@@ -1,11 +1,12 @@
 import type { PlayerInput } from './types';
 
-/** Bit flags for one tick of input packed into a u8 (0..31). */
+/** Bit flags for one tick of input packed into a u8 (0..63). */
 const LEFT = 1;
 const RIGHT = 2;
 const JUMP = 4;
 const UP = 8;
 const DOWN = 16;
+const ATTACK = 32;
 
 export function packInput(i: PlayerInput): number {
   return (
@@ -13,7 +14,8 @@ export function packInput(i: PlayerInput): number {
     (i.right ? RIGHT : 0) |
     (i.jump ? JUMP : 0) |
     (i.up ? UP : 0) |
-    (i.down ? DOWN : 0)
+    (i.down ? DOWN : 0) |
+    (i.attack ? ATTACK : 0)
   );
 }
 
@@ -24,5 +26,6 @@ export function unpackInput(p: number): PlayerInput {
     jump: (p & JUMP) !== 0,
     up: (p & UP) !== 0,
     down: (p & DOWN) !== 0,
+    attack: (p & ATTACK) !== 0,
   };
 }

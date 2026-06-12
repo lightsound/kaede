@@ -1,6 +1,6 @@
 import type { PlayerInput } from '@maple/shared';
 
-const MOVE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space']);
+const MOVE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyZ']);
 
 /** Field-wise OR of two inputs, so multiple sources (keyboard, touch) combine. */
 export function mergeInputs(a: PlayerInput, b: PlayerInput): PlayerInput {
@@ -10,6 +10,7 @@ export function mergeInputs(a: PlayerInput, b: PlayerInput): PlayerInput {
     up: a.up || b.up,
     down: a.down || b.down,
     jump: a.jump || b.jump,
+    attack: a.attack || b.attack,
   };
 }
 
@@ -36,6 +37,7 @@ export function createInput(): { sample(): PlayerInput; dispose(): void } {
       up: held.has('ArrowUp'),
       down: held.has('ArrowDown'),
       jump: held.has('Space'),
+      attack: held.has('KeyZ'),
     }),
     dispose: () => {
       window.removeEventListener('keydown', onDown);

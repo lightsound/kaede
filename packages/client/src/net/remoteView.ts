@@ -18,12 +18,18 @@ interface Snapshot {
 }
 
 /**
- * Per-remote render state: the display name, the snapshot buffer, plus the
+ * Per-view render state: the display name, an opaque meta payload threaded
+ * straight through to the draw callback (so mobs can reuse this machinery and
+ * carry their `kind` without a parallel buffer), the snapshot buffer, plus the
  * smoothing carry (the decaying error offset and the previous rendered position
  * used to detect target discontinuities).
+ *
+ * `Meta` is generic so each createRemoteViews instance fixes one meta shape
+ * (string name for players, kind for mobs) without `any` leaking out.
  */
-interface RemoteView {
+interface RemoteView<Meta> {
   name: string;
+  meta: Meta;
   snaps: Snapshot[];
   offset: Vec2;
   prevRendered?: Vec2;
@@ -39,22 +45,25 @@ const SNAPSHOT_TTL_MS = 1500;
  * discontinuities (teleports, reorders) with a decaying error offset so the
  * rendered path stays continuous.
  */
-export function createRemoteViews() {
-  const views = new Map<string, RemoteView>();
+export function createRemoteViews<Meta = undefined>() {
+  const views = new Map<string, RemoteView<Meta>>();
 
   // Inbound (remote): buffer a timestamped snapshot for each remote row change.
+  // `meta` rides through unchanged to the draw callback (latest write wins).
   function record(
     idHex: string,
     name: string,
     row: { x: number; y: number; vx: number; vy: number; facing: number },
     nowMs: number,
+    meta: Meta,
   ): void {
     let view = views.get(idHex);
     if (!view) {
-      view = { name, snaps: [], offset: { x: 0, y: 0 } };
+      view = { name, meta, snaps: [], offset: { x: 0, y: 0 } };
       views.set(idHex, view);
     }
     view.name = name;
+    view.meta = meta;
     view.snaps.push({
       t: nowMs,
       x: row.x,
@@ -69,12 +78,12 @@ export function createRemoteViews() {
     views.delete(idHex);
   }
 
-  // Render remote players interpolated INTERP_DELAY_MS in the past, smoothing
-  // over any snapshot discontinuities (teleports, reorders) with a decaying
-  // error offset so the rendered path stays continuous.
+  // Render views interpolated INTERP_DELAY_MS in the past, smoothing over any
+  // snapshot discontinuities (teleports, reorders) with a decaying error offset
+  // so the rendered path stays continuous.
   function renderFrame(
     nowMs: number,
-    draw: (idHex: string, name: string, x: number, y: number, facing: Facing) => void,
+    draw: (idHex: string, name: string, x: number, y: number, facing: Facing, meta: Meta) => void,
   ): void {
     const renderTime = nowMs - INTERP_DELAY_MS;
     for (const [idHex, view] of views) {
@@ -98,7 +107,7 @@ export function createRemoteViews() {
       const ry = target.y + view.offset.y;
       view.prevRendered = { x: rx, y: ry };
       view.lastFrameMs = nowMs;
-      draw(idHex, view.name, rx, ry, target.facing);
+      draw(idHex, view.name, rx, ry, target.facing, view.meta);
     }
   }
 

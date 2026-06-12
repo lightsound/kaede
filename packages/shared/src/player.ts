@@ -11,6 +11,7 @@ import {
   ROPE_GRAB_RANGE,
   ROPE_JUMP_VELOCITY,
 } from './constants';
+import { ATTACK_COOLDOWN_TICKS } from './combat';
 import { overlaps, rectBounds, type AABB } from './physics';
 import type { CollisionMap, Facing, PlayerInput, PlayerState, Rect } from './types';
 
@@ -37,6 +38,7 @@ export function stateFromRow(r: {
   facing: number;
   onGround: boolean;
   rope: number;
+  attackCooldown: number;
 }): PlayerState {
   return {
     x: r.x,
@@ -46,7 +48,18 @@ export function stateFromRow(r: {
     facing: toFacing(r.facing),
     onGround: r.onGround,
     rope: r.rope,
+    attackCooldown: r.attackCooldown,
   };
+}
+
+/**
+ * Whether a swing fires THIS tick, evaluated against the PRE-step state. A swing
+ * needs the attack input, a ready cooldown, and the player not on a rope (no
+ * mid-climb swings). Both client prediction and server replay call this with the
+ * same pre-step state, so the "did it fire" decision stays deterministic.
+ */
+export function attackFires(state: PlayerState, input: PlayerInput): boolean {
+  return input.attack && state.attackCooldown === 0 && state.rope === -1;
 }
 
 /**
@@ -86,6 +99,14 @@ function grabRope(state: PlayerState, input: PlayerInput, map: CollisionMap): nu
  * never mutates its arguments, so identical inputs always yield identical output.
  */
 export function stepPlayer(state: PlayerState, input: PlayerInput, map: CollisionMap): PlayerState {
+  // Post-step cooldown, carried into EVERY returned state below so the value is
+  // never dropped on a climbing/rope early return. A swing this tick (evaluated
+  // on the pre-step state) latches the full cooldown; otherwise it decays by one
+  // toward 0. Attacking is purely a combat clock and never alters movement.
+  const attackCooldown = attackFires(state, input)
+    ? ATTACK_COOLDOWN_TICKS
+    : Math.max(0, state.attackCooldown - 1);
+
   // --- Climbing: up/down drive y directly; gravity and collision are suspended.
   const rope = state.rope >= 0 ? map.ropes[state.rope] : undefined;
   if (rope) {
@@ -106,20 +127,21 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, map: Collisio
           facing: state.facing,
           onGround: true,
           rope: -1,
+          attackCooldown,
         };
       }
       if (y > rope.bottom) {
         // Slid past the bottom: let go and fall.
-        return { x: rope.x, y: rope.bottom, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: -1 };
+        return { x: rope.x, y: rope.bottom, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: -1, attackCooldown };
       }
-      return { x: rope.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: state.rope };
+      return { x: rope.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: state.rope, attackCooldown };
     }
   } else if (input.up || input.down) {
     const grabbed = grabRope(state, input, map);
     if (grabbed >= 0) {
       const r = map.ropes[grabbed];
       const y = Math.min(Math.max(state.y, r.top), r.bottom);
-      return { x: r.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: grabbed };
+      return { x: r.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: grabbed, attackCooldown };
     }
   }
 
@@ -183,5 +205,5 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, map: Collisio
     }
   }
 
-  return { x, y, vx, vy, facing, onGround, rope: -1 };
+  return { x, y, vx, vy, facing, onGround, rope: -1, attackCooldown };
 }

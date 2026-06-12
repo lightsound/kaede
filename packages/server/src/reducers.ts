@@ -1,17 +1,74 @@
-import { t } from 'spacetimedb/server';
+import { ScheduleAt, Timestamp } from 'spacetimedb';
+import { t, type InferSchema, type ReducerCtx, type ReducerExport } from 'spacetimedb/server';
 import {
   DEFAULT_MAP,
   DT,
   INPUT_BATCH_MAX_TICKS,
+  MOB_RESPAWN_MS,
+  MOB_STATS,
+  MOB_SPAWNS,
+  MOB_TICK_MS,
+  PLAYER_HALF_H,
+  PLAYER_HALF_W,
+  PLAYER_INVULN_MS,
   SPAWN_X,
   SPAWN_Y,
   TICK_ALLOWANCE_SLACK,
+  attackDamage,
+  attackFires,
+  maxHpForLevel,
+  mobBox,
+  overlaps,
+  resolveAttackTarget,
   stateFromRow,
+  stepMobPatrol,
   stepPlayer,
   unpackInput,
+  xpToNext,
+  type MobKind,
   type PlayerState,
 } from '@maple/shared';
-import { spacetimedb } from './tables';
+import { setMobTick, spacetimedb } from './tables';
+
+type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+/** A future instant `ms` milliseconds after `from`. (Timestamp has no add().) */
+function plusMillis(from: Timestamp, ms: number): Timestamp {
+  return new Timestamp(from.microsSinceUnixEpoch + BigInt(ms) * 1000n);
+}
+
+/**
+ * Seed one mob row per MOB_SPAWNS entry, starting alive at full HP facing right.
+ * Shared by `init` and the defensive reseed in mobTick so a republished DB whose
+ * init never reran (or was wiped) still ends up with a populated world.
+ */
+function seedMobs(ctx: Ctx): void {
+  for (let i = 0; i < MOB_SPAWNS.length; i++) {
+    const s = MOB_SPAWNS[i];
+    ctx.db.mob.insert({
+      id: 0, // autoInc
+      kind: s.kind,
+      x: s.x,
+      y: s.y,
+      dir: 1,
+      hp: MOB_STATS[s.kind].maxHp,
+      spawnIdx: i,
+      respawnAt: ctx.timestamp,
+      updatedAt: ctx.timestamp,
+    });
+  }
+}
+
+// Runs once when the module is first published: seed the mobs and arm the AI
+// timer. Exported like any other reducer (index.ts does `export * from
+// './reducers'`) so the lifecycle hook is registered.
+export const init = spacetimedb.init((ctx) => {
+  seedMobs(ctx);
+  ctx.db.mobAiTimer.insert({
+    scheduledId: 0n, // autoInc
+    scheduledAt: ScheduleAt.interval(BigInt(MOB_TICK_MS) * 1000n),
+  });
+});
 
 // Server-authoritative movement: clients send only inputs, the server replays
 // them through the same shared physics. Position cannot change any other way.
@@ -29,8 +86,52 @@ export const submitInputs = spacetimedb.reducer(
     const allowed = Math.floor(elapsedMs / (DT * 1000)) + TICK_ALLOWANCE_SLACK;
     if (row.tick + inputs.length > allowed) return;
 
+    // Combat is replayed inline with movement so a swing's hit is decided on the
+    // exact tick it fired. hp/xp/level mutate locally and persist with the final
+    // movement state. The mob table is read live each swing (alive = hp > 0).
+    let hp = row.hp;
+    let xp = row.xp;
+    let level = row.level;
+    let maxHp = row.maxHp;
+
     let s: PlayerState = stateFromRow(row);
-    for (const byte of inputs) s = stepPlayer(s, unpackInput(byte), DEFAULT_MAP);
+    for (const byte of inputs) {
+      const input = unpackInput(byte);
+      // `attackFires` is evaluated on the PRE-step state, identically to the
+      // client's prediction, so the swing decision is deterministic.
+      const fires = attackFires(s, input);
+      s = stepPlayer(s, input, DEFAULT_MAP);
+      if (!fires) continue;
+
+      const mobs = [...ctx.db.mob.iter()];
+      const target = resolveAttackTarget(
+        s,
+        mobs.map((m) => ({ x: m.x, y: m.y, kind: m.kind as MobKind, alive: m.hp > 0 })),
+      );
+      if (target < 0) continue;
+
+      const mob = mobs[target];
+      const newHp = mob.hp - attackDamage(level);
+      if (newHp > 0) {
+        ctx.db.mob.id.update({ ...mob, hp: newHp, updatedAt: ctx.timestamp });
+        continue;
+      }
+      // Kill: schedule the respawn and award XP, leveling up (full heal) while
+      // the carried-over remainder still covers the next level's cost.
+      ctx.db.mob.id.update({
+        ...mob,
+        hp: 0,
+        respawnAt: plusMillis(ctx.timestamp, MOB_RESPAWN_MS),
+        updatedAt: ctx.timestamp,
+      });
+      xp += MOB_STATS[mob.kind as MobKind].xp;
+      while (xp >= xpToNext(level)) {
+        xp -= xpToNext(level);
+        level += 1;
+        maxHp = maxHpForLevel(level);
+        hp = maxHp;
+      }
+    }
 
     ctx.db.player.identity.update({
       ...row,
@@ -41,6 +142,13 @@ export const submitInputs = spacetimedb.reducer(
       facing: s.facing,
       onGround: s.onGround,
       rope: s.rope,
+      hp,
+      maxHp,
+      xp,
+      level,
+      // Cooldown comes from the final replayed state so the next batch resumes
+      // the same combat clock the client predicted.
+      attackCooldown: s.attackCooldown,
       // Self-heal `online` here: a double-login-then-close race can land a
       // stale offline flag on a still-active identity. Any input proves we're
       // online, and we're already updating the row, so reassert it.
@@ -54,19 +162,22 @@ export const submitInputs = spacetimedb.reducer(
 // Spawning is an explicit opt-in, not a connection side effect: observer
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
-export const join = spacetimedb.reducer(ctx => {
+export const join = spacetimedb.reducer((ctx) => {
   const row = ctx.db.player.identity.find(ctx.sender);
   if (row) {
     // Reconnect under a persisted identity: keep where they left off (x, y,
-    // name, facing) but re-arm the speed-hack guard. Resetting tick to 0 with a
-    // fresh simStartAt is REQUIRED — otherwise the wall-clock elapsed since the
-    // original spawn would let the next batch burst far ahead of real time.
+    // name, facing) AND their progression (hp, xp, level), but re-arm the
+    // speed-hack guard. Resetting tick to 0 with a fresh simStartAt is REQUIRED
+    // — otherwise the wall-clock elapsed since the original spawn would let the
+    // next batch burst far ahead of real time. attackCooldown resets to 0
+    // alongside the other per-session sim fields.
     ctx.db.player.identity.update({
       ...row,
       vx: 0,
       vy: 0,
       onGround: false,
       rope: -1,
+      attackCooldown: 0,
       online: true,
       tick: 0,
       simStartAt: ctx.timestamp,
@@ -75,6 +186,7 @@ export const join = spacetimedb.reducer(ctx => {
     return;
   }
   const name = 'Player-' + ctx.sender.toHexString().slice(0, 6);
+  const maxHp = maxHpForLevel(1);
   ctx.db.player.insert({
     identity: ctx.sender,
     name,
@@ -86,6 +198,12 @@ export const join = spacetimedb.reducer(ctx => {
     onGround: false,
     rope: -1,
     online: true,
+    hp: maxHp,
+    maxHp,
+    xp: 0,
+    level: 1,
+    attackCooldown: 0,
+    invulnUntil: ctx.timestamp,
     tick: 0,
     simStartAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
@@ -94,7 +212,7 @@ export const join = spacetimedb.reducer(ctx => {
 
 // Presence, not deletion: the row persists so the player resumes from their
 // last position on the next join. Only the online flag flips.
-export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
+export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
   const row = ctx.db.player.identity.find(ctx.sender);
   if (!row) return;
   ctx.db.player.identity.update({ ...row, online: false, updatedAt: ctx.timestamp });
@@ -110,3 +228,102 @@ export const setName = spacetimedb.reducer({ name: t.string() }, (ctx, { name })
   if (trimmed.length === 0 || trimmed.length > 16 || /[\x00-\x1f\x7f]/.test(trimmed)) return;
   ctx.db.player.identity.update({ ...row, name: trimmed, updatedAt: ctx.timestamp });
 });
+
+/**
+ * The mob-AI body, factored out and typed via the explicit `Ctx` so it keeps
+ * full `ctx.db` typing. mobTick (the scheduled export) merely forwards to this;
+ * see the mobTick declaration for why that indirection matters.
+ */
+function runMobTick(ctx: Ctx): void {
+  // Defensive reseed: a republished DB whose init didn't reseed leaves an
+  // empty mob table. Seed it (the timer row already exists, so don't re-add).
+  if (ctx.db.mob.count() === 0n) {
+    seedMobs(ctx);
+    return;
+  }
+
+  const now = ctx.timestamp;
+  for (const mob of ctx.db.mob.iter()) {
+    const spawn = MOB_SPAWNS[mob.spawnIdx];
+    if (mob.hp > 0) {
+      // (a) Patrol: advance the alive mob's horizontal walk.
+      const next = stepMobPatrol(mob.x, mob.dir, spawn, MOB_TICK_MS);
+      ctx.db.mob.id.update({ ...mob, x: next.x, dir: next.dir, updatedAt: now });
+    } else if (now.since(mob.respawnAt).millis >= 0) {
+      // (b) Respawn a dead mob whose timer has elapsed, back at its home.
+      ctx.db.mob.id.update({
+        ...mob,
+        x: spawn.x,
+        dir: 1,
+        hp: MOB_STATS[spawn.kind].maxHp,
+        updatedAt: now,
+      });
+    }
+  }
+
+  // (c) Contact damage: any online player overlapping an alive mob (past their
+  // invuln window) takes the mob's touch damage. hp <= 0 teleports them to
+  // spawn at full HP. We do NOT touch `tick` — the client's next own-row ack
+  // reconciles the teleport through the existing replay path.
+  for (const player of ctx.db.player.iter()) {
+    if (!player.online) continue;
+    if (now.since(player.invulnUntil).millis < 0) continue;
+    const pRect = {
+      x: player.x - PLAYER_HALF_W,
+      y: player.y - PLAYER_HALF_H,
+      w: PLAYER_HALF_W * 2,
+      h: PLAYER_HALF_H * 2,
+    };
+    let hit: MobKind | undefined;
+    for (const mob of ctx.db.mob.iter()) {
+      if (mob.hp <= 0) continue;
+      if (overlaps(mobBox(mob.x, mob.y, mob.kind as MobKind), pRect)) {
+        hit = mob.kind as MobKind;
+        break;
+      }
+    }
+    if (!hit) continue;
+
+    const hp = player.hp - MOB_STATS[hit].touchDamage;
+    if (hp > 0) {
+      ctx.db.player.identity.update({
+        ...player,
+        hp,
+        invulnUntil: plusMillis(now, PLAYER_INVULN_MS),
+        updatedAt: now,
+      });
+    } else {
+      // Death: respawn at the start, fully healed. Movement state resets; tick
+      // is intentionally untouched (see comment above).
+      ctx.db.player.identity.update({
+        ...player,
+        x: SPAWN_X,
+        y: SPAWN_Y,
+        vx: 0,
+        vy: 0,
+        rope: -1,
+        onGround: false,
+        hp: player.maxHp,
+        invulnUntil: plusMillis(now, PLAYER_INVULN_MS),
+        updatedAt: now,
+      });
+    }
+  }
+}
+
+// Mob AI tick (10 Hz). The single param is the fired timer row; we never read it
+// — the schedule itself is the clock. Private/scheduled, so clients can't call it.
+//
+// The explicit `ReducerExport<any, any>` annotation pairs with tables.ts's lazy
+// mobTickRef to cut the tables.ts <-> reducers.ts cycle at BOTH the type and the
+// runtime level: the typed body lives in runMobTick, and tables.ts never imports
+// this value eagerly (it would TDZ-crash, since reducers.ts reads `spacetimedb`
+// from tables.ts at its own top level). We hand the reducer to setMobTick so the
+// scheduled thunk can resolve it at registration time.
+export const mobTick: ReducerExport<any, any> = spacetimedb.reducer(
+  { timer: t.row({ scheduledId: t.u64(), scheduledAt: t.scheduleAt() }) },
+  (ctx) => {
+    runMobTick(ctx);
+  }
+);
+setMobTick(mobTick);

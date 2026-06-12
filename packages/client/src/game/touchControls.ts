@@ -18,12 +18,20 @@ const JUMP_HIT_RADIUS = JUMP_BTN_RADIUS * 1.4; // oversized for fat-finger toler
 const JUMP_X = 1170;
 const JUMP_Y = 600;
 
+// Attack button: sits up-left of JUMP so the thumb can reach both without the
+// hit areas overlapping (centers are ~136px apart > the two hit radii summed).
+const ATTACK_BTN_RADIUS = 56;
+const ATTACK_HIT_RADIUS = ATTACK_BTN_RADIUS * 1.3;
+const ATTACK_X = 1040;
+const ATTACK_Y = 560;
+
 const BTN_COLOR = 0xeceff4;
 const IDLE_ALPHA = 0.35;
 const PRESSED_ALPHA = 0.7;
 
 const GLYPH_STYLE = new TextStyle({ fill: 0x10131b, fontSize: 36, fontFamily: 'sans-serif' });
 const JUMP_STYLE = new TextStyle({ fill: 0x10131b, fontSize: 24, fontFamily: 'sans-serif' });
+const ATTACK_STYLE = new TextStyle({ fill: 0x10131b, fontSize: 20, fontFamily: 'sans-serif' });
 
 /**
  * A single round button. Each button owns its own pointer handlers, so holding
@@ -93,8 +101,9 @@ export function createTouchControls(): {
   const up = padBtn(0, -PAD_SPACING, '▲');
   const down = padBtn(0, PAD_SPACING, '▼');
   const jump = createButton(JUMP_X, JUMP_Y, 'JUMP', JUMP_BTN_RADIUS, JUMP_HIT_RADIUS, JUMP_STYLE);
+  const attack = createButton(ATTACK_X, ATTACK_Y, 'ATK', ATTACK_BTN_RADIUS, ATTACK_HIT_RADIUS, ATTACK_STYLE);
 
-  container.addChild(left.node, right.node, up.node, down.node, jump.node);
+  container.addChild(left.node, right.node, up.node, down.node, jump.node, attack.node);
 
   return {
     container,
@@ -104,6 +113,7 @@ export function createTouchControls(): {
       up: up.pressed(),
       down: down.pressed(),
       jump: jump.pressed(),
+      attack: attack.pressed(),
     }),
     dispose: () => {
       container.destroy({ children: true });

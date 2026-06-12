@@ -18,10 +18,10 @@ import {
   type PlayerState,
 } from '../src/index';
 
-const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
+const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false, attack: false };
 
 function spawn(overrides: Partial<PlayerState> = {}): PlayerState {
-  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, ...overrides };
+  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, attackCooldown: 0, ...overrides };
 }
 
 /** Run the sim for n ticks, threading the same input through each tick. */
@@ -114,7 +114,7 @@ describe('stepPlayer', () => {
 
   it('is pure and deterministic and does not mutate inputs', () => {
     const state = spawn({ y: 250, vy: 50 });
-    const input: PlayerInput = { left: false, right: true, jump: true, up: false, down: false };
+    const input: PlayerInput = { left: false, right: true, jump: true, up: false, down: false, attack: false };
     const stateCopy = { ...state };
     const inputCopy = { ...input };
 

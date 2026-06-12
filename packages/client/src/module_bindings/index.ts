@@ -41,6 +41,7 @@ import SubmitInputsReducer from "./submit_inputs_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import MobRow from "./mob_table";
 import PlayerRow from "./player_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -58,6 +59,17 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  mob: __table({
+    name: 'mob',
+    indexes: [
+      { accessor: 'id', name: 'mob_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'mob_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, MobRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */

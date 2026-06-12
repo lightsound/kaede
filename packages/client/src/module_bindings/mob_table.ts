@@ -11,23 +11,13 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  identity: __t.identity().primaryKey(),
-  name: __t.string(),
+  id: __t.u32().primaryKey().autoInc(),
+  kind: __t.string(),
   x: __t.f64(),
   y: __t.f64(),
-  vx: __t.f64(),
-  vy: __t.f64(),
-  facing: __t.i8(),
-  onGround: __t.bool().name("on_ground"),
-  rope: __t.i32(),
-  online: __t.bool(),
+  dir: __t.i8(),
   hp: __t.i32(),
-  maxHp: __t.i32().name("max_hp"),
-  xp: __t.u32(),
-  level: __t.u16(),
-  attackCooldown: __t.u16().name("attack_cooldown"),
-  invulnUntil: __t.timestamp().name("invuln_until"),
-  tick: __t.u32(),
-  simStartAt: __t.timestamp().name("sim_start_at"),
+  spawnIdx: __t.u16().name("spawn_idx"),
+  respawnAt: __t.timestamp().name("respawn_at"),
   updatedAt: __t.timestamp().name("updated_at"),
 });

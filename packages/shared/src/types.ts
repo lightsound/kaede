@@ -8,6 +8,7 @@ export interface PlayerInput {
   up: boolean;
   down: boolean;
   jump: boolean;
+  attack: boolean;
 }
 
 /**
@@ -23,6 +24,12 @@ export interface PlayerState {
   onGround: boolean;
   /** Index into the map's ropes while climbing, or -1 when not climbing. */
   rope: number;
+  /**
+   * Ticks remaining before the next attack can fire (0 = ready). Decrements one
+   * per tick in stepPlayer; set to ATTACK_COOLDOWN_TICKS on the tick a swing
+   * fires. Part of PlayerState so prediction and server replay stay in lockstep.
+   */
+  attackCooldown: number;
 }
 
 /** Axis-aligned rectangle: top-left corner plus size, in world pixels. */
