@@ -6,5 +6,8 @@
     "dev": "pnpm --filter @maple/client dev",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "fallow": "^2.94.0"
   }
 }
