@@ -12,6 +12,13 @@ import {
 } from '@maple/shared';
 import type { GameApp } from '../game/GameApp';
 import type { DbConnection } from '../module_bindings';
+import {
+  correctionOffset,
+  decayOffset,
+  hermite,
+  REMOTE_DISCONTINUITY_SPEED,
+  type Vec2,
+} from '../game/smoothing';
 import { connect } from './connection';
 
 /** The generated own/remote player row type (all columns). */
@@ -23,7 +30,21 @@ interface Snapshot {
   t: number;
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   facing: Facing;
+}
+
+/**
+ * Per-remote render state: the snapshot buffer plus the smoothing carry (the
+ * decaying error offset and the previous rendered position used to detect
+ * target discontinuities).
+ */
+interface RemoteView {
+  snaps: Snapshot[];
+  offset: Vec2;
+  prevRendered?: Vec2;
+  lastFrameMs?: number;
 }
 
 /** Discard samples older than this, but always keep the last two to interpolate. */
@@ -59,7 +80,7 @@ export interface Net {
  * Remote players are rendered interpolated INTERP_DELAY_MS in the past.
  */
 export function startNet(gameApp: GameApp): Net {
-  const buffers = new Map<string, Snapshot[]>();
+  const views = new Map<string, RemoteView>();
   const names = new Map<string, string>();
   let conn: DbConnection | undefined;
   let myIdHex = '';
@@ -167,18 +188,25 @@ export function startNet(gameApp: GameApp): Net {
   }
 
   // Inbound (remote): buffer a timestamped snapshot for each remote row change.
-  const record = (idHex: string, x: number, y: number, facing: number) => {
-    let buf = buffers.get(idHex);
-    if (!buf) {
-      buf = [];
-      buffers.set(idHex, buf);
+  const record = (idHex: string, row: PlayerRow) => {
+    let view = views.get(idHex);
+    if (!view) {
+      view = { snaps: [], offset: { x: 0, y: 0 } };
+      views.set(idHex, view);
     }
-    buf.push({ t: performance.now(), x, y, facing: toFacing(facing) });
+    view.snaps.push({
+      t: performance.now(),
+      x: row.x,
+      y: row.y,
+      vx: row.vx,
+      vy: row.vy,
+      facing: toFacing(row.facing),
+    });
   };
 
-  const handleRemote = (idHex: string, name: string, x: number, y: number, facing: number) => {
-    names.set(idHex, name);
-    record(idHex, x, y, facing);
+  const handleRemote = (idHex: string, row: PlayerRow) => {
+    names.set(idHex, row.name);
+    record(idHex, row);
   };
 
   connect()
@@ -199,7 +227,7 @@ export function startNet(gameApp: GameApp): Net {
           ownRow = row;
           continue;
         }
-        handleRemote(idHex, row.name, row.x, row.y, row.facing);
+        handleRemote(idHex, row);
       }
       if (ownRow) {
         gameApp.setLocalPlayerName(ownRow.name);
@@ -213,7 +241,7 @@ export function startNet(gameApp: GameApp): Net {
       c.db.player.onInsert((_ctx, row) => {
         const idHex = row.identity.toHexString();
         if (idHex === myIdHex) return;
-        handleRemote(idHex, row.name, row.x, row.y, row.facing);
+        handleRemote(idHex, row);
       });
       c.db.player.onUpdate((_ctx, _old, row) => {
         const idHex = row.identity.toHexString();
@@ -221,26 +249,45 @@ export function startNet(gameApp: GameApp): Net {
           onAck(row);
           return;
         }
-        handleRemote(idHex, row.name, row.x, row.y, row.facing);
+        handleRemote(idHex, row);
       });
       c.db.player.onDelete((_ctx, row) => {
         const idHex = row.identity.toHexString();
         if (idHex === myIdHex) return;
-        buffers.delete(idHex);
+        views.delete(idHex);
         names.delete(idHex);
         gameApp.removeRemotePlayer(idHex);
       });
     })
     .catch(() => {});
 
-  // Render remote players interpolated INTERP_DELAY_MS in the past.
+  // Render remote players interpolated INTERP_DELAY_MS in the past, smoothing
+  // over any snapshot discontinuities (teleports, reorders) with a decaying
+  // error offset so the rendered path stays continuous.
   gameApp.onFrame((now) => {
     const renderTime = now - INTERP_DELAY_MS;
-    for (const [idHex, buf] of buffers) {
-      prune(buf, now);
-      if (buf.length === 0) continue;
-      const s = sampleAt(buf, renderTime);
-      gameApp.upsertRemotePlayer(idHex, names.get(idHex) ?? '', s.x, s.y, s.facing);
+    for (const [idHex, view] of views) {
+      prune(view.snaps, now);
+      if (view.snaps.length === 0) continue;
+      const target = sampleAt(view.snaps, renderTime);
+
+      const frameDt = view.lastFrameMs !== undefined ? now - view.lastFrameMs : 0;
+      // Discontinuity: target jumped further than authoritative motion allows.
+      // Reanchor the offset on the previous rendered position (which already
+      // folds in the old offset), keeping the rendered path continuous.
+      if (
+        view.prevRendered &&
+        dist(target, view.prevRendered) > REMOTE_DISCONTINUITY_SPEED * (frameDt / 1000) + 1
+      ) {
+        view.offset = correctionOffset(view.prevRendered, target);
+      }
+      view.offset = decayOffset(view.offset, frameDt);
+
+      const rx = target.x + view.offset.x;
+      const ry = target.y + view.offset.y;
+      view.prevRendered = { x: rx, y: ry };
+      view.lastFrameMs = now;
+      gameApp.upsertRemotePlayer(idHex, names.get(idHex) ?? '', rx, ry, target.facing);
     }
   });
 
@@ -253,15 +300,21 @@ export function startNet(gameApp: GameApp): Net {
   };
 }
 
+/** Euclidean distance between two points. */
+function dist(a: Vec2, b: Vec2): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 /** Drop samples older than the TTL, always keeping at least the last two. */
 function prune(buf: Snapshot[], now: number): void {
   while (buf.length > 2 && now - buf[0].t > SNAPSHOT_TTL_MS) buf.shift();
 }
 
 /**
- * Returns the position at renderTime by linearly interpolating between the two
- * straddling snapshots. Clamps to the nearest snapshot outside the buffered
- * range (no extrapolation). facing comes from the later snapshot.
+ * Returns the position at renderTime by cubic-Hermite interpolating between the
+ * two straddling snapshots (using their authoritative velocities as tangents).
+ * Clamps to the nearest snapshot outside the buffered range (no extrapolation).
+ * facing comes from the later snapshot.
  */
 function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
   if (renderTime <= buf[0].t) return buf[0];
@@ -272,13 +325,9 @@ function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
     if (renderTime <= b.t) {
       const a = buf[i - 1];
       const span = b.t - a.t;
-      const alpha = span > 0 ? (renderTime - a.t) / span : 0;
-      return {
-        t: renderTime,
-        x: a.x + (b.x - a.x) * alpha,
-        y: a.y + (b.y - a.y) * alpha,
-        facing: b.facing,
-      };
+      if (span <= 0) return { ...b, t: renderTime };
+      const p = hermite(a, b, renderTime);
+      return { t: renderTime, x: p.x, y: p.y, vx: b.vx, vy: b.vy, facing: b.facing };
     }
   }
   return last;

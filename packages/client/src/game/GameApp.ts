@@ -15,6 +15,7 @@ import {
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { cameraOffset } from './camera';
 import { createInput } from './input';
+import { correctionOffset, decayOffset, type Vec2 } from './smoothing';
 
 const VIEW_W = 1280;
 const VIEW_H = 720;
@@ -92,6 +93,11 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   let acc = 0;
   // Simulation is gated until start(): tick < 0 means "not yet running".
   let tick = -1;
+  // Render-only smoothing for reconciliation corrections: the decaying error
+  // between where we last rendered and the new corrected state. The simulation
+  // state (prev/curr) always holds the exact corrected value; this offset only
+  // shifts the sprite, never the physics.
+  let localOffset: Vec2 = { x: 0, y: 0 };
 
   app.ticker.add((ticker) => {
     for (const cb of frameCbs) cb(performance.now());
@@ -113,10 +119,15 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     const alpha = acc / DT;
     const rx = prev.x + (curr.x - prev.x) * alpha;
     const ry = prev.y + (curr.y - prev.y) * alpha;
-    local.root.position.set(rx, ry);
+    // Smoothing is render-only: shift the sprite by the decaying correction
+    // offset, but leave prev/curr (the simulation truth) untouched.
+    localOffset = decayOffset(localOffset, ticker.deltaMS);
+    const sx = rx + localOffset.x;
+    const sy = ry + localOffset.y;
+    local.root.position.set(sx, sy);
     local.body.scale.x = curr.facing;
 
-    const cam = cameraOffset(rx, ry, VIEW_W, VIEW_H, WORLD_WIDTH, WORLD_HEIGHT);
+    const cam = cameraOffset(sx, sy, VIEW_W, VIEW_H, WORLD_WIDTH, WORLD_HEIGHT);
     world.position.set(cam.x, cam.y);
   });
 
@@ -132,10 +143,19 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       prev = curr = state;
       tick = t;
       acc = 0; // clamp so the first running frame doesn't replay a burst
+      localOffset = { x: 0, y: 0 };
     },
     resetLocal(state, t) {
+      // Carry the visual error: where we render now (incl. the live offset) vs.
+      // the corrected state. prev/curr jump to the truth; the sprite eases over.
+      const alpha = acc / DT;
+      const renderedBefore = {
+        x: prev.x + (curr.x - prev.x) * alpha + localOffset.x,
+        y: prev.y + (curr.y - prev.y) * alpha + localOffset.y,
+      };
       prev = curr = state;
       tick = t;
+      localOffset = correctionOffset(renderedBefore, { x: state.x, y: state.y });
     },
     onLocalTick(cb) {
       tickCbs.push(cb);
