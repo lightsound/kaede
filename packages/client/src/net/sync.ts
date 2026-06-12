@@ -85,14 +85,26 @@ export function startNet(gameApp: GameApp): Net {
     prediction.onTick(state, tick, packedInput, performance.now());
   });
 
-  // Render remote players and mobs interpolated INTERP_DELAY_MS in the past.
+  // Render remote players and mobs interpolated INTERP_DELAY_MS in the past. The
+  // interpolated vx/vy is threaded through so the rigs can animate (walk/jump
+  // pose for players; mob velocity is implicit, so mobs ignore it).
   gameApp.onFrame((now) => {
-    remoteViews.renderFrame(now, gameApp.upsertRemotePlayer);
-    mobViews.renderFrame(now, (idHex, _name, x, y, facing, kind) => {
-      // The interpolated frame carries only position/facing; the live hp comes
-      // from mobHp (kept current by the row handlers), so the rectangle's HP bar
-      // and hidden/dead state stay correct between row updates.
-      gameApp.upsertMob(Number(idHex), kind, x, y, facing, mobHp.get(idHex) ?? MOB_STATS[kind].maxHp);
+    remoteViews.renderFrame(now, (idHex, name, x, y, facing, vx, vy) => {
+      gameApp.upsertRemotePlayer(idHex, name, x, y, facing, vx, vy);
+    });
+    mobViews.renderFrame(now, (idHex, _name, x, y, facing, vx, _vy, kind) => {
+      // The interpolated frame carries position/facing/velocity; the live hp
+      // comes from mobHp (kept current by the row handlers), so the HP bar and
+      // hidden/dead state stay correct between row updates.
+      gameApp.upsertMob(
+        Number(idHex),
+        kind,
+        x,
+        y,
+        facing,
+        mobHp.get(idHex) ?? MOB_STATS[kind].maxHp,
+        vx,
+      );
     });
   });
 

@@ -80,10 +80,21 @@ export function createRemoteViews<Meta = undefined>() {
 
   // Render views interpolated INTERP_DELAY_MS in the past, smoothing over any
   // snapshot discontinuities (teleports, reorders) with a decaying error offset
-  // so the rendered path stays continuous.
+  // so the rendered path stays continuous. The interpolated velocity (vx/vy from
+  // the straddling snapshot) is surfaced to the draw callback so the renderer can
+  // animate the rig (walk cadence, jump/fall pose) without any extra net state.
   function renderFrame(
     nowMs: number,
-    draw: (idHex: string, name: string, x: number, y: number, facing: Facing, meta: Meta) => void,
+    draw: (
+      idHex: string,
+      name: string,
+      x: number,
+      y: number,
+      facing: Facing,
+      vx: number,
+      vy: number,
+      meta: Meta,
+    ) => void,
   ): void {
     const renderTime = nowMs - INTERP_DELAY_MS;
     for (const [idHex, view] of views) {
@@ -107,7 +118,7 @@ export function createRemoteViews<Meta = undefined>() {
       const ry = target.y + view.offset.y;
       view.prevRendered = { x: rx, y: ry };
       view.lastFrameMs = nowMs;
-      draw(idHex, view.name, rx, ry, target.facing, view.meta);
+      draw(idHex, view.name, rx, ry, target.facing, target.vx, target.vy, view.meta);
     }
   }
 

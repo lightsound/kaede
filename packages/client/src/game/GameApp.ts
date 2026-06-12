@@ -5,7 +5,6 @@ import {
   DT,
   MOB_STATS,
   PLAYER_HALF_H,
-  PLAYER_HALF_W,
   SPAWN_X,
   SPAWN_Y,
   WORLD_HEIGHT,
@@ -20,7 +19,10 @@ import {
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { cameraOffset } from './camera';
 import { createInput, mergeInputs } from './input';
+import { createScene } from './scene/background';
 import { correctionOffset, decayOffset, type Vec2 } from './smoothing';
+import { createCharacterRig, type CharacterRig, type Pose } from './sprites/character';
+import { createDeathPoof, createMobRig, type MobRig } from './sprites/mobs';
 import { createTouchControls } from './touchControls';
 
 const VIEW_W = 1280;
@@ -28,30 +30,34 @@ const VIEW_H = 720;
 const MAX_FRAME = 0.25;
 
 const BG_COLOR = 0x10131b;
-const SOLID_COLOR = 0x3b4252;
-const PLATFORM_COLOR = 0x5e81ac; // one-way platforms: lighter than solid ground
-const ROPE_COLOR = 0xd8a657;
-const ROPE_WIDTH = 4;
 const LOCAL_COLOR = 0x88c0d0;
 const REMOTE_COLOR = 0xd08770;
 const SLASH_COLOR = 0xeceff4;
 
-// Mob rendering: rectangle sized per kind, plus an HP bar shown only when hurt.
-const MOB_COLORS: Record<MobKind, number> = { slime: 0xa3be8c, mushroom: 0xd08770 };
-const MOB_RENDER: Record<MobKind, { w: number; h: number }> = {
-  slime: { w: 28, h: 24 },
-  mushroom: { w: 32, h: 32 },
-};
+// HP bars: shown above a mob only while hurt.
 const HP_BAR_W = 36;
 const HP_BAR_H = 4;
 const HP_BAR_BG = 0x2e3440;
 const HP_BAR_FG = 0xbf616a;
 
 const SLASH_FADE_MS = 100;
+// The arm-swing animation window. The slash effect fades over SLASH_FADE_MS;
+// the arm holds its forward swing a touch longer so the gesture reads clearly.
+const ATTACK_ANIM_MS = 120;
 const DAMAGE_RISE_PX = 40; // how far a damage number floats up over its life
 const DAMAGE_LIFE_MS = 800;
 const DEATH_FLASH_MS = 200;
 const DEATH_FLASH_COLOR = 0xbf616a;
+
+// Remote pose inference: we only receive interpolated x/y/vx/vy for remotes, so
+// onGround/climbing are guessed. A remote whose vy has been ~0 for this long is
+// treated as grounded; a sustained vertical velocity reads as climbing/airborne.
+const REMOTE_VY_STILL = 6; // |vy| below this (px/s) counts as "not moving vertically"
+const REMOTE_GROUNDED_MS = 80; // vy must be still this long before we call it grounded
+// A remote with a steady, modest vertical speed near a rope-ish cadence is most
+// likely climbing; a large vy is a jump/fall. We can't see rope state, so this
+// is a soft heuristic — the rig tolerates wrong guesses (defaults to idle/walk).
+const REMOTE_CLIMB_VY_MAX = 200; // |vy| at or below this, while not still, looks like a climb
 
 // Chat speech bubbles: a rounded near-white panel of dark text that floats above
 // a player's name label and follows them (it's parented to the player's root).
@@ -97,10 +103,19 @@ export interface GameApp {
   resetLocal(state: PlayerState, tick: number): void;
   onLocalTick(cb: (state: PlayerState, tick: number, packedInput: number) => void): void;
   onFrame(cb: (nowMs: number) => void): void;
-  upsertRemotePlayer(id: string, name: string, x: number, y: number, facing: Facing): void;
+  /** Upsert a remote player view. vx/vy are the interpolated velocity (for animation). */
+  upsertRemotePlayer(
+    id: string,
+    name: string,
+    x: number,
+    y: number,
+    facing: Facing,
+    vx: number,
+    vy: number,
+  ): void;
   removeRemotePlayer(id: string): void;
-  /** Upsert a mob view; hidden when hp <= 0. */
-  upsertMob(id: number, kind: MobKind, x: number, y: number, dir: number, hp: number): void;
+  /** Upsert a mob view; hidden when hp <= 0. vx is the interpolated x-velocity (waddle gate). */
+  upsertMob(id: number, kind: MobKind, x: number, y: number, dir: number, hp: number, vx: number): void;
   removeMob(id: number): void;
   /** Floating combat text that rises and fades at world position (x, y). */
   spawnDamageNumber(x: number, y: number, amount: number, color: number): void;
@@ -123,16 +138,30 @@ export interface GameApp {
 
 interface PlayerView {
   root: Container;
-  body: Graphics;
+  rig: CharacterRig;
   label: Text;
+  /** Milliseconds left in the current attack-swing animation (0 = none). */
+  attackMs: number;
+}
+
+/** Per-frame interpolated motion for a remote, plus inferred grounded heuristic. */
+interface RemotePose {
+  vx: number;
+  vy: number;
+  /** ms the remote's |vy| has stayed below REMOTE_VY_STILL (grounded confidence). */
+  stillMs: number;
 }
 
 interface MobView {
   root: Container;
-  body: Graphics;
+  rig: MobRig;
   hpBar: Container;
   hpFill: Graphics;
   kind: MobKind;
+  /** True while the mob's interpolated x-velocity says it's walking (waddle gate). */
+  moving: boolean;
+  /** Last hp we drew, so upsertMob can detect the alive->dead transition (poof). */
+  lastHp: number;
 }
 
 /** A render-only effect with a finite lifetime; `update` returns false when done. */
@@ -141,18 +170,18 @@ interface Effect {
   update(dtMs: number): boolean;
 }
 
-/** A labelled rectangle sprite parented under the world container. */
+/** A labelled character rig parented under the world container. */
 function createPlayerView(world: Container, name: string, color: number): PlayerView {
   const root = new Container();
-  const body = new Graphics()
-    .rect(-PLAYER_HALF_W, -PLAYER_HALF_H, PLAYER_HALF_W * 2, PLAYER_HALF_H * 2)
-    .fill(color);
+  const rig = createCharacterRig(color);
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
-  root.addChild(body, label);
+  // rig.body holds the mirror-able parts; the label stays unmirrored (a flip of
+  // body.scale.x must never touch it), so both are direct children of the root.
+  root.addChild(rig.body, label);
   world.addChild(root);
-  return { root, body, label };
+  return { root, rig, label, attackMs: 0 };
 }
 
 /**
@@ -186,27 +215,23 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   await app.init({ width: VIEW_W, height: VIEW_H, background: BG_COLOR, antialias: false });
   host.appendChild(app.canvas);
 
+  // Scene split: the backdrop (sky + parallax) is SCREEN-space and goes on the
+  // stage behind the world; the map geometry is WORLD-space and goes inside the
+  // world. This preserves the depth order: sky → parallax → ropes (behind
+  // platforms) → players → effects → HUD.
+  const scene = createScene(VIEW_W, VIEW_H);
+  app.stage.addChild(scene.backdrop);
+
   const world = new Container();
   app.stage.addChild(world);
-
-  // Static map geometry. Ropes hang behind everything; platforms and the
-  // ground slab draw on top of them. All live in mapGfx, which is added to the
-  // world before any player view, so the whole map renders behind players.
-  const mapGfx = new Graphics();
-  for (const r of DEFAULT_MAP.ropes) {
-    // Visual span: rope.top down to rope.bottom + PLAYER_HALF_H (the lower end
-    // rests on a floor, while rope.bottom bounds the climbing player's center).
-    mapGfx
-      .rect(r.x - ROPE_WIDTH / 2, r.top, ROPE_WIDTH, r.bottom + PLAYER_HALF_H - r.top)
-      .fill(ROPE_COLOR);
-  }
-  for (const s of DEFAULT_MAP.solids) mapGfx.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
-  for (const p of DEFAULT_MAP.platforms) mapGfx.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
-  world.addChild(mapGfx);
+  world.addChild(scene.mapGfx);
 
   const mobs = new Map<number, MobView>();
   const local = createPlayerView(world, 'You', LOCAL_COLOR);
   const remotes = new Map<string, PlayerView>();
+  // Latest interpolated motion per remote, fed by upsertRemotePlayer and read by
+  // the ticker to animate that remote's rig (remotes don't run the sim locally).
+  const remotePoses = new Map<string, RemotePose>();
 
   // World-space transient effects (slashes, damage numbers) drawn above players.
   const effectsLayer = new Container();
@@ -294,6 +319,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     });
   }
 
+  /** An expanding fading poof at a mob's death spot. */
+  function spawnDeathPoof(x: number, y: number, kind: MobKind): void {
+    const poof = createDeathPoof(kind);
+    poof.node.position.set(x, y);
+    effectsLayer.addChild(poof.node);
+    effects.push({ node: poof.node, update: poof.update });
+  }
+
   function spawnLevelUp(x: number, y: number): void {
     const t = new Text({ text: 'LEVEL UP!', style: LEVELUP_STYLE });
     t.anchor.set(0.5, 1);
@@ -313,6 +346,32 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     });
   }
 
+  /** Pose for the LOCAL player straight from the interpolated sim state. */
+  function localPose(attackMs: number): Pose {
+    return {
+      vx: curr.vx,
+      vy: curr.vy,
+      onGround: curr.onGround,
+      climbing: curr.rope >= 0,
+      attackSwingMs: attackMs,
+    };
+  }
+
+  /**
+   * Pose for a REMOTE player, inferred from interpolated velocity alone (we never
+   * see their onGround/rope columns). Heuristics:
+   *   - grounded once |vy| has stayed near zero for REMOTE_GROUNDED_MS;
+   *   - a sustained modest |vy| reads as climbing; a large |vy| as jump/fall.
+   * The rig tolerates wrong guesses (falls back to idle/walk by |vx|), so these
+   * only need to be right "often enough" to look alive.
+   */
+  function remotePose(p: RemotePose, attackMs: number): Pose {
+    const stillVy = Math.abs(p.vy) < REMOTE_VY_STILL;
+    const grounded = stillVy && p.stillMs >= REMOTE_GROUNDED_MS;
+    const climbing = !grounded && Math.abs(p.vy) > REMOTE_VY_STILL && Math.abs(p.vy) <= REMOTE_CLIMB_VY_MAX;
+    return { vx: p.vx, vy: p.vy, onGround: grounded, climbing, attackSwingMs: attackMs };
+  }
+
   app.ticker.add((ticker) => {
     for (const cb of frameCbs) cb(performance.now());
 
@@ -326,7 +385,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       const sample = touch ? mergeInputs(input.sample(), touch.sample()) : input.sample();
       // Predict our own swing: attackFires reads the PRE-step state, exactly like
       // the server's replay, so the slash shows the instant the swing happens.
-      if (attackFires(curr, sample)) spawnSlash(curr.x, curr.y, curr.facing);
+      if (attackFires(curr, sample)) {
+        spawnSlash(curr.x, curr.y, curr.facing);
+        local.attackMs = ATTACK_ANIM_MS; // sync the arm swing with the slash
+      }
       curr = stepPlayer(curr, sample, DEFAULT_MAP);
       tick += 1;
       acc -= DT;
@@ -342,7 +404,27 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     const sx = rx + localOffset.x;
     const sy = ry + localOffset.y;
     local.root.position.set(sx, sy);
-    local.body.scale.x = curr.facing;
+    local.rig.body.scale.x = curr.facing;
+    local.attackMs = Math.max(0, local.attackMs - ticker.deltaMS);
+    local.rig.update(ticker.deltaMS, localPose(local.attackMs));
+
+    // Animate every remote rig from its latest inferred pose. Position/facing are
+    // set in upsertRemotePlayer; here we only advance the rig animation.
+    for (const [id, view] of remotes) {
+      view.attackMs = Math.max(0, view.attackMs - ticker.deltaMS);
+      const pose = remotePoses.get(id);
+      if (pose) {
+        // Accumulate grounded-confidence: reset when vy moves, build while still.
+        pose.stillMs =
+          Math.abs(pose.vy) < REMOTE_VY_STILL ? pose.stillMs + ticker.deltaMS : 0;
+        view.rig.update(ticker.deltaMS, remotePose(pose, view.attackMs));
+      } else {
+        view.rig.update(ticker.deltaMS, remotePose({ vx: 0, vy: 0, stillMs: 0 }, view.attackMs));
+      }
+    }
+
+    // Animate mob rigs (squash, waddle) from their last-known moving state.
+    for (const view of mobs.values()) view.rig.update(ticker.deltaMS, view.moving);
 
     // Advance and reap transient effects.
     for (let i = effects.length - 1; i >= 0; i--) {
@@ -369,6 +451,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
     const cam = cameraOffset(sx, sy, VIEW_W, VIEW_H, WORLD_WIDTH, WORLD_HEIGHT);
     world.position.set(cam.x, cam.y);
+    scene.update(cam.x, cam.y);
   });
 
   return {
@@ -404,7 +487,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     onFrame(cb) {
       frameCbs.push(cb);
     },
-    upsertRemotePlayer(id, name, x, y, facing) {
+    upsertRemotePlayer(id, name, x, y, facing, vx, vy) {
       let view = remotes.get(id);
       if (!view) {
         view = createPlayerView(world, name, REMOTE_COLOR);
@@ -413,7 +496,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       view.label.text = name;
       view.root.position.set(x, y);
       // Flip only the body; flipping the root would mirror the name label.
-      view.body.scale.x = facing;
+      view.rig.body.scale.x = facing;
+      const pose = remotePoses.get(id);
+      if (pose) {
+        pose.vx = vx;
+        pose.vy = vy;
+      } else {
+        remotePoses.set(id, { vx, vy, stillMs: 0 });
+      }
     },
     removeRemotePlayer(id) {
       const view = remotes.get(id);
@@ -421,20 +511,25 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       // The bubble is a child of view.root, so destroying the root destroys it
       // too; drop the map entry so the expiry loop doesn't touch a dead node.
       speechBubbles.delete(id);
+      remotePoses.delete(id);
       view.root.destroy({ children: true });
       remotes.delete(id);
     },
-    upsertMob(id, kind, x, y, dir, hp) {
+    upsertMob(id, kind, x, y, dir, hp, vx) {
       let view = mobs.get(id);
       if (!view) {
         view = createMobView(world, kind);
         mobs.set(id, view);
       }
+      // alive -> dead this frame: puff at the mob's spot before it hides.
+      if (view.lastHp > 0 && hp <= 0) spawnDeathPoof(x, y, kind);
+      view.lastHp = hp;
       // Dead mobs (hp <= 0) are hidden rather than removed, so the SAME row
       // reappears on respawn without churning the map.
       view.root.visible = hp > 0;
       view.root.position.set(x, y);
-      view.body.scale.x = dir < 0 ? -1 : 1;
+      view.rig.body.scale.x = dir < 0 ? -1 : 1;
+      view.moving = Math.abs(vx) > 1;
       const max = MOB_STATS[kind].maxHp;
       const frac = Math.max(0, Math.min(1, hp / max));
       view.hpBar.visible = hp > 0 && hp < max;
@@ -454,6 +549,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       const view = remotes.get(idHex);
       if (!view) return;
       spawnSlash(view.root.position.x, view.root.position.y, facing);
+      view.attackMs = ATTACK_ANIM_MS; // swing the rig's arm to match the slash
     },
     showLevelUp() {
       spawnLevelUp(local.root.position.x, local.root.position.y);
@@ -481,15 +577,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   };
 }
 
-/** A mob view: colored rectangle body + an HP bar that hides at full health. */
-// (createMobView / createHud defined below.)
+/** A mob view: animated procedural rig + an HP bar that hides at full health. */
 function createMobView(world: Container, kind: MobKind): MobView {
-  const { w, h } = MOB_RENDER[kind];
   const root = new Container();
-  const body = new Graphics().rect(-w / 2, -h / 2, w, h).fill(MOB_COLORS[kind]);
+  const rig = createMobRig(kind);
 
   const hpBar = new Container();
-  hpBar.y = -h / 2 - 8;
+  // Sit the bar above the mob's drawing (halfH from center, plus a gap).
+  hpBar.y = -MOB_STATS[kind].halfH - 10;
   const bg = new Graphics().rect(-HP_BAR_W / 2, 0, HP_BAR_W, HP_BAR_H).fill(HP_BAR_BG);
   // Fill anchored at its left edge so scaling x shrinks it from the right.
   const hpFill = new Graphics().rect(0, 0, HP_BAR_W, HP_BAR_H).fill(HP_BAR_FG);
@@ -497,9 +592,9 @@ function createMobView(world: Container, kind: MobKind): MobView {
   hpBar.addChild(bg, hpFill);
   hpBar.visible = false;
 
-  root.addChild(body, hpBar);
+  root.addChild(rig.body, hpBar);
   world.addChild(root);
-  return { root, body, hpBar, hpFill, kind };
+  return { root, rig, hpBar, hpFill, kind, moving: false, lastHp: MOB_STATS[kind].maxHp };
 }
 
 /** Bottom-left HP/XP bars fixed to the stage. */
