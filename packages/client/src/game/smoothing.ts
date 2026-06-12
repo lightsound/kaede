@@ -9,15 +9,15 @@ export interface Vec2 {
 }
 
 /** Error offsets decay as exp(-dt/tau); tau in ms. */
-export const SMOOTH_TAU_MS = 80;
+const SMOOTH_TAU_MS = 80;
 /** Corrections larger than this (px) snap instantly instead of smearing. */
-export const SMOOTH_MAX_OFFSET_PX = 160;
+const SMOOTH_MAX_OFFSET_PX = 160;
 /** Offsets below this magnitude (px) are zeroed to avoid endless drift. */
-export const SMOOTH_EPSILON_PX = 0.5;
+const SMOOTH_EPSILON_PX = 0.5;
 /** Frame-to-frame remote target motion above this (px/s) is a discontinuity. */
 export const REMOTE_DISCONTINUITY_SPEED = 2000;
 /** Hermite segments longer than this (ms) fall back to linear interpolation. */
-export const HERMITE_MAX_SEGMENT_MS = 250;
+const HERMITE_MAX_SEGMENT_MS = 250;
 
 /**
  * The render-error offset to carry after a correction: how far the previously

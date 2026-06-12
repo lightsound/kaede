@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "pnpm --filter @maple/client dev",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "audit": "fallow audit",
+    "analyze": "fallow dead-code && fallow dupes && fallow health"
   },
   "devDependencies": {
     "fallow": "^2.94.0"

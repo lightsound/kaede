@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "workspaces": {
+    "packages": ["packages/*"]
+  },
+  // Generated SpacetimeDB bindings: not ours to prune.
+  "ignorePatterns": ["**/module_bindings/**"],
+  // Used by the generated (ignored) bindings in packages/client.
+  "ignoreDependencies": ["spacetimedb"],
+  // Small repo: report even pair-only duplicates.
+  "duplicates": {
+    "minOccurrences": 2
+  },
+  "rules": {}
+}
