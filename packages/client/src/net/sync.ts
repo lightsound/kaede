@@ -64,15 +64,15 @@ export function startNet(gameApp: GameApp): Net {
   // connection so onChat works whether called before or after connect resolves.
   const chatCbs: ((msg: ChatMessage) => void)[] = [];
 
-  // Deliver a chat row to the UI log AND raise the speech bubble over its
-  // sender. Used for both the initial seed (iter, ascending by id) and live
-  // inserts. The bubble targets the local player (null) for our own messages,
-  // or the remote player's view by id hex otherwise.
-  function handleMessage(row: MessageRow): void {
+  // Deliver a chat row to the UI log and, for LIVE inserts only, raise the
+  // speech bubble over its sender (local player when it's ours). The initial
+  // backlog seed passes bubble=false: replaying stale lines over everyone's
+  // head on every reconnect would misread as people speaking right now.
+  function handleMessage(row: MessageRow, bubble: boolean): void {
     const senderHex = row.sender.toHexString();
     const mine = senderHex === myIdHex;
     for (const cb of chatCbs) cb({ id: row.id, name: row.name, text: row.text, mine });
-    gameApp.showSpeech(mine ? null : senderHex, row.text);
+    if (bubble) gameApp.showSpeech(mine ? null : senderHex, row.text);
   }
 
   // Track each mob's last-seen hp so the per-frame redraw (which only carries
@@ -216,11 +216,10 @@ export function startNet(gameApp: GameApp): Net {
       for (const row of c.db.mob.iter()) handleMobInsert(row);
 
       // Seed the existing chat backlog oldest-first so the UI log reads top-to-
-      // bottom in chronological order (the server keeps ids monotonic). This
-      // also raises a bubble for the most recent line of each present player,
-      // which is acceptable (and self-expires) on a fresh connect.
+      // bottom in chronological order (the server keeps ids monotonic). Log
+      // only — no bubbles for history (see handleMessage).
       const backlog = [...c.db.message.iter()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-      for (const row of backlog) handleMessage(row);
+      for (const row of backlog) handleMessage(row, false);
 
       c.db.player.onInsert((_ctx, row) => {
         const idHex = row.identity.toHexString();
@@ -262,7 +261,7 @@ export function startNet(gameApp: GameApp): Net {
 
       // New chat lines stream in as inserts; the server's prune deletes oldest
       // rows, which we ignore (the UI keeps its own capped backlog).
-      c.db.message.onInsert((_ctx, row) => handleMessage(row));
+      c.db.message.onInsert((_ctx, row) => handleMessage(row, true));
 
       c.reducers.join({}).catch(() => {});
     })
