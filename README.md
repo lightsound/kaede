@@ -95,6 +95,36 @@
    pnpm test        # shared の物理シミュレーションのユニットテスト
    ```
 
+## デプロイ（公開手順）
+
+ローカルでの動作確認ができたら、Maincloud（SpacetimeDB のマネージドホスト）へモジュールを公開し、
+クライアントを GitHub Pages へ発行することで、スマホを含む任意の端末からアクセスできます。
+
+1. **Maincloud へのモジュール公開**（お手元で実行）
+
+   ```sh
+   spacetime login
+   spacetime publish <DB名> --server maincloud --yes   # リポジトリルートで実行。DB名は任意のユニーク名
+   ```
+
+   TypeScript バインディングは生成済みのものがリポジトリに含まれているため、デプロイ時に再生成する必要はありません。
+
+2. **GitHub リポジトリ設定**
+
+   - **Settings → Secrets and variables → Actions → Variables** に以下を登録します。
+     - `VITE_SPACETIME_DB`: Maincloud で付けた DB名。
+     - `VITE_SPACETIME_URI`（任意）: 既定は `wss://maincloud.spacetimedb.com` なので、Maincloud を使う場合は不要です。
+   - **Settings → Pages → Build and deployment → Source** を **「GitHub Actions」** に設定します。
+
+3. **デプロイの実行**
+
+   - **Actions** タブから **Deploy** ワークフローを選び、**Run workflow** で手動実行します（誤発行を避けるため自動ではなく手動トリガーです）。
+   - 完了後に発行された URL へスマホからアクセスできます（タッチ操作に対応しています）。
+
+4. **CI**
+
+   push のたびに **CI** ワークフローが走り、typecheck・test・build・fallow（dead-code / dupes）を自動で検証します。
+
 ## やらないこと（このフェーズの範囲外）
 
 - **見た目は単色矩形のみ** です。スプライトやアニメーションは含みません。

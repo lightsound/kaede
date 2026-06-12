@@ -14,8 +14,9 @@ import {
 } from '@maple/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { cameraOffset } from './camera';
-import { createInput } from './input';
+import { createInput, mergeInputs } from './input';
 import { correctionOffset, decayOffset, type Vec2 } from './smoothing';
+import { createTouchControls } from './touchControls';
 
 const VIEW_W = 1280;
 const VIEW_H = 720;
@@ -85,6 +86,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const remotes = new Map<string, PlayerView>();
 
   const input = createInput();
+
+  // Touch overlay: only built on coarse-pointer / touch-capable devices. Added
+  // to app.stage (not world) so it stays fixed in screen space, above the world.
+  const wantsTouch =
+    window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+  const touch = wantsTouch ? createTouchControls() : undefined;
+  if (touch) app.stage.addChild(touch.container);
+
   const tickCbs: ((s: PlayerState, tick: number, packedInput: number) => void)[] = [];
   const frameCbs: ((nowMs: number) => void)[] = [];
 
@@ -109,7 +118,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     }
     while (acc >= DT) {
       prev = curr;
-      const sample = input.sample();
+      const sample = touch ? mergeInputs(input.sample(), touch.sample()) : input.sample();
       curr = stepPlayer(curr, sample, DEFAULT_MAP);
       tick += 1;
       acc -= DT;
@@ -134,6 +143,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   return {
     destroy() {
       input.dispose();
+      touch?.dispose();
       app.destroy(true, { children: true });
     },
     setLocalPlayerName(name) {

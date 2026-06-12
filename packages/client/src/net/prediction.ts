@@ -30,7 +30,7 @@ const sameState = (a: PlayerState, b: PlayerState): boolean =>
  * un-acked inputs whenever the authoritative state disagrees with our
  * prediction. `startTick` is the authoritative spawn tick.
  */
-export function createPrediction(deps: PredictionDeps, startTick: number) {
+export function createPrediction(deps: PredictionDeps, startTick: number, nowMs = performance.now()) {
   // Prediction bookkeeping. history[t] is the packed input applied to produce
   // predicted[t]; both are pruned once tick t is acknowledged by the server.
   const history = new Map<number, number>();
@@ -38,9 +38,9 @@ export function createPrediction(deps: PredictionDeps, startTick: number) {
   let currentTick = startTick;
   let ackedTick = startTick;
   let lastSentTick = startTick;
-  // Seed the ack-advance clock at creation (the authoritative spawn is "fresh"),
-  // mirroring the old `lastAckAdvanceAt = performance.now()` at start.
-  let lastAckAdvanceAt = performance.now();
+  // Seed the ack-advance clock at creation (the authoritative spawn is "fresh").
+  // nowMs is injectable so tests can drive a virtual clock.
+  let lastAckAdvanceAt = nowMs;
   let lastFlushMs = 0;
 
   function flush(now: number): void {

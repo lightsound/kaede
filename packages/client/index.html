@@ -2,13 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>Maple</title>
     <style>
       html,
       body {
         margin: 0;
+        height: 100%;
         background: #0b0d12;
+        overscroll-behavior: none;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      /* The canvas is appended by Pixi at runtime under #root. Internal
+         resolution stays 1280x720; we scale it down purely via CSS. */
+      #root canvas {
+        display: block;
+        width: min(100vw, 1280px);
+        height: auto;
+        touch-action: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
     </style>
   </head>
