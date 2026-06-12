@@ -12,21 +12,32 @@ export const SPAWN_X = 200;
 export const SPAWN_Y = GROUND_TOP - PLAYER_HALF_H;
 
 /**
- * The single hard-coded level: a full-width ground slab plus a handful of
- * floating platforms. Platform tops sit 100-120px apart so every one of them
- * is reachable with the standard jump (max jump height ~147px).
+ * The single hard-coded level. The ground slab is the only solid; every
+ * floating platform is one-way (jump through from below, land from above,
+ * drop through with down+jump). Platform tops sit 100-120px apart so each is
+ * reachable with the standard jump (max jump height ~147px) — except the high
+ * platform at y=300, which is reachable only by climbing its rope.
+ *
+ * Rope `bottom` is the lowest CENTER y while climbing: floorTop minus
+ * PLAYER_HALF_H of whatever the rope's lower end rests on.
  */
 export const DEFAULT_MAP: CollisionMap = {
   width: WORLD_WIDTH,
   height: WORLD_HEIGHT,
-  solids: [
-    { x: 0, y: GROUND_TOP, w: WORLD_WIDTH, h: WORLD_HEIGHT - GROUND_TOP },
+  solids: [{ x: 0, y: GROUND_TOP, w: WORLD_WIDTH, h: WORLD_HEIGHT - GROUND_TOP }],
+  platforms: [
     { x: 420, y: 540, w: 260, h: 24 },
     { x: 860, y: 440, w: 260, h: 24 },
     { x: 1320, y: 540, w: 300, h: 24 },
+    { x: 1300, y: 300, w: 200, h: 24 },
     { x: 1800, y: 430, w: 240, h: 24 },
     { x: 2240, y: 540, w: 320, h: 24 },
     { x: 2760, y: 450, w: 260, h: 24 },
     { x: 3260, y: 540, w: 280, h: 24 },
+  ],
+  ropes: [
+    { x: 550, top: 540, bottom: GROUND_TOP - PLAYER_HALF_H }, // ground → platform at 420
+    { x: 990, top: 440, bottom: GROUND_TOP - PLAYER_HALF_H }, // ground → platform at 860
+    { x: 1400, top: 300, bottom: 540 - PLAYER_HALF_H }, // platform at 1320 → high platform
   ],
 };

@@ -5,6 +5,8 @@ export type Facing = -1 | 1;
 export interface PlayerInput {
   left: boolean;
   right: boolean;
+  up: boolean;
+  down: boolean;
   jump: boolean;
 }
 
@@ -19,6 +21,8 @@ export interface PlayerState {
   vy: number;
   facing: Facing;
   onGround: boolean;
+  /** Index into the map's ropes while climbing, or -1 when not climbing. */
+  rope: number;
 }
 
 /** Axis-aligned rectangle: top-left corner plus size, in world pixels. */
@@ -29,9 +33,25 @@ export interface Rect {
   h: number;
 }
 
-/** Static collision geometry of a map. All solids are impassable AABBs. */
+/**
+ * A climbable vertical line (rope/ladder). `top` and `bottom` bound the
+ * player's CENTER y while climbing. A rope whose lower end rests on a floor
+ * should use bottom = floorTop - PLAYER_HALF_H, so letting go at the bottom
+ * lands instantly instead of clipping into the floor.
+ */
+export interface Rope {
+  x: number;
+  top: number;
+  bottom: number;
+}
+
+/** Static collision geometry of a map. */
 export interface CollisionMap {
   width: number;
   height: number;
+  /** Impassable AABBs (ground, walls). Block movement from every side. */
   solids: Rect[];
+  /** One-way platforms: support the player only when falling onto their top edge. */
+  platforms: Rect[];
+  ropes: Rope[];
 }

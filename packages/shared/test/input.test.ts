@@ -9,11 +9,16 @@ import {
   type PlayerState,
 } from '../src/index';
 
-/** All 8 combinations of the three input bitflags. */
-const ALL_INPUTS: PlayerInput[] = Array.from({ length: 8 }, (_, n) => ({
+/**
+ * All 32 combinations of the five input bitflags.
+ * Bit mapping (must match src/input.ts): 1=left, 2=right, 4=jump, 8=up, 16=down.
+ */
+const ALL_INPUTS: PlayerInput[] = Array.from({ length: 32 }, (_, n) => ({
   left: (n & 1) !== 0,
   right: (n & 2) !== 0,
   jump: (n & 4) !== 0,
+  up: (n & 8) !== 0,
+  down: (n & 16) !== 0,
 }));
 
 describe('packInput / unpackInput', () => {
@@ -23,20 +28,37 @@ describe('packInput / unpackInput', () => {
     }
   });
 
-  it('packs into the u8 range 0..7', () => {
+  it('packs into the u8 range 0..31', () => {
     for (const input of ALL_INPUTS) {
       const p = packInput(input);
       expect(p).toBeGreaterThanOrEqual(0);
-      expect(p).toBeLessThanOrEqual(7);
+      expect(p).toBeLessThanOrEqual(31);
     }
+  });
+
+  it('packs each bit at its documented position', () => {
+    expect(packInput({ left: true, right: false, jump: false, up: false, down: false })).toBe(1);
+    expect(packInput({ left: false, right: true, jump: false, up: false, down: false })).toBe(2);
+    expect(packInput({ left: false, right: false, jump: true, up: false, down: false })).toBe(4);
+    expect(packInput({ left: false, right: false, jump: false, up: true, down: false })).toBe(8);
+    expect(packInput({ left: false, right: false, jump: false, up: false, down: true })).toBe(16);
   });
 });
 
 describe('replay determinism', () => {
   it('replaying a fixed input sequence yields identical state both times', () => {
     // This is what makes server replay bit-identical to client prediction.
-    const seq = [2, 2, 6, 0, 1, 1, 4, 2, 0, 3].map(unpackInput);
-    const start: PlayerState = { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false };
+    // Sequence exercises movement, jump, and climb (up/down) bits, values up to 31.
+    const seq = [2, 2, 6, 24, 8, 1, 1, 20, 4, 16, 31, 0, 3].map(unpackInput);
+    const start: PlayerState = {
+      x: SPAWN_X,
+      y: 200,
+      vx: 0,
+      vy: 0,
+      facing: 1,
+      onGround: false,
+      rope: -1,
+    };
 
     const replay = (): PlayerState => {
       let s = start;

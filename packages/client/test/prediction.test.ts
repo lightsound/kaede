@@ -13,11 +13,11 @@ import {
 } from '@maple/shared';
 import { createPrediction, type PredictionDeps } from '../src/net/prediction';
 
-const NO_INPUT: PlayerInput = { left: false, right: false, jump: false };
+const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
 
 /** The authoritative spawn state the prediction loop starts from. */
 function spawn(): PlayerState {
-  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false };
+  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1 };
 }
 
 interface SentBatch {
