@@ -18,6 +18,9 @@ export const Player = __t.object("Player", {
   vx: __t.f64(),
   vy: __t.f64(),
   facing: __t.i8(),
+  onGround: __t.bool(),
+  tick: __t.u32(),
+  simStartAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;

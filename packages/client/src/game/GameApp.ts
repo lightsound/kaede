@@ -7,6 +7,7 @@ import {
   SPAWN_Y,
   WORLD_HEIGHT,
   WORLD_WIDTH,
+  packInput,
   stepPlayer,
   type Facing,
   type PlayerState,
@@ -29,7 +30,18 @@ const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sa
 export interface GameApp {
   destroy(): void;
   setLocalPlayerName(name: string): void;
-  onLocalTick(cb: (state: PlayerState) => void): void;
+  /**
+   * Begin stepping the local simulation from `state` at `tick`. Until this is
+   * called the ticker renders the scene but never steps physics or fires
+   * onLocalTick, so the client waits for the authoritative spawn row.
+   */
+  start(state: PlayerState, tick: number): void;
+  /**
+   * Reconciliation hook: snap prev=curr=state and the tick counter to `tick`.
+   * Rendering jumps to the corrected state (intended).
+   */
+  resetLocal(state: PlayerState, tick: number): void;
+  onLocalTick(cb: (state: PlayerState, tick: number, packedInput: number) => void): void;
   onFrame(cb: (nowMs: number) => void): void;
   upsertRemotePlayer(id: string, name: string, x: number, y: number, facing: Facing): void;
   removeRemotePlayer(id: string): void;
@@ -72,22 +84,30 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const remotes = new Map<string, PlayerView>();
 
   const input = createInput();
-  const tickCbs: ((s: PlayerState) => void)[] = [];
+  const tickCbs: ((s: PlayerState, tick: number, packedInput: number) => void)[] = [];
   const frameCbs: ((nowMs: number) => void)[] = [];
 
   let prev: PlayerState = { x: SPAWN_X, y: SPAWN_Y, vx: 0, vy: 0, facing: 1, onGround: false };
   let curr: PlayerState = prev;
   let acc = 0;
+  // Simulation is gated until start(): tick < 0 means "not yet running".
+  let tick = -1;
 
   app.ticker.add((ticker) => {
     for (const cb of frameCbs) cb(performance.now());
 
-    acc += Math.min(ticker.deltaMS / 1000, MAX_FRAME);
+    if (tick < 0) {
+      acc = 0; // never pre-accumulate before the sim starts
+    } else {
+      acc += Math.min(ticker.deltaMS / 1000, MAX_FRAME);
+    }
     while (acc >= DT) {
       prev = curr;
-      curr = stepPlayer(curr, input.sample(), DEFAULT_MAP);
+      const sample = input.sample();
+      curr = stepPlayer(curr, sample, DEFAULT_MAP);
+      tick += 1;
       acc -= DT;
-      for (const cb of tickCbs) cb(curr);
+      for (const cb of tickCbs) cb(curr, tick, packInput(sample));
     }
 
     const alpha = acc / DT;
@@ -107,6 +127,15 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     },
     setLocalPlayerName(name) {
       local.label.text = name;
+    },
+    start(state, t) {
+      prev = curr = state;
+      tick = t;
+      acc = 0; // clamp so the first running frame doesn't replay a burst
+    },
+    resetLocal(state, t) {
+      prev = curr = state;
+      tick = t;
     },
     onLocalTick(cb) {
       tickCbs.push(cb);

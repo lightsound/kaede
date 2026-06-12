@@ -11,9 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  x: __t.f64(),
-  y: __t.f64(),
-  vx: __t.f64(),
-  vy: __t.f64(),
-  facing: __t.i8(),
+  startTick: __t.u32(),
+  inputs: __t.byteArray(),
 };

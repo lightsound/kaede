@@ -18,5 +18,8 @@ export default __t.row({
   vx: __t.f64(),
   vy: __t.f64(),
   facing: __t.i8(),
+  onGround: __t.bool().name("on_ground"),
+  tick: __t.u32(),
+  simStartAt: __t.timestamp().name("sim_start_at"),
   updatedAt: __t.timestamp().name("updated_at"),
 });
