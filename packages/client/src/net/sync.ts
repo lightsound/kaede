@@ -48,19 +48,11 @@ export function startNet(gameApp: GameApp): Net {
       conn = c;
       myIdHex = id;
 
-      // Find our own row and start the simulation from the authoritative spawn
-      // state. Other rows already in the cache are seeded as remote players.
-      let ownRow: PlayerRow | undefined;
-      for (const row of c.db.player.iter()) {
-        const idHex = row.identity.toHexString();
-        if (idHex === myIdHex) {
-          ownRow = row;
-          continue;
-        }
-        remoteViews.record(idHex, row.name, row, performance.now());
-      }
-      if (ownRow) {
-        gameApp.setLocalPlayerName(ownRow.name);
+      // Spawning is explicit: our row appears via onInsert only after we call
+      // join below. Start the simulation from that authoritative spawn state.
+      const handleOwnRow = (row: PlayerRow) => {
+        if (prediction) return;
+        gameApp.setLocalPlayerName(row.name);
         prediction = createPrediction(
           {
             sendBatch(startTick, packed) {
@@ -70,14 +62,25 @@ export function startNet(gameApp: GameApp): Net {
               gameApp.resetLocal(state, tick);
             },
           },
-          ownRow.tick,
+          row.tick,
         );
-        gameApp.start(stateFromRow(ownRow), ownRow.tick);
+        gameApp.start(stateFromRow(row), row.tick);
+      };
+
+      // Seed players already in the world (a leftover own row would mean a
+      // reconnect under the same identity; resume from it rather than re-join).
+      for (const row of c.db.player.iter()) {
+        const idHex = row.identity.toHexString();
+        if (idHex === myIdHex) handleOwnRow(row);
+        else remoteViews.record(idHex, row.name, row, performance.now());
       }
 
       c.db.player.onInsert((_ctx, row) => {
         const idHex = row.identity.toHexString();
-        if (idHex === myIdHex) return;
+        if (idHex === myIdHex) {
+          handleOwnRow(row);
+          return;
+        }
         remoteViews.record(idHex, row.name, row, performance.now());
       });
       c.db.player.onUpdate((_ctx, _old, row) => {
@@ -95,6 +98,8 @@ export function startNet(gameApp: GameApp): Net {
         remoteViews.remove(idHex);
         gameApp.removeRemotePlayer(idHex);
       });
+
+      c.reducers.join({}).catch(() => {});
     })
     .catch(() => {});
 

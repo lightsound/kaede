@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import JoinReducer from "./join_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
 
 // Import all procedure arg schemas
@@ -60,6 +61,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("join", JoinReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
 );
 

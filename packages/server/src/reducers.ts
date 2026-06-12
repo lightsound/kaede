@@ -46,7 +46,10 @@ export const submitInputs = spacetimedb.reducer(
   }
 );
 
-export const onConnect = spacetimedb.clientConnected(ctx => {
+// Spawning is an explicit opt-in, not a connection side effect: observer
+// connections (spacetime sql/subscribe, admin tooling) never call join, so
+// they no longer flash into the world as phantom players.
+export const join = spacetimedb.reducer(ctx => {
   if (ctx.db.player.identity.find(ctx.sender)) return;
   const name = 'Player-' + ctx.sender.toHexString().slice(0, 6);
   ctx.db.player.insert({
