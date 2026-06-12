@@ -1,15 +1,54 @@
 import { t } from 'spacetimedb/server';
-import { SPAWN_X, SPAWN_Y } from '@maple/shared';
+import {
+  DEFAULT_MAP,
+  DT,
+  INPUT_BATCH_MAX_TICKS,
+  SPAWN_X,
+  SPAWN_Y,
+  TICK_ALLOWANCE_SLACK,
+  stepPlayer,
+  unpackInput,
+  type PlayerState,
+} from '@maple/shared';
 import { spacetimedb } from './tables';
 
-// Trust-based MVP: no server-side physics validation. The sender can only ever
-// write its own row, enforced by keying on ctx.sender (never an identity param).
-export const updatePosition = spacetimedb.reducer(
-  { x: t.number(), y: t.number(), vx: t.number(), vy: t.number(), facing: t.i8() },
-  (ctx, { x, y, vx, vy, facing }) => {
+// Server-authoritative movement: clients send only inputs, the server replays
+// them through the same shared physics. Position cannot change any other way.
+export const submitInputs = spacetimedb.reducer(
+  { startTick: t.u32(), inputs: t.array(t.u8()) },
+  (ctx, { startTick, inputs }) => {
     const row = ctx.db.player.identity.find(ctx.sender);
     if (!row) return;
-    ctx.db.player.identity.update({ ...row, x, y, vx, vy, facing, updatedAt: ctx.timestamp });
+    if (inputs.length === 0 || inputs.length > INPUT_BATCH_MAX_TICKS) return;
+    if (startTick !== row.tick) return; // out-of-order / duplicate batch
+
+    // Speed-hack guard: a player's tick count may run at most TICK_ALLOWANCE_SLACK
+    // ticks ahead of the wall-clock ticks elapsed since spawn.
+    const elapsedMs = ctx.timestamp.since(row.simStartAt).millis;
+    const allowed = Math.floor(elapsedMs / (DT * 1000)) + TICK_ALLOWANCE_SLACK;
+    if (row.tick + inputs.length > allowed) return;
+
+    let s: PlayerState = {
+      x: row.x,
+      y: row.y,
+      vx: row.vx,
+      vy: row.vy,
+      facing: row.facing < 0 ? -1 : 1,
+      onGround: row.onGround,
+    };
+    for (const byte of inputs) s = stepPlayer(s, unpackInput(byte), DEFAULT_MAP);
+
+    ctx.db.player.identity.update({
+      ...row,
+      x: s.x,
+      y: s.y,
+      vx: s.vx,
+      vy: s.vy,
+      facing: s.facing,
+      onGround: s.onGround,
+      tick: row.tick + inputs.length,
+      updatedAt: ctx.timestamp,
+    });
   }
 );
 
@@ -24,6 +63,9 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
     vx: 0,
     vy: 0,
     facing: 1,
+    onGround: false,
+    tick: 0,
+    simStartAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
   });
 });

@@ -11,6 +11,9 @@ export const spacetimedb = schema({
       vx: t.number(),
       vy: t.number(),
       facing: t.i8(), // -1 left, 1 right
+      onGround: t.bool(),
+      tick: t.u32(), // ticks applied so far; state is "after tick `tick`"
+      simStartAt: t.timestamp(), // spawn wall-clock, basis of the speed-hack guard
       updatedAt: t.timestamp(),
     }
   ),
