@@ -62,11 +62,12 @@ describe('replay determinism', () => {
       onGround: false,
       rope: -1,
       attackCooldown: 0,
+      mapId: 0,
     };
 
     const replay = (): PlayerState => {
       let s = start;
-      for (const input of seq) s = stepPlayer(s, input, DEFAULT_MAP);
+      for (const input of seq) s = stepPlayer(s, input, [DEFAULT_MAP]);
       return s;
     };
 

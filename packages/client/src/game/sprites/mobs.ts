@@ -16,6 +16,7 @@ import { createOscillator } from './oscillator';
 const PALETTE: Record<MobKind, number> = {
   slime: 0xa3be8c,
   mushroom: 0xd08770,
+  golem: 0x6b7280, // stony grey-blue
 };
 
 const EYE = 0x10131b;
@@ -32,6 +33,13 @@ const SLIME_HOP_PX = 5; // vertical hop tied to the same bounce
 const MUSH_PERIOD_MS = 420;
 const MUSH_WADDLE_RAD = 0.16;
 
+// Golem: a heavy stone bruiser that bobs slowly up and down (its mass lumbers).
+// The bob runs always (even idle) but is small, so it reads as a hulking idle.
+const GOLEM_PERIOD_MS = 1400;
+const GOLEM_BOB_PX = 3;
+const GOLEM_ROCK = 0x4b515c; // darker stone for plating
+const GOLEM_CRACK = 0x363b44; // crack lines
+
 export interface MobRig {
   body: Container;
   /** Advance the rig by dtMs. `moving` gates motion-only animation (waddle). */
@@ -39,7 +47,9 @@ export interface MobRig {
 }
 
 export function createMobRig(kind: MobKind): MobRig {
-  return kind === 'slime' ? createSlimeRig() : createMushroomRig();
+  if (kind === 'slime') return createSlimeRig();
+  if (kind === 'golem') return createGolemRig();
+  return createMushroomRig();
 }
 
 function createSlimeRig(): MobRig {
@@ -133,6 +143,64 @@ function createMushroomRig(): MobRig {
     const w = waddle.tick(dtMs);
     // Only rock while walking; a stationary mushroom holds still.
     inner.rotation = moving ? MUSH_WADDLE_RAD * w : 0;
+  }
+
+  return { body, update };
+}
+
+function createGolemRig(): MobRig {
+  const s = MOB_STATS.golem;
+  const halfW = s.halfW;
+  const halfH = s.halfH;
+  const color = PALETTE.golem;
+
+  const body = new Container();
+  // Bottom anchor at the AABB floor; geometry is drawn upward from there so the
+  // slow bob lifts the whole mass without clipping into the ground.
+  const inner = new Container();
+  inner.y = halfH;
+  body.addChild(inner);
+
+  // Blocky torso filling most of the box, with darker plating and crack lines so
+  // it reads as carved stone rather than a flat slab.
+  const torsoW = halfW * 1.7;
+  const torsoH = halfH * 1.5;
+  const torso = new Graphics()
+    .roundRect(-torsoW / 2, -torsoH, torsoW, torsoH, 4)
+    .fill(color);
+  const plating = new Graphics()
+    .rect(-torsoW / 2, -torsoH * 0.55, torsoW, torsoH * 0.18)
+    .fill(GOLEM_ROCK);
+  const cracks = new Graphics()
+    .poly([-torsoW * 0.2, -torsoH * 0.9, -torsoW * 0.05, -torsoH * 0.6, -torsoW * 0.25, -torsoH * 0.35])
+    .stroke({ color: GOLEM_CRACK, width: 1.5 });
+
+  // A squat head block on top.
+  const headW = halfW * 1.0;
+  const headH = halfH * 0.5;
+  const headY = -torsoH - headH * 0.5;
+  const head = new Graphics()
+    .roundRect(-headW / 2, headY - headH / 2, headW, headH, 3)
+    .fill(color);
+  const eyes = new Graphics()
+    .rect(-headW * 0.28, headY - 1.5, 4, 3)
+    .rect(headW * 0.12, headY - 1.5, 4, 3)
+    .fill(0xebcb8b); // glowing amber eyes
+
+  // Stubby arms hanging at the sides.
+  const arms = new Graphics()
+    .roundRect(-torsoW / 2 - 5, -torsoH * 0.85, 6, torsoH * 0.7, 3)
+    .roundRect(torsoW / 2 - 1, -torsoH * 0.85, 6, torsoH * 0.7, 3)
+    .fill(GOLEM_ROCK);
+
+  inner.addChild(torso, plating, cracks, arms, head, eyes);
+
+  const bob = createOscillator(GOLEM_PERIOD_MS);
+
+  function update(dtMs: number, _moving: boolean): void {
+    const b = bob.tick(dtMs);
+    // Heavy, ever-present bob: lift the whole body by a few px on the upswing.
+    inner.y = halfH - GOLEM_BOB_PX * Math.max(0, b);
   }
 
   return { body, update };

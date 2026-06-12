@@ -5,6 +5,7 @@ import {
   ATTACK_RANGE_X,
   DEFAULT_MAP,
   GROUND_TOP,
+  MAPS,
   MOB_STATS,
   MOB_SPAWNS,
   PLAYER_HALF_H,
@@ -27,33 +28,36 @@ const ATTACK: PlayerInput = { ...NO_INPUT, attack: true };
 
 const GROUNDED_Y = GROUND_TOP - PLAYER_HALF_H;
 
+// Single-map MAPS list for stepPlayer (the player's mapId is 0, so maps[0]).
+const MAPS0 = [DEFAULT_MAP];
+
 function spawn(overrides: Partial<PlayerState> = {}): PlayerState {
-  return { x: SPAWN_X, y: GROUNDED_Y, vx: 0, vy: 0, facing: 1, onGround: true, rope: -1, attackCooldown: 0, ...overrides };
+  return { x: SPAWN_X, y: GROUNDED_Y, vx: 0, vy: 0, facing: 1, onGround: true, rope: -1, attackCooldown: 0, mapId: 0, ...overrides };
 }
 
 describe('attack cooldown lifecycle in stepPlayer', () => {
   it('fires when ready and latches the full cooldown on the post-step state', () => {
     const before = spawn();
     expect(attackFires(before, ATTACK)).toBe(true);
-    const after = stepPlayer(before, ATTACK, DEFAULT_MAP);
+    const after = stepPlayer(before, ATTACK, MAPS0);
     expect(after.attackCooldown).toBe(ATTACK_COOLDOWN_TICKS);
   });
 
   it('blocks a re-fire while the cooldown is above 0, then re-fires at 0', () => {
-    let s = stepPlayer(spawn(), ATTACK, DEFAULT_MAP);
+    let s = stepPlayer(spawn(), ATTACK, MAPS0);
     expect(s.attackCooldown).toBe(ATTACK_COOLDOWN_TICKS);
     // Hold attack: every intermediate tick is blocked and decrements by one. It
     // takes ATTACK_COOLDOWN_TICKS more steps to drain 36 -> 0.
     for (let i = 0; i < ATTACK_COOLDOWN_TICKS; i++) {
       const cd = s.attackCooldown;
       expect(attackFires(s, ATTACK)).toBe(false);
-      s = stepPlayer(s, ATTACK, DEFAULT_MAP);
+      s = stepPlayer(s, ATTACK, MAPS0);
       expect(s.attackCooldown).toBe(cd - 1);
     }
     // Now cooldown is exactly 0 and the next swing fires again.
     expect(s.attackCooldown).toBe(0);
     expect(attackFires(s, ATTACK)).toBe(true);
-    const refired = stepPlayer(s, ATTACK, DEFAULT_MAP);
+    const refired = stepPlayer(s, ATTACK, MAPS0);
     expect(refired.attackCooldown).toBe(ATTACK_COOLDOWN_TICKS);
   });
 
@@ -61,14 +65,14 @@ describe('attack cooldown lifecycle in stepPlayer', () => {
     // On a rope with a partial cooldown: attack is suppressed yet the clock ticks.
     const onRope = spawn({ x: 550, y: 580, onGround: false, rope: 0, attackCooldown: 5 });
     expect(attackFires(onRope, ATTACK)).toBe(false);
-    const after = stepPlayer(onRope, { ...ATTACK, up: true }, DEFAULT_MAP);
+    const after = stepPlayer(onRope, { ...ATTACK, up: true }, MAPS0);
     expect(after.rope).toBe(0); // still climbing
     expect(after.attackCooldown).toBe(4); // decremented, not latched
   });
 
   it('decays to 0 with no attack input held', () => {
-    let s = stepPlayer(spawn(), ATTACK, DEFAULT_MAP);
-    for (let i = 0; i < ATTACK_COOLDOWN_TICKS; i++) s = stepPlayer(s, NO_INPUT, DEFAULT_MAP);
+    let s = stepPlayer(spawn(), ATTACK, MAPS0);
+    for (let i = 0; i < ATTACK_COOLDOWN_TICKS; i++) s = stepPlayer(s, NO_INPUT, MAPS0);
     expect(s.attackCooldown).toBe(0);
   });
 });
@@ -166,16 +170,19 @@ describe('xp / level helpers', () => {
 });
 
 describe('MOB_SPAWNS placement', () => {
-  it('keeps every patrol range inside its [minX, maxX] and on a valid surface', () => {
+  it('keeps every patrol range inside its [minX, maxX] and on a valid surface of its map', () => {
     for (const s of MOB_SPAWNS) {
       expect(s.minX).toBeLessThan(s.maxX);
       expect(s.x).toBeGreaterThanOrEqual(s.minX);
       expect(s.x).toBeLessThanOrEqual(s.maxX);
+      // A spawn's map must exist; its surface is checked against THAT map.
+      expect(s.map).toBeGreaterThanOrEqual(0);
+      expect(s.map).toBeLessThan(MAPS.length);
       // y is a resting center: surfaceTop = y + halfH should match a surface.
       const halfH = MOB_STATS[s.kind].halfH;
       const surfaceTop = s.y + halfH;
       const onGround = surfaceTop === GROUND_TOP;
-      const onPlatform = DEFAULT_MAP.platforms.some(
+      const onPlatform = MAPS[s.map].platforms.some(
         (p) => p.y === surfaceTop && s.minX >= p.x && s.maxX <= p.x + p.w,
       );
       expect(onGround || onPlatform).toBe(true);

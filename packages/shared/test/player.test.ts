@@ -5,13 +5,16 @@ import {
   DT,
   GROUND_TOP,
   JUMP_VELOCITY,
+  MAPS,
   MOVE_SPEED,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
+  PORTAL_RANGE_X,
   ROPE_JUMP_VELOCITY,
   SPAWN_X,
   WORLD_HEIGHT,
   WORLD_WIDTH,
+  portalInRange,
   stepPlayer,
   type CollisionMap,
   type PlayerInput,
@@ -20,14 +23,18 @@ import {
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false, attack: false };
 
+// Most tests run on map 0 alone; pass it as a single-element MAPS list (the
+// player's mapId is 0, so stepPlayer reads maps[0]).
+const MAPS0: readonly CollisionMap[] = [DEFAULT_MAP];
+
 function spawn(overrides: Partial<PlayerState> = {}): PlayerState {
-  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, attackCooldown: 0, ...overrides };
+  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, attackCooldown: 0, mapId: 0, ...overrides };
 }
 
 /** Run the sim for n ticks, threading the same input through each tick. */
-function run(state: PlayerState, input: PlayerInput, n: number, map = DEFAULT_MAP): PlayerState {
+function run(state: PlayerState, input: PlayerInput, n: number, maps: readonly CollisionMap[] = MAPS0): PlayerState {
   let s = state;
-  for (let i = 0; i < n; i++) s = stepPlayer(s, input, map);
+  for (let i = 0; i < n; i++) s = stepPlayer(s, input, maps);
   return s;
 }
 
@@ -35,7 +42,7 @@ const GROUNDED_Y = GROUND_TOP - PLAYER_HALF_H; // 632: AABB center y when standi
 
 describe('stepPlayer', () => {
   it('falls under gravity and settles on the ground', () => {
-    const after1 = stepPlayer(spawn(), NO_INPUT, DEFAULT_MAP);
+    const after1 = stepPlayer(spawn(), NO_INPUT, MAPS0);
     expect(after1.vy).toBeGreaterThan(0);
     expect(after1.y).toBeGreaterThan(200);
 
@@ -49,7 +56,7 @@ describe('stepPlayer', () => {
     const grounded = run(spawn(), NO_INPUT, 120);
     expect(grounded.onGround).toBe(true);
 
-    const jumped = stepPlayer(grounded, { ...NO_INPUT, jump: true }, DEFAULT_MAP);
+    const jumped = stepPlayer(grounded, { ...NO_INPUT, jump: true }, MAPS0);
     expect(jumped.onGround).toBe(false);
     // After applying gravity for one tick the upward velocity is still negative.
     expect(jumped.vy).toBeLessThan(0);
@@ -58,7 +65,7 @@ describe('stepPlayer', () => {
 
     // Jumping mid-air does nothing.
     const airborne = spawn({ y: 300, onGround: false });
-    const noLift = stepPlayer(airborne, { ...NO_INPUT, jump: true }, DEFAULT_MAP);
+    const noLift = stepPlayer(airborne, { ...NO_INPUT, jump: true }, MAPS0);
     expect(noLift.y).toBeGreaterThan(airborne.y);
   });
 
@@ -68,9 +75,9 @@ describe('stepPlayer', () => {
     const platformTop = 540;
     const groundedRightOfPlatform = spawn({ x: 720, y: GROUNDED_Y, onGround: true });
 
-    let s = stepPlayer(groundedRightOfPlatform, { ...NO_INPUT, jump: true, left: true }, DEFAULT_MAP);
+    let s = stepPlayer(groundedRightOfPlatform, { ...NO_INPUT, jump: true, left: true }, MAPS0);
     for (let i = 0; i < 240 && !(s.onGround && s.y < GROUNDED_Y); i++) {
-      s = stepPlayer(s, { ...NO_INPUT, left: true }, DEFAULT_MAP);
+      s = stepPlayer(s, { ...NO_INPUT, left: true }, MAPS0);
     }
     expect(s.onGround).toBe(true);
     expect(s.y).toBe(platformTop - PLAYER_HALF_H);
@@ -81,6 +88,7 @@ describe('stepPlayer', () => {
 
   it('is stopped horizontally by a wall-like solid', () => {
     const wall: CollisionMap = {
+      name: 'wall-test',
       width: WORLD_WIDTH,
       height: WORLD_HEIGHT,
       solids: [
@@ -89,9 +97,10 @@ describe('stepPlayer', () => {
       ],
       platforms: [],
       ropes: [],
+      portals: [],
     };
     const start = spawn({ x: 300, y: GROUNDED_Y, onGround: true });
-    const after = run(start, { ...NO_INPUT, right: true }, 120, wall);
+    const after = run(start, { ...NO_INPUT, right: true }, 120, [wall]);
     // Pushed flush against the wall's left face, never through it.
     expect(after.x).toBe(400 - PLAYER_HALF_W);
     expect(after.facing).toBe(1);
@@ -99,9 +108,9 @@ describe('stepPlayer', () => {
 
   it('keeps facing when idle and flips when moving', () => {
     const facingLeft = spawn({ facing: -1, onGround: true, y: GROUNDED_Y });
-    const idle = stepPlayer(facingLeft, NO_INPUT, DEFAULT_MAP);
+    const idle = stepPlayer(facingLeft, NO_INPUT, MAPS0);
     expect(idle.facing).toBe(-1);
-    const moved = stepPlayer(facingLeft, { ...NO_INPUT, right: true }, DEFAULT_MAP);
+    const moved = stepPlayer(facingLeft, { ...NO_INPUT, right: true }, MAPS0);
     expect(moved.facing).toBe(1);
     expect(moved.vx).toBe(MOVE_SPEED);
   });
@@ -118,8 +127,8 @@ describe('stepPlayer', () => {
     const stateCopy = { ...state };
     const inputCopy = { ...input };
 
-    const a = stepPlayer(state, input, DEFAULT_MAP);
-    const b = stepPlayer(state, input, DEFAULT_MAP);
+    const a = stepPlayer(state, input, MAPS0);
+    const b = stepPlayer(state, input, MAPS0);
 
     expect(a).toEqual(b);
     expect(a).not.toBe(b);
@@ -145,14 +154,14 @@ describe('one-way platforms', () => {
 
     // Jump. A full jump apex (~147px above ground = y≈485) clears the platform
     // top at 540, so the player rises right through the one-way platform.
-    let s = stepPlayer(start, { ...NO_INPUT, jump: true }, DEFAULT_MAP);
+    let s = stepPlayer(start, { ...NO_INPUT, jump: true }, MAPS0);
     expect(s.onGround).toBe(false);
 
     // During ascent y must decrease monotonically: the platform never snaps the
     // player to its underside (one-way platforms do not block from below).
     let prevY = s.y;
     while (s.vy < 0) {
-      s = stepPlayer(s, NO_INPUT, DEFAULT_MAP);
+      s = stepPlayer(s, NO_INPUT, MAPS0);
       expect(s.y).toBeLessThanOrEqual(prevY);
       // Never caught on the underside / bottom edge of the platform.
       expect(s.onGround).toBe(false);
@@ -177,7 +186,7 @@ describe('one-way platforms', () => {
     const dropInput = { ...NO_INPUT, down: true, jump: true };
 
     // One tick: released from the platform, now falling below its top.
-    const after1 = stepPlayer(start, dropInput, DEFAULT_MAP);
+    const after1 = stepPlayer(start, dropInput, MAPS0);
     expect(after1.onGround).toBe(false);
     expect(after1.y).toBeGreaterThan(STAND_ON_PLAT);
 
@@ -185,7 +194,7 @@ describe('one-way platforms', () => {
     // player falls all the way to the ground.
     let s = after1;
     for (let i = 0; i < 200; i++) {
-      s = stepPlayer(s, dropInput, DEFAULT_MAP);
+      s = stepPlayer(s, dropInput, MAPS0);
       // Never snapped back onto the platform top.
       if (s.onGround) expect(s.y).toBe(GROUNDED_Y);
     }
@@ -201,7 +210,7 @@ describe('down+jump on solid ground', () => {
 
     let s = start;
     for (let i = 0; i < 5; i++) {
-      s = stepPlayer(s, input, DEFAULT_MAP);
+      s = stepPlayer(s, input, MAPS0);
       // y never rises above the standing position: no jump occurred.
       expect(s.y).toBe(GROUNDED_Y);
       expect(s.onGround).toBe(true);
@@ -217,7 +226,7 @@ describe('rope climbing', () => {
   it('grabs a rope from the ground by holding up', () => {
     // Stand on the ground within grab range of the rope (|x - 550| <= 16).
     const start = spawn({ x: 550, y: GROUNDED_Y, onGround: true });
-    const grabbed = stepPlayer(start, { ...NO_INPUT, up: true }, DEFAULT_MAP);
+    const grabbed = stepPlayer(start, { ...NO_INPUT, up: true }, MAPS0);
 
     expect(grabbed.rope).toBe(0);
     expect(grabbed.x).toBe(ROPE0.x);
@@ -231,12 +240,12 @@ describe('rope climbing', () => {
   it('climbs up the rope at CLIMB_SPEED while up is held', () => {
     const grabbed = spawn({ x: 550, y: GROUNDED_Y, onGround: false, rope: 0 });
 
-    const up1 = stepPlayer(grabbed, { ...NO_INPUT, up: true }, DEFAULT_MAP);
+    const up1 = stepPlayer(grabbed, { ...NO_INPUT, up: true }, MAPS0);
     expect(up1.rope).toBe(0);
     expect(up1.y).toBe(GROUNDED_Y - CLIMB_SPEED * DT); // 632 - 140/60
 
     // Each further tick keeps decreasing y while still on the rope.
-    const up2 = stepPlayer(up1, { ...NO_INPUT, up: true }, DEFAULT_MAP);
+    const up2 = stepPlayer(up1, { ...NO_INPUT, up: true }, MAPS0);
     expect(up2.rope).toBe(0);
     expect(up2.y).toBeLessThan(up1.y);
   });
@@ -245,7 +254,7 @@ describe('rope climbing', () => {
   function climbOffTop(state: PlayerState, ropeIndex: number): PlayerState {
     let s = state;
     for (let i = 0; i < 200 && s.rope === ropeIndex; i++) {
-      s = stepPlayer(s, { ...NO_INPUT, up: true }, DEFAULT_MAP);
+      s = stepPlayer(s, { ...NO_INPUT, up: true }, MAPS0);
     }
     return s;
   }
@@ -260,7 +269,7 @@ describe('rope climbing', () => {
 
     // Standing at the top-exit spot and holding up does NOT re-grab the rope:
     // the up-grab requires y > rope.top, but y here equals top - 24 < top.
-    const again = stepPlayer(s, { ...NO_INPUT, up: true }, DEFAULT_MAP);
+    const again = stepPlayer(s, { ...NO_INPUT, up: true }, MAPS0);
     expect(again.rope).toBe(-1);
     expect(again.onGround).toBe(true);
     expect(again.y).toBe(ROPE0.top - PLAYER_HALF_H);
@@ -271,7 +280,7 @@ describe('rope climbing', () => {
     // Stand on platform 0 at the rope x (y=516, onGround). Holding down grabs
     // the rope hanging below and clamps the center to the rope top (540).
     const start = spawn({ x: 550, y: 540 - PLAYER_HALF_H, onGround: true });
-    const grabbed = stepPlayer(start, { ...NO_INPUT, down: true }, DEFAULT_MAP);
+    const grabbed = stepPlayer(start, { ...NO_INPUT, down: true }, MAPS0);
 
     expect(grabbed.rope).toBe(0);
     expect(grabbed.x).toBe(550);
@@ -284,7 +293,7 @@ describe('rope climbing', () => {
   it('lets go at the bottom and settles on the ground', () => {
     // On the rope near its bottom, holding down slides past bottom and detaches.
     const nearBottom = spawn({ x: 550, y: ROPE0.bottom - 1, onGround: false, rope: 0 });
-    const detach = stepPlayer(nearBottom, { ...NO_INPUT, down: true }, DEFAULT_MAP);
+    const detach = stepPlayer(nearBottom, { ...NO_INPUT, down: true }, MAPS0);
     expect(detach.rope).toBe(-1);
     expect(detach.y).toBe(ROPE0.bottom); // 632
     expect(detach.onGround).toBe(false);
@@ -298,7 +307,7 @@ describe('rope climbing', () => {
 
   it('jumps off the rope with a direction, applying horizontal input the same tick', () => {
     const midRope = spawn({ x: 550, y: 580, onGround: false, rope: 0 });
-    const jumped = stepPlayer(midRope, { ...NO_INPUT, jump: true, left: true }, DEFAULT_MAP);
+    const jumped = stepPlayer(midRope, { ...NO_INPUT, jump: true, left: true }, MAPS0);
 
     expect(jumped.rope).toBe(-1);
     // vy = ROPE_JUMP_VELOCITY + GRAVITY*DT = -540 + 2400/60 = -500.
@@ -310,7 +319,7 @@ describe('rope climbing', () => {
 
   it('a plain jump (no direction) on a rope keeps climbing', () => {
     const midRope = spawn({ x: 550, y: 580, onGround: false, rope: 0 });
-    const stillOn = stepPlayer(midRope, { ...NO_INPUT, jump: true }, DEFAULT_MAP);
+    const stillOn = stepPlayer(midRope, { ...NO_INPUT, jump: true }, MAPS0);
     expect(stillOn.rope).toBe(0);
     // No vertical input, so y is unchanged this tick.
     expect(stillOn.y).toBe(580);
@@ -326,7 +335,7 @@ describe('rope climbing', () => {
 
     // Stand on platform 2 at the rope x and grab by holding up.
     const start = spawn({ x: 1400, y: 540 - PLAYER_HALF_H, onGround: true });
-    const grabbed = stepPlayer(start, { ...NO_INPUT, up: true }, DEFAULT_MAP);
+    const grabbed = stepPlayer(start, { ...NO_INPUT, up: true }, MAPS0);
     expect(grabbed.rope).toBe(2);
     expect(grabbed.x).toBe(1400);
 
@@ -336,5 +345,73 @@ describe('rope climbing', () => {
     expect(s.onGround).toBe(true);
     expect(s.x).toBe(1400);
     expect(s.y).toBe(rope2.top - PLAYER_HALF_H); // 276
+  });
+});
+
+describe('portal travel', () => {
+  // Map 0's portal (the only one) sits on the ground near the right edge and
+  // sends the player to map 1.
+  const portal0 = MAPS[0].portals[0];
+
+  /** Stand a grounded player exactly on a portal of map 0. */
+  function onPortal(overrides: Partial<PlayerState> = {}): PlayerState {
+    return spawn({ x: portal0.x, y: portal0.y, onGround: true, mapId: 0, ...overrides });
+  }
+
+  it('teleports to the target map and coords when grounded + in range + up', () => {
+    const after = stepPlayer(onPortal(), { ...NO_INPUT, up: true }, MAPS);
+    expect(after.mapId).toBe(portal0.targetMap);
+    expect(after.x).toBe(portal0.targetX);
+    expect(after.y).toBe(portal0.targetY);
+    // Arrives airborne (onGround=false) so a held up can't re-trigger until landing.
+    expect(after.onGround).toBe(false);
+    expect(after.rope).toBe(-1);
+    expect(after.vx).toBe(0);
+    expect(after.vy).toBe(0);
+  });
+
+  it('does not activate without up', () => {
+    const after = stepPlayer(onPortal(), NO_INPUT, MAPS);
+    expect(after.mapId).toBe(0);
+    // Stayed on map 0 near the portal (didn't jump maps).
+    expect(after.x).toBeCloseTo(portal0.x, 0);
+  });
+
+  it('does not activate mid-air even with up held in range', () => {
+    const airborne = onPortal({ onGround: false, vy: 0 });
+    const after = stepPlayer(airborne, { ...NO_INPUT, up: true }, MAPS);
+    expect(after.mapId).toBe(0);
+  });
+
+  it('does not activate when grounded but out of range', () => {
+    const offset = onPortal({ x: portal0.x + PORTAL_RANGE_X + 10 });
+    const after = stepPlayer(offset, { ...NO_INPUT, up: true }, MAPS);
+    expect(after.mapId).toBe(0);
+  });
+
+  it('lands outside every destination portal so a held up cannot ping-pong (invariant across MAPS)', () => {
+    // For every portal, its landing spot (targetX, targetY) must NOT lie within
+    // the activation range of ANY portal on the destination map. Otherwise a held
+    // up key would re-fire on arrival and bounce the player between maps.
+    for (let m = 0; m < MAPS.length; m++) {
+      for (const portal of MAPS[m].portals) {
+        const dest = MAPS[portal.targetMap];
+        for (const destPortal of dest.portals) {
+          expect(portalInRange(portal.targetX, portal.targetY, destPortal)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('a held up after arrival does not bounce back (end-to-end of the invariant)', () => {
+    // Travel to map 1, let the player land, then keep holding up: it must NOT
+    // send them back to map 0 (the landing spot is offset from map 1's portal).
+    let s = stepPlayer(onPortal(), { ...NO_INPUT, up: true }, MAPS);
+    expect(s.mapId).toBe(portal0.targetMap);
+    // Hold up through the fall + landing; the player must stay on the target map.
+    for (let i = 0; i < 120; i++) {
+      s = stepPlayer(s, { ...NO_INPUT, up: true }, MAPS);
+      expect(s.mapId).toBe(portal0.targetMap);
+    }
   });
 });

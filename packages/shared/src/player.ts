@@ -8,12 +8,14 @@ import {
   PLATFORM_DROP_NUDGE,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
+  PORTAL_RANGE_X,
+  PORTAL_RANGE_Y,
   ROPE_GRAB_RANGE,
   ROPE_JUMP_VELOCITY,
 } from './constants';
 import { ATTACK_COOLDOWN_TICKS } from './combat';
 import { overlaps, rectBounds, type AABB } from './physics';
-import type { CollisionMap, Facing, PlayerInput, PlayerState, Rect } from './types';
+import type { CollisionMap, Facing, Portal, PlayerInput, PlayerState, Rect } from './types';
 
 function box(x: number, y: number): AABB {
   return { cx: x, cy: y, hw: PLAYER_HALF_W, hh: PLAYER_HALF_H };
@@ -39,6 +41,7 @@ export function stateFromRow(r: {
   onGround: boolean;
   rope: number;
   attackCooldown: number;
+  mapId: number;
 }): PlayerState {
   return {
     x: r.x,
@@ -49,7 +52,18 @@ export function stateFromRow(r: {
     onGround: r.onGround,
     rope: r.rope,
     attackCooldown: r.attackCooldown,
+    mapId: r.mapId,
   };
+}
+
+/**
+ * True when a player centered at (x, y) is within a portal's activation box.
+ * Shared by stepPlayer (to fire travel) and the ping-pong invariant test (to
+ * assert no landing spot sits inside any destination portal's box), so the
+ * range geometry lives in exactly one place.
+ */
+export function portalInRange(x: number, y: number, p: Portal): boolean {
+  return Math.abs(x - p.x) <= PORTAL_RANGE_X && Math.abs(y - p.y) <= PORTAL_RANGE_Y;
 }
 
 /**
@@ -97,15 +111,51 @@ function grabRope(state: PlayerState, input: PlayerInput, map: CollisionMap): nu
 /**
  * Advance one player by a single fixed tick. Pure: returns a fresh state and
  * never mutates its arguments, so identical inputs always yield identical output.
+ *
+ * `maps` is the full map list; this tick acts on `maps[state.mapId]`. Portal
+ * travel is just another step here, so client prediction and server replay
+ * switch maps in perfect lockstep — no separate teleport reducer, no special
+ * reconciliation, and the client cannot fake a destination.
  */
-export function stepPlayer(state: PlayerState, input: PlayerInput, map: CollisionMap): PlayerState {
+export function stepPlayer(
+  state: PlayerState,
+  input: PlayerInput,
+  maps: readonly CollisionMap[],
+): PlayerState {
+  const map = maps[state.mapId];
+
   // Post-step cooldown, carried into EVERY returned state below so the value is
-  // never dropped on a climbing/rope early return. A swing this tick (evaluated
-  // on the pre-step state) latches the full cooldown; otherwise it decays by one
-  // toward 0. Attacking is purely a combat clock and never alters movement.
+  // never dropped on a climbing/rope/portal early return. A swing this tick
+  // (evaluated on the pre-step state) latches the full cooldown; otherwise it
+  // decays by one toward 0. Attacking is purely a combat clock and never alters
+  // movement.
   const attackCooldown = attackFires(state, input)
     ? ATTACK_COOLDOWN_TICKS
     : Math.max(0, state.attackCooldown - 1);
+
+  // --- Portal travel, checked FIRST (before rope/climb): a grounded player
+  // pressing up while standing on a portal teleports to the target map/coords.
+  // INVARIANTS: onGround=false on arrival means a held up cannot re-trigger
+  // until the player lands; combined with the landing-offset rule (a target
+  // never sits inside a destination portal's box), a held up key can't
+  // ping-pong the player between maps. The target map is the only place mapId
+  // changes; every other path below carries state.mapId unchanged.
+  if (input.up && state.onGround) {
+    for (const portal of map.portals) {
+      if (!portalInRange(state.x, state.y, portal)) continue;
+      return {
+        x: portal.targetX,
+        y: portal.targetY,
+        vx: 0,
+        vy: 0,
+        facing: state.facing,
+        onGround: false,
+        rope: -1,
+        attackCooldown,
+        mapId: portal.targetMap,
+      };
+    }
+  }
 
   // --- Climbing: up/down drive y directly; gravity and collision are suspended.
   const rope = state.rope >= 0 ? map.ropes[state.rope] : undefined;
@@ -128,20 +178,21 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, map: Collisio
           onGround: true,
           rope: -1,
           attackCooldown,
+          mapId: state.mapId,
         };
       }
       if (y > rope.bottom) {
         // Slid past the bottom: let go and fall.
-        return { x: rope.x, y: rope.bottom, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: -1, attackCooldown };
+        return { x: rope.x, y: rope.bottom, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: -1, attackCooldown, mapId: state.mapId };
       }
-      return { x: rope.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: state.rope, attackCooldown };
+      return { x: rope.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: state.rope, attackCooldown, mapId: state.mapId };
     }
   } else if (input.up || input.down) {
     const grabbed = grabRope(state, input, map);
     if (grabbed >= 0) {
       const r = map.ropes[grabbed];
       const y = Math.min(Math.max(state.y, r.top), r.bottom);
-      return { x: r.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: grabbed, attackCooldown };
+      return { x: r.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: grabbed, attackCooldown, mapId: state.mapId };
     }
   }
 
@@ -205,5 +256,5 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, map: Collisio
     }
   }
 
-  return { x, y, vx, vy, facing, onGround, rope: -1, attackCooldown };
+  return { x, y, vx, vy, facing, onGround, rope: -1, attackCooldown, mapId: state.mapId };
 }

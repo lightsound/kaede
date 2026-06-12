@@ -1,8 +1,8 @@
 import {
   ATTACK_HALF_H,
   ATTACK_RANGE_X,
-  DEFAULT_MAP,
   DT,
+  MAPS,
   MOB_STATS,
   PLAYER_HALF_H,
   SPAWN_X,
@@ -19,7 +19,7 @@ import {
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { cameraOffset } from './camera';
 import { createInput, mergeInputs } from './input';
-import { createScene } from './scene/background';
+import { createMapGfx, createScene, type MapGfx } from './scene/background';
 import { correctionOffset, decayOffset, type Vec2 } from './smoothing';
 import { createCharacterRig, type CharacterRig, type Pose } from './sprites/character';
 import { createDeathPoof, createMobRig, type MobRig } from './sprites/mobs';
@@ -86,6 +86,9 @@ const LEVELUP_GOLD = 0xebcb8b;
 const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
 const HUD_STYLE = new TextStyle({ fill: 0xeceff4, fontSize: 14, fontFamily: 'sans-serif' });
 const LEVELUP_STYLE = new TextStyle({ fill: LEVELUP_GOLD, fontSize: 22, fontFamily: 'sans-serif' });
+// Screen-centered map-name toast on a map change; fades like the LEVEL UP flash.
+const MAP_TOAST_STYLE = new TextStyle({ fill: 0xeceff4, fontSize: 28, fontFamily: 'sans-serif' });
+const MAP_TOAST_LIFE_MS = 1600;
 
 export interface GameApp {
   destroy(): void;
@@ -103,6 +106,13 @@ export interface GameApp {
   resetLocal(state: PlayerState, tick: number): void;
   onLocalTick(cb: (state: PlayerState, tick: number, packedInput: number) => void): void;
   onFrame(cb: (nowMs: number) => void): void;
+  /**
+   * Subscribe to local map changes. GameApp owns the detection (it sees the
+   * predicted/reconciled sim state) and fires this with the new mapId AFTER it
+   * has swapped geometry and cleared old-map effects, so sync can re-filter and
+   * re-seed remote/mob views for the new map.
+   */
+  onMapChange(cb: (mapId: number) => void): void;
   /** Upsert a remote player view. vx/vy are the interpolated velocity (for animation). */
   upsertRemotePlayer(
     id: string,
@@ -224,7 +234,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
   const world = new Container();
   app.stage.addChild(world);
-  world.addChild(scene.mapGfx);
+
+  // The current map's geometry. GameApp owns it (the backdrop is shared across
+  // maps), swapping it on a map change. Built for map 0 here; start() rebuilds
+  // it if we spawn on a different map (rejoin keeps mapId). It's the FIRST child
+  // of world so it sits behind players/effects, matching the old depth order.
+  let mapGfx: MapGfx = createMapGfx(MAPS[0]);
+  world.addChild(mapGfx.node);
+  let renderedMapId = 0;
 
   const mobs = new Map<number, MobView>();
   const local = createPlayerView(world, 'You', LOCAL_COLOR);
@@ -253,6 +270,12 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   app.stage.addChild(deathFlash);
   let deathFlashMs = 0;
 
+  // Screen-space transient effects (the map-name toast): parented to the stage so
+  // they stay centered regardless of camera. Advanced by the same effects loop.
+  const screenEffectsLayer = new Container();
+  app.stage.addChild(screenEffectsLayer);
+  const screenEffects: Effect[] = [];
+
   const input = createInput();
 
   // Touch overlay: only built on coarse-pointer / touch-capable devices. Added
@@ -264,9 +287,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
   const tickCbs: ((s: PlayerState, tick: number, packedInput: number) => void)[] = [];
   const frameCbs: ((nowMs: number) => void)[] = [];
+  const mapChangeCbs: ((mapId: number) => void)[] = [];
 
   let prev: PlayerState = {
-    x: SPAWN_X, y: SPAWN_Y, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, attackCooldown: 0,
+    x: SPAWN_X, y: SPAWN_Y, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, attackCooldown: 0, mapId: 0,
   };
   let curr: PlayerState = prev;
   let acc = 0;
@@ -346,6 +370,46 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     });
   }
 
+  /** A centered map-name toast that fades over MAP_TOAST_LIFE_MS, like LEVEL UP. */
+  function spawnMapToast(name: string): void {
+    const t = new Text({ text: name, style: MAP_TOAST_STYLE });
+    t.anchor.set(0.5, 0.5);
+    t.position.set(VIEW_W / 2, VIEW_H * 0.3);
+    screenEffectsLayer.addChild(t);
+    let ms = 0;
+    screenEffects.push({
+      node: t,
+      update(dtMs) {
+        ms += dtMs;
+        const k = ms / MAP_TOAST_LIFE_MS;
+        // Hold full opacity for the first third, then fade out.
+        t.alpha = k < 0.33 ? 1 : Math.max(0, 1 - (k - 0.33) / 0.67);
+        return ms < MAP_TOAST_LIFE_MS;
+      },
+    });
+  }
+
+  /**
+   * Swap the rendered geometry to `mapId`: destroy the old map gfx, build the
+   * new one (behind players/effects), clear WORLD-space transient effects (old-
+   * map damage numbers / slashes have no meaning on the new map), toast the map
+   * name, and notify subscribers so sync can re-filter views. Called only when
+   * the sim's mapId actually changed (GameApp owns that detection).
+   */
+  function switchMap(mapId: number): void {
+    mapGfx.node.destroy({ children: true });
+    mapGfx = createMapGfx(MAPS[mapId]);
+    // Re-insert at index 0 so it stays BEHIND the effects layer and players.
+    world.addChildAt(mapGfx.node, 0);
+    renderedMapId = mapId;
+
+    for (const e of effects) e.node.destroy({ children: true });
+    effects.length = 0;
+
+    spawnMapToast(MAPS[mapId].name);
+    for (const cb of mapChangeCbs) cb(mapId);
+  }
+
   /** Pose for the LOCAL player straight from the interpolated sim state. */
   function localPose(attackMs: number): Pose {
     return {
@@ -389,7 +453,16 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
         spawnSlash(curr.x, curr.y, curr.facing);
         local.attackMs = ATTACK_ANIM_MS; // sync the arm swing with the slash
       }
-      curr = stepPlayer(curr, sample, DEFAULT_MAP);
+      curr = stepPlayer(curr, sample, MAPS);
+      // Map switch detection: a portal step inside stepPlayer changed mapId. The
+      // PREDICTED state drives rendering, so the world swaps instantly (not after
+      // the server ack). prev is snapped to curr so the post-teleport interpolation
+      // doesn't streak across the old position.
+      if (curr.mapId !== renderedMapId) {
+        switchMap(curr.mapId);
+        prev = curr;
+        localOffset = { x: 0, y: 0 };
+      }
       tick += 1;
       acc -= DT;
       for (const cb of tickCbs) cb(curr, tick, packInput(sample));
@@ -426,11 +499,20 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     // Animate mob rigs (squash, waddle) from their last-known moving state.
     for (const view of mobs.values()) view.rig.update(ticker.deltaMS, view.moving);
 
-    // Advance and reap transient effects.
+    // Animate the current map's portals (swirl/pulse).
+    mapGfx.update(ticker.deltaMS);
+
+    // Advance and reap transient effects (world-space, then screen-space).
     for (let i = effects.length - 1; i >= 0; i--) {
       if (!effects[i].update(ticker.deltaMS)) {
         effects[i].node.destroy({ children: true });
         effects.splice(i, 1);
+      }
+    }
+    for (let i = screenEffects.length - 1; i >= 0; i--) {
+      if (!screenEffects[i].update(ticker.deltaMS)) {
+        screenEffects[i].node.destroy({ children: true });
+        screenEffects.splice(i, 1);
       }
     }
 
@@ -468,6 +550,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       tick = t;
       acc = 0; // clamp so the first running frame doesn't replay a burst
       localOffset = { x: 0, y: 0 };
+      // Rejoin can spawn us on a non-0 map: build the STARTING map's geometry,
+      // not always map 0. switchMap also toasts the name and notifies sync to
+      // seed views for the right map.
+      if (state.mapId !== renderedMapId) switchMap(state.mapId);
     },
     resetLocal(state, t) {
       // Carry the visual error: where we render now (incl. the live offset) vs.
@@ -480,12 +566,22 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       prev = curr = state;
       tick = t;
       localOffset = correctionOffset(renderedBefore, { x: state.x, y: state.y });
+      // Reconciliation can land us on a different map (e.g. a death-respawn to
+      // town the client didn't predict). Swap geometry to the corrected map and
+      // don't carry a stale cross-map smoothing offset.
+      if (state.mapId !== renderedMapId) {
+        switchMap(state.mapId);
+        localOffset = { x: 0, y: 0 };
+      }
     },
     onLocalTick(cb) {
       tickCbs.push(cb);
     },
     onFrame(cb) {
       frameCbs.push(cb);
+    },
+    onMapChange(cb) {
+      mapChangeCbs.push(cb);
     },
     upsertRemotePlayer(id, name, x, y, facing, vx, vy) {
       let view = remotes.get(id);

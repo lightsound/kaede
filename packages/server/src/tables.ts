@@ -35,6 +35,11 @@ export const spacetimedb = schema({
       level: t.u16(),
       attackCooldown: t.u16(), // ticks until the next swing is allowed (0 = ready)
       invulnUntil: t.timestamp(), // contact damage is ignored until this instant
+      // Current map (index into MAPS). Part of the deterministic state: stepPlayer
+      // switches it on portal travel, so the server replays map changes for free.
+      // Placed right after invulnUntil — this IS the wire order the client binding
+      // mirrors column-for-column.
+      mapId: t.u16(),
       tick: t.u32(), // ticks applied so far; state is "after tick `tick`"
       simStartAt: t.timestamp(), // spawn wall-clock, basis of the speed-hack guard
       updatedAt: t.timestamp(),

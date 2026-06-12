@@ -1,4 +1,12 @@
-import { MOB_STATS, SPAWN_X, SPAWN_Y, stateFromRow, xpToNext, type MobKind } from '@maple/shared';
+import {
+  MOB_SPAWNS,
+  MOB_STATS,
+  SPAWN_X,
+  SPAWN_Y,
+  stateFromRow,
+  xpToNext,
+  type MobKind,
+} from '@maple/shared';
 import { DAMAGE_COLORS, type GameApp } from '../game/GameApp';
 import type { DbConnection } from '../module_bindings';
 import { connect } from './connection';
@@ -49,6 +57,11 @@ export function startNet(gameApp: GameApp): Net {
   let conn: DbConnection | undefined;
   let myIdHex = '';
   let disposed = false;
+  // The map the LOCAL player is on, which scopes what we render: remote players
+  // and mobs on other maps are treated like offline (no view). Initialized from
+  // the own spawn row, then driven by GameApp's onMapChange (the PREDICTED map),
+  // so the world's population switches in lockstep with the geometry swap.
+  let localMapId = 0;
 
   // Prediction is created once the authoritative own row is known (the sim
   // doesn't tick before start() anyway, mirroring today's `if (!conn) return`).
@@ -124,6 +137,10 @@ export function startNet(gameApp: GameApp): Net {
       // to online=true with tick=0, and that update is what we start from.
       const handleOwnRow = (row: PlayerRow) => {
         if (prediction || !row.online) return;
+        // Seed the local map BEFORE start(): the remote/mob seed loops below
+        // filter by localMapId, and start() may immediately switchMap (rejoin on
+        // a non-0 map), whose onMapChange re-seed also reads this value.
+        localMapId = row.mapId;
         gameApp.setLocalPlayerName(row.name);
         gameApp.setHud(row.hp, row.maxHp, row.xp, xpToNext(row.level), row.level);
         prediction = createPrediction(
@@ -145,10 +162,11 @@ export function startNet(gameApp: GameApp): Net {
         }
       };
 
-      // Remote presence: a row only represents a player in the world while it is
-      // online. Buffer online rows; drop the view the moment a row goes offline.
+      // Remote presence: a row represents a renderable player only while it is
+      // online AND on the local player's map. Off-map players are treated exactly
+      // like offline ones (no view), so bubbles/slashes never leak across maps.
       const handleRemoteRow = (idHex: string, old: PlayerRow | undefined, row: PlayerRow) => {
-        if (row.online) {
+        if (row.online && row.mapId === localMapId) {
           remoteViews.record(idHex, row.name, row, performance.now(), undefined);
           // A remote swing is observable only as a cooldown jump (0 -> full) on
           // their authoritative row; render a slash at their interpolated spot.
@@ -172,13 +190,14 @@ export function startNet(gameApp: GameApp): Net {
         if (row.hp < old.hp) {
           gameApp.spawnDamageNumber(row.x, row.y - 24, old.hp - row.hp, DAMAGE_COLORS.own);
         }
-        // Death-respawn: the server full-heals AND teleports to spawn in one
-        // update (so hp never appears <= 0 on the wire). A heal-to-max combined
-        // with a teleport to the spawn point, at the same level, is a death.
+        // Death-respawn: the server full-heals AND teleports to map 0's spawn in
+        // one update (so hp never appears <= 0 on the wire). A heal-to-max with a
+        // teleport to the map-0 spawn point, at the same level, is a death.
         if (
           row.hp > old.hp &&
           row.hp === row.maxHp &&
           row.level === old.level &&
+          row.mapId === 0 &&
           row.x === SPAWN_X &&
           row.y === SPAWN_Y
         ) {
@@ -193,16 +212,23 @@ export function startNet(gameApp: GameApp): Net {
         if (row.level > old.level) gameApp.showLevelUp();
       };
 
-      // --- Mobs: buffer snapshots for interpolation; surface hp changes.
-      const handleMobInsert = (row: MobRow) => {
+      // --- Mobs: buffer snapshots for interpolation; surface hp changes. A mob's
+      // map is derived from its spawn entry (no column on the row); only mobs on
+      // the local map get a view, the rest are dropped like off-map players.
+      // Buffer a mob's snapshot + hp IF it's on the local map; returns whether it
+      // was recorded (so the update path knows to also surface a damage number).
+      const recordMobView = (row: MobRow): boolean => {
+        if (mobMap(row) !== localMapId) return false;
         const idHex = String(row.id);
         mobHp.set(idHex, row.hp);
         mobViews.record(idHex, idHex, mobSnap(row), performance.now(), row.kind as MobKind);
+        return true;
+      };
+      const handleMobInsert = (row: MobRow) => {
+        recordMobView(row);
       };
       const handleMobUpdate = (old: MobRow, row: MobRow) => {
-        const idHex = String(row.id);
-        mobHp.set(idHex, row.hp);
-        mobViews.record(idHex, idHex, mobSnap(row), performance.now(), row.kind as MobKind);
+        if (!recordMobView(row)) return;
         // hp dropped: a hit landed — float the damage at the mob's rendered spot.
         if (row.hp < old.hp && old.hp > 0) {
           gameApp.spawnDamageNumber(row.x, row.y - 16, old.hp - row.hp, DAMAGE_COLORS.mob);
@@ -216,6 +242,35 @@ export function startNet(gameApp: GameApp): Net {
         mobViews.remove(idHex);
         gameApp.removeMob(row.id);
       };
+
+      // On a local map change: drop EVERY remote/mob view (they belong to the old
+      // map), then re-seed from the SDK row cache with the new localMapId filter.
+      // The row cache is the single source of truth — no parallel row map needed.
+      // GameApp owns the switch detection and calls this through onMapChange,
+      // after it has swapped geometry and set the new map, so handleRemoteRow /
+      // handleMobInsert here read the up-to-date localMapId.
+      const reseedWorldViews = () => {
+        for (const row of c.db.player.iter()) {
+          const idHex = row.identity.toHexString();
+          if (idHex === myIdHex) continue;
+          remoteViews.remove(idHex);
+          gameApp.removeRemotePlayer(idHex);
+        }
+        for (const row of c.db.mob.iter()) handleMobDelete(row);
+
+        for (const row of c.db.player.iter()) {
+          const idHex = row.identity.toHexString();
+          if (idHex !== myIdHex) handleRemoteRow(idHex, undefined, row);
+        }
+        for (const row of c.db.mob.iter()) handleMobInsert(row);
+      };
+
+      // GameApp detects the local (predicted) map switch and fires this; we adopt
+      // the new map and re-filter all foreign views to it.
+      gameApp.onMapChange((mapId) => {
+        localMapId = mapId;
+        reseedWorldViews();
+      });
 
       // Seed players already in the world. A leftover own row may be our stale
       // offline row from a prior session; handleOwnRow ignores it (only the
@@ -309,4 +364,9 @@ export function startNet(gameApp: GameApp): Net {
 function mobSnap(row: MobRow) {
   const speed = MOB_STATS[row.kind as MobKind].speed;
   return { x: row.x, y: row.y, vx: row.dir * speed, vy: 0, facing: row.dir };
+}
+
+/** Which map a mob lives on, derived from its spawn (no column on the mob row). */
+function mobMap(row: MobRow): number {
+  return MOB_SPAWNS[row.spawnIdx].map;
 }

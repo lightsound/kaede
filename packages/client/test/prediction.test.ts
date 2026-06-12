@@ -17,7 +17,7 @@ const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: fals
 
 /** The authoritative spawn state the prediction loop starts from. */
 function spawn(): PlayerState {
-  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, attackCooldown: 0 };
+  return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1, attackCooldown: 0, mapId: 0 };
 }
 
 interface SentBatch {
@@ -69,7 +69,7 @@ function driver(start: PlayerState, startTick: number) {
     /** Step one tick with `input` at virtual time `nowMs`, feeding the loop. */
     step(loop: ReturnType<typeof createPrediction>, input: PlayerInput, nowMs: number) {
       tick += 1;
-      const next = stepPlayer(prev, input, DEFAULT_MAP);
+      const next = stepPlayer(prev, input, [DEFAULT_MAP]);
       states.set(tick, next);
       packedAt.set(tick, packInput(input));
       loop.onTick(next, tick, packInput(input), nowMs);
@@ -198,7 +198,7 @@ describe('createPrediction', () => {
     // state, ackTick+1 .. currentTick, with the real shared physics.
     let expected = authoritative;
     for (let t = ackTick + 1; t <= currentTick; t++) {
-      expected = stepPlayer(expected, inputs[t - 1], DEFAULT_MAP);
+      expected = stepPlayer(expected, inputs[t - 1], [DEFAULT_MAP]);
     }
 
     loop.onAck(authoritative, ackTick, 1000);

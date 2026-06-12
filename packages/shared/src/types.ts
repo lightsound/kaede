@@ -25,6 +25,13 @@ export interface PlayerState {
   /** Index into the map's ropes while climbing, or -1 when not climbing. */
   rope: number;
   /**
+   * Which map (index into MAPS) the player is currently on. Part of PlayerState
+   * — and thus of the deterministic input replay — because portal travel happens
+   * inside stepPlayer: a portal step rewrites x/y AND mapId, so prediction and
+   * server replay switch maps in lockstep with NO special reconciliation.
+   */
+  mapId: number;
+  /**
    * Ticks remaining before the next attack can fire (0 = ready). Decrements one
    * per tick in stepPlayer; set to ATTACK_COOLDOWN_TICKS on the tick a swing
    * fires. Part of PlayerState so prediction and server replay stay in lockstep.
@@ -52,8 +59,24 @@ export interface Rope {
   bottom: number;
 }
 
+/**
+ * A travel portal. Standing on the ground within PORTAL_RANGE_X/Y of (x, y) and
+ * pressing up teleports the player to (targetX, targetY) on map `targetMap`.
+ * Portals are static map data; activation lives in stepPlayer so it replays
+ * deterministically on both client and server.
+ */
+export interface Portal {
+  x: number;
+  y: number;
+  targetMap: number;
+  targetX: number;
+  targetY: number;
+}
+
 /** Static collision geometry of a map. */
 export interface CollisionMap {
+  /** Display name shown in the map-change toast (Japanese, MapleStory-ish). */
+  name: string;
   width: number;
   height: number;
   /** Impassable AABBs (ground, walls). Block movement from every side. */
@@ -61,4 +84,6 @@ export interface CollisionMap {
   /** One-way platforms: support the player only when falling onto their top edge. */
   platforms: Rect[];
   ropes: Rope[];
+  /** Travel portals on this map (see Portal). */
+  portals: Portal[];
 }

@@ -27,6 +27,7 @@ export default __t.row({
   level: __t.u16(),
   attackCooldown: __t.u16().name("attack_cooldown"),
   invulnUntil: __t.timestamp().name("invuln_until"),
+  mapId: __t.u16().name("map_id"),
   tick: __t.u32(),
   simStartAt: __t.timestamp().name("sim_start_at"),
   updatedAt: __t.timestamp().name("updated_at"),

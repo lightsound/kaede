@@ -1,10 +1,11 @@
 import {
-  DEFAULT_MAP,
   PLAYER_HALF_H,
   WORLD_HEIGHT,
   WORLD_WIDTH,
+  type CollisionMap,
 } from '@maple/shared';
 import { Container, FillGradient, Graphics } from 'pixi.js';
+import { createOscillator } from '../sprites/oscillator';
 
 /**
  * The non-interactive scene: a fixed sky gradient, two parallax silhouette
@@ -40,6 +41,14 @@ const ROPE_KNOT_COLOR = 0xb8860b;
 const ROPE_KNOT_SPACING = 24; // a small knot every ~24px down the rope
 const ROPE_KNOT_R = 3;
 
+// Portal: MapleStory-ish blue-ish swirl, drawn as a few concentric ellipses that
+// slowly rotate and pulse. Layered light→dark blue for a glowing-vortex read.
+const PORTAL_COLORS = [0x88c0d0, 0x5e81ac, 0x81a1c1, 0x4c6a92];
+const PORTAL_RX = 26; // horizontal radius of the outermost ellipse
+const PORTAL_RY = 44; // vertical radius — a tall oval, like a doorway
+const PORTAL_SWIRL_PERIOD_MS = 2600; // one slow pulse cycle
+const PORTAL_PULSE = 0.12; // scale pulse amplitude (±12%)
+
 // Parallax: distant layers move at a FRACTION of the camera scroll, so they
 // drift slower than the foreground and read as far away. 0.2x ≈ very distant,
 // 0.5x ≈ mid hills. The world geometry is effectively 1.0x.
@@ -52,14 +61,25 @@ const CLOUD_COUNT = 6;
 export interface Scene {
   /** Screen-space backdrop (sky + parallax). Add to the stage behind the world. */
   backdrop: Container;
-  /** World-space map geometry. Add inside the world container. */
-  mapGfx: Container;
   /**
    * Reposition the parallax layers for the current camera offset (cam.x/cam.y
    * are the world container's position, i.e. negative as you scroll right).
    * Called every frame from the ticker.
    */
   update(camX: number, camY: number): void;
+}
+
+/**
+ * A built map's world-space geometry plus a per-frame `update` driving any
+ * animated bits (the portal swirl). GameApp owns the current MapGfx, adds
+ * `node` inside the world container, ticks `update`, and destroys + rebuilds it
+ * on a map change. The sky/parallax backdrop is shared across maps (identical
+ * world dimensions) and never rebuilt.
+ */
+export interface MapGfx {
+  node: Container;
+  /** Advance animated geometry (portal swirl) by dtMs. */
+  update(dtMs: number): void;
 }
 
 export function createScene(viewW: number, viewH: number): Scene {
@@ -100,7 +120,7 @@ export function createScene(viewW: number, viewH: number): Scene {
     near.x = camX * NEAR_PARALLAX;
   }
 
-  return { backdrop, mapGfx: createMapGfx(), update };
+  return { backdrop, update };
 }
 
 /** A starfield scattered over the upper sky, deterministic so it doesn't flicker. */
@@ -156,15 +176,18 @@ function makeHillStrip(color: number, baseFrac: number, amp: number, periodCount
 }
 
 /**
- * The static map geometry as a Container of Graphics. Ropes are drawn FIRST so
- * they sit BEHIND platforms (preserving the existing depth order); then the
- * ground slab with a grass lip, then highlighted one-way platforms.
+ * The static geometry of `map` as a Container of Graphics, plus animated
+ * portals. Ropes are drawn FIRST so they sit BEHIND platforms (preserving the
+ * existing depth order); then the ground slab with a grass lip, then highlighted
+ * one-way platforms; finally the portals on top. Parameterized by the map so
+ * GameApp can build/swap per PlayerState.mapId — the backdrop is unchanged
+ * because every map shares the world dimensions.
  */
-function createMapGfx(): Container {
-  const container = new Container();
+export function createMapGfx(map: CollisionMap): MapGfx {
+  const node = new Container();
   const g = new Graphics();
 
-  for (const r of DEFAULT_MAP.ropes) {
+  for (const r of map.ropes) {
     const top = r.top;
     const bottom = r.bottom + PLAYER_HALF_H; // lower end rests on a floor
     g.rect(r.x - ROPE_WIDTH / 2, top, ROPE_WIDTH, bottom - top).fill(ROPE_COLOR);
@@ -174,20 +197,58 @@ function createMapGfx(): Container {
     }
   }
 
-  for (const s of DEFAULT_MAP.solids) {
+  for (const s of map.solids) {
     g.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
     // Grass lip along the top edge of the ground slab.
     g.rect(s.x, s.y, s.w, GRASS_LIP_H).fill(GRASS_COLOR);
   }
 
-  for (const p of DEFAULT_MAP.platforms) {
+  for (const p of map.platforms) {
     g.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
     // A lighter strip on the landing edge reads as a top highlight.
     g.rect(p.x, p.y, p.w, PLATFORM_HIGHLIGHT_H).fill(PLATFORM_HIGHLIGHT);
   }
 
-  container.addChild(g);
-  return container;
+  node.addChild(g);
+
+  // One swirling portal per portal entry. Each is its own Container so it can
+  // rotate/pulse independently; they all share one oscillator for the pulse.
+  const portals = map.portals.map((p) => {
+    const node = createPortalGfx();
+    node.position.set(p.x, p.y);
+    return node;
+  });
+  for (const p of portals) node.addChild(p);
+
+  const swirl = createOscillator(PORTAL_SWIRL_PERIOD_MS);
+  function update(dtMs: number): void {
+    const s = swirl.tick(dtMs);
+    const scale = 1 + PORTAL_PULSE * s;
+    for (const portal of portals) {
+      portal.rotation += dtMs * 0.0008; // slow continuous spin
+      portal.scale.set(scale, scale);
+    }
+  }
+
+  return { node, update };
+}
+
+/**
+ * A single portal: concentric blue-ish ellipses (light center → dark rim) that
+ * read as a glowing vortex once GameApp spins/pulses the container. Origin is
+ * the portal center, so positioning it at the portal coord lines the swirl up
+ * with the activation box.
+ */
+function createPortalGfx(): Container {
+  const node = new Container();
+  const g = new Graphics();
+  // Outer rim first (largest), then progressively smaller/lighter rings.
+  for (let i = 0; i < PORTAL_COLORS.length; i++) {
+    const k = 1 - i / PORTAL_COLORS.length;
+    g.ellipse(0, 0, PORTAL_RX * k, PORTAL_RY * k).fill({ color: PORTAL_COLORS[i], alpha: 0.65 });
+  }
+  node.addChild(g);
+  return node;
 }
 
 /**

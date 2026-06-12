@@ -1,9 +1,9 @@
 import { ScheduleAt, Timestamp } from 'spacetimedb';
 import { t, type InferSchema, type ReducerCtx, type ReducerExport } from 'spacetimedb/server';
 import {
-  DEFAULT_MAP,
   DT,
   INPUT_BATCH_MAX_TICKS,
+  MAPS,
   MOB_RESPAWN_MS,
   MOB_STATS,
   MOB_SPAWNS,
@@ -126,10 +126,12 @@ export const submitInputs = spacetimedb.reducer(
       // `attackFires` is evaluated on the PRE-step state, identically to the
       // client's prediction, so the swing decision is deterministic.
       const fires = attackFires(s, input);
-      s = stepPlayer(s, input, DEFAULT_MAP);
+      s = stepPlayer(s, input, MAPS);
       if (!fires) continue;
 
-      const mobs = [...ctx.db.mob.iter()];
+      // Only mobs on the player's CURRENT (post-step) map are hittable: a swing
+      // can't reach across maps. A mob's map is derived from its spawn entry.
+      const mobs = [...ctx.db.mob.iter()].filter((m) => MOB_SPAWNS[m.spawnIdx].map === s.mapId);
       const target = resolveAttackTarget(
         s,
         mobs.map((m) => ({ x: m.x, y: m.y, kind: m.kind as MobKind, alive: m.hp > 0 })),
@@ -175,6 +177,9 @@ export const submitInputs = spacetimedb.reducer(
       // Cooldown comes from the final replayed state so the next batch resumes
       // the same combat clock the client predicted.
       attackCooldown: s.attackCooldown,
+      // mapId comes from the replay too: a portal step inside stepPlayer moved
+      // the player to another map, persisted here with no separate reducer.
+      mapId: s.mapId,
       // Self-heal `online` here: a double-login-then-close race can land a
       // stale offline flag on a still-active identity. Any input proves we're
       // online, and we're already updating the row, so reassert it.
@@ -230,6 +235,7 @@ export const join = spacetimedb.reducer((ctx) => {
     level: 1,
     attackCooldown: 0,
     invulnUntil: ctx.timestamp,
+    mapId: 0, // new players start in town (map 0); rejoin keeps mapId via ...row.
     tick: 0,
     simStartAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
@@ -349,6 +355,9 @@ function runMobTick(ctx: Ctx): void {
     let hit: MobKind | undefined;
     for (const mob of ctx.db.mob.iter()) {
       if (mob.hp <= 0) continue;
+      // Only mobs on the player's CURRENT map can touch them: an off-map mob's
+      // coordinates would otherwise spuriously overlap (maps share a coord space).
+      if (MOB_SPAWNS[mob.spawnIdx].map !== player.mapId) continue;
       if (overlaps(mobBox(mob.x, mob.y, mob.kind as MobKind), pRect)) {
         hit = mob.kind as MobKind;
         break;
@@ -365,8 +374,11 @@ function runMobTick(ctx: Ctx): void {
         updatedAt: now,
       });
     } else {
-      // Death: respawn at the start, fully healed. Movement state resets; tick
-      // is intentionally untouched (see comment above).
+      // Death: respawn at the start of map 0 (back to town, MapleStory-style),
+      // fully healed. Movement state and mapId reset; tick is intentionally
+      // untouched (the client's next ack reconciles the teleport + map switch
+      // through the existing replay path). The mapId change drives the client to
+      // swap maps via its own predicted-state watcher on the reconciled state.
       ctx.db.player.identity.update({
         ...player,
         x: SPAWN_X,
@@ -375,6 +387,7 @@ function runMobTick(ctx: Ctx): void {
         vy: 0,
         rope: -1,
         onGround: false,
+        mapId: 0,
         hp: player.maxHp,
         invulnUntil: plusMillis(now, PLAYER_INVULN_MS),
         updatedAt: now,

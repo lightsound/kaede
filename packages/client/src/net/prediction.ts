@@ -1,7 +1,7 @@
 import {
-  DEFAULT_MAP,
   INPUT_BATCH_MAX_TICKS,
   INPUT_FLUSH_INTERVAL_MS,
+  MAPS,
   PREDICTION_HISTORY_MAX_TICKS,
   RESEND_TIMEOUT_MS,
   stepPlayer,
@@ -25,7 +25,8 @@ const sameState = (a: PlayerState, b: PlayerState): boolean =>
   a.facing === b.facing &&
   a.onGround === b.onGround &&
   a.rope === b.rope &&
-  a.attackCooldown === b.attackCooldown;
+  a.attackCooldown === b.attackCooldown &&
+  a.mapId === b.mapId;
 
 /**
  * Local-player prediction bookkeeping. The client predicts locally and replays
@@ -127,7 +128,7 @@ export function createPrediction(deps: PredictionDeps, startTick: number, nowMs 
 
       let s = authoritative;
       for (let t = ack + 1; t <= currentTick; t++) {
-        s = stepPlayer(s, unpackInput(history.get(t) ?? 0), DEFAULT_MAP);
+        s = stepPlayer(s, unpackInput(history.get(t) ?? 0), MAPS);
         predicted.set(t, s);
       }
       deps.resetLocal(s, currentTick);

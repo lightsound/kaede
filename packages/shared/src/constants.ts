@@ -28,6 +28,15 @@ export const ROPE_JUMP_VELOCITY = -540;
  */
 export const PLATFORM_DROP_NUDGE = 1;
 
+/**
+ * Activation box (half extents, px) around a portal's center. A grounded player
+ * whose center is within PORTAL_RANGE_X horizontally and PORTAL_RANGE_Y
+ * vertically of the portal, pressing up, triggers travel. Y is generous so the
+ * player standing just on top of (or beside) the portal still counts.
+ */
+export const PORTAL_RANGE_X = 24;
+export const PORTAL_RANGE_Y = 48;
+
 /** How often a client flushes its pending input batches to the server (ms). */
 export const INPUT_FLUSH_INTERVAL_MS = 100;
 /**
