@@ -53,6 +53,25 @@ const DAMAGE_LIFE_MS = 800;
 const DEATH_FLASH_MS = 200;
 const DEATH_FLASH_COLOR = 0xbf616a;
 
+// Chat speech bubbles: a rounded near-white panel of dark text that floats above
+// a player's name label and follows them (it's parented to the player's root).
+const SPEECH_LIFE_MS = 4000;
+const SPEECH_WRAP_PX = 180;
+const SPEECH_PAD = 6;
+const SPEECH_BG = 0xf4f6fb;
+const SPEECH_BG_ALPHA = 0.92;
+const SPEECH_TEXT = 0x10131b;
+const SPEECH_STYLE = new TextStyle({
+  fill: SPEECH_TEXT,
+  fontSize: 12,
+  fontFamily: 'sans-serif',
+  wordWrap: true,
+  wordWrapWidth: SPEECH_WRAP_PX,
+  breakWords: true, // long unbroken strings (e.g. URLs) must still wrap
+});
+// Speech bubbles are keyed like the player views; the local player has no id hex.
+const SPEECH_LOCAL_KEY = 'local';
+
 const DAMAGE_WHITE = 0xffffff;
 const DAMAGE_RED = 0xbf616a;
 const EXP_GREEN = 0xa3be8c;
@@ -93,6 +112,13 @@ export interface GameApp {
   showLevelUp(): void;
   /** Brief full-screen red flash when own hp hits 0. */
   showDeathFlash(): void;
+  /**
+   * Show a chat speech bubble over a player. `remoteIdHex` null targets the
+   * local player; otherwise it's the remote player's id hex (no-op if that view
+   * isn't currently rendered). A new message replaces that player's existing
+   * bubble and resets its lifetime.
+   */
+  showSpeech(remoteIdHex: string | null, text: string): void;
 }
 
 interface PlayerView {
@@ -127,6 +153,25 @@ function createPlayerView(world: Container, name: string, color: number): Player
   root.addChild(body, label);
   world.addChild(root);
   return { root, body, label };
+}
+
+/**
+ * A rounded-rect chat bubble (dark text on a near-white panel) sized to its
+ * wrapped text, anchored so its bottom tip sits at the bubble's local origin —
+ * the caller positions that origin just above the name label so the bubble
+ * floats over the player's head.
+ */
+function createSpeechBubble(text: string): Container {
+  const node = new Container();
+  const label = new Text({ text, style: SPEECH_STYLE });
+  const w = label.width + SPEECH_PAD * 2;
+  const h = label.height + SPEECH_PAD * 2;
+  const bg = new Graphics()
+    .roundRect(-w / 2, -h, w, h, 5)
+    .fill({ color: SPEECH_BG, alpha: SPEECH_BG_ALPHA });
+  label.position.set(-w / 2 + SPEECH_PAD, -h + SPEECH_PAD);
+  node.addChild(bg, label);
+  return node;
 }
 
 /** Damage-number colors are passed by callers; these are the conventions. */
@@ -167,6 +212,13 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const effectsLayer = new Container();
   world.addChild(effectsLayer);
   const effects: Effect[] = [];
+
+  // One speech bubble per player, keyed the same way as the player views
+  // (SPEECH_LOCAL_KEY for the local player, the remote id hex otherwise). The
+  // bubble node is parented to that player's root container so it FOLLOWS them;
+  // we keep a parallel timer here to expire it. A new message for the same key
+  // replaces the node and resets the timer.
+  const speechBubbles = new Map<string, { node: Container; ms: number }>();
 
   // Screen-space overlay (HUD + death flash), added to the stage so it stays put.
   const hud = createHud();
@@ -300,6 +352,16 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       }
     }
 
+    // Expire speech bubbles. They ride their player's root, so no per-frame
+    // repositioning is needed — only the lifetime is ticked here.
+    for (const [key, bubble] of speechBubbles) {
+      bubble.ms -= ticker.deltaMS;
+      if (bubble.ms <= 0) {
+        bubble.node.destroy({ children: true });
+        speechBubbles.delete(key);
+      }
+    }
+
     if (deathFlashMs > 0) {
       deathFlashMs = Math.max(0, deathFlashMs - ticker.deltaMS);
       deathFlash.alpha = (deathFlashMs / DEATH_FLASH_MS) * 0.6;
@@ -356,6 +418,9 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     removeRemotePlayer(id) {
       const view = remotes.get(id);
       if (!view) return;
+      // The bubble is a child of view.root, so destroying the root destroys it
+      // too; drop the map entry so the expiry loop doesn't touch a dead node.
+      speechBubbles.delete(id);
       view.root.destroy({ children: true });
       remotes.delete(id);
     },
@@ -395,6 +460,23 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     },
     showDeathFlash() {
       deathFlashMs = DEATH_FLASH_MS;
+    },
+    showSpeech(remoteIdHex, text) {
+      const key = remoteIdHex ?? SPEECH_LOCAL_KEY;
+      // Resolve the player's root. A remote whose view isn't currently rendered
+      // (off-screen / just dropped) has no root, so there's nowhere to show it.
+      const root = remoteIdHex === null ? local.root : remotes.get(remoteIdHex)?.root;
+      if (!root) return;
+
+      // One bubble per player: drop the previous node before adding the new one,
+      // which also resets the lifetime below.
+      speechBubbles.get(key)?.node.destroy({ children: true });
+
+      const node = createSpeechBubble(text);
+      // Sit just above the name label (label top edge is at -PLAYER_HALF_H - 4).
+      node.y = -PLAYER_HALF_H - 18;
+      root.addChild(node);
+      speechBubbles.set(key, { node, ms: SPEECH_LIFE_MS });
     },
   };
 }

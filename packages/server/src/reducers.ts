@@ -32,10 +32,36 @@ import { setMobTick, spacetimedb } from './tables';
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
+/** A full message row, as iterated from the table (used by the prune scan). */
+type MessageRow = ReturnType<Ctx['db']['message']['insert']>;
+
 /** A future instant `ms` milliseconds after `from`. (Timestamp has no add().) */
 function plusMillis(from: Timestamp, ms: number): Timestamp {
   return new Timestamp(from.microsSinceUnixEpoch + BigInt(ms) * 1000n);
 }
+
+/**
+ * Trimmed user text that is non-empty, within `maxLen`, and free of control
+ * characters. Shared by setName and sendMessage so both reject the same garbage
+ * (and so the regex lives in exactly one place). Returns the trimmed string, or
+ * undefined to reject. Mirrors the client overlays' maxLength.
+ */
+function validateText(raw: string, maxLen: number): string | undefined {
+  const trimmed = raw.trim();
+  // eslint-disable-next-line no-control-regex
+  if (trimmed.length === 0 || trimmed.length > maxLen || /[\x00-\x1f\x7f]/.test(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+const MAX_NAME_LEN = 16;
+const MAX_MESSAGE_LEN = 120;
+// World chat is bounded to its most recent N rows: this caps storage AND keeps
+// the rate-limit scan (newest sentAt per sender) cheap.
+const MESSAGE_KEEP = 50;
+// Minimum gap between one sender's messages, enforced by scanning the table.
+const MESSAGE_MIN_GAP_MS = 500;
 
 /**
  * Seed one mob row per MOB_SPAWNS entry, starting alive at full HP facing right.
@@ -223,10 +249,56 @@ export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
 export const setName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
   const row = ctx.db.player.identity.find(ctx.sender);
   if (!row) return;
-  const trimmed = name.trim();
-  // eslint-disable-next-line no-control-regex
-  if (trimmed.length === 0 || trimmed.length > 16 || /[\x00-\x1f\x7f]/.test(trimmed)) return;
+  const trimmed = validateText(name, MAX_NAME_LEN);
+  if (trimmed === undefined) return;
   ctx.db.player.identity.update({ ...row, name: trimmed, updatedAt: ctx.timestamp });
+});
+
+// World chat. Only players who have joined (and are online) may speak. The text
+// is validated like a name (trim, 1..120 chars, no control characters), then a
+// per-sender rate limit is enforced WITHOUT touching the player schema: because
+// the table is kept pruned to MESSAGE_KEEP rows, scanning it for the sender's
+// most recent sentAt is cheap. The row stores a SNAPSHOT of the current name so
+// later renames leave history intact. After inserting we prune oldest-first so
+// both storage and the rate-limit scan stay bounded.
+export const sendMessage = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+  const player = ctx.db.player.identity.find(ctx.sender);
+  if (!player || !player.online) return;
+  const trimmed = validateText(text, MAX_MESSAGE_LEN);
+  if (trimmed === undefined) return;
+
+  // Rate limit: reject if this sender posted within the last MESSAGE_MIN_GAP_MS.
+  // The pruned table makes this full scan a fixed small cost.
+  let lastSentAt: Timestamp | undefined;
+  for (const m of ctx.db.message.iter()) {
+    if (!m.sender.isEqual(ctx.sender)) continue;
+    if (lastSentAt === undefined || m.sentAt.microsSinceUnixEpoch > lastSentAt.microsSinceUnixEpoch) {
+      lastSentAt = m.sentAt;
+    }
+  }
+  if (lastSentAt !== undefined && ctx.timestamp.since(lastSentAt).millis < MESSAGE_MIN_GAP_MS) {
+    return;
+  }
+
+  ctx.db.message.insert({
+    id: 0n, // autoInc
+    sender: ctx.sender,
+    name: player.name,
+    text: trimmed,
+    sentAt: ctx.timestamp,
+  });
+
+  // Prune oldest-first (autoInc id is monotonic, so the smallest id is oldest)
+  // until at most MESSAGE_KEEP rows remain. Delete by the whole row to stay on
+  // the table-level delete API the rest of the module uses.
+  while (ctx.db.message.count() > BigInt(MESSAGE_KEEP)) {
+    let oldest: MessageRow | undefined;
+    for (const m of ctx.db.message.iter()) {
+      if (oldest === undefined || m.id < oldest.id) oldest = m;
+    }
+    if (oldest === undefined) break;
+    ctx.db.message.delete(oldest);
+  }
 });
 
 /**

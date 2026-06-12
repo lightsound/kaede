@@ -54,9 +54,9 @@ function attempt(token: string | undefined): Promise<Connected> {
         conn
           .subscriptionBuilder()
           .onApplied(() => resolve({ conn, myIdHex }))
-          // Subscribe to players and the public mob table in one applied batch so
-          // both row caches are populated before the connection resolves.
-          .subscribe([tables.player, tables.mob]);
+          // Subscribe to players, mobs, and the public chat log in one applied
+          // batch so every row cache is populated before the connection resolves.
+          .subscribe([tables.player, tables.mob, tables.message]);
       })
       .onConnectError((_ctx, err) => reject(err))
       .onDisconnect(() => {})

@@ -12,10 +12,26 @@ type PlayerRow =
 /** The generated mob row type (all columns). */
 type MobRow = ReturnType<DbConnection['db']['mob']['iter']> extends Iterator<infer R> ? R : never;
 
+/** The generated chat-message row type (all columns). */
+type MessageRow =
+  ReturnType<DbConnection['db']['message']['iter']> extends Iterator<infer R> ? R : never;
+
+/** A chat message as surfaced to the UI: `mine` tags the local player's own lines. */
+export interface ChatMessage {
+  id: bigint;
+  name: string;
+  text: string;
+  mine: boolean;
+}
+
 export interface Net {
   dispose(): void;
   /** Request a display-name change; applied once connected (latest wins if called early). */
   setName(name: string): void;
+  /** Send a world-chat line. Silently no-ops until connected. */
+  sendChat(text: string): void;
+  /** Subscribe to incoming chat messages. Registering before or after connect both work. */
+  onChat(cb: (msg: ChatMessage) => void): void;
 }
 
 /**
@@ -42,6 +58,21 @@ export function startNet(gameApp: GameApp): Net {
   let pendingName: string | undefined;
   function applyName(name: string): void {
     conn?.reducers.setName({ name }).catch(() => {});
+  }
+
+  // Chat subscribers (the App's React state). Registered independently of the
+  // connection so onChat works whether called before or after connect resolves.
+  const chatCbs: ((msg: ChatMessage) => void)[] = [];
+
+  // Deliver a chat row to the UI log AND raise the speech bubble over its
+  // sender. Used for both the initial seed (iter, ascending by id) and live
+  // inserts. The bubble targets the local player (null) for our own messages,
+  // or the remote player's view by id hex otherwise.
+  function handleMessage(row: MessageRow): void {
+    const senderHex = row.sender.toHexString();
+    const mine = senderHex === myIdHex;
+    for (const cb of chatCbs) cb({ id: row.id, name: row.name, text: row.text, mine });
+    gameApp.showSpeech(mine ? null : senderHex, row.text);
   }
 
   // Track each mob's last-seen hp so the per-frame redraw (which only carries
@@ -184,6 +215,13 @@ export function startNet(gameApp: GameApp): Net {
       }
       for (const row of c.db.mob.iter()) handleMobInsert(row);
 
+      // Seed the existing chat backlog oldest-first so the UI log reads top-to-
+      // bottom in chronological order (the server keeps ids monotonic). This
+      // also raises a bubble for the most recent line of each present player,
+      // which is acceptable (and self-expires) on a fresh connect.
+      const backlog = [...c.db.message.iter()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      for (const row of backlog) handleMessage(row);
+
       c.db.player.onInsert((_ctx, row) => {
         const idHex = row.identity.toHexString();
         if (idHex === myIdHex) {
@@ -222,6 +260,10 @@ export function startNet(gameApp: GameApp): Net {
       c.db.mob.onUpdate((_ctx, old, row) => handleMobUpdate(old, row));
       c.db.mob.onDelete((_ctx, row) => handleMobDelete(row));
 
+      // New chat lines stream in as inserts; the server's prune deletes oldest
+      // rows, which we ignore (the UI keeps its own capped backlog).
+      c.db.message.onInsert((_ctx, row) => handleMessage(row));
+
       c.reducers.join({}).catch(() => {});
     })
     .catch(() => {});
@@ -237,6 +279,14 @@ export function startNet(gameApp: GameApp): Net {
       // handleOwnRow can apply it. Afterwards send it straight through.
       if (prediction) applyName(name);
       else pendingName = name;
+    },
+    sendChat(text) {
+      // No latching: a chat line only makes sense once we're in the world, and
+      // the server rejects senders without a row anyway. Drop it if not ready.
+      conn?.reducers.sendMessage({ text }).catch(() => {});
+    },
+    onChat(cb) {
+      chatCbs.push(cb);
     },
   };
 }

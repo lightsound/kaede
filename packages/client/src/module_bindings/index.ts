@@ -35,12 +35,14 @@ import {
 
 // Import all reducer arg schemas
 import JoinReducer from "./join_reducer";
+import SendMessageReducer from "./send_message_reducer";
 import SetNameReducer from "./set_name_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import MessageRow from "./message_table";
 import MobRow from "./mob_table";
 import PlayerRow from "./player_table";
 
@@ -70,11 +72,23 @@ const tablesSchema = __schema({
       { name: 'mob_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, MobRow),
+  message: __table({
+    name: 'message',
+    indexes: [
+      { accessor: 'id', name: 'message_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'message_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, MessageRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("send_message", SendMessageReducer),
   __reducerSchema("set_name", SetNameReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
 );

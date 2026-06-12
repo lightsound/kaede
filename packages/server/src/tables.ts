@@ -41,6 +41,23 @@ export const spacetimedb = schema({
     }
   ),
 
+  // World chat. Public so every client streams the log; clients never write to
+  // it directly (the sendMessage reducer is the only writer). The table is kept
+  // pruned to the most recent 50 rows, which bounds storage AND makes it cheap
+  // to scan for the sender's last sentAt (the rate limit, kept off the player
+  // schema). `name` is a snapshot of the sender's display name at send time, so
+  // later renames don't rewrite history.
+  message: table(
+    { name: 'message', public: true },
+    {
+      id: t.u64().primaryKey().autoInc(),
+      sender: t.identity(),
+      name: t.string(),
+      text: t.string(),
+      sentAt: t.timestamp(),
+    }
+  ),
+
   // Server-driven monsters. Public so clients can render them interpolated (the
   // same way they render remote players); clients never write to it.
   mob: table(
