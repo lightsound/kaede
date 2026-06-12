@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { createGameApp, type GameApp } from './game/GameApp';
+import { startNet, type Net } from './net/sync';
 
 export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let game: GameApp | undefined;
+    let net: Net | undefined;
     let cancelled = false;
 
     void (async () => {
@@ -17,10 +19,12 @@ export function App() {
         return;
       }
       game = created;
+      net = startNet(created);
     })();
 
     return () => {
       cancelled = true;
+      net?.dispose();
       game?.destroy();
     };
   }, []);
