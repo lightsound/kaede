@@ -1,0 +1,21 @@
+/*
+ * Options below marked as required by SpacetimeDB must not be modified
+ * (see the official `spacetime init --lang typescript` template).
+ */
+{
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "noUnusedLocals": true,
+
+    /* Required by SpacetimeDB */
+    "target": "ESNext",
+    "lib": ["ES2021", "dom"],
+    "module": "ESNext",
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["./src/**/*"]
+}

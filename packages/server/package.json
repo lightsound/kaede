@@ -1,0 +1,17 @@
+{
+  "name": "@maple/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "spacetime build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@maple/shared": "workspace:*",
+    "spacetimedb": "2.5.*"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2"
+  }
+}

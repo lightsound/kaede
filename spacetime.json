@@ -1,0 +1,4 @@
+{
+  "module-path": "packages/server",
+  "server": "local"
+}
