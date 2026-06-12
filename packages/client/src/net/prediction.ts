@@ -23,7 +23,8 @@ const sameState = (a: PlayerState, b: PlayerState): boolean =>
   a.vx === b.vx &&
   a.vy === b.vy &&
   a.facing === b.facing &&
-  a.onGround === b.onGround;
+  a.onGround === b.onGround &&
+  a.rope === b.rope;
 
 /**
  * Local-player prediction bookkeeping. The client predicts locally and replays

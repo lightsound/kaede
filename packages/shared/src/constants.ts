@@ -16,6 +16,18 @@ export const MAX_FALL_SPEED = 1200;
 export const PLAYER_HALF_W = 16;
 export const PLAYER_HALF_H = 24;
 
+/** Climbing speed on ropes/ladders in px/s. */
+export const CLIMB_SPEED = 140;
+/** Max horizontal distance (px) between the player center and a rope to grab it. */
+export const ROPE_GRAB_RANGE = 16;
+/** Initial vertical velocity when jumping off a rope in px/s (negative = up). */
+export const ROPE_JUMP_VELOCITY = -540;
+/**
+ * Downward nudge (px) applied when dropping through a one-way platform, so the
+ * "feet were at the top edge" check no longer holds on the next tick.
+ */
+export const PLATFORM_DROP_NUDGE = 1;
+
 /** How often a client flushes its pending input batches to the server (ms). */
 export const INPUT_FLUSH_INTERVAL_MS = 100;
 /**

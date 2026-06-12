@@ -40,6 +40,7 @@ export const submitInputs = spacetimedb.reducer(
       vy: s.vy,
       facing: s.facing,
       onGround: s.onGround,
+      rope: s.rope,
       tick: row.tick + inputs.length,
       updatedAt: ctx.timestamp,
     });
@@ -61,6 +62,7 @@ export const join = spacetimedb.reducer(ctx => {
     vy: 0,
     facing: 1,
     onGround: false,
+    rope: -1,
     tick: 0,
     simStartAt: ctx.timestamp,
     updatedAt: ctx.timestamp,

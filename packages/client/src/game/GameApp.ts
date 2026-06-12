@@ -24,6 +24,9 @@ const MAX_FRAME = 0.25;
 
 const BG_COLOR = 0x10131b;
 const SOLID_COLOR = 0x3b4252;
+const PLATFORM_COLOR = 0x5e81ac; // one-way platforms: lighter than solid ground
+const ROPE_COLOR = 0xd8a657;
+const ROPE_WIDTH = 4;
 const LOCAL_COLOR = 0x88c0d0;
 const REMOTE_COLOR = 0xd08770;
 
@@ -77,9 +80,19 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const world = new Container();
   app.stage.addChild(world);
 
-  // Static map geometry.
+  // Static map geometry. Ropes hang behind everything; platforms and the
+  // ground slab draw on top of them. All live in mapGfx, which is added to the
+  // world before any player view, so the whole map renders behind players.
   const mapGfx = new Graphics();
+  for (const r of DEFAULT_MAP.ropes) {
+    // Visual span: rope.top down to rope.bottom + PLAYER_HALF_H (the lower end
+    // rests on a floor, while rope.bottom bounds the climbing player's center).
+    mapGfx
+      .rect(r.x - ROPE_WIDTH / 2, r.top, ROPE_WIDTH, r.bottom + PLAYER_HALF_H - r.top)
+      .fill(ROPE_COLOR);
+  }
   for (const s of DEFAULT_MAP.solids) mapGfx.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
+  for (const p of DEFAULT_MAP.platforms) mapGfx.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
   world.addChild(mapGfx);
 
   const local = createPlayerView(world, 'You', LOCAL_COLOR);
@@ -97,7 +110,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const tickCbs: ((s: PlayerState, tick: number, packedInput: number) => void)[] = [];
   const frameCbs: ((nowMs: number) => void)[] = [];
 
-  let prev: PlayerState = { x: SPAWN_X, y: SPAWN_Y, vx: 0, vy: 0, facing: 1, onGround: false };
+  let prev: PlayerState = { x: SPAWN_X, y: SPAWN_Y, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1 };
   let curr: PlayerState = prev;
   let acc = 0;
   // Simulation is gated until start(): tick < 0 means "not yet running".
