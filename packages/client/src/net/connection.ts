@@ -1,6 +1,10 @@
 import { DbConnection, tables } from '../module_bindings';
 
-const URI = import.meta.env.VITE_SPACETIME_URI ?? 'ws://localhost:3000';
+// Production builds default to Maincloud so a missing env var can't silently
+// point a deployed client at localhost; dev keeps the local server.
+const URI =
+  import.meta.env.VITE_SPACETIME_URI ??
+  (import.meta.env.PROD ? 'wss://maincloud.spacetimedb.com' : 'ws://localhost:3000');
 const DB = import.meta.env.VITE_SPACETIME_DB ?? 'maple-like';
 
 export interface Connected {

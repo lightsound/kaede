@@ -98,7 +98,7 @@
 ## デプロイ（公開手順）
 
 ローカルでの動作確認ができたら、Maincloud（SpacetimeDB のマネージドホスト）へモジュールを公開し、
-クライアントを GitHub Pages へ発行することで、スマホを含む任意の端末からアクセスできます。
+クライアントを Vercel へデプロイすることで、スマホを含む任意の端末からアクセスできます。
 
 1. **Maincloud へのモジュール公開**（お手元で実行）
 
@@ -109,17 +109,18 @@
 
    TypeScript バインディングは生成済みのものがリポジトリに含まれているため、デプロイ時に再生成する必要はありません。
 
-2. **GitHub リポジトリ設定**
+2. **Vercel プロジェクトの作成**
 
-   - **Settings → Secrets and variables → Actions → Variables** に以下を登録します。
-     - `VITE_SPACETIME_DB`: Maincloud で付けた DB名。
-     - `VITE_SPACETIME_URI`（任意）: 既定は `wss://maincloud.spacetimedb.com` なので、Maincloud を使う場合は不要です。
-   - **Settings → Pages → Build and deployment → Source** を **「GitHub Actions」** に設定します。
+   [vercel.com](https://vercel.com) で **Add New → Project** からこのリポジトリを import し、次の2点だけ設定します。
 
-3. **デプロイの実行**
+   - **Root Directory**: `packages/client`（`vercel.json` が install / build / 出力先を定義済み。Framework は Vite として自動検出されます）
+   - **Environment Variables**: `VITE_SPACETIME_DB` = Maincloud で付けた DB名。
+     （`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com` なので、Maincloud を使う限り設定不要です）
 
-   - **Actions** タブから **Deploy** ワークフローを選び、**Run workflow** で手動実行します（誤発行を避けるため自動ではなく手動トリガーです）。
-   - 完了後に発行された URL へスマホからアクセスできます（タッチ操作に対応しています）。
+3. **デプロイ**
+
+   **Deploy** を押せば公開されます。以後、ブランチへ push するたびに Vercel が自動でビルド・デプロイします。
+   発行された URL にスマホからアクセスできます（タッチ操作に対応しています）。
 
 4. **CI**
 
