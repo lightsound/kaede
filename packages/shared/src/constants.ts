@@ -16,11 +16,11 @@ export const MAX_FALL_SPEED = 1200;
 export const PLAYER_HALF_W = 16;
 export const PLAYER_HALF_H = 24;
 
-/** How often a client publishes its pending inputs to the server (ms). */
-export const SNAPSHOT_SEND_INTERVAL_MS = 100;
+/** How often a client flushes its pending input batches to the server (ms). */
+export const INPUT_FLUSH_INTERVAL_MS = 100;
 /**
  * Remote players are rendered this far in the past (ms) so that there are
- * always two snapshots to interpolate between at the 10Hz publish rate.
+ * always two snapshots to interpolate between at the 10Hz row-update rate.
  */
 export const INTERP_DELAY_MS = 120;
 

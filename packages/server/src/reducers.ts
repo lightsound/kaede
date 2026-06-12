@@ -6,6 +6,7 @@ import {
   SPAWN_X,
   SPAWN_Y,
   TICK_ALLOWANCE_SLACK,
+  stateFromRow,
   stepPlayer,
   unpackInput,
   type PlayerState,
@@ -28,14 +29,7 @@ export const submitInputs = spacetimedb.reducer(
     const allowed = Math.floor(elapsedMs / (DT * 1000)) + TICK_ALLOWANCE_SLACK;
     if (row.tick + inputs.length > allowed) return;
 
-    let s: PlayerState = {
-      x: row.x,
-      y: row.y,
-      vx: row.vx,
-      vy: row.vy,
-      facing: row.facing < 0 ? -1 : 1,
-      onGround: row.onGround,
-    };
+    let s: PlayerState = stateFromRow(row);
     for (const byte of inputs) s = stepPlayer(s, unpackInput(byte), DEFAULT_MAP);
 
     ctx.db.player.identity.update({

@@ -14,6 +14,30 @@ function box(x: number, y: number): AABB {
   return { cx: x, cy: y, hw: PLAYER_HALF_W, hh: PLAYER_HALF_H };
 }
 
+/** Normalize a raw facing column (any sign) into the Facing union. */
+export function toFacing(f: number): Facing {
+  return f < 0 ? -1 : 1;
+}
+
+/** Build a PlayerState from a player row's dynamic columns. */
+export function stateFromRow(r: {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  facing: number;
+  onGround: boolean;
+}): PlayerState {
+  return {
+    x: r.x,
+    y: r.y,
+    vx: r.vx,
+    vy: r.vy,
+    facing: toFacing(r.facing),
+    onGround: r.onGround,
+  };
+}
+
 /**
  * Advance one player by a single fixed tick. Pure: returns a fresh state and
  * never mutates its arguments, so identical inputs always yield identical output.

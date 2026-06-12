@@ -25,7 +25,7 @@
 
 - **クライアントは入力のみを送信** します。位置や速度は一切送りません。クライアントは
   `submit_inputs` リデューサーへ、`packInput` で u8 のビットフラグにパックした入力バッチを
-  送ります（`SNAPSHOT_SEND_INTERVAL_MS` 間隔、`INPUT_BATCH_MAX_TICKS` ティックごとに分割）。
+  送ります（`INPUT_FLUSH_INTERVAL_MS` 間隔、`INPUT_BATCH_MAX_TICKS` ティックごとに分割）。
 - **サーバーが共有物理で再生** します。サーバーは `packages/shared` の決定論的な
   `stepPlayer` を使い、受け取った入力を権威状態（`player` 行）へ適用します。`row.tick` が
   適用済みティック数となり、行の更新そのものがクライアントへの ack になります。
