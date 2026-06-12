@@ -13,6 +13,7 @@ export const spacetimedb = schema({
       facing: t.i8(), // -1 left, 1 right
       onGround: t.bool(),
       rope: t.i32(), // rope index while climbing, -1 = none
+      online: t.bool(), // connection presence: rows persist across disconnects
       tick: t.u32(), // ticks applied so far; state is "after tick `tick`"
       simStartAt: t.timestamp(), // spawn wall-clock, basis of the speed-hack guard
       updatedAt: t.timestamp(),

@@ -159,6 +159,23 @@ describe('createPrediction', () => {
     expect(resets).toHaveLength(0);
   });
 
+  it('does not reset on a repeated ack at the same tick with identical state', () => {
+    const loop = createPrediction(deps, 0, 0);
+    const drv = driver(spawn(), 0);
+
+    const ackTick = drv.step(loop, { ...NO_INPUT, right: true }, INPUT_FLUSH_INTERVAL_MS);
+    drv.step(loop, NO_INPUT, 2 * INPUT_FLUSH_INTERVAL_MS);
+    loop.onAck(drv.state(ackTick), ackTick, 1000);
+
+    // A later own-row update that carries no new tick (e.g. a name change) re-acks
+    // the same tick with the same physics state. Pruning strictly BELOW the ack
+    // keeps predicted[ackTick] around, so this matches and short-circuits rather
+    // than triggering a needless replay + resetLocal.
+    loop.onAck(drv.state(ackTick), ackTick, 1001);
+
+    expect(resets).toHaveLength(0);
+  });
+
   it('reconciles a divergent ack by replaying un-acked inputs', () => {
     const loop = createPrediction(deps, 0, 0);
     const drv = driver(spawn(), 0);

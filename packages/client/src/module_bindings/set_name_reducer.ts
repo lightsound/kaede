@@ -10,18 +10,6 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  identity: __t.identity().primaryKey(),
+export default {
   name: __t.string(),
-  x: __t.f64(),
-  y: __t.f64(),
-  vx: __t.f64(),
-  vy: __t.f64(),
-  facing: __t.i8(),
-  onGround: __t.bool().name("on_ground"),
-  rope: __t.i32(),
-  online: __t.bool(),
-  tick: __t.u32(),
-  simStartAt: __t.timestamp().name("sim_start_at"),
-  updatedAt: __t.timestamp().name("updated_at"),
-});
+};

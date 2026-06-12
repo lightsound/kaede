@@ -41,6 +41,10 @@ export const submitInputs = spacetimedb.reducer(
       facing: s.facing,
       onGround: s.onGround,
       rope: s.rope,
+      // Self-heal `online` here: a double-login-then-close race can land a
+      // stale offline flag on a still-active identity. Any input proves we're
+      // online, and we're already updating the row, so reassert it.
+      online: true,
       tick: row.tick + inputs.length,
       updatedAt: ctx.timestamp,
     });
@@ -51,7 +55,25 @@ export const submitInputs = spacetimedb.reducer(
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
 export const join = spacetimedb.reducer(ctx => {
-  if (ctx.db.player.identity.find(ctx.sender)) return;
+  const row = ctx.db.player.identity.find(ctx.sender);
+  if (row) {
+    // Reconnect under a persisted identity: keep where they left off (x, y,
+    // name, facing) but re-arm the speed-hack guard. Resetting tick to 0 with a
+    // fresh simStartAt is REQUIRED — otherwise the wall-clock elapsed since the
+    // original spawn would let the next batch burst far ahead of real time.
+    ctx.db.player.identity.update({
+      ...row,
+      vx: 0,
+      vy: 0,
+      onGround: false,
+      rope: -1,
+      online: true,
+      tick: 0,
+      simStartAt: ctx.timestamp,
+      updatedAt: ctx.timestamp,
+    });
+    return;
+  }
   const name = 'Player-' + ctx.sender.toHexString().slice(0, 6);
   ctx.db.player.insert({
     identity: ctx.sender,
@@ -63,12 +85,28 @@ export const join = spacetimedb.reducer(ctx => {
     facing: 1,
     onGround: false,
     rope: -1,
+    online: true,
     tick: 0,
     simStartAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
   });
 });
 
+// Presence, not deletion: the row persists so the player resumes from their
+// last position on the next join. Only the online flag flips.
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
-  ctx.db.player.identity.delete(ctx.sender);
+  const row = ctx.db.player.identity.find(ctx.sender);
+  if (!row) return;
+  ctx.db.player.identity.update({ ...row, online: false, updatedAt: ctx.timestamp });
+});
+
+// Player-chosen display name. Validation mirrors the client overlay's
+// maxLength: a trimmed, control-character-free string of 1..16 chars.
+export const setName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
+  const row = ctx.db.player.identity.find(ctx.sender);
+  if (!row) return;
+  const trimmed = name.trim();
+  // eslint-disable-next-line no-control-regex
+  if (trimmed.length === 0 || trimmed.length > 16 || /[\x00-\x1f\x7f]/.test(trimmed)) return;
+  ctx.db.player.identity.update({ ...row, name: trimmed, updatedAt: ctx.timestamp });
 });

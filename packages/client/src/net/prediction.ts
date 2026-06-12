@@ -67,9 +67,13 @@ export function createPrediction(deps: PredictionDeps, startTick: number, nowMs 
     lastSentTick = currentTick;
   }
 
-  function prunePredictionsUpTo(tick: number): void {
-    for (const t of history.keys()) if (t <= tick) history.delete(t);
-    for (const t of predicted.keys()) if (t <= tick) predicted.delete(t);
+  // Prune strictly BELOW the acked tick, keeping predicted[ack] itself. A later
+  // own-row update that does NOT advance tick (a name or, later, HP change)
+  // re-acks the same tick; retaining its predicted state lets onAck's sameState
+  // check early-return instead of forcing a needless replay + resetLocal.
+  function prunePredictionsBelow(tick: number): void {
+    for (const t of history.keys()) if (t < tick) history.delete(t);
+    for (const t of predicted.keys()) if (t < tick) predicted.delete(t);
   }
 
   return {
@@ -102,7 +106,7 @@ export function createPrediction(deps: PredictionDeps, startTick: number, nowMs 
       if (mine && sameState(mine, authoritative)) {
         // Prediction matched: just advance the ack horizon.
         ackedTick = ack;
-        prunePredictionsUpTo(ack);
+        prunePredictionsBelow(ack);
         return;
       }
 
@@ -127,7 +131,7 @@ export function createPrediction(deps: PredictionDeps, startTick: number, nowMs 
       }
       deps.resetLocal(s, currentTick);
       ackedTick = ack;
-      prunePredictionsUpTo(ack);
+      prunePredictionsBelow(ack);
     },
   };
 }
