@@ -28,7 +28,7 @@ import {
   type MobKind,
   type PlayerState,
 } from '@maple/shared';
-import { setMobTick, spacetimedb } from './tables';
+import { mobAiTimerRow, setMobTick, spacetimedb } from './tables';
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
@@ -398,6 +398,8 @@ function runMobTick(ctx: Ctx): void {
 
 // Mob AI tick (10 Hz). The single param is the fired timer row; we never read it
 // — the schedule itself is the clock. Private/scheduled, so clients can't call it.
+// The param MUST be the shared, NAMED mobAiTimerRow: publish-time registration
+// rejects anonymous compound parameter types ("Missing type name").
 //
 // The explicit `ReducerExport<any, any>` annotation pairs with tables.ts's lazy
 // mobTickRef to cut the tables.ts <-> reducers.ts cycle at BOTH the type and the
@@ -406,7 +408,7 @@ function runMobTick(ctx: Ctx): void {
 // from tables.ts at its own top level). We hand the reducer to setMobTick so the
 // scheduled thunk can resolve it at registration time.
 export const mobTick: ReducerExport<any, any> = spacetimedb.reducer(
-  { timer: t.row({ scheduledId: t.u64(), scheduledAt: t.scheduleAt() }) },
+  { timer: mobAiTimerRow },
   (ctx) => {
     runMobTick(ctx);
   }

@@ -13,6 +13,20 @@ export function setMobTick(reducer: ReducerExport<any, any>): void {
   mobTickRef = reducer;
 }
 
+/**
+ * The mob_ai_timer row, declared ONCE with an explicit type name and shared by
+ * the table below and mobTick's reducer parameter (reducers.ts). Publish-time
+ * registration requires every compound reducer-parameter type to carry a type
+ * name — an anonymous t.row(...) makes `spacetime publish` fail with
+ * "Missing type name for RowBuilder". Sharing the instance also registers the
+ * table row and the scheduled arg as the same type. 'MobAiTimer' matches what
+ * the SDK would derive from the table name.
+ */
+export const mobAiTimerRow = t.row('MobAiTimer', {
+  scheduledId: t.u64().primaryKey().autoInc(),
+  scheduledAt: t.scheduleAt(),
+});
+
 export const spacetimedb = schema({
   player: table(
     { name: 'player', public: true },
@@ -84,11 +98,5 @@ export const spacetimedb = schema({
   // thunk resolves mobTick lazily through mobTickRef (see above); it's only
   // invoked at schema registration, after both modules have evaluated. Private
   // by default: clients must not see or call the timer.
-  mobAiTimer: table(
-    { name: 'mob_ai_timer', scheduled: () => mobTickRef! },
-    {
-      scheduledId: t.u64().primaryKey().autoInc(),
-      scheduledAt: t.scheduleAt(),
-    }
-  ),
+  mobAiTimer: table({ name: 'mob_ai_timer', scheduled: () => mobTickRef! }, mobAiTimerRow),
 });
