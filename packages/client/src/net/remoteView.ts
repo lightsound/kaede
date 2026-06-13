@@ -15,6 +15,9 @@ interface Snapshot {
   vx: number;
   vy: number;
   facing: Facing;
+  /** Authoritative pose flags, carried straight through (mob rigs ignore them). */
+  onGround: boolean;
+  climbing: boolean;
 }
 
 /**
@@ -53,7 +56,7 @@ export function createRemoteViews<Meta = undefined>() {
   function record(
     idHex: string,
     name: string,
-    row: { x: number; y: number; vx: number; vy: number; facing: number },
+    row: { x: number; y: number; vx: number; vy: number; facing: number; onGround: boolean; climbing: boolean },
     nowMs: number,
     meta: Meta,
   ): void {
@@ -71,6 +74,8 @@ export function createRemoteViews<Meta = undefined>() {
       vx: row.vx,
       vy: row.vy,
       facing: toFacing(row.facing),
+      onGround: row.onGround,
+      climbing: row.climbing,
     });
   }
 
@@ -80,9 +85,10 @@ export function createRemoteViews<Meta = undefined>() {
 
   // Render views interpolated INTERP_DELAY_MS in the past, smoothing over any
   // snapshot discontinuities (teleports, reorders) with a decaying error offset
-  // so the rendered path stays continuous. The interpolated velocity (vx/vy from
-  // the straddling snapshot) is surfaced to the draw callback so the renderer can
-  // animate the rig (walk cadence, jump/fall pose) without any extra net state.
+  // so the rendered path stays continuous. The interpolated velocity (vx/vy) and
+  // the authoritative pose flags (onGround/climbing, from the later snapshot) are
+  // surfaced to the draw callback so the renderer can animate the rig (walk
+  // cadence, jump/fall, climb pose) without any extra net state or heuristics.
   function renderFrame(
     nowMs: number,
     draw: (
@@ -93,6 +99,8 @@ export function createRemoteViews<Meta = undefined>() {
       facing: Facing,
       vx: number,
       vy: number,
+      onGround: boolean,
+      climbing: boolean,
       meta: Meta,
     ) => void,
   ): void {
@@ -118,7 +126,7 @@ export function createRemoteViews<Meta = undefined>() {
       const ry = target.y + view.offset.y;
       view.prevRendered = { x: rx, y: ry };
       view.lastFrameMs = nowMs;
-      draw(idHex, view.name, rx, ry, target.facing, target.vx, target.vy, view.meta);
+      draw(idHex, view.name, rx, ry, target.facing, target.vx, target.vy, target.onGround, target.climbing, view.meta);
     }
   }
 
@@ -139,7 +147,7 @@ function prune(buf: Snapshot[], now: number): void {
  * Returns the position at renderTime by cubic-Hermite interpolating between the
  * two straddling snapshots (using their authoritative velocities as tangents).
  * Clamps to the nearest snapshot outside the buffered range (no extrapolation).
- * facing comes from the later snapshot.
+ * The discrete fields (facing, onGround, climbing) come from the later snapshot.
  */
 function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
   if (renderTime <= buf[0].t) return buf[0];
@@ -152,7 +160,7 @@ function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
       const span = b.t - a.t;
       if (span <= 0) return { ...b, t: renderTime };
       const p = hermite(a, b, renderTime);
-      return { t: renderTime, x: p.x, y: p.y, vx: b.vx, vy: b.vy, facing: b.facing };
+      return { t: renderTime, x: p.x, y: p.y, vx: b.vx, vy: b.vy, facing: b.facing, onGround: b.onGround, climbing: b.climbing };
     }
   }
   return last;

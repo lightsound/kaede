@@ -109,85 +109,91 @@ function grabRope(state: PlayerState, input: PlayerInput, map: CollisionMap): nu
 }
 
 /**
- * Advance one player by a single fixed tick. Pure: returns a fresh state and
- * never mutates its arguments, so identical inputs always yield identical output.
+ * Portal travel, checked FIRST (before rope/climb): a grounded player pressing
+ * up while standing on a portal teleports to the target map/coords; returns the
+ * arrival state, or undefined when no portal fires (proceed to climb/step).
  *
- * `maps` is the full map list; this tick acts on `maps[state.mapId]`. Portal
- * travel is just another step here, so client prediction and server replay
- * switch maps in perfect lockstep — no separate teleport reducer, no special
- * reconciliation, and the client cannot fake a destination.
+ * INVARIANTS: onGround=false on arrival means a held up cannot re-trigger until
+ * the player lands; combined with the landing-offset rule (a target never sits
+ * inside a destination portal's box), a held up key can't ping-pong the player
+ * between maps. The target map is the only place mapId changes; every other path
+ * carries state.mapId unchanged.
  */
-export function stepPlayer(
+function tryPortal(
   state: PlayerState,
   input: PlayerInput,
-  maps: readonly CollisionMap[],
-): PlayerState {
-  const map = maps[state.mapId];
-
-  // Post-step cooldown, carried into EVERY returned state below so the value is
-  // never dropped on a climbing/rope/portal early return. A swing this tick
-  // (evaluated on the pre-step state) latches the full cooldown; otherwise it
-  // decays by one toward 0. Attacking is purely a combat clock and never alters
-  // movement.
-  const attackCooldown = attackFires(state, input)
-    ? ATTACK_COOLDOWN_TICKS
-    : Math.max(0, state.attackCooldown - 1);
-
-  // --- Portal travel, checked FIRST (before rope/climb): a grounded player
-  // pressing up while standing on a portal teleports to the target map/coords.
-  // INVARIANTS: onGround=false on arrival means a held up cannot re-trigger
-  // until the player lands; combined with the landing-offset rule (a target
-  // never sits inside a destination portal's box), a held up key can't
-  // ping-pong the player between maps. The target map is the only place mapId
-  // changes; every other path below carries state.mapId unchanged.
-  if (input.up && state.onGround) {
-    for (const portal of map.portals) {
-      if (!portalInRange(state.x, state.y, portal)) continue;
-      return {
-        x: portal.targetX,
-        y: portal.targetY,
-        vx: 0,
-        vy: 0,
-        facing: state.facing,
-        onGround: false,
-        rope: -1,
-        attackCooldown,
-        mapId: portal.targetMap,
-      };
-    }
+  map: CollisionMap,
+  attackCooldown: number,
+): PlayerState | undefined {
+  if (!input.up || !state.onGround) return undefined;
+  for (const portal of map.portals) {
+    if (!portalInRange(state.x, state.y, portal)) continue;
+    return {
+      x: portal.targetX,
+      y: portal.targetY,
+      vx: 0,
+      vy: 0,
+      facing: state.facing,
+      onGround: false,
+      rope: -1,
+      attackCooldown,
+      mapId: portal.targetMap,
+    };
   }
+  return undefined;
+}
 
-  // --- Climbing: up/down drive y directly; gravity and collision are suspended.
+/**
+ * Outcome of the climb step. `undefined` means the rope did nothing this tick,
+ * so the caller runs the regular ground/air step on the ORIGINAL state. A plain
+ * PlayerState is a finished tick (early return). A `{ fallthrough }` carries the
+ * MODIFIED state that the regular step must still run THIS tick: jumping off a
+ * rope with a direction detaches the rope (rope=-1, vy=ROPE_JUMP_VELOCITY,
+ * onGround=false) yet must also apply the horizontal input the same tick.
+ */
+type ClimbResult = PlayerState | { fallthrough: PlayerState } | undefined;
+
+/**
+ * Climbing: up/down drive y directly; gravity and collision are suspended.
+ * Handles both the rope-attached branch and the rope-grab path. See ClimbResult
+ * for the three outcomes.
+ */
+function climbStep(
+  state: PlayerState,
+  input: PlayerInput,
+  map: CollisionMap,
+  attackCooldown: number,
+): ClimbResult {
   const rope = state.rope >= 0 ? map.ropes[state.rope] : undefined;
   if (rope) {
     if (input.jump && (input.left || input.right)) {
       // Jumping off needs a direction (plain jump keeps climbing). Fall through
       // to the regular step so the horizontal input takes effect this tick.
-      state = { ...state, rope: -1, vy: ROPE_JUMP_VELOCITY, onGround: false };
-    } else {
-      const dir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-      const y = state.y + dir * CLIMB_SPEED * DT;
-      if (y < rope.top) {
-        // Climbed past the top: step up onto whatever the rope hangs from.
-        return {
-          x: rope.x,
-          y: rope.top - PLAYER_HALF_H,
-          vx: 0,
-          vy: 0,
-          facing: state.facing,
-          onGround: true,
-          rope: -1,
-          attackCooldown,
-          mapId: state.mapId,
-        };
-      }
-      if (y > rope.bottom) {
-        // Slid past the bottom: let go and fall.
-        return { x: rope.x, y: rope.bottom, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: -1, attackCooldown, mapId: state.mapId };
-      }
-      return { x: rope.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: state.rope, attackCooldown, mapId: state.mapId };
+      return { fallthrough: { ...state, rope: -1, vy: ROPE_JUMP_VELOCITY, onGround: false } };
     }
-  } else if (input.up || input.down) {
+    const dir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+    const y = state.y + dir * CLIMB_SPEED * DT;
+    if (y < rope.top) {
+      // Climbed past the top: step up onto whatever the rope hangs from.
+      return {
+        x: rope.x,
+        y: rope.top - PLAYER_HALF_H,
+        vx: 0,
+        vy: 0,
+        facing: state.facing,
+        onGround: true,
+        rope: -1,
+        attackCooldown,
+        mapId: state.mapId,
+      };
+    }
+    if (y > rope.bottom) {
+      // Slid past the bottom: let go and fall.
+      return { x: rope.x, y: rope.bottom, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: -1, attackCooldown, mapId: state.mapId };
+    }
+    return { x: rope.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: state.rope, attackCooldown, mapId: state.mapId };
+  }
+  if (input.up || input.down) {
     const grabbed = grabRope(state, input, map);
     if (grabbed >= 0) {
       const r = map.ropes[grabbed];
@@ -195,7 +201,27 @@ export function stepPlayer(
       return { x: r.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: grabbed, attackCooldown, mapId: state.mapId };
     }
   }
+  return undefined;
+}
 
+/** The horizontal half of a regular step: the new x, vx, facing, and vy/y0. */
+interface HorizontalStep {
+  x: number;
+  vx: number;
+  facing: Facing;
+  /** vy after the jump/drop decision and the gravity clamp. */
+  vy: number;
+  /** y BEFORE the vertical move (the platform-drop nudge folds into it here). */
+  y0: number;
+}
+
+/**
+ * The horizontal half of a regular ground/air step: pick vx/facing, apply the
+ * jump / drop-through decision, clamp gravity, then sweep x against solids and
+ * the world bounds. `y0` is the (possibly drop-nudged) pre-vertical-move y, used
+ * by both the solids sweep here and the vertical resolve next.
+ */
+function horizontalStep(state: PlayerState, input: PlayerInput, map: CollisionMap): HorizontalStep {
   const vx = ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * MOVE_SPEED;
   let facing: Facing = state.facing;
   if (vx > 0) facing = 1;
@@ -226,7 +252,23 @@ export function stepPlayer(
   }
   x = Math.min(Math.max(x, PLAYER_HALF_W), map.width - PLAYER_HALF_W);
 
-  // Vertical move + resolution. A downward hit lands us; either hit zeroes vy.
+  return { x, vx, facing, vy, y0 };
+}
+
+/** The resolved vertical position after the move: final y, vy, and onGround. */
+interface VerticalResolve {
+  y: number;
+  vy: number;
+  onGround: boolean;
+}
+
+/**
+ * The vertical half of a regular step: move from y0 by vy, resolve against
+ * solids (a downward hit lands us; either hit zeroes vy), then let one-way
+ * platforms support the player — but only while falling and only when the feet
+ * crossed the platform's top edge during this tick.
+ */
+function verticalResolve(x: number, y0: number, vy: number, map: CollisionMap): VerticalResolve {
   let y = y0 + vy * DT;
   let onGround = false;
   for (const solid of map.solids) {
@@ -256,5 +298,58 @@ export function stepPlayer(
     }
   }
 
-  return { x, y, vx, vy, facing, onGround, rope: -1, attackCooldown, mapId: state.mapId };
+  return { y, vy, onGround };
+}
+
+/**
+ * Advance one player by a single fixed tick. Pure: returns a fresh state and
+ * never mutates its arguments, so identical inputs always yield identical output.
+ *
+ * `maps` is the full map list; this tick acts on `maps[state.mapId]`. Portal
+ * travel is just another step here, so client prediction and server replay
+ * switch maps in perfect lockstep — no separate teleport reducer, no special
+ * reconciliation, and the client cannot fake a destination.
+ */
+export function stepPlayer(
+  state: PlayerState,
+  input: PlayerInput,
+  maps: readonly CollisionMap[],
+): PlayerState {
+  const map = maps[state.mapId];
+
+  // Post-step cooldown, carried into EVERY returned state below so the value is
+  // never dropped on a climbing/rope/portal early return. A swing this tick
+  // (evaluated on the pre-step state) latches the full cooldown; otherwise it
+  // decays by one toward 0. Attacking is purely a combat clock and never alters
+  // movement.
+  const attackCooldown = attackFires(state, input)
+    ? ATTACK_COOLDOWN_TICKS
+    : Math.max(0, state.attackCooldown - 1);
+
+  const portaled = tryPortal(state, input, map, attackCooldown);
+  if (portaled) return portaled;
+
+  // Climbing may finish the tick outright, or yield a fall-through state (jump
+  // off a rope with a direction) that the regular step still runs THIS tick.
+  const climbed = climbStep(state, input, map, attackCooldown);
+  let stepState = state;
+  if (climbed !== undefined) {
+    if ('fallthrough' in climbed) stepState = climbed.fallthrough;
+    else return climbed;
+  }
+
+  const h = horizontalStep(stepState, input, map);
+  const v = verticalResolve(h.x, h.y0, h.vy, map);
+
+  return {
+    x: h.x,
+    y: v.y,
+    vx: h.vx,
+    vy: v.vy,
+    facing: h.facing,
+    onGround: v.onGround,
+    rope: -1,
+    attackCooldown,
+    mapId: state.mapId,
+  };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createGameApp, type GameApp } from './game/GameApp';
+import { isTextEntry } from './game/input';
 import { startNet, type ChatMessage, type Net } from './net/sync';
 
 const NAME_KEY = 'maple.name';
@@ -62,12 +63,8 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || showOverlay) return;
-      const target = e.target;
-      const typing =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable);
-      if (typing) return;
+      // Skip when an input already has focus (chat's own Enter sends).
+      if (isTextEntry(e.target)) return;
       e.preventDefault();
       chatInputRef.current?.focus();
     };

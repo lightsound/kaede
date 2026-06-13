@@ -1,5 +1,5 @@
 import { GROUND_TOP } from './map';
-import { type AABB, overlaps } from './physics';
+import { type AABB, aabbToRect, overlaps } from './physics';
 import { attackHitbox } from './combat';
 import type { PlayerState } from './types';
 
@@ -126,9 +126,8 @@ export function resolveAttackTarget(
   state: PlayerState,
   mobs: { x: number; y: number; kind: MobKind; alive: boolean }[],
 ): number {
-  const hit = attackHitbox(state);
   // The hitbox is an AABB; overlaps() takes a Rect, so express it as one.
-  const hitRect = { x: hit.cx - hit.hw, y: hit.cy - hit.hh, w: hit.hw * 2, h: hit.hh * 2 };
+  const hitRect = aabbToRect(attackHitbox(state));
   let best = -1;
   let bestDx = Infinity;
   for (let i = 0; i < mobs.length; i++) {

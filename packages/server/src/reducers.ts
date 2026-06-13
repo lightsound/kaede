@@ -14,6 +14,7 @@ import {
   SPAWN_X,
   SPAWN_Y,
   TICK_ALLOWANCE_SLACK,
+  aabbToRect,
   attackDamage,
   attackFires,
   maxHpForLevel,
@@ -346,12 +347,12 @@ function runMobTick(ctx: Ctx): void {
   for (const player of ctx.db.player.iter()) {
     if (!player.online) continue;
     if (now.since(player.invulnUntil).millis < 0) continue;
-    const pRect = {
-      x: player.x - PLAYER_HALF_W,
-      y: player.y - PLAYER_HALF_H,
-      w: PLAYER_HALF_W * 2,
-      h: PLAYER_HALF_H * 2,
-    };
+    const pRect = aabbToRect({
+      cx: player.x,
+      cy: player.y,
+      hw: PLAYER_HALF_W,
+      hh: PLAYER_HALF_H,
+    });
     let hit: MobKind | undefined;
     for (const mob of ctx.db.mob.iter()) {
       if (mob.hp <= 0) continue;

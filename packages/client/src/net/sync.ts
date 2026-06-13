@@ -7,11 +7,17 @@ import {
   xpToNext,
   type MobKind,
 } from '@maple/shared';
-import { DAMAGE_COLORS, type GameApp } from '../game/GameApp';
+import type { GameApp } from '../game/GameApp';
 import type { DbConnection } from '../module_bindings';
 import { connect } from './connection';
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
+
+/** Mob view meta carried through the interpolation machinery (latest write wins). */
+interface MobMeta {
+  kind: MobKind;
+  hp: number;
+}
 
 /** The generated own/remote player row type (all columns). */
 type PlayerRow =
@@ -52,8 +58,10 @@ export interface Net {
 export function startNet(gameApp: GameApp): Net {
   const remoteViews = createRemoteViews();
   // Mob views share the same interpolation/smoothing code; the meta payload is
-  // the mob kind, which the draw callback needs to size/color the rectangle.
-  const mobViews = createRemoteViews<MobKind>();
+  // the mob's kind and live hp. The kind picks the procedural rig and stats
+  // (mobs have been rigs, not rectangles, since Phase 4); hp drives the HP bar
+  // and the hidden/dead state. Both ride latest-write-wins through record().
+  const mobViews = createRemoteViews<MobMeta>();
   let conn: DbConnection | undefined;
   let myIdHex = '';
   let disposed = false;
@@ -88,36 +96,23 @@ export function startNet(gameApp: GameApp): Net {
     if (bubble) gameApp.showSpeech(mine ? null : senderHex, row.text);
   }
 
-  // Track each mob's last-seen hp so the per-frame redraw (which only carries
-  // interpolated position) can keep the HP bar / hidden state in sync, and so a
-  // row UPDATE can detect a damage tick (hp decreased) vs. a respawn (hp up).
-  const mobHp = new Map<string, number>();
-
   gameApp.onLocalTick((state, tick, packedInput) => {
     if (!prediction) return;
     prediction.onTick(state, tick, packedInput, performance.now());
   });
 
-  // Render remote players and mobs interpolated INTERP_DELAY_MS in the past. The
-  // interpolated vx/vy is threaded through so the rigs can animate (walk/jump
-  // pose for players; mob velocity is implicit, so mobs ignore it).
+  // Render remote players and mobs interpolated INTERP_DELAY_MS in the past. For
+  // players the interpolated vx/vy plus the authoritative onGround/climbing pose
+  // drive the rig; for mobs vx gates the waddle and the meta carries kind + hp.
   gameApp.onFrame((now) => {
-    remoteViews.renderFrame(now, (idHex, name, x, y, facing, vx, vy) => {
-      gameApp.upsertRemotePlayer(idHex, name, x, y, facing, vx, vy);
+    remoteViews.renderFrame(now, (idHex, name, x, y, facing, vx, vy, onGround, climbing) => {
+      gameApp.upsertRemotePlayer(idHex, name, x, y, facing, vx, vy, onGround, climbing);
     });
-    mobViews.renderFrame(now, (idHex, _name, x, y, facing, vx, _vy, kind) => {
+    mobViews.renderFrame(now, (idHex, _name, x, y, facing, vx, _vy, _onGround, _climbing, meta) => {
       // The interpolated frame carries position/facing/velocity; the live hp
-      // comes from mobHp (kept current by the row handlers), so the HP bar and
-      // hidden/dead state stay correct between row updates.
-      gameApp.upsertMob(
-        Number(idHex),
-        kind,
-        x,
-        y,
-        facing,
-        mobHp.get(idHex) ?? MOB_STATS[kind].maxHp,
-        vx,
-      );
+      // rides through meta (kept current by record() on each row change), so the
+      // HP bar and hidden/dead state stay correct between row updates.
+      gameApp.upsertMob(Number(idHex), meta.kind, x, y, facing, meta.hp, vx);
     });
   });
 
@@ -167,7 +162,15 @@ export function startNet(gameApp: GameApp): Net {
       // like offline ones (no view), so bubbles/slashes never leak across maps.
       const handleRemoteRow = (idHex: string, old: PlayerRow | undefined, row: PlayerRow) => {
         if (row.online && row.mapId === localMapId) {
-          remoteViews.record(idHex, row.name, row, performance.now(), undefined);
+          // Carry the authoritative pose: onGround straight through, and climbing
+          // derived from the rope column (rope >= 0 means attached/climbing).
+          remoteViews.record(
+            idHex,
+            row.name,
+            { ...row, climbing: row.rope >= 0 },
+            performance.now(),
+            undefined,
+          );
           // A remote swing is observable only as a cooldown jump (0 -> full) on
           // their authoritative row; render a slash at their interpolated spot.
           if (old && row.attackCooldown > old.attackCooldown) {
@@ -188,7 +191,7 @@ export function startNet(gameApp: GameApp): Net {
 
         // Contact damage: hp dropped. Float a red number at the player.
         if (row.hp < old.hp) {
-          gameApp.spawnDamageNumber(row.x, row.y - 24, old.hp - row.hp, DAMAGE_COLORS.own);
+          gameApp.spawnDamageNumber(row.x, row.y - 24, old.hp - row.hp, 'own');
         }
         // Death-respawn: the server full-heals AND teleports to map 0's spawn in
         // one update (so hp never appears <= 0 on the wire). A heal-to-max with a
@@ -205,7 +208,7 @@ export function startNet(gameApp: GameApp): Net {
         }
         // XP gain within the same level reads as "+N EXP".
         if (row.xp > old.xp && row.level === old.level) {
-          gameApp.spawnDamageNumber(row.x, row.y - 24, row.xp - old.xp, DAMAGE_COLORS.exp);
+          gameApp.spawnDamageNumber(row.x, row.y - 24, row.xp - old.xp, 'exp');
         }
         // Level-up: xp rebases onto the new curve (delta isn't a clean gain), so
         // show the flash rather than a misleading number.
@@ -220,8 +223,10 @@ export function startNet(gameApp: GameApp): Net {
       const recordMobView = (row: MobRow): boolean => {
         if (mobMap(row) !== localMapId) return false;
         const idHex = String(row.id);
-        mobHp.set(idHex, row.hp);
-        mobViews.record(idHex, idHex, mobSnap(row), performance.now(), row.kind as MobKind);
+        mobViews.record(idHex, idHex, mobSnap(row), performance.now(), {
+          kind: row.kind as MobKind,
+          hp: row.hp,
+        });
         return true;
       };
       const handleMobInsert = (row: MobRow) => {
@@ -231,14 +236,13 @@ export function startNet(gameApp: GameApp): Net {
         if (!recordMobView(row)) return;
         // hp dropped: a hit landed — float the damage at the mob's rendered spot.
         if (row.hp < old.hp && old.hp > 0) {
-          gameApp.spawnDamageNumber(row.x, row.y - 16, old.hp - row.hp, DAMAGE_COLORS.mob);
+          gameApp.spawnDamageNumber(row.x, row.y - 16, old.hp - row.hp, 'mob');
         }
         // Death / respawn visibility is handled by upsertMob via the hp we pass
-        // each frame (mobHp map); nothing extra needed here.
+        // each frame (carried in the view meta); nothing extra needed here.
       };
       const handleMobDelete = (row: MobRow) => {
         const idHex = String(row.id);
-        mobHp.delete(idHex);
         mobViews.remove(idHex);
         gameApp.removeMob(row.id);
       };
@@ -359,11 +363,13 @@ export function startNet(gameApp: GameApp): Net {
 
 /**
  * A mob row as an interpolation snapshot. The server moves mobs by dir * speed,
- * so we reconstruct that velocity as the Hermite tangent; vy is always 0.
+ * so we reconstruct that velocity as the Hermite tangent; vy is always 0. The
+ * onGround/climbing pose flags are required by record() but unused by mob rigs,
+ * so we pass fixed defaults (grounded, never climbing).
  */
 function mobSnap(row: MobRow) {
   const speed = MOB_STATS[row.kind as MobKind].speed;
-  return { x: row.x, y: row.y, vx: row.dir * speed, vy: 0, facing: row.dir };
+  return { x: row.x, y: row.y, vx: row.dir * speed, vy: 0, facing: row.dir, onGround: true, climbing: false };
 }
 
 /** Which map a mob lives on, derived from its spawn (no column on the mob row). */

@@ -18,9 +18,10 @@ export function mergeInputs(a: PlayerInput, b: PlayerInput): PlayerInput {
  * True while the event originated from a text-entry element. When chat (or the
  * name overlay) has focus, key events must NOT reach the game: otherwise typing
  * "z" would swing the sword and arrow keys (caret movement) would be eaten by
- * preventDefault. We let those events fall straight through to the input.
+ * preventDefault. We let those events fall straight through to the input. Also
+ * reused by App.tsx's Enter-to-focus-chat listener (skip when already typing).
  */
-function isTextEntry(target: EventTarget | null): boolean {
+export function isTextEntry(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||

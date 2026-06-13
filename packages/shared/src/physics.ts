@@ -23,6 +23,11 @@ export function rectBounds(r: Rect) {
   return { left: r.x, right: r.x + r.w, top: r.y, bottom: r.y + r.h };
 }
 
+/** A center+half-extents box as a top-left+size Rect (the same span, re-expressed). */
+export function aabbToRect(box: AABB): Rect {
+  return { x: box.cx - box.hw, y: box.cy - box.hh, w: box.hw * 2, h: box.hh * 2 };
+}
+
 /** True when a center+half-extents box overlaps a top-left+size rect. */
 export function overlaps(box: AABB, r: Rect): boolean {
   const b = aabbBounds(box);
