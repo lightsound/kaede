@@ -2,7 +2,18 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+# One run per branch: a new push cancels the outdated run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pin the CLI so the bindings drift check doesn't break when a new release
+  # changes codegen. Bump together with a bindings regeneration commit.
+  SPACETIME_VERSION: v2.6.1
 
 jobs:
   ci:
@@ -20,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -34,3 +48,21 @@ jobs:
 
       - name: Duplicate check
         run: pnpm exec fallow dupes
+
+      - name: Install SpacetimeDB CLI (pinned)
+        run: |
+          curl -sSfL -o /tmp/spacetime.tar.gz \
+            "https://github.com/clockworklabs/SpacetimeDB/releases/download/${SPACETIME_VERSION}/spacetime-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Check module bindings are up to date
+        run: |
+          spacetimedb-cli generate --lang typescript --module-path packages/server \
+            --out-dir packages/client/src/module_bindings --yes
+          if [ -n "$(git status --porcelain packages/client/src/module_bindings)" ]; then
+            echo "::error::module_bindings drifted from the server schema. Run 'spacetime generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings' and commit the result."
+            git diff packages/client/src/module_bindings
+            exit 1
+          fi
