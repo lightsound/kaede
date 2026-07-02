@@ -1,16 +1,16 @@
 import {
   DEFAULT_MAP,
   DT,
+  type Facing,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
+  type PlayerState,
+  packInput,
   SPAWN_X,
   SPAWN_Y,
+  stepPlayer,
   WORLD_HEIGHT,
   WORLD_WIDTH,
-  packInput,
-  stepPlayer,
-  type Facing,
-  type PlayerState,
 } from '@maple/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { cameraOffset } from './camera';
@@ -50,6 +50,8 @@ export interface GameApp {
   onFrame(cb: (nowMs: number) => void): void;
   upsertRemotePlayer(id: string, name: string, x: number, y: number, facing: Facing): void;
   removeRemotePlayer(id: string): void;
+  /** Drop every remote player sprite (e.g. when the connection is lost). */
+  clearRemotePlayers(): void;
 }
 
 interface PlayerView {
@@ -102,15 +104,22 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
   // Touch overlay: only built on coarse-pointer / touch-capable devices. Added
   // to app.stage (not world) so it stays fixed in screen space, above the world.
-  const wantsTouch =
-    window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+  const wantsTouch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   const touch = wantsTouch ? createTouchControls() : undefined;
   if (touch) app.stage.addChild(touch.container);
 
   const tickCbs: ((s: PlayerState, tick: number, packedInput: number) => void)[] = [];
   const frameCbs: ((nowMs: number) => void)[] = [];
 
-  let prev: PlayerState = { x: SPAWN_X, y: SPAWN_Y, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1 };
+  let prev: PlayerState = {
+    x: SPAWN_X,
+    y: SPAWN_Y,
+    vx: 0,
+    vy: 0,
+    facing: 1,
+    onGround: false,
+    rope: -1,
+  };
   let curr: PlayerState = prev;
   let acc = 0;
   // Simulation is gated until start(): tick < 0 means "not yet running".
@@ -202,6 +211,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       if (!view) return;
       view.root.destroy({ children: true });
       remotes.delete(id);
+    },
+    clearRemotePlayers() {
+      for (const view of remotes.values()) view.root.destroy({ children: true });
+      remotes.clear();
     },
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CLIMB_SPEED,
+  type CollisionMap,
   DEFAULT_MAP,
   DT,
   GROUND_TOP,
@@ -8,14 +9,13 @@ import {
   MOVE_SPEED,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
-  ROPE_JUMP_VELOCITY,
-  SPAWN_X,
-  WORLD_HEIGHT,
-  WORLD_WIDTH,
-  stepPlayer,
-  type CollisionMap,
   type PlayerInput,
   type PlayerState,
+  ROPE_JUMP_VELOCITY,
+  SPAWN_X,
+  stepPlayer,
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
 } from '../src/index';
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
@@ -68,7 +68,11 @@ describe('stepPlayer', () => {
     const platformTop = 540;
     const groundedRightOfPlatform = spawn({ x: 720, y: GROUNDED_Y, onGround: true });
 
-    let s = stepPlayer(groundedRightOfPlatform, { ...NO_INPUT, jump: true, left: true }, DEFAULT_MAP);
+    let s = stepPlayer(
+      groundedRightOfPlatform,
+      { ...NO_INPUT, jump: true, left: true },
+      DEFAULT_MAP,
+    );
     for (let i = 0; i < 240 && !(s.onGround && s.y < GROUNDED_Y); i++) {
       s = stepPlayer(s, { ...NO_INPUT, left: true }, DEFAULT_MAP);
     }

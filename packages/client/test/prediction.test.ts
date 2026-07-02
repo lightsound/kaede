@@ -1,16 +1,16 @@
-import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_MAP,
   INPUT_BATCH_MAX_TICKS,
   INPUT_FLUSH_INTERVAL_MS,
-  PREDICTION_HISTORY_MAX_TICKS,
-  RESEND_TIMEOUT_MS,
-  SPAWN_X,
-  packInput,
-  stepPlayer,
   type PlayerInput,
   type PlayerState,
+  PREDICTION_HISTORY_MAX_TICKS,
+  packInput,
+  RESEND_TIMEOUT_MS,
+  SPAWN_X,
+  stepPlayer,
 } from '@maple/shared';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createPrediction, type PredictionDeps } from '../src/net/prediction';
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
@@ -135,7 +135,8 @@ describe('createPrediction', () => {
       expect(sent[0].packed).toHaveLength(INPUT_BATCH_MAX_TICKS);
       expect(sent[1].startTick).toBe(INPUT_BATCH_MAX_TICKS);
       expect(sent[1].packed).toHaveLength(pending - INPUT_BATCH_MAX_TICKS);
-      for (const batch of sent) expect(batch.packed.length).toBeLessThanOrEqual(INPUT_BATCH_MAX_TICKS);
+      for (const batch of sent)
+        expect(batch.packed.length).toBeLessThanOrEqual(INPUT_BATCH_MAX_TICKS);
     });
   });
 
@@ -150,7 +151,9 @@ describe('createPrediction', () => {
       { ...NO_INPUT, right: true },
       NO_INPUT,
     ];
-    inputs.forEach((input, i) => drv.step(loop, input, (i + 1) * INPUT_FLUSH_INTERVAL_MS));
+    inputs.forEach((input, i) => {
+      drv.step(loop, input, (i + 1) * INPUT_FLUSH_INTERVAL_MS);
+    });
 
     const ackTick = 2;
     // Server replayed the same inputs deterministically: ack the exact predicted state.
@@ -170,7 +173,9 @@ describe('createPrediction', () => {
       { ...NO_INPUT, right: true },
       { ...NO_INPUT, left: true },
     ];
-    inputs.forEach((input, i) => drv.step(loop, input, (i + 1) * INPUT_FLUSH_INTERVAL_MS));
+    inputs.forEach((input, i) => {
+      drv.step(loop, input, (i + 1) * INPUT_FLUSH_INTERVAL_MS);
+    });
 
     const ackTick = 2;
     const currentTick = drv.tick;

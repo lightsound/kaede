@@ -2,11 +2,11 @@ import {
   DEFAULT_MAP,
   INPUT_BATCH_MAX_TICKS,
   INPUT_FLUSH_INTERVAL_MS,
+  type PlayerState,
   PREDICTION_HISTORY_MAX_TICKS,
   RESEND_TIMEOUT_MS,
   stepPlayer,
   unpackInput,
-  type PlayerState,
 } from '@maple/shared';
 
 /** Transport + sim hooks the prediction loop drives, decoupled from SpacetimeDB/Pixi. */
@@ -31,7 +31,11 @@ const sameState = (a: PlayerState, b: PlayerState): boolean =>
  * un-acked inputs whenever the authoritative state disagrees with our
  * prediction. `startTick` is the authoritative spawn tick.
  */
-export function createPrediction(deps: PredictionDeps, startTick: number, nowMs = performance.now()) {
+export function createPrediction(
+  deps: PredictionDeps,
+  startTick: number,
+  nowMs = performance.now(),
+) {
   // Prediction bookkeeping. history[t] is the packed input applied to produce
   // predicted[t]; both are pruned once tick t is acknowledged by the server.
   const history = new Map<number, number>();

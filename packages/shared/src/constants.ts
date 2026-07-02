@@ -39,10 +39,23 @@ export const INTERP_DELAY_MS = 120;
 /** Max ticks accepted per submit_inputs call; clients chunk bigger backlogs. */
 export const INPUT_BATCH_MAX_TICKS = 30;
 /**
- * Server-side speed-hack guard: a player's total tick count may exceed the
- * wall-clock ticks elapsed since spawn by at most this many ticks.
+ * Server-side speed-hack guard (token bucket): how many ticks a player may run
+ * ahead of the server wall clock before batches are refused. Absorbs the flush
+ * cadence and clock jitter of honest clients.
  */
 export const TICK_ALLOWANCE_SLACK = 30;
+/**
+ * Token-bucket cap: at most this many unspent ticks accrue while a player is
+ * idle or lagging (~1s), bounding the movement burst a client can replay after
+ * falling behind. Without a cap, time spent throttled in a background tab
+ * would bank an unlimited fast-forward allowance.
+ */
+export const MAX_TICK_BANK = 60;
+/**
+ * How long a disconnected player's row is kept (ms) so a reload or network
+ * blip resumes the same character; older offline rows are swept on join.
+ */
+export const OFFLINE_RETENTION_MS = 10 * 60_000;
 /** Client resend watchdog: re-send un-acked inputs after this long (ms). */
 export const RESEND_TIMEOUT_MS = 600;
 /** Client keeps at most this many ticks of prediction history (~10s). */

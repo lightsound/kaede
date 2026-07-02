@@ -1,4 +1,4 @@
-import { schema, table, t } from 'spacetimedb/server';
+import { schema, t, table } from 'spacetimedb/server';
 
 export const spacetimedb = schema({
   player: table(
@@ -14,8 +14,9 @@ export const spacetimedb = schema({
       onGround: t.bool(),
       rope: t.i32(), // rope index while climbing, -1 = none
       tick: t.u32(), // ticks applied so far; state is "after tick `tick`"
-      simStartAt: t.timestamp(), // spawn wall-clock, basis of the speed-hack guard
+      online: t.bool(), // false between disconnect and rejoin/sweep; hidden by clients
+      allowanceMicros: t.i64(), // token-bucket marker of the speed-hack guard (micros since epoch)
       updatedAt: t.timestamp(),
-    }
+    },
   ),
 });
