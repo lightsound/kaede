@@ -11,7 +11,7 @@ import {
   ROPE_GRAB_RANGE,
   ROPE_JUMP_VELOCITY,
 } from './constants';
-import { overlaps, rectBounds, type AABB } from './physics';
+import { type AABB, overlaps, rectBounds } from './physics';
 import type { CollisionMap, Facing, PlayerInput, PlayerState, Rect } from './types';
 
 function box(x: number, y: number): AABB {
@@ -110,9 +110,25 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, map: Collisio
       }
       if (y > rope.bottom) {
         // Slid past the bottom: let go and fall.
-        return { x: rope.x, y: rope.bottom, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: -1 };
+        return {
+          x: rope.x,
+          y: rope.bottom,
+          vx: 0,
+          vy: 0,
+          facing: state.facing,
+          onGround: false,
+          rope: -1,
+        };
       }
-      return { x: rope.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: state.rope };
+      return {
+        x: rope.x,
+        y,
+        vx: 0,
+        vy: 0,
+        facing: state.facing,
+        onGround: false,
+        rope: state.rope,
+      };
     }
   } else if (input.up || input.down) {
     const grabbed = grabRope(state, input, map);

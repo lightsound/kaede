@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MAP,
-  SPAWN_X,
-  packInput,
-  stepPlayer,
-  unpackInput,
   type PlayerInput,
   type PlayerState,
+  packInput,
+  SPAWN_X,
+  stepPlayer,
+  unpackInput,
 } from '../src/index';
 
 /**
