@@ -1,4 +1,4 @@
-import { INTERP_DELAY_MS, toFacing, type Facing } from '@maple/shared';
+import { type Facing, INTERP_DELAY_MS, toFacing } from '@maple/shared';
 import {
   correctionOffset,
   decayOffset,
@@ -6,8 +6,9 @@ import {
   REMOTE_DISCONTINUITY_SPEED,
   type Vec2,
 } from '../game/smoothing';
+import { createServerClock } from './serverClock';
 
-/** One timestamped position sample for a remote player. */
+/** One position sample for a remote player, timestamped on the SERVER clock. */
 interface Snapshot {
   t: number;
   x: number;
@@ -34,21 +35,34 @@ interface RemoteView {
 const SNAPSHOT_TTL_MS = 1500;
 
 /**
- * Buffers authoritative remote-player rows as timestamped snapshots and renders
- * them interpolated INTERP_DELAY_MS in the past, smoothing over any snapshot
- * discontinuities (teleports, reorders) with a decaying error offset so the
- * rendered path stays continuous.
+ * When the snapshot buffer runs dry (a delivery gap), keep moving the player
+ * along its last authoritative velocity for at most this long before freezing.
+ * The discontinuity smoothing eases any overshoot back when real data returns.
+ */
+export const REMOTE_EXTRAPOLATION_MAX_MS = 250;
+
+/**
+ * Buffers authoritative remote-player rows as snapshots on the server timeline
+ * (row.updatedAt), and renders them interpolated INTERP_DELAY_MS in the past.
+ * Anchoring on server timestamps means delivery jitter cannot distort the
+ * spacing between samples; a clock-offset estimator maps the local render
+ * clock onto the server timeline. Snapshot discontinuities (teleports,
+ * estimator shifts) are smoothed with a decaying error offset so the rendered
+ * path stays continuous.
  */
 export function createRemoteViews() {
   const views = new Map<string, RemoteView>();
+  const clock = createServerClock();
 
-  // Inbound (remote): buffer a timestamped snapshot for each remote row change.
+  // Inbound (remote): buffer a snapshot for each remote row change, and feed
+  // the clock estimator with the (server time, receive time) pair.
   function record(
     idHex: string,
     name: string,
-    row: { x: number; y: number; vx: number; vy: number; facing: number },
+    row: { x: number; y: number; vx: number; vy: number; facing: number; updatedAtMs: number },
     nowMs: number,
   ): void {
+    clock.record(row.updatedAtMs, nowMs);
     let view = views.get(idHex);
     if (!view) {
       view = { name, snaps: [], offset: { x: 0, y: 0 } };
@@ -56,7 +70,7 @@ export function createRemoteViews() {
     }
     view.name = name;
     view.snaps.push({
-      t: nowMs,
+      t: row.updatedAtMs,
       x: row.x,
       y: row.y,
       vx: row.vx,
@@ -69,6 +83,11 @@ export function createRemoteViews() {
     views.delete(idHex);
   }
 
+  /** Drop all remote state (e.g. when the connection is lost). */
+  function clear(): void {
+    views.clear();
+  }
+
   // Render remote players interpolated INTERP_DELAY_MS in the past, smoothing
   // over any snapshot discontinuities (teleports, reorders) with a decaying
   // error offset so the rendered path stays continuous.
@@ -76,9 +95,11 @@ export function createRemoteViews() {
     nowMs: number,
     draw: (idHex: string, name: string, x: number, y: number, facing: Facing) => void,
   ): void {
-    const renderTime = nowMs - INTERP_DELAY_MS;
+    const serverNowMs = clock.serverNow(nowMs);
+    if (serverNowMs === undefined) return; // no samples yet: nothing to render anyway
+    const renderTime = serverNowMs - INTERP_DELAY_MS;
     for (const [idHex, view] of views) {
-      prune(view.snaps, nowMs);
+      prune(view.snaps, serverNowMs);
       if (view.snaps.length === 0) continue;
       const target = sampleAt(view.snaps, renderTime);
 
@@ -102,7 +123,7 @@ export function createRemoteViews() {
     }
   }
 
-  return { record, remove, renderFrame };
+  return { record, remove, clear, renderFrame };
 }
 
 /** Euclidean distance between two points. */
@@ -111,20 +132,24 @@ function dist(a: Vec2, b: Vec2): number {
 }
 
 /** Drop samples older than the TTL, always keeping at least the last two. */
-function prune(buf: Snapshot[], now: number): void {
-  while (buf.length > 2 && now - buf[0].t > SNAPSHOT_TTL_MS) buf.shift();
+function prune(buf: Snapshot[], serverNowMs: number): void {
+  while (buf.length > 2 && serverNowMs - buf[0].t > SNAPSHOT_TTL_MS) buf.shift();
 }
 
 /**
- * Returns the position at renderTime by cubic-Hermite interpolating between the
- * two straddling snapshots (using their authoritative velocities as tangents).
- * Clamps to the nearest snapshot outside the buffered range (no extrapolation).
- * facing comes from the later snapshot.
+ * Returns the position at renderTime (server timeline). Between snapshots,
+ * cubic-Hermite interpolates using the authoritative velocities as tangents.
+ * Past the newest snapshot, extrapolates along its velocity for at most
+ * REMOTE_EXTRAPOLATION_MAX_MS, then freezes. Before the oldest, clamps.
+ * facing comes from the nearest later (or last) snapshot.
  */
-function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
+export function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
   if (renderTime <= buf[0].t) return buf[0];
   const last = buf[buf.length - 1];
-  if (renderTime >= last.t) return last;
+  if (renderTime >= last.t) {
+    const dtS = Math.min(renderTime - last.t, REMOTE_EXTRAPOLATION_MAX_MS) / 1000;
+    return { ...last, t: renderTime, x: last.x + last.vx * dtS, y: last.y + last.vy * dtS };
+  }
   for (let i = 1; i < buf.length; i++) {
     const b = buf[i];
     if (renderTime <= b.t) {

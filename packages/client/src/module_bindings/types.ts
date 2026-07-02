@@ -21,7 +21,8 @@ export const Player = __t.object("Player", {
   onGround: __t.bool(),
   rope: __t.i32(),
   tick: __t.u32(),
-  simStartAt: __t.timestamp(),
+  online: __t.bool(),
+  allowanceMicros: __t.i64(),
   updatedAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;

@@ -1,33 +1,43 @@
-import { t } from 'spacetimedb/server';
 import {
   DEFAULT_MAP,
-  DT,
-  INPUT_BATCH_MAX_TICKS,
+  evaluateInputBatch,
+  OFFLINE_RETENTION_MS,
+  type PlayerState,
   SPAWN_X,
   SPAWN_Y,
-  TICK_ALLOWANCE_SLACK,
   stateFromRow,
   stepPlayer,
   unpackInput,
-  type PlayerState,
 } from '@maple/shared';
+import { t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
 
 // Server-authoritative movement: clients send only inputs, the server replays
 // them through the same shared physics. Position cannot change any other way.
+// Admission (batch size, ordering, token-bucket rate limit) lives in the pure
+// evaluateInputBatch so it is unit-tested in @maple/shared.
 export const submitInputs = spacetimedb.reducer(
   { startTick: t.u32(), inputs: t.array(t.u8()) },
   (ctx, { startTick, inputs }) => {
     const row = ctx.db.player.identity.find(ctx.sender);
     if (!row) return;
-    if (inputs.length === 0 || inputs.length > INPUT_BATCH_MAX_TICKS) return;
-    if (startTick !== row.tick) return; // out-of-order / duplicate batch
 
-    // Speed-hack guard: a player's tick count may run at most TICK_ALLOWANCE_SLACK
-    // ticks ahead of the wall-clock ticks elapsed since spawn.
-    const elapsedMs = ctx.timestamp.since(row.simStartAt).millis;
-    const allowed = Math.floor(elapsedMs / (DT * 1000)) + TICK_ALLOWANCE_SLACK;
-    if (row.tick + inputs.length > allowed) return;
+    const verdict = evaluateInputBatch({
+      batchLength: inputs.length,
+      startTick,
+      rowTick: row.tick,
+      allowanceMicros: row.allowanceMicros,
+      nowMicros: ctx.timestamp.microsSinceUnixEpoch,
+    });
+    if (!verdict.ok) {
+      // stale-tick is the resend watchdog's normal duplicate path, not noteworthy.
+      if (verdict.reason !== 'stale-tick') {
+        console.warn(
+          `submit_inputs rejected (${verdict.reason}): sender=${ctx.sender.toHexString()} startTick=${startTick} len=${inputs.length} rowTick=${row.tick}`,
+        );
+      }
+      return;
+    }
 
     let s: PlayerState = stateFromRow(row);
     for (const byte of inputs) s = stepPlayer(s, unpackInput(byte), DEFAULT_MAP);
@@ -42,17 +52,41 @@ export const submitInputs = spacetimedb.reducer(
       onGround: s.onGround,
       rope: s.rope,
       tick: row.tick + inputs.length,
+      online: true, // a stale disconnect event may have raced us; inputs prove liveness
+      allowanceMicros: verdict.allowanceMicros,
       updatedAt: ctx.timestamp,
     });
-  }
+  },
 );
 
 // Spawning is an explicit opt-in, not a connection side effect: observer
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
-export const join = spacetimedb.reducer(ctx => {
-  if (ctx.db.player.identity.find(ctx.sender)) return;
-  const name = 'Player-' + ctx.sender.toHexString().slice(0, 6);
+export const join = spacetimedb.reducer((ctx) => {
+  // Sweep offline rows whose retention expired (collect first: don't delete
+  // out from under the iterator).
+  const stale = [];
+  for (const row of ctx.db.player.iter()) {
+    if (!row.online && ctx.timestamp.since(row.updatedAt).millis > OFFLINE_RETENTION_MS) {
+      stale.push(row.identity);
+    }
+  }
+  for (const identity of stale) ctx.db.player.identity.delete(identity);
+
+  const existing = ctx.db.player.identity.find(ctx.sender);
+  if (existing) {
+    // Reload / network blip within the retention window: resume the saved
+    // character where it stood, with a fresh input allowance.
+    ctx.db.player.identity.update({
+      ...existing,
+      online: true,
+      allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
+      updatedAt: ctx.timestamp,
+    });
+    return;
+  }
+
+  const name = `Player-${ctx.sender.toHexString().slice(0, 6)}`;
   ctx.db.player.insert({
     identity: ctx.sender,
     name,
@@ -64,11 +98,16 @@ export const join = spacetimedb.reducer(ctx => {
     onGround: false,
     rope: -1,
     tick: 0,
-    simStartAt: ctx.timestamp,
+    online: true,
+    allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
     updatedAt: ctx.timestamp,
   });
 });
 
-export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
-  ctx.db.player.identity.delete(ctx.sender);
+// Keep the row on disconnect (marked offline) so a quick reconnect under the
+// same identity resumes the character; join sweeps rows past their retention.
+export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
+  const row = ctx.db.player.identity.find(ctx.sender);
+  if (!row) return;
+  ctx.db.player.identity.update({ ...row, online: false, updatedAt: ctx.timestamp });
 });

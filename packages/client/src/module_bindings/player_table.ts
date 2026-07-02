@@ -21,6 +21,7 @@ export default __t.row({
   onGround: __t.bool().name("on_ground"),
   rope: __t.i32(),
   tick: __t.u32(),
-  simStartAt: __t.timestamp().name("sim_start_at"),
+  online: __t.bool(),
+  allowanceMicros: __t.i64().name("allowance_micros"),
   updatedAt: __t.timestamp().name("updated_at"),
 });
