@@ -1,0 +1,7 @@
+{
+  // Generated SpacetimeDB bindings (CI regenerates and enforces zero drift):
+  // not ours to prune, same as the fallow ignore in .fallowrc.jsonc.
+  "ignore": {
+    "files": ["**/module_bindings/**"]
+  }
+}

@@ -24,7 +24,7 @@ function batch(overrides: Partial<Parameters<typeof evaluateInputBatch>[0]>) {
   });
 }
 
-describe('evaluateInputBatch', () => {
+describe('evaluateInputBatch: batch admission', () => {
   it('rejects an empty batch', () => {
     expect(batch({ batchLength: 0 })).toEqual({ ok: false, reason: 'empty-batch' });
   });
@@ -40,7 +40,9 @@ describe('evaluateInputBatch', () => {
     expect(batch({ startTick: 5, rowTick: 6 })).toEqual({ ok: false, reason: 'stale-tick' });
     expect(batch({ startTick: 7, rowTick: 6 })).toEqual({ ok: false, reason: 'stale-tick' });
   });
+});
 
+describe('evaluateInputBatch: token bucket', () => {
   it('accepts the normal cadence: batch duration matches elapsed wall clock', () => {
     const v = batch({ batchLength: 6, allowanceMicros: 0n, nowMicros: micros(6) });
     expect(v.ok).toBe(true);
@@ -75,7 +77,9 @@ describe('evaluateInputBatch', () => {
     const later = now + BigInt(Math.ceil((TICK_ALLOWANCE_SLACK + 1) * MICROS_PER_TICK));
     expect(batch({ batchLength: 1, allowanceMicros: ahead, nowMicros: later }).ok).toBe(true);
   });
+});
 
+describe('evaluateInputBatch: sustained load', () => {
   it('caps the idle bank: a long-idle player cannot replay more than bank + slack', () => {
     // One hour idle, then hammer max-size batches with no wall-clock progress.
     const now = micros(3600 * TICK_RATE);

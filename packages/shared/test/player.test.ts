@@ -33,7 +33,7 @@ function run(state: PlayerState, input: PlayerInput, n: number, map = DEFAULT_MA
 
 const GROUNDED_Y = GROUND_TOP - PLAYER_HALF_H; // 632: AABB center y when standing on the ground.
 
-describe('stepPlayer', () => {
+describe('stepPlayer: gravity and jumping', () => {
   it('falls under gravity and settles on the ground', () => {
     const after1 = stepPlayer(spawn(), NO_INPUT, DEFAULT_MAP);
     expect(after1.vy).toBeGreaterThan(0);
@@ -61,7 +61,9 @@ describe('stepPlayer', () => {
     const noLift = stepPlayer(airborne, { ...NO_INPUT, jump: true }, DEFAULT_MAP);
     expect(noLift.y).toBeGreaterThan(airborne.y);
   });
+});
 
+describe('stepPlayer: horizontal movement and collision', () => {
   it('lands on a platform top by jumping up to it', () => {
     // Platform { x: 420, y: 540, w: 260, h: 24 }, top at y=540. Jump from the
     // ground just to the right of it, then drift left over the top and land.
@@ -115,7 +117,9 @@ describe('stepPlayer', () => {
     const after = run(start, { ...NO_INPUT, left: true }, 30);
     expect(after.x).toBe(PLAYER_HALF_W);
   });
+});
 
+describe('stepPlayer: purity', () => {
   it('is pure and deterministic and does not mutate inputs', () => {
     const state = spawn({ y: 250, vy: 50 });
     const input: PlayerInput = { left: false, right: true, jump: true, up: false, down: false };
@@ -135,13 +139,13 @@ describe('stepPlayer', () => {
   });
 });
 
-describe('one-way platforms', () => {
-  // Platform 0 spans x in [420, 680], top y=540 (stand center 516), underside y=564.
-  const PLAT_LEFT = 420;
-  const PLAT_RIGHT = 680;
-  const PLAT_TOP = 540;
-  const STAND_ON_PLAT = PLAT_TOP - PLAYER_HALF_H; // 516
+// Platform 0 spans x in [420, 680], top y=540 (stand center 516), underside y=564.
+const PLAT_LEFT = 420;
+const PLAT_RIGHT = 680;
+const PLAT_TOP = 540;
+const STAND_ON_PLAT = PLAT_TOP - PLAYER_HALF_H; // 516
 
+describe('one-way platforms', () => {
   it('jumping from below rises up THROUGH the platform without a head bonk', () => {
     // Stand on the ground directly under the platform (x within 420..680).
     const x = 500;
@@ -213,11 +217,20 @@ describe('down+jump on solid ground', () => {
   });
 });
 
-describe('rope climbing', () => {
-  // Rope 0: { x: 550, top: 540, bottom: 632 }. Its bottom rests on the ground
-  // (632 = GROUND_TOP - PLAYER_HALF_H) and its top sits at platform 0 (top 540).
-  const ROPE0 = DEFAULT_MAP.ropes[0];
+// Rope 0: { x: 550, top: 540, bottom: 632 }. Its bottom rests on the ground
+// (632 = GROUND_TOP - PLAYER_HALF_H) and its top sits at platform 0 (top 540).
+const ROPE0 = DEFAULT_MAP.ropes[0];
 
+/** Hold up until the climber leaves rope `ropeIndex` via the top-exit. */
+function climbOffTop(state: PlayerState, ropeIndex: number): PlayerState {
+  let s = state;
+  for (let i = 0; i < 200 && s.rope === ropeIndex; i++) {
+    s = stepPlayer(s, { ...NO_INPUT, up: true }, DEFAULT_MAP);
+  }
+  return s;
+}
+
+describe('rope grabbing', () => {
   it('grabs a rope from the ground by holding up', () => {
     // Stand on the ground within grab range of the rope (|x - 550| <= 16).
     const start = spawn({ x: 550, y: GROUNDED_Y, onGround: true });
@@ -232,6 +245,22 @@ describe('rope climbing', () => {
     expect(grabbed.y).toBe(GROUNDED_Y);
   });
 
+  it('grabs a hanging rope from a platform top by holding down', () => {
+    // Stand on platform 0 at the rope x (y=516, onGround). Holding down grabs
+    // the rope hanging below and clamps the center to the rope top (540).
+    const start = spawn({ x: 550, y: 540 - PLAYER_HALF_H, onGround: true });
+    const grabbed = stepPlayer(start, { ...NO_INPUT, down: true }, DEFAULT_MAP);
+
+    expect(grabbed.rope).toBe(0);
+    expect(grabbed.x).toBe(550);
+    expect(grabbed.y).toBe(ROPE0.top); // clamped to rope.top = 540
+    expect(grabbed.onGround).toBe(false);
+    expect(grabbed.vx).toBe(0);
+    expect(grabbed.vy).toBe(0);
+  });
+});
+
+describe('rope climbing', () => {
   it('climbs up the rope at CLIMB_SPEED while up is held', () => {
     const grabbed = spawn({ x: 550, y: GROUNDED_Y, onGround: false, rope: 0 });
 
@@ -244,15 +273,6 @@ describe('rope climbing', () => {
     expect(up2.rope).toBe(0);
     expect(up2.y).toBeLessThan(up1.y);
   });
-
-  /** Hold up until the climber leaves rope `ropeIndex` via the top-exit. */
-  function climbOffTop(state: PlayerState, ropeIndex: number): PlayerState {
-    let s = state;
-    for (let i = 0; i < 200 && s.rope === ropeIndex; i++) {
-      s = stepPlayer(s, { ...NO_INPUT, up: true }, DEFAULT_MAP);
-    }
-    return s;
-  }
 
   it('exits at the top onto the platform the rope hangs from', () => {
     const s = climbOffTop(spawn({ x: 550, y: GROUNDED_Y, onGround: false, rope: 0 }), 0);
@@ -271,20 +291,6 @@ describe('rope climbing', () => {
     expect(again.x).toBe(550);
   });
 
-  it('grabs a hanging rope from a platform top by holding down', () => {
-    // Stand on platform 0 at the rope x (y=516, onGround). Holding down grabs
-    // the rope hanging below and clamps the center to the rope top (540).
-    const start = spawn({ x: 550, y: 540 - PLAYER_HALF_H, onGround: true });
-    const grabbed = stepPlayer(start, { ...NO_INPUT, down: true }, DEFAULT_MAP);
-
-    expect(grabbed.rope).toBe(0);
-    expect(grabbed.x).toBe(550);
-    expect(grabbed.y).toBe(ROPE0.top); // clamped to rope.top = 540
-    expect(grabbed.onGround).toBe(false);
-    expect(grabbed.vx).toBe(0);
-    expect(grabbed.vy).toBe(0);
-  });
-
   it('lets go at the bottom and settles on the ground', () => {
     // On the rope near its bottom, holding down slides past bottom and detaches.
     const nearBottom = spawn({ x: 550, y: ROPE0.bottom - 1, onGround: false, rope: 0 });
@@ -299,7 +305,9 @@ describe('rope climbing', () => {
     expect(settled.rope).toBe(-1);
     expect(settled.y).toBe(GROUNDED_Y);
   });
+});
 
+describe('rope jump-off', () => {
   it('jumps off the rope with a direction, applying horizontal input the same tick', () => {
     const midRope = spawn({ x: 550, y: 580, onGround: false, rope: 0 });
     const jumped = stepPlayer(midRope, { ...NO_INPUT, jump: true, left: true }, DEFAULT_MAP);
@@ -320,7 +328,9 @@ describe('rope climbing', () => {
     expect(stillOn.y).toBe(580);
     expect(stillOn.vy).toBe(0);
   });
+});
 
+describe('map routes', () => {
   it('the high platform is reachable only via its rope', () => {
     // Rope 2: { x: 1400, top: 300, bottom: 516 }. It runs from platform 2
     // (x 1320..1620, top 540 → stand center 516) up to the high platform

@@ -10,7 +10,7 @@ import {
   SPAWN_X,
   stepPlayer,
 } from '@maple/shared';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createPrediction, type PredictionDeps } from '../src/net/prediction';
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
@@ -87,73 +87,72 @@ function driver(start: PlayerState, startTick: number) {
   };
 }
 
-describe('createPrediction', () => {
-  let deps: PredictionDeps;
-  let sent: SentBatch[];
-  let resets: Reset[];
-
-  beforeEach(() => {
-    ({ deps, sent, resets } = spyDeps());
-  });
-
-  describe('flush cadence + chunking', () => {
-    it('sends one contiguous batch per flush window', () => {
-      const loop = createPrediction(deps, 0, 0);
-      const drv = driver(spawn(), 0);
-
-      const ticksPerWindow = 6;
-      const windows = 3;
-      for (let w = 0; w < windows; w++) {
-        for (let i = 1; i <= ticksPerWindow; i++) {
-          // The last tick of each window crosses the flush threshold, so the
-          // whole window's worth of inputs is sent in one batch.
-          const nowMs = i === ticksPerWindow ? (w + 1) * INPUT_FLUSH_INTERVAL_MS : 0;
-          drv.step(loop, NO_INPUT, nowMs);
-        }
-      }
-
-      expect(sent).toHaveLength(windows);
-      // Contiguous batches: startTick is the tick before the window's first input.
-      expect(sent.map((b) => b.startTick)).toEqual([0, 6, 12]);
-      for (const batch of sent) expect(batch.packed).toHaveLength(ticksPerWindow);
-    });
-
-    it('splits a large backlog into chunks of <= INPUT_BATCH_MAX_TICKS', () => {
-      const loop = createPrediction(deps, 0, 0);
-      const drv = driver(spawn(), 0);
-
-      const pending = 40;
-      for (let i = 1; i <= pending; i++) {
-        // Keep nowMs below the threshold until the final tick so the entire
-        // backlog flushes in a single flush() call.
-        const nowMs = i === pending ? INPUT_FLUSH_INTERVAL_MS : 0;
-        drv.step(loop, NO_INPUT, nowMs);
-      }
-
-      expect(sent).toHaveLength(2);
-      expect(sent[0].startTick).toBe(0);
-      expect(sent[0].packed).toHaveLength(INPUT_BATCH_MAX_TICKS);
-      expect(sent[1].startTick).toBe(INPUT_BATCH_MAX_TICKS);
-      expect(sent[1].packed).toHaveLength(pending - INPUT_BATCH_MAX_TICKS);
-      for (const batch of sent)
-        expect(batch.packed.length).toBeLessThanOrEqual(INPUT_BATCH_MAX_TICKS);
-    });
-  });
-
-  it('does not reset on an honest ack matching the predicted state', () => {
+describe('createPrediction: flush cadence + chunking', () => {
+  it('sends one contiguous batch per flush window', () => {
+    const { deps, sent } = spyDeps();
     const loop = createPrediction(deps, 0, 0);
     const drv = driver(spawn(), 0);
 
+    const ticksPerWindow = 6;
+    const windows = 3;
+    for (let w = 0; w < windows; w++) {
+      for (let i = 1; i <= ticksPerWindow; i++) {
+        // The last tick of each window crosses the flush threshold, so the
+        // whole window's worth of inputs is sent in one batch.
+        const nowMs = i === ticksPerWindow ? (w + 1) * INPUT_FLUSH_INTERVAL_MS : 0;
+        drv.step(loop, NO_INPUT, nowMs);
+      }
+    }
+
+    expect(sent).toHaveLength(windows);
+    // Contiguous batches: startTick is the tick before the window's first input.
+    expect(sent.map((b) => b.startTick)).toEqual([0, 6, 12]);
+    for (const batch of sent) expect(batch.packed).toHaveLength(ticksPerWindow);
+  });
+
+  it('splits a large backlog into chunks of <= INPUT_BATCH_MAX_TICKS', () => {
+    const { deps, sent } = spyDeps();
+    const loop = createPrediction(deps, 0, 0);
+    const drv = driver(spawn(), 0);
+
+    const pending = 40;
+    for (let i = 1; i <= pending; i++) {
+      // Keep nowMs below the threshold until the final tick so the entire
+      // backlog flushes in a single flush() call.
+      const nowMs = i === pending ? INPUT_FLUSH_INTERVAL_MS : 0;
+      drv.step(loop, NO_INPUT, nowMs);
+    }
+
+    expect(sent).toHaveLength(2);
+    expect(sent[0].startTick).toBe(0);
+    expect(sent[0].packed).toHaveLength(INPUT_BATCH_MAX_TICKS);
+    expect(sent[1].startTick).toBe(INPUT_BATCH_MAX_TICKS);
+    expect(sent[1].packed).toHaveLength(pending - INPUT_BATCH_MAX_TICKS);
+    for (const batch of sent)
+      expect(batch.packed.length).toBeLessThanOrEqual(INPUT_BATCH_MAX_TICKS);
+  });
+});
+
+/** Fresh spies + loop + driver at spawn tick 0, driven one tick per input. */
+function ackScenario(inputs: PlayerInput[]) {
+  const { deps, sent, resets } = spyDeps();
+  const loop = createPrediction(deps, 0, 0);
+  const drv = driver(spawn(), 0);
+  inputs.forEach((input, i) => {
+    drv.step(loop, input, (i + 1) * INPUT_FLUSH_INTERVAL_MS);
+  });
+  return { sent, resets, loop, drv };
+}
+
+describe('createPrediction: ack reconciliation', () => {
+  it('does not reset on an honest ack matching the predicted state', () => {
     // Feed a few ticks with varied input so prediction has real content.
-    const inputs: PlayerInput[] = [
+    const { resets, loop, drv } = ackScenario([
       { ...NO_INPUT, right: true },
       { ...NO_INPUT, right: true, jump: true },
       { ...NO_INPUT, right: true },
       NO_INPUT,
-    ];
-    inputs.forEach((input, i) => {
-      drv.step(loop, input, (i + 1) * INPUT_FLUSH_INTERVAL_MS);
-    });
+    ]);
 
     const ackTick = 2;
     // Server replayed the same inputs deterministically: ack the exact predicted state.
@@ -163,9 +162,6 @@ describe('createPrediction', () => {
   });
 
   it('reconciles a divergent ack by replaying un-acked inputs', () => {
-    const loop = createPrediction(deps, 0, 0);
-    const drv = driver(spawn(), 0);
-
     const inputs: PlayerInput[] = [
       { ...NO_INPUT, right: true },
       { ...NO_INPUT, right: true },
@@ -173,9 +169,7 @@ describe('createPrediction', () => {
       { ...NO_INPUT, right: true },
       { ...NO_INPUT, left: true },
     ];
-    inputs.forEach((input, i) => {
-      drv.step(loop, input, (i + 1) * INPUT_FLUSH_INTERVAL_MS);
-    });
+    const { resets, loop, drv } = ackScenario(inputs);
 
     const ackTick = 2;
     const currentTick = drv.tick;
@@ -195,8 +189,11 @@ describe('createPrediction', () => {
     expect(resets[0].tick).toBe(currentTick);
     expect(resets[0].state).toEqual(expected);
   });
+});
 
+describe('createPrediction: recovery paths', () => {
   it('re-sends from the acked tick after the resend watchdog fires', () => {
+    const { deps, sent } = spyDeps();
     const loop = createPrediction(deps, 0, 0);
     const drv = driver(spawn(), 0);
 
@@ -219,6 +216,7 @@ describe('createPrediction', () => {
   });
 
   it('hard-resets to the authoritative state when the ack predates kept history', () => {
+    const { deps, resets } = spyDeps();
     const loop = createPrediction(deps, 0, 0);
     const drv = driver(spawn(), 0);
 

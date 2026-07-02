@@ -101,29 +101,39 @@ export function createRemoteViews() {
     for (const [idHex, view] of views) {
       prune(view.snaps, serverNowMs);
       if (view.snaps.length === 0) continue;
-      const target = sampleAt(view.snaps, renderTime);
-
-      const frameDt = view.lastFrameMs !== undefined ? nowMs - view.lastFrameMs : 0;
-      // Discontinuity: target jumped further than authoritative motion allows.
-      // Reanchor the offset on the previous rendered position (which already
-      // folds in the old offset), keeping the rendered path continuous.
-      if (
-        view.prevRendered &&
-        dist(target, view.prevRendered) > REMOTE_DISCONTINUITY_SPEED * (frameDt / 1000) + 1
-      ) {
-        view.offset = correctionOffset(view.prevRendered, target);
-      }
-      view.offset = decayOffset(view.offset, frameDt);
-
-      const rx = target.x + view.offset.x;
-      const ry = target.y + view.offset.y;
-      view.prevRendered = { x: rx, y: ry };
-      view.lastFrameMs = nowMs;
-      draw(idHex, view.name, rx, ry, target.facing);
+      const pose = renderView(view, renderTime, nowMs);
+      draw(idHex, view.name, pose.x, pose.y, pose.facing);
     }
   }
 
   return { record, remove, clear, renderFrame };
+}
+
+/** Advance one view's smoothing state to nowMs and return where to draw it. */
+function renderView(
+  view: RemoteView,
+  renderTime: number,
+  nowMs: number,
+): { x: number; y: number; facing: Facing } {
+  const target = sampleAt(view.snaps, renderTime);
+
+  const frameDt = view.lastFrameMs !== undefined ? nowMs - view.lastFrameMs : 0;
+  // Discontinuity: target jumped further than authoritative motion allows.
+  // Reanchor the offset on the previous rendered position (which already
+  // folds in the old offset), keeping the rendered path continuous.
+  if (
+    view.prevRendered &&
+    dist(target, view.prevRendered) > REMOTE_DISCONTINUITY_SPEED * (frameDt / 1000) + 1
+  ) {
+    view.offset = correctionOffset(view.prevRendered, target);
+  }
+  view.offset = decayOffset(view.offset, frameDt);
+
+  const x = target.x + view.offset.x;
+  const y = target.y + view.offset.y;
+  view.prevRendered = { x, y };
+  view.lastFrameMs = nowMs;
+  return { x, y, facing: target.facing };
 }
 
 /** Euclidean distance between two points. */

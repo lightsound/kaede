@@ -9,8 +9,24 @@ import {
   stepPlayer,
   unpackInput,
 } from '@maple/shared';
-import { t } from 'spacetimedb/server';
+import { type InferSchema, type ReducerCtx, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
+
+type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+// stale-tick is the resend watchdog's normal duplicate path, not noteworthy.
+function warnRejectedBatch(
+  ctx: Ctx,
+  reason: string,
+  startTick: number,
+  len: number,
+  rowTick: number,
+): void {
+  if (reason === 'stale-tick') return;
+  console.warn(
+    `submit_inputs rejected (${reason}): sender=${ctx.sender.toHexString()} startTick=${startTick} len=${len} rowTick=${rowTick}`,
+  );
+}
 
 // Server-authoritative movement: clients send only inputs, the server replays
 // them through the same shared physics. Position cannot change any other way.
@@ -30,12 +46,7 @@ export const submitInputs = spacetimedb.reducer(
       nowMicros: ctx.timestamp.microsSinceUnixEpoch,
     });
     if (!verdict.ok) {
-      // stale-tick is the resend watchdog's normal duplicate path, not noteworthy.
-      if (verdict.reason !== 'stale-tick') {
-        console.warn(
-          `submit_inputs rejected (${verdict.reason}): sender=${ctx.sender.toHexString()} startTick=${startTick} len=${inputs.length} rowTick=${row.tick}`,
-        );
-      }
+      warnRejectedBatch(ctx, verdict.reason, startTick, inputs.length, row.tick);
       return;
     }
 
@@ -59,19 +70,22 @@ export const submitInputs = spacetimedb.reducer(
   },
 );
 
+// Sweep offline rows whose retention expired (collect first: don't delete
+// out from under the iterator).
+function sweepExpiredOffline(ctx: Ctx): void {
+  const stale = [...ctx.db.player.iter()]
+    .filter(
+      (row) => !row.online && ctx.timestamp.since(row.updatedAt).millis > OFFLINE_RETENTION_MS,
+    )
+    .map((row) => row.identity);
+  for (const identity of stale) ctx.db.player.identity.delete(identity);
+}
+
 // Spawning is an explicit opt-in, not a connection side effect: observer
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
 export const join = spacetimedb.reducer((ctx) => {
-  // Sweep offline rows whose retention expired (collect first: don't delete
-  // out from under the iterator).
-  const stale = [];
-  for (const row of ctx.db.player.iter()) {
-    if (!row.online && ctx.timestamp.since(row.updatedAt).millis > OFFLINE_RETENTION_MS) {
-      stale.push(row.identity);
-    }
-  }
-  for (const identity of stale) ctx.db.player.identity.delete(identity);
+  sweepExpiredOffline(ctx);
 
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing) {
