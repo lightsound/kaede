@@ -74,10 +74,17 @@ export function evaluateInputBatch(batch: {
 }
 
 /**
- * True once a disconnected player's row has sat past its retention window and
- * may be swept. Within the window the row is kept so a reload or network blip
- * resumes the same character; `ageMs` is the time since the row last changed.
+ * True once a player row has sat unchanged past its retention window and may be
+ * swept. `ageMs` is the time since the row last changed.
+ *
+ * The `online` flag is deliberately not consulted. A live client rewrites its
+ * row every INPUT_FLUSH_INTERVAL_MS, so any row this old is abandoned — either
+ * by a clean disconnect (kept for the window so a reload resumes the same
+ * character) or by a host that died before client_disconnected could run,
+ * leaving the row stranded at `online = true`. A module cannot enumerate live
+ * connections, so age is the only evidence available, and gating the sweep on
+ * `online` would let stranded rows haunt the world forever.
  */
-export function isExpiredOffline(online: boolean, ageMs: number): boolean {
-  return !online && ageMs > OFFLINE_RETENTION_MS;
+export function isExpiredRow(ageMs: number): boolean {
+  return ageMs > OFFLINE_RETENTION_MS;
 }

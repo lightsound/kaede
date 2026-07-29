@@ -1,9 +1,9 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredOffline in @maple/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredRow in @maple/shared and unit-tested there
 import {
   type BatchRejectReason,
   DEFAULT_MAP,
   evaluateInputBatch,
-  isExpiredOffline,
+  isExpiredRow,
   replayInputs,
   SPAWN_X,
   SPAWN_Y,
@@ -74,13 +74,17 @@ export const submitInputs = spacetimedb.reducer(
 );
 
 /**
- * Deletes offline rows whose retention window has elapsed. Identities are
+ * Deletes rows whose retention window has elapsed, whatever they are flagged
+ * as: see isExpiredRow for why age rather than `online` decides. Identities are
  * collected first so nothing is removed out from under the iterator.
+ *
+ * A client throttled long enough to be swept while still connected notices the
+ * delete of its own row and re-joins, so reclaiming a row is recoverable.
  */
-function sweepExpiredOfflineRows(ctx: Ctx): void {
+function sweepExpiredRows(ctx: Ctx): void {
   const stale = [];
   for (const row of ctx.db.player.iter()) {
-    if (isExpiredOffline(row.online, ctx.timestamp.since(row.updatedAt).millis)) {
+    if (isExpiredRow(ctx.timestamp.since(row.updatedAt).millis)) {
       stale.push(row.identity);
     }
   }
@@ -91,7 +95,7 @@ function sweepExpiredOfflineRows(ctx: Ctx): void {
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
 export const join = spacetimedb.reducer((ctx) => {
-  sweepExpiredOfflineRows(ctx);
+  sweepExpiredRows(ctx);
 
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing) {
