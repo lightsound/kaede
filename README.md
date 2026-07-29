@@ -5,11 +5,41 @@
 
 ## 技術スタック
 
-- **TypeScript** — 全パッケージ共通の言語
+- **TypeScript 7** — 全パッケージ共通の言語（ネイティブ実装の `tsc`）
 - **PixiJS v8** — 2Dレンダリング
 - **Vite + React** — クライアントのビルド／開発サーバー（Reactの役割はキャンバスのマウントのみ）
 - **SpacetimeDB 2.x** — リアルタイム同期バックエンド（DB兼サーバーロジック）
 - **pnpm workspaces** — モノレポ管理
+- **Vitest** — ユニットテスト（リポジトリ全体を1回のrunで実行し、カバレッジも1本にまとめる）
+- **Biome** — lint とフォーマット
+- **fallow** — デッドコード・重複・複雑度・アーキテクチャ境界の静的解析
+
+### 静的解析の方針
+
+`.fallowrc.jsonc` は fallow が持つ**全53ルールを例外なく `error`** に上げています。既定で `warn` の
+クリーンアップ系・スタイル系ルールも、既定で `off` のオプトインルール（`private-type-leaks`、
+`prop-drilling`、`thin-wrapper`、`duplicate-prop-shape`、`coverage-gaps`、`security-*`、
+`require-suppression-reason`、`feature-flags`）も含みます。あわせて次を有効化しています。
+
+- **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
+  ままなら通しません。バックエンドは fallow が同梱する TypeScript です（`fallow-type-aware`
+  が `typescript@7.0.2` を自前に固定しており、各パッケージの TypeScript とは独立です）。
+  `pnpm exec fallow --format json` の `_meta.check.type_aware` で確認できます。
+- **`boundaries`** — README が説明するアーキテクチャそのものの強制。`shared` は葉であり何も
+  import せず、`client` と `server` は `shared` だけを見ます（互いは不可視）。`requireAllFiles`
+  によりどのゾーンにも属さないファイルも検出され、例外は `vitest.config.ts` の1件だけを
+  名指しで許可しています。
+- **`duplicates.mode: "semantic"`** — 変数名を変えただけの複製（Type-2 クローン）も検出します。
+- **`includeEntryExports`** — エントリポイントの export も未使用検査の対象にします。
+- **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
+- **`sealed`** — 設定が外部の `extends` を引き込めないようにします。
+
+グローバルに無効化しているルールはありません。例外は個別の抑制コメント
+（`// fallow-ignore-file <rule> -- <理由>` またはその行だけに効く `// fallow-ignore-next-line ...`）
+でのみ表明し、`require-suppression-reason` により理由のない抑制は許されません
+（`pnpm exec fallow suppressions` で全件を一覧できます）。
+なお `feature-flags` だけは `error` にしても実際には終了コードを変えない報告専用ルールです
+（インベントリは `fallow flags` で確認できます）。
 
 ## パッケージ構成
 
@@ -63,7 +93,11 @@
 
 1. **SpacetimeDB CLIのインストール**
    [https://spacetimedb.com/install](https://spacetimedb.com/install) の案内に従ってインストールします。
-   （GitHub Releases の `spacetime-x86_64-unknown-linux-gnu.tar.gz` などのバイナリを直接配置しても構いません。）
+   以降の手順は、インストーラが用意する `spacetime` コマンドを前提にしています。
+   （GitHub Releases の `spacetime-x86_64-unknown-linux-gnu.tar.gz` を直接展開する場合、
+   中身は `spacetimedb-cli` と `spacetimedb-standalone` で `spacetime` は含まれません。
+   その場合は以降の `spacetime ...` を `spacetimedb-cli ...` に読み替えてください。
+   CI もこの理由で `spacetimedb-cli` を呼んでいます。）
 
 2. **依存関係のインストール**
 
@@ -113,14 +147,24 @@
      - `↓` + `Space` で足場を**すり抜けて降りられる**こと。
      - ロープで**高台（ジャンプでは届かない高さ）に登れる**こと。
 
-8. **型チェック・テスト・lint**
+8. **型チェック・テスト・lint・静的解析**
 
    ```sh
-   pnpm typecheck   # 全パッケージの tsc --noEmit
-   pnpm test        # shared の物理・入力ガード、client の予測・補間のユニットテスト
-   pnpm lint        # Biome による lint とフォーマット検査
-   pnpm format      # Biome によるフォーマット適用
+   pnpm typecheck         # 全パッケージの tsc --noEmit
+   pnpm test              # shared と client のユニットテストを1回の vitest で実行
+   pnpm test:coverage     # 同上 + coverage/coverage-final.json を出力
+   pnpm lint              # Biome による lint とフォーマット検査
+   pnpm format            # Biome によるフォーマット適用
+   pnpm analyze           # CIと同じ fallow 一式（dead-code / dupes / health / security）
+   pnpm analyze:changed   # 変更ファイルだけを fallow で検査（コミット前向け）
    ```
+
+   テストは shared の物理・入力ガード、client の予測・補間・入力・カメラを対象とします
+   （`packages/server` はモジュールホスト上でしか動かず単体テストから import できないため、
+   テスト対象になる純粋ロジックは `shared` 側に置いています）。
+   `fallow health` は `coverage/coverage-final.json` を**必須**とし、無ければエラー終了します。
+   `fallow` を直接叩くときは先に `pnpm test:coverage` を実行してください
+   （`pnpm analyze` / `pnpm analyze:changed` と CI は込みです）。
 
 ## デプロイ（公開手順）
 
@@ -145,7 +189,7 @@
 
    [vercel.com](https://vercel.com) で **Add New → Project** からこのリポジトリを import し、次の2点だけ設定します。
 
-   - **Root Directory**: `packages/client`（`vercel.json` が install / build / 出力先を定義済み。Framework は Vite として自動検出されます）
+   - **Root Directory**: `packages/client`（`vercel.json` が framework / install / build / 出力先を定義済みなので、追加設定は不要です）
    - **Environment Variables**: `VITE_SPACETIME_DB` = Maincloud で付けた DB名。
      （`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com` なので、Maincloud を使う限り設定不要です）
 
@@ -156,8 +200,9 @@
 
 4. **CI**
 
-   `main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test・build・
-   fallow（dead-code / dupes）に加えて、`spacetime generate`（バージョン固定）の再実行によりコミット済み
+   `main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
+   build・fallow（dead-code / dupes / health / security）に加えて、バージョンを固定した CLI
+   （`spacetimedb-cli generate`）の再実行によりコミット済み
    TypeScript バインディングがサーバースキーマとずれていないことを検証します。同一ブランチへの連続 push は
    古い実行をキャンセルします。
 

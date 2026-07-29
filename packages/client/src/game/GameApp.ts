@@ -1,4 +1,6 @@
+// fallow-ignore-file coverage-gaps -- drives PixiJS against a live WebGL canvas; the logic worth testing is extracted into camera.ts, input.ts, and smoothing.ts, which are unit-tested
 import {
+  type CollisionMap,
   DEFAULT_MAP,
   DT,
   type Facing,
@@ -74,6 +76,25 @@ function createPlayerView(world: Container, name: string, color: number): Player
   return { root, body, label };
 }
 
+/**
+ * The static map geometry as one Graphics. Ropes hang behind everything;
+ * platforms and the ground slab draw on top of them. Added to the world before
+ * any player view, so the whole map renders behind players.
+ */
+function drawMap(map: CollisionMap): Graphics {
+  const gfx = new Graphics();
+  for (const r of map.ropes) {
+    // Visual span: rope.top down to rope.bottom + PLAYER_HALF_H (the lower end
+    // rests on a floor, while rope.bottom bounds the climbing player's center).
+    gfx
+      .rect(r.x - ROPE_WIDTH / 2, r.top, ROPE_WIDTH, r.bottom + PLAYER_HALF_H - r.top)
+      .fill(ROPE_COLOR);
+  }
+  for (const s of map.solids) gfx.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
+  for (const p of map.platforms) gfx.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
+  return gfx;
+}
+
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const app = new Application();
   await app.init({ width: VIEW_W, height: VIEW_H, background: BG_COLOR, antialias: false });
@@ -81,21 +102,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
   const world = new Container();
   app.stage.addChild(world);
-
-  // Static map geometry. Ropes hang behind everything; platforms and the
-  // ground slab draw on top of them. All live in mapGfx, which is added to the
-  // world before any player view, so the whole map renders behind players.
-  const mapGfx = new Graphics();
-  for (const r of DEFAULT_MAP.ropes) {
-    // Visual span: rope.top down to rope.bottom + PLAYER_HALF_H (the lower end
-    // rests on a floor, while rope.bottom bounds the climbing player's center).
-    mapGfx
-      .rect(r.x - ROPE_WIDTH / 2, r.top, ROPE_WIDTH, r.bottom + PLAYER_HALF_H - r.top)
-      .fill(ROPE_COLOR);
-  }
-  for (const s of DEFAULT_MAP.solids) mapGfx.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
-  for (const p of DEFAULT_MAP.platforms) mapGfx.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
-  world.addChild(mapGfx);
+  world.addChild(drawMap(DEFAULT_MAP));
 
   const local = createPlayerView(world, 'You', LOCAL_COLOR);
   const remotes = new Map<string, PlayerView>();
@@ -130,29 +137,24 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   // shifts the sprite, never the physics.
   let localOffset: Vec2 = { x: 0, y: 0 };
 
-  app.ticker.add((ticker) => {
-    for (const cb of frameCbs) cb(performance.now());
+  /** One fixed simulation tick: sample every input source, step, notify. */
+  function simulateTick(): void {
+    prev = curr;
+    const sample = touch ? mergeInputs(input.sample(), touch.sample()) : input.sample();
+    curr = stepPlayer(curr, sample, DEFAULT_MAP);
+    tick += 1;
+    acc -= DT;
+    for (const cb of tickCbs) cb(curr, tick, packInput(sample));
+  }
 
-    if (tick < 0) {
-      acc = 0; // never pre-accumulate before the sim starts
-    } else {
-      acc += Math.min(ticker.deltaMS / 1000, MAX_FRAME);
-    }
-    while (acc >= DT) {
-      prev = curr;
-      const sample = touch ? mergeInputs(input.sample(), touch.sample()) : input.sample();
-      curr = stepPlayer(curr, sample, DEFAULT_MAP);
-      tick += 1;
-      acc -= DT;
-      for (const cb of tickCbs) cb(curr, tick, packInput(sample));
-    }
-
+  /** Place the local sprite and the camera for the current interpolation alpha. */
+  function renderLocal(deltaMS: number): void {
     const alpha = acc / DT;
     const rx = prev.x + (curr.x - prev.x) * alpha;
     const ry = prev.y + (curr.y - prev.y) * alpha;
     // Smoothing is render-only: shift the sprite by the decaying correction
     // offset, but leave prev/curr (the simulation truth) untouched.
-    localOffset = decayOffset(localOffset, ticker.deltaMS);
+    localOffset = decayOffset(localOffset, deltaMS);
     const sx = rx + localOffset.x;
     const sy = ry + localOffset.y;
     local.root.position.set(sx, sy);
@@ -160,6 +162,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
     const cam = cameraOffset(sx, sy, VIEW_W, VIEW_H, WORLD_WIDTH, WORLD_HEIGHT);
     world.position.set(cam.x, cam.y);
+  }
+
+  app.ticker.add((ticker) => {
+    for (const cb of frameCbs) cb(performance.now());
+    // Simulation is gated until start(): never pre-accumulate before it runs.
+    acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
+    while (acc >= DT) simulateTick();
+    renderLocal(ticker.deltaMS);
   });
 
   return {

@@ -1,3 +1,4 @@
+// fallow-ignore-file coverage-gaps -- a React component that mounts the canvas and renders connection status; needs a DOM, and no DOM test environment is configured
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { createGameApp, type GameApp } from './game/GameApp';
 import { type ConnectionStatus, type Net, startNet } from './net/sync';

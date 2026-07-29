@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   evaluateInputBatch,
   INPUT_BATCH_MAX_TICKS,
+  isExpiredOffline,
   MAX_TICK_BANK,
+  OFFLINE_RETENTION_MS,
   TICK_ALLOWANCE_SLACK,
   TICK_RATE,
 } from '../src';
@@ -115,5 +117,22 @@ describe('evaluateInputBatch', () => {
       tick += 6;
     }
     expect(tick).toBe(600);
+  });
+});
+
+describe('isExpiredOffline', () => {
+  it('never expires a row that is still online, however old', () => {
+    expect(isExpiredOffline(true, OFFLINE_RETENTION_MS * 10)).toBe(false);
+  });
+
+  it('keeps an offline row until the retention window has fully elapsed', () => {
+    expect(isExpiredOffline(false, 0)).toBe(false);
+    expect(isExpiredOffline(false, OFFLINE_RETENTION_MS - 1)).toBe(false);
+    // Exactly at the window the row is still kept: the comparison is strict.
+    expect(isExpiredOffline(false, OFFLINE_RETENTION_MS)).toBe(false);
+  });
+
+  it('expires an offline row once past the window', () => {
+    expect(isExpiredOffline(false, OFFLINE_RETENTION_MS + 1)).toBe(true);
   });
 });

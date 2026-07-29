@@ -1,16 +1,36 @@
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredOffline in @maple/shared and unit-tested there
 import {
+  type BatchRejectReason,
   DEFAULT_MAP,
   evaluateInputBatch,
-  OFFLINE_RETENTION_MS,
-  type PlayerState,
+  isExpiredOffline,
+  replayInputs,
   SPAWN_X,
   SPAWN_Y,
   stateFromRow,
-  stepPlayer,
-  unpackInput,
 } from '@maple/shared';
-import { t } from 'spacetimedb/server';
+import { type InferSchema, type ReducerCtx, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
+
+/** The reducer context for this module's schema, for helpers that touch the db. */
+type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+/**
+ * Records why a batch was refused. `stale-tick` is the resend watchdog's normal
+ * duplicate path, so it is not noteworthy.
+ */
+function logRejection(
+  reason: BatchRejectReason,
+  sender: string,
+  startTick: number,
+  length: number,
+  rowTick: number,
+): void {
+  if (reason === 'stale-tick') return;
+  console.warn(
+    `submit_inputs rejected (${reason}): sender=${sender} startTick=${startTick} len=${length} rowTick=${rowTick}`,
+  );
+}
 
 // Server-authoritative movement: clients send only inputs, the server replays
 // them through the same shared physics. Position cannot change any other way.
@@ -30,17 +50,11 @@ export const submitInputs = spacetimedb.reducer(
       nowMicros: ctx.timestamp.microsSinceUnixEpoch,
     });
     if (!verdict.ok) {
-      // stale-tick is the resend watchdog's normal duplicate path, not noteworthy.
-      if (verdict.reason !== 'stale-tick') {
-        console.warn(
-          `submit_inputs rejected (${verdict.reason}): sender=${ctx.sender.toHexString()} startTick=${startTick} len=${inputs.length} rowTick=${row.tick}`,
-        );
-      }
+      logRejection(verdict.reason, ctx.sender.toHexString(), startTick, inputs.length, row.tick);
       return;
     }
 
-    let s: PlayerState = stateFromRow(row);
-    for (const byte of inputs) s = stepPlayer(s, unpackInput(byte), DEFAULT_MAP);
+    const s = replayInputs(stateFromRow(row), inputs, DEFAULT_MAP);
 
     ctx.db.player.identity.update({
       ...row,
@@ -59,19 +73,25 @@ export const submitInputs = spacetimedb.reducer(
   },
 );
 
-// Spawning is an explicit opt-in, not a connection side effect: observer
-// connections (spacetime sql/subscribe, admin tooling) never call join, so
-// they no longer flash into the world as phantom players.
-export const join = spacetimedb.reducer((ctx) => {
-  // Sweep offline rows whose retention expired (collect first: don't delete
-  // out from under the iterator).
+/**
+ * Deletes offline rows whose retention window has elapsed. Identities are
+ * collected first so nothing is removed out from under the iterator.
+ */
+function sweepExpiredOfflineRows(ctx: Ctx): void {
   const stale = [];
   for (const row of ctx.db.player.iter()) {
-    if (!row.online && ctx.timestamp.since(row.updatedAt).millis > OFFLINE_RETENTION_MS) {
+    if (isExpiredOffline(row.online, ctx.timestamp.since(row.updatedAt).millis)) {
       stale.push(row.identity);
     }
   }
   for (const identity of stale) ctx.db.player.identity.delete(identity);
+}
+
+// Spawning is an explicit opt-in, not a connection side effect: observer
+// connections (spacetime sql/subscribe, admin tooling) never call join, so
+// they no longer flash into the world as phantom players.
+export const join = spacetimedb.reducer((ctx) => {
+  sweepExpiredOfflineRows(ctx);
 
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing) {

@@ -1,4 +1,10 @@
-import { INPUT_BATCH_MAX_TICKS, MAX_TICK_BANK, TICK_ALLOWANCE_SLACK, TICK_RATE } from './constants';
+import {
+  INPUT_BATCH_MAX_TICKS,
+  MAX_TICK_BANK,
+  OFFLINE_RETENTION_MS,
+  TICK_ALLOWANCE_SLACK,
+  TICK_RATE,
+} from './constants';
 
 const MICROS_PER_SECOND = 1_000_000n;
 const TICK_RATE_BIG = BigInt(TICK_RATE);
@@ -65,4 +71,13 @@ export function evaluateInputBatch(batch: {
   if (batchLength > bank + TICK_ALLOWANCE_SLACK) return { ok: false, reason: 'rate-limited' };
 
   return { ok: true, allowanceMicros: marker + microsFromTicks(batchLength) };
+}
+
+/**
+ * True once a disconnected player's row has sat past its retention window and
+ * may be swept. Within the window the row is kept so a reload or network blip
+ * resumes the same character; `ageMs` is the time since the row last changed.
+ */
+export function isExpiredOffline(online: boolean, ageMs: number): boolean {
+  return !online && ageMs > OFFLINE_RETENTION_MS;
 }

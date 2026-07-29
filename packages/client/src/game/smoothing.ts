@@ -1,6 +1,6 @@
 /**
- * Pure render-smoothing math. No Pixi, no DOM, no side effects: this file is
- * imported by a Node E2E script, so it must stay dependency-free.
+ * Pure render-smoothing math. No Pixi, no DOM, no side effects, so it stays
+ * unit-testable under plain Node; keep it dependency-free.
  */
 
 export interface Vec2 {
@@ -40,7 +40,8 @@ export function decayOffset(off: Vec2, dtMs: number): Vec2 {
   return { x, y };
 }
 
-interface HermitePoint {
+/** An interpolation endpoint: a timestamped position with its velocity. */
+export interface HermitePoint {
   t: number;
   x: number;
   y: number;

@@ -12,14 +12,24 @@ concurrency:
 
 env:
   # Pin the CLI so the bindings drift check doesn't break when a new release
-  # changes codegen. Bump together with a bindings regeneration commit.
-  SPACETIME_VERSION: v2.6.1
+  # changes codegen — module_bindings/index.ts records the CLI version, so any
+  # bump must land together with a bindings regeneration commit.
+  #
+  # Kept on the same 2.7 line as the `spacetimedb` npm dependency. Note the tag
+  # is not a plain vX.Y.Z: the newest 2.7 release is a hotfix tag, which is what
+  # `releases/latest` resolves to.
+  SPACETIME_VERSION: v2.7.0-hotfix3
 
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # fallow health's churn/hotspot analysis walks git history, and the
+          # default shallow clone empties it (fallow warns and carries on, so
+          # this would degrade the report rather than fail the job).
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -37,8 +47,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
+      # Writes coverage/coverage-final.json, which `fallow health` reads for
+      # real per-function CRAP scores (see .fallowrc.jsonc health.coverage).
+      # Must run before the fallow steps below.
+      - name: Test (with coverage)
+        run: pnpm test:coverage
 
       - name: Build client
         run: pnpm --filter @maple/client build
@@ -48,6 +61,12 @@ jobs:
 
       - name: Duplicate check
         run: pnpm exec fallow dupes
+
+      - name: Health check
+        run: pnpm exec fallow health
+
+      - name: Security candidates
+        run: pnpm exec fallow security
 
       - name: Install SpacetimeDB CLI (pinned)
         run: |
@@ -62,7 +81,7 @@ jobs:
           spacetimedb-cli generate --lang typescript --module-path packages/server \
             --out-dir packages/client/src/module_bindings --yes
           if [ -n "$(git status --porcelain packages/client/src/module_bindings)" ]; then
-            echo "::error::module_bindings drifted from the server schema. Run 'spacetime generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings' and commit the result."
+            echo "::error::module_bindings drifted from the server schema. Run 'spacetime generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings' with CLI ${SPACETIME_VERSION} and commit the result."
             git diff packages/client/src/module_bindings
             exit 1
           fi

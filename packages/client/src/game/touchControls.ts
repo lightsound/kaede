@@ -1,3 +1,4 @@
+// fallow-ignore-file coverage-gaps -- builds PixiJS display objects and binds pointer events; needs a real canvas
 import type { PlayerInput } from '@maple/shared';
 import { Circle, Container, Graphics, Text, TextStyle } from 'pixi.js';
 

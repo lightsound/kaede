@@ -11,8 +11,9 @@ import {
   ROPE_GRAB_RANGE,
   ROPE_JUMP_VELOCITY,
 } from './constants';
+import { unpackInput } from './input';
 import { type AABB, overlaps, rectBounds } from './physics';
-import type { CollisionMap, Facing, PlayerInput, PlayerState, Rect } from './types';
+import type { CollisionMap, Facing, PlayerInput, PlayerState, Rect, Rope } from './types';
 
 function box(x: number, y: number): AABB {
   return { cx: x, cy: y, hw: PLAYER_HALF_W, hh: PLAYER_HALF_H };
@@ -82,70 +83,90 @@ function grabRope(state: PlayerState, input: PlayerInput, map: CollisionMap): nu
 }
 
 /**
- * Advance one player by a single fixed tick. Pure: returns a fresh state and
- * never mutates its arguments, so identical inputs always yield identical output.
+ * One tick of climbing on `rope`: up/down drive y directly, and gravity and
+ * collision are suspended. Passing either end lets go — off the top the player
+ * steps onto whatever the rope hangs from, off the bottom they fall.
  */
-export function stepPlayer(state: PlayerState, input: PlayerInput, map: CollisionMap): PlayerState {
-  // --- Climbing: up/down drive y directly; gravity and collision are suspended.
+function climb(state: PlayerState, input: PlayerInput, rope: Rope): PlayerState {
+  const dir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+  const y = state.y + dir * CLIMB_SPEED * DT;
+  const at = (cy: number, onGround: boolean, held: number): PlayerState => ({
+    x: rope.x,
+    y: cy,
+    vx: 0,
+    vy: 0,
+    facing: state.facing,
+    onGround,
+    rope: held,
+  });
+  if (y < rope.top) return at(rope.top - PLAYER_HALF_H, true, -1);
+  if (y > rope.bottom) return at(rope.bottom, false, -1);
+  return at(y, false, state.rope);
+}
+
+/**
+ * Outcome of the rope phase. `done` means the tick was fully handled on a rope;
+ * otherwise `state` is what the regular ground step continues from.
+ */
+interface ClimbStep {
+  done: boolean;
+  state: PlayerState;
+}
+
+/**
+ * Resolves the player's relationship with ropes for this tick: keep climbing,
+ * jump off, grab on, or nothing. A directional jump releases the rope and does
+ * NOT finish the tick (a plain jump keeps climbing), so the horizontal input
+ * still takes effect through the regular step below.
+ */
+function stepRopePhase(state: PlayerState, input: PlayerInput, map: CollisionMap): ClimbStep {
   const rope = state.rope >= 0 ? map.ropes[state.rope] : undefined;
   if (rope) {
     if (input.jump && (input.left || input.right)) {
-      // Jumping off needs a direction (plain jump keeps climbing). Fall through
-      // to the regular step so the horizontal input takes effect this tick.
-      state = { ...state, rope: -1, vy: ROPE_JUMP_VELOCITY, onGround: false };
-    } else {
-      const dir = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-      const y = state.y + dir * CLIMB_SPEED * DT;
-      if (y < rope.top) {
-        // Climbed past the top: step up onto whatever the rope hangs from.
-        return {
-          x: rope.x,
-          y: rope.top - PLAYER_HALF_H,
-          vx: 0,
-          vy: 0,
-          facing: state.facing,
-          onGround: true,
-          rope: -1,
-        };
-      }
-      if (y > rope.bottom) {
-        // Slid past the bottom: let go and fall.
-        return {
-          x: rope.x,
-          y: rope.bottom,
-          vx: 0,
-          vy: 0,
-          facing: state.facing,
-          onGround: false,
-          rope: -1,
-        };
-      }
-      return {
-        x: rope.x,
+      const released = { ...state, rope: -1, vy: ROPE_JUMP_VELOCITY, onGround: false };
+      return { done: false, state: released };
+    }
+    return { done: true, state: climb(state, input, rope) };
+  }
+
+  if (input.up || input.down) {
+    const grabbed = grabRope(state, input, map);
+    if (grabbed >= 0) {
+      const r = map.ropes[grabbed];
+      const y = Math.min(Math.max(state.y, r.top), r.bottom);
+      const held = {
+        x: r.x,
         y,
         vx: 0,
         vy: 0,
         facing: state.facing,
         onGround: false,
-        rope: state.rope,
+        rope: grabbed,
       };
-    }
-  } else if (input.up || input.down) {
-    const grabbed = grabRope(state, input, map);
-    if (grabbed >= 0) {
-      const r = map.ropes[grabbed];
-      const y = Math.min(Math.max(state.y, r.top), r.bottom);
-      return { x: r.x, y, vx: 0, vy: 0, facing: state.facing, onGround: false, rope: grabbed };
+      return { done: true, state: held };
     }
   }
+  return { done: false, state };
+}
 
+/** This tick's horizontal velocity, plus the facing it implies. */
+function horizontalIntent(state: PlayerState, input: PlayerInput): { vx: number; facing: Facing } {
   const vx = ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * MOVE_SPEED;
-  let facing: Facing = state.facing;
-  if (vx > 0) facing = 1;
-  else if (vx < 0) facing = -1;
+  if (vx > 0) return { vx, facing: 1 };
+  if (vx < 0) return { vx, facing: -1 };
+  return { vx, facing: state.facing };
+}
 
-  // Jump / drop-through. Holding down turns jump into a platform drop, and
-  // suppresses the jump entirely on solid ground.
+/**
+ * Applies jump / drop-through to the tick's starting y and vertical velocity,
+ * then gravity. Holding down turns jump into a platform drop, and suppresses
+ * the jump entirely on solid ground.
+ */
+function applyJump(
+  state: PlayerState,
+  input: PlayerInput,
+  map: CollisionMap,
+): { y0: number; vy: number } {
   let y0 = state.y;
   let vy = state.vy;
   if (input.jump && state.onGround) {
@@ -156,10 +177,14 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, map: Collisio
       y0 += PLATFORM_DROP_NUDGE;
     }
   }
-  vy = Math.min(vy + GRAVITY * DT, MAX_FALL_SPEED);
+  return { y0, vy: Math.min(vy + GRAVITY * DT, MAX_FALL_SPEED) };
+}
 
-  // Horizontal move + resolution. Solids only stop you; vx is unchanged and
-  // platforms never block sideways.
+/**
+ * Horizontal move + resolution, clamped to the world. Solids only stop you; vx
+ * is unchanged and platforms never block sideways.
+ */
+function moveX(state: PlayerState, vx: number, y0: number, map: CollisionMap): number {
   let x = state.x + vx * DT;
   for (const solid of map.solids) {
     if (!overlaps(box(x, y0), solid)) continue;
@@ -167,37 +192,88 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, map: Collisio
     if (vx > 0) x = s.left - PLAYER_HALF_W;
     else if (vx < 0) x = s.right + PLAYER_HALF_W;
   }
-  x = Math.min(Math.max(x, PLAYER_HALF_W), map.width - PLAYER_HALF_W);
+  return Math.min(Math.max(x, PLAYER_HALF_W), map.width - PLAYER_HALF_W);
+}
 
-  // Vertical move + resolution. A downward hit lands us; either hit zeroes vy.
+/** Where the vertical move left the player, and whether it put them on ground. */
+interface VerticalStep {
+  y: number;
+  vy: number;
+  onGround: boolean;
+}
+
+/** Vertical move + resolution against solids. A downward hit lands us; either hit zeroes vy. */
+function moveY(x: number, y0: number, vy: number, map: CollisionMap): VerticalStep {
   let y = y0 + vy * DT;
+  let out = vy;
   let onGround = false;
   for (const solid of map.solids) {
     if (!overlaps(box(x, y), solid)) continue;
     const s = rectBounds(solid);
-    if (vy > 0) {
+    if (out > 0) {
       y = s.top - PLAYER_HALF_H;
       onGround = true;
-      vy = 0;
-    } else if (vy < 0) {
+      out = 0;
+    } else if (out < 0) {
       y = s.bottom + PLAYER_HALF_H;
+      out = 0;
+    }
+  }
+  return { y, vy: out, onGround };
+}
+
+/**
+ * One-way platforms: support only while falling, and only when the feet crossed
+ * the platform's top edge during this tick. `y0` is the pre-move y, so a player
+ * already below the edge passes straight through.
+ */
+function landOnPlatforms(
+  x: number,
+  y0: number,
+  step: VerticalStep,
+  map: CollisionMap,
+): VerticalStep {
+  if (step.vy <= 0) return step;
+  const prevFeet = y0 + PLAYER_HALF_H;
+  let { y, vy, onGround } = step;
+  for (const p of map.platforms) {
+    if (!spansRect(x, p)) continue;
+    if (prevFeet <= p.y && y + PLAYER_HALF_H >= p.y) {
+      y = p.y - PLAYER_HALF_H;
+      onGround = true;
       vy = 0;
     }
   }
+  return { y, vy, onGround };
+}
 
-  // One-way platforms: support only while falling, and only when the feet
-  // crossed the platform's top edge during this tick.
-  if (vy > 0) {
-    const prevFeet = y0 + PLAYER_HALF_H;
-    for (const p of map.platforms) {
-      if (!spansRect(x, p)) continue;
-      if (prevFeet <= p.y && y + PLAYER_HALF_H >= p.y) {
-        y = p.y - PLAYER_HALF_H;
-        onGround = true;
-        vy = 0;
-      }
-    }
-  }
+/**
+ * Advance one player by a single fixed tick. Pure: returns a fresh state and
+ * never mutates its arguments, so identical inputs always yield identical output.
+ */
+export function stepPlayer(state: PlayerState, input: PlayerInput, map: CollisionMap): PlayerState {
+  const roped = stepRopePhase(state, input, map);
+  if (roped.done) return roped.state;
+  const s = roped.state;
 
-  return { x, y, vx, vy, facing, onGround, rope: -1 };
+  const { vx, facing } = horizontalIntent(s, input);
+  const { y0, vy } = applyJump(s, input, map);
+  const x = moveX(s, vx, y0, map);
+  const fall = landOnPlatforms(x, y0, moveY(x, y0, vy, map), map);
+  return { x, y: fall.y, vx, vy: fall.vy, facing, onGround: fall.onGround, rope: -1 };
+}
+
+/**
+ * Replays a packed input batch onto `state`, one tick per byte. This is how the
+ * server applies an accepted batch; because the physics is deterministic, a
+ * client replaying the same bytes from the same state lands on the same result.
+ */
+export function replayInputs(
+  state: PlayerState,
+  packed: Iterable<number>,
+  map: CollisionMap,
+): PlayerState {
+  let s = state;
+  for (const byte of packed) s = stepPlayer(s, unpackInput(byte), map);
+  return s;
 }
