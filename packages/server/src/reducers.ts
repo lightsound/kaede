@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- every reducer here needs a running SpacetimeDB module host; each one is a thin shell over pure logic (evaluateInputBatch, replayInputs, isExpiredOffline) that is unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import them; every rule they enforce (admission, replay, retention) is delegated to evaluateInputBatch / replayInputs / isExpiredOffline in @maple/shared, which are unit-tested there. What is left here is row reads and writes.
 import {
   type BatchRejectReason,
   DEFAULT_MAP,

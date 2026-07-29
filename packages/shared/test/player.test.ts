@@ -11,9 +11,12 @@ import {
   PLAYER_HALF_W,
   type PlayerInput,
   type PlayerState,
+  packInput,
   ROPE_JUMP_VELOCITY,
+  replayInputs,
   SPAWN_X,
   stepPlayer,
+  unpackInput,
   WORLD_HEIGHT,
   WORLD_WIDTH,
 } from '../src/index';
@@ -340,5 +343,44 @@ describe('rope climbing', () => {
     expect(s.onGround).toBe(true);
     expect(s.x).toBe(1400);
     expect(s.y).toBe(rope2.top - PLAYER_HALF_H); // 276
+  });
+});
+
+describe('replayInputs', () => {
+  it('is the same as stepping each packed byte by hand', () => {
+    const start = spawn({ y: GROUND_TOP - PLAYER_HALF_H, onGround: true });
+    const packed = [
+      packInput({ ...NO_INPUT, right: true }),
+      packInput({ ...NO_INPUT, right: true, jump: true }),
+      packInput({ ...NO_INPUT, right: true }),
+      packInput(NO_INPUT),
+      packInput({ ...NO_INPUT, left: true }),
+    ];
+
+    let expected = start;
+    for (const byte of packed) expected = stepPlayer(expected, unpackInput(byte), DEFAULT_MAP);
+
+    expect(replayInputs(start, packed, DEFAULT_MAP)).toEqual(expected);
+  });
+
+  it('applies a Uint8Array batch, which is what the server receives', () => {
+    const start = spawn({ y: GROUND_TOP - PLAYER_HALF_H, onGround: true });
+    const right = packInput({ ...NO_INPUT, right: true });
+    const batch = new Uint8Array([right, right, right]);
+
+    // Three ticks of running right, resolved against the ground.
+    expect(replayInputs(start, batch, DEFAULT_MAP)).toEqual(run(start, unpackInput(right), 3));
+  });
+
+  it('returns the input state untouched for an empty batch', () => {
+    const start = spawn();
+    expect(replayInputs(start, [], DEFAULT_MAP)).toBe(start);
+  });
+
+  it('never mutates the state it is given', () => {
+    const start = spawn({ y: GROUND_TOP - PLAYER_HALF_H, onGround: true });
+    const snapshot = { ...start };
+    replayInputs(start, [packInput({ ...NO_INPUT, right: true, jump: true })], DEFAULT_MAP);
+    expect(start).toEqual(snapshot);
   });
 });

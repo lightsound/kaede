@@ -22,9 +22,9 @@
 `require-suppression-reason`）も含みます。あわせて次を有効化しています。
 
 - **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
-  ままなら通しません。fallow は TypeScript を同梱しておらず、解析には各パッケージが依存する
-  TypeScript を使います（`--format json` の `_meta.type_aware.backend` が `typescript-go`、
-  `backend_version` が `7.0.2` と報告します）。
+  ままなら通しません。バックエンドは fallow が同梱する TypeScript です（`fallow-type-aware`
+  が `typescript@7.0.2` を自前に固定しており、各パッケージの TypeScript とは独立です）。
+  `pnpm exec fallow --format json` の `_meta.check.type_aware` で確認できます。
 - **`boundaries`** — README が説明するアーキテクチャそのものの強制。`shared` は葉であり何も
   import せず、`client` と `server` は `shared` だけを見ます（互いは不可視）。`requireAllFiles`
   によりどのゾーンにも属さないファイルも検出され、例外は `vitest.config.ts` の1件だけを
