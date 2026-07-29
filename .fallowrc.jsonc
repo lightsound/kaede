@@ -1,15 +1,136 @@
 {
-  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "$schema": "./node_modules/fallow/schema.json",
+
+  // Only file-relative bases inside this directory may be `extends`ed. We use
+  // none; sealing keeps a remote/npm base from ever being pulled in silently.
+  "sealed": true,
+
   "workspaces": {
-    "packages": ["packages/*"]
+    "patterns": ["packages/*"]
   },
+
   // Generated SpacetimeDB bindings: not ours to prune.
   "ignorePatterns": ["**/module_bindings/**"],
   // Used by the generated (ignored) bindings in packages/client.
   "ignoreDependencies": ["spacetimedb"],
-  // Small repo: report even pair-only duplicates.
+
+  // Entry-point exports are checked like any other export, so a stray or
+  // misspelled export in an index barrel is reported instead of auto-credited.
+  "includeEntryExports": true,
+
+  // TypeScript semantic pass: project-wide symbol use, provenance, and public
+  // API surface. `complete` makes a partial semantic result fail the gate
+  // rather than silently degrade to syntactic-only answers.
+  "typeAware": {
+    "enabled": true,
+    "projects": [
+      "packages/shared/tsconfig.json",
+      "packages/client/tsconfig.json",
+      "packages/server/tsconfig.json"
+    ],
+    "require": "complete"
+  },
+
+  // Small repo: report even pair-only duplicates, and use the most aggressive
+  // blinding so renamed-variable (Type-2) clones are caught too.
   "duplicates": {
+    "mode": "semantic",
     "minOccurrences": 2
   },
-  "rules": {}
+
+  // The architecture the README describes, enforced: shared is the leaf that
+  // both sides replay physics through, and client/server never see each other.
+  "boundaries": {
+    "zones": [
+      { "name": "shared", "patterns": ["packages/shared/**"] },
+      { "name": "client", "patterns": ["packages/client/**"] },
+      { "name": "server", "patterns": ["packages/server/**"] }
+    ],
+    "rules": [
+      { "from": "shared", "allow": [] },
+      { "from": "client", "allow": ["shared"] },
+      { "from": "server", "allow": ["shared"] }
+    ],
+    "coverage": {
+      "requireAllFiles": true,
+      // Root-level tooling config; not part of the package architecture.
+      "allowUnmatched": ["*.ts", "*.js", "*.mjs"]
+    }
+  },
+
+  "health": {
+    // Real per-function CRAP instead of coverage estimated from the module
+    // graph, which scores well-tested code as risky. Produced by
+    // `pnpm test:coverage`; absent, fallow falls back to the estimate.
+    "coverage": "coverage/coverage-final.json"
+  },
+
+  // `fallow audit` gates on every finding in the changed files, not just the
+  // ones this changeset introduced.
+  "audit": {
+    "gate": "all"
+  },
+
+  // Every rule fallow ships, at `error`. The defaults leave cleanup, styling,
+  // and framework-hygiene rules at `warn` and the opinionated ones `off`; we
+  // want all of them gating. Deviations are commented individually.
+  "rules": {
+    "unused-files": "error",
+    "unused-exports": "error",
+    "unused-types": "error",
+    "private-type-leaks": "error",
+    "unused-dependencies": "error",
+    "unused-dev-dependencies": "error",
+    "unused-optional-dependencies": "error",
+    "unused-enum-members": "error",
+    "unused-class-members": "error",
+    "unused-store-members": "error",
+    "unprovided-injects": "error",
+    "unrendered-components": "error",
+    "unused-component-props": "error",
+    "unused-component-emits": "error",
+    "unused-component-inputs": "error",
+    "unused-component-outputs": "error",
+    "unused-svelte-events": "error",
+    "unused-server-actions": "error",
+    "unused-load-data-keys": "error",
+    "prop-drilling": "error",
+    "thin-wrapper": "error",
+    "duplicate-prop-shape": "error",
+    "css-token-drift": "error",
+    "css-duplicate-block": "error",
+    "css-selector-complexity": "error",
+    "css-dead-surface": "error",
+    "css-broken-reference": "error",
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "duplicate-exports": "error",
+    "type-only-dependencies": "error",
+    "test-only-dependencies": "error",
+    "dev-dependencies-in-production": "error",
+    "circular-dependencies": "error",
+    "re-export-cycle": "error",
+    "boundary-violation": "error",
+    "coverage-gaps": "error",
+    "stale-suppressions": "error",
+    "require-suppression-reason": "error",
+    "unused-catalog-entries": "error",
+    "empty-catalog-groups": "error",
+    "unresolved-catalog-references": "error",
+    "unused-dependency-overrides": "error",
+    "misconfigured-dependency-overrides": "error",
+    "security-client-server-leak": "error",
+    "security-sink": "error",
+    "policy-violation": "error",
+    "invalid-client-export": "error",
+    "mixed-client-server-barrel": "error",
+    "misplaced-directive": "error",
+    "route-collision": "error",
+    "dynamic-segment-name-conflict": "error",
+
+    // Left at fallow's default of `off`: an inventory rule, not a defect check.
+    // It reports that a feature flag *exists*, so gating on it would fail CI
+    // for legitimately adding one. `fallow flags` runs it on demand.
+    "feature-flags": "off"
+  }
 }

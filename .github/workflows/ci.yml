@@ -37,8 +37,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
+      # Writes coverage/coverage-final.json, which `fallow health` reads for
+      # real per-function CRAP scores (see .fallowrc.jsonc health.coverage).
+      # Must run before the fallow steps below.
+      - name: Test (with coverage)
+        run: pnpm test:coverage
 
       - name: Build client
         run: pnpm --filter @maple/client build
@@ -48,6 +51,12 @@ jobs:
 
       - name: Duplicate check
         run: pnpm exec fallow dupes
+
+      - name: Health check
+        run: pnpm exec fallow health
+
+      - name: Security candidates
+        run: pnpm exec fallow security
 
       - name: Install SpacetimeDB CLI (pinned)
         run: |

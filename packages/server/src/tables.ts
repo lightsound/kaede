@@ -1,3 +1,4 @@
+// fallow-ignore-file coverage-gaps -- a SpacetimeDB schema declaration; validated by publishing the module, not by unit tests
 import { schema, t, table } from 'spacetimedb/server';
 
 export const spacetimedb = schema({

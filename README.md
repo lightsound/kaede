@@ -5,11 +5,36 @@
 
 ## 技術スタック
 
-- **TypeScript** — 全パッケージ共通の言語
+- **TypeScript 7** — 全パッケージ共通の言語（ネイティブ実装の `tsc`）
 - **PixiJS v8** — 2Dレンダリング
 - **Vite + React** — クライアントのビルド／開発サーバー（Reactの役割はキャンバスのマウントのみ）
 - **SpacetimeDB 2.x** — リアルタイム同期バックエンド（DB兼サーバーロジック）
 - **pnpm workspaces** — モノレポ管理
+- **Vitest** — ユニットテスト（リポジトリ全体を1回のrunで実行し、カバレッジも1本にまとめる）
+- **Biome** — lint とフォーマット
+- **fallow** — デッドコード・重複・複雑度・アーキテクチャ境界の静的解析
+
+### 静的解析の方針
+
+`.fallowrc.jsonc` は fallow のルールを原則すべて `error` に上げています。既定で `warn` の
+クリーンアップ系・スタイル系ルールも、既定で `off` のオプトインルール（`private-type-leaks`、
+`prop-drilling`、`thin-wrapper`、`duplicate-prop-shape`、`coverage-gaps`、`security-*`、
+`require-suppression-reason`）も含みます。あわせて次を有効化しています。
+
+- **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
+  ままなら通しません。バックエンドは同梱の TypeScript 7 です。
+- **`boundaries`** — README が説明するアーキテクチャそのものの強制。`shared` は葉であり何も
+  import せず、`client` と `server` は `shared` だけを見ます（互いは不可視）。未分類ファイルも
+  `requireAllFiles` で検出します。
+- **`duplicates.mode: "semantic"`** — 変数名を変えただけの複製（Type-2 クローン）も検出します。
+- **`includeEntryExports`** — エントリポイントの export も未使用検査の対象にします。
+- **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
+- **`sealed`** — 設定が外部の `extends` を引き込めないようにします。
+
+例外は個別のコメント（`// fallow-ignore-file <rule> -- <理由>`）で表明し、`require-suppression-reason`
+により理由のない抑制は許されません。唯一グローバルに `off` のままなのは `feature-flags` で、
+これはフィーチャーフラグの「存在」を報告する棚卸しルールであり欠陥検査ではないためです
+（必要なときは `fallow flags` で確認できます）。
 
 ## パッケージ構成
 
@@ -113,14 +138,21 @@
      - `↓` + `Space` で足場を**すり抜けて降りられる**こと。
      - ロープで**高台（ジャンプでは届かない高さ）に登れる**こと。
 
-8. **型チェック・テスト・lint**
+8. **型チェック・テスト・lint・静的解析**
 
    ```sh
-   pnpm typecheck   # 全パッケージの tsc --noEmit
-   pnpm test        # shared の物理・入力ガード、client の予測・補間のユニットテスト
-   pnpm lint        # Biome による lint とフォーマット検査
-   pnpm format      # Biome によるフォーマット適用
+   pnpm typecheck      # 全パッケージの tsc --noEmit
+   pnpm test           # 全パッケージのユニットテストを1回のvitestで実行
+   pnpm test:coverage  # 同上 + coverage/coverage-final.json を出力
+   pnpm lint           # Biome による lint とフォーマット検査
+   pnpm format         # Biome によるフォーマット適用
+   pnpm analyze        # カバレッジを取り直して fallow の全解析を実行
+   pnpm audit          # 変更ファイルだけを fallow で検査（コミット前向け）
    ```
+
+   テストは shared の物理・入力ガード、client の予測・補間・入力・カメラを対象とします。
+   `fallow health` は `coverage/coverage-final.json` を読んで正確な CRAP スコアを出すため、
+   単体で走らせる場合は先に `pnpm test:coverage` を実行してください（`pnpm analyze` は込みです）。
 
 ## デプロイ（公開手順）
 
@@ -156,8 +188,8 @@
 
 4. **CI**
 
-   `main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test・build・
-   fallow（dead-code / dupes）に加えて、`spacetime generate`（バージョン固定）の再実行によりコミット済み
+   `main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
+   build・fallow（dead-code / dupes / health / security）に加えて、`spacetime generate`（バージョン固定）の再実行によりコミット済み
    TypeScript バインディングがサーバースキーマとずれていないことを検証します。同一ブランチへの連続 push は
    古い実行をキャンセルします。
 

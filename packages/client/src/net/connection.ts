@@ -1,3 +1,4 @@
+// fallow-ignore-file coverage-gaps -- opens a SpacetimeDB WebSocket; needs a running host, not a unit test
 import { DbConnection, tables } from '../module_bindings';
 
 // Production builds default to Maincloud so a missing env var can't silently

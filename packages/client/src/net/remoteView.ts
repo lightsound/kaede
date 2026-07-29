@@ -9,7 +9,7 @@ import {
 import { createServerClock } from './serverClock';
 
 /** One position sample for a remote player, timestamped on the SERVER clock. */
-interface Snapshot {
+export interface Snapshot {
   t: number;
   x: number;
   y: number;

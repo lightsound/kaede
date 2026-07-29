@@ -40,7 +40,8 @@ export function decayOffset(off: Vec2, dtMs: number): Vec2 {
   return { x, y };
 }
 
-interface HermitePoint {
+/** An interpolation endpoint: a timestamped position with its velocity. */
+export interface HermitePoint {
   t: number;
   x: number;
   y: number;

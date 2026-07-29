@@ -1,3 +1,4 @@
+// fallow-ignore-file coverage-gaps -- mounts the canvas and renders connection status; needs a DOM, covered by the browser smoke test instead
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { createGameApp, type GameApp } from './game/GameApp';
 import { type ConnectionStatus, type Net, startNet } from './net/sync';

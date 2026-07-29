@@ -1,3 +1,4 @@
+// fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host
 import { stateFromRow } from '@maple/shared';
 import type { GameApp } from '../game/GameApp';
 import type { DbConnection } from '../module_bindings';
