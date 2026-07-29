@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import them; every rule they enforce (admission, replay, retention) is delegated to evaluateInputBatch / replayInputs / isExpiredOffline in @maple/shared, which are unit-tested there. What is left here is row reads and writes.
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredOffline in @maple/shared and unit-tested there
 import {
   type BatchRejectReason,
   DEFAULT_MAP,

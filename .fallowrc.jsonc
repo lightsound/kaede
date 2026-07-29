@@ -31,8 +31,9 @@
     "require": "complete"
   },
 
-  // Small repo: report even pair-only duplicates, and use the most aggressive
-  // blinding so renamed-variable (Type-2) clones are caught too.
+  // The most aggressive blinding, so renamed-variable (Type-2) clones are
+  // caught too. `minOccurrences` is spelled out at fallow's own minimum: a
+  // pair is already a duplicate in a repo this small.
   "duplicates": {
     "mode": "semantic",
     "minOccurrences": 2
@@ -74,9 +75,9 @@
     "gate": "all"
   },
 
-  // Every rule fallow ships, at `error`. The defaults leave cleanup, styling,
-  // and framework-hygiene rules at `warn` and the opinionated ones `off`; we
-  // want all of them gating. Deviations are commented individually.
+  // Every rule fallow ships, all 53 of them, at `error`. The defaults leave
+  // cleanup, styling, and framework-hygiene rules at `warn` and the opinionated
+  // ones `off`; we want all of them reported and gating.
   "rules": {
     "unused-files": "error",
     "unused-exports": "error",
@@ -131,9 +132,10 @@
     "route-collision": "error",
     "dynamic-segment-name-conflict": "error",
 
-    // Left at fallow's default of `off`: an inventory rule, not a defect check.
-    // It reports that a feature flag *exists*, so gating on it would fail CI
-    // for legitimately adding one. `fallow flags` runs it on demand.
-    "feature-flags": "off"
+    // An inventory rule rather than a defect check: it reports that a feature
+    // flag exists. Promoted anyway so there is no deviation from the policy —
+    // verified that a detected flag still exits 0, so this reports without
+    // gating. `fallow flags` shows the inventory on demand.
+    "feature-flags": "error"
   }
 }

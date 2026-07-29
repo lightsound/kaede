@@ -16,10 +16,10 @@
 
 ### 静的解析の方針
 
-`.fallowrc.jsonc` は fallow のルールを原則すべて `error` に上げています。既定で `warn` の
+`.fallowrc.jsonc` は fallow が持つ**全53ルールを例外なく `error`** に上げています。既定で `warn` の
 クリーンアップ系・スタイル系ルールも、既定で `off` のオプトインルール（`private-type-leaks`、
 `prop-drilling`、`thin-wrapper`、`duplicate-prop-shape`、`coverage-gaps`、`security-*`、
-`require-suppression-reason`）も含みます。あわせて次を有効化しています。
+`require-suppression-reason`、`feature-flags`）も含みます。あわせて次を有効化しています。
 
 - **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
   ままなら通しません。バックエンドは fallow が同梱する TypeScript です（`fallow-type-aware`
@@ -34,10 +34,11 @@
 - **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
 - **`sealed`** — 設定が外部の `extends` を引き込めないようにします。
 
-例外は個別のコメント（`// fallow-ignore-file <rule> -- <理由>`）で表明し、`require-suppression-reason`
-により理由のない抑制は許されません。唯一グローバルに `off` のままなのは `feature-flags` で、
-これはフィーチャーフラグの「存在」を報告する棚卸しルールであり欠陥検査ではないためです
-（必要なときは `fallow flags` で確認できます）。
+グローバルに無効化しているルールはありません。例外は必ず個別のコメント
+（`// fallow-ignore-file <rule> -- <理由>`）で表明し、`require-suppression-reason` により
+理由のない抑制は許されません（`pnpm exec fallow suppressions` で一覧できます）。
+なお `feature-flags` だけは `error` にしても実際には終了コードを変えない報告専用ルールです
+（インベントリは `fallow flags` で確認できます）。
 
 ## パッケージ構成
 
@@ -154,7 +155,8 @@
    ```
 
    テストは shared の物理・入力ガード、client の予測・補間・入力・カメラを対象とします
-   （`packages/server` はリデューサーのみでテスト対象がないため、純粋ロジックは `shared` 側にあります）。
+   （`packages/server` はモジュールホスト上でしか動かず単体テストから import できないため、
+   テスト対象になる純粋ロジックは `shared` 側に置いています）。
    `fallow health` は `coverage/coverage-final.json` を**必須**とし、無ければエラー終了します。
    `fallow` を直接叩くときは先に `pnpm test:coverage` を実行してください
    （`pnpm analyze` / `pnpm analyze:changed` と CI は込みです）。
@@ -182,7 +184,7 @@
 
    [vercel.com](https://vercel.com) で **Add New → Project** からこのリポジトリを import し、次の2点だけ設定します。
 
-   - **Root Directory**: `packages/client`（`vercel.json` が install / build / 出力先を定義済み。Framework は Vite として自動検出されます）
+   - **Root Directory**: `packages/client`（`vercel.json` が framework / install / build / 出力先を定義済みなので、追加設定は不要です）
    - **Environment Variables**: `VITE_SPACETIME_DB` = Maincloud で付けた DB名。
      （`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com` なので、Maincloud を使う限り設定不要です）
 

@@ -12,14 +12,13 @@ concurrency:
 
 env:
   # Pin the CLI so the bindings drift check doesn't break when a new release
-  # changes codegen. Bump together with a bindings regeneration commit.
+  # changes codegen — the generated files carry the CLI version, so any bump
+  # must land together with a bindings regeneration commit.
   #
-  # This is deliberately behind the npm SDK: `spacetimedb` is on 2.7.x, but the
-  # newest published CLI release is v2.6.1. Verified that 2.6.1 builds the 2.7
-  # module, emits byte-identical bindings, and publishes a database two browser
-  # clients sync against. When a 2.7 CLI ships, bump this and regenerate the
-  # bindings in the same commit.
-  SPACETIME_VERSION: v2.6.1
+  # Kept on the same 2.7 line as the `spacetimedb` npm dependency. Note the tag
+  # is not a plain vX.Y.Z: the newest 2.7 release is a hotfix tag, which is what
+  # `releases/latest` resolves to.
+  SPACETIME_VERSION: v2.7.0-hotfix3
 
 jobs:
   ci:
