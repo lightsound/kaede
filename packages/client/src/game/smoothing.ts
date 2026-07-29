@@ -1,6 +1,6 @@
 /**
- * Pure render-smoothing math. No Pixi, no DOM, no side effects: this file is
- * imported by a Node E2E script, so it must stay dependency-free.
+ * Pure render-smoothing math. No Pixi, no DOM, no side effects, so it stays
+ * unit-testable under plain Node; keep it dependency-free.
  */
 
 export interface Vec2 {

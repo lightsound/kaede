@@ -1,8 +1,9 @@
-// fallow-ignore-file coverage-gaps -- SpacetimeDB reducers run inside the module host; the pure logic they call lives in @maple/shared and is unit-tested there
+// fallow-ignore-file coverage-gaps -- every reducer here needs a running SpacetimeDB module host; each one is a thin shell over pure logic (evaluateInputBatch, replayInputs, isExpiredOffline) that is unit-tested in @maple/shared
 import {
+  type BatchRejectReason,
   DEFAULT_MAP,
   evaluateInputBatch,
-  OFFLINE_RETENTION_MS,
+  isExpiredOffline,
   replayInputs,
   SPAWN_X,
   SPAWN_Y,
@@ -19,7 +20,7 @@ type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
  * duplicate path, so it is not noteworthy.
  */
 function logRejection(
-  reason: string,
+  reason: BatchRejectReason,
   sender: string,
   startTick: number,
   length: number,
@@ -71,11 +72,6 @@ export const submitInputs = spacetimedb.reducer(
     });
   },
 );
-
-/** True once a disconnected player's row has sat past its retention window. */
-function isExpiredOffline(online: boolean, ageMs: number): boolean {
-  return !online && ageMs > OFFLINE_RETENTION_MS;
-}
 
 /**
  * Deletes offline rows whose retention window has elapsed. Identities are

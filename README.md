@@ -22,10 +22,13 @@
 `require-suppression-reason`）も含みます。あわせて次を有効化しています。
 
 - **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
-  ままなら通しません。バックエンドは同梱の TypeScript 7 です。
+  ままなら通しません。fallow は TypeScript を同梱しておらず、解析には各パッケージが依存する
+  TypeScript を使います（`--format json` の `_meta.type_aware.backend` が `typescript-go`、
+  `backend_version` が `7.0.2` と報告します）。
 - **`boundaries`** — README が説明するアーキテクチャそのものの強制。`shared` は葉であり何も
-  import せず、`client` と `server` は `shared` だけを見ます（互いは不可視）。未分類ファイルも
-  `requireAllFiles` で検出します。
+  import せず、`client` と `server` は `shared` だけを見ます（互いは不可視）。`requireAllFiles`
+  によりどのゾーンにも属さないファイルも検出され、例外は `vitest.config.ts` の1件だけを
+  名指しで許可しています。
 - **`duplicates.mode: "semantic"`** — 変数名を変えただけの複製（Type-2 クローン）も検出します。
 - **`includeEntryExports`** — エントリポイントの export も未使用検査の対象にします。
 - **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
@@ -141,18 +144,20 @@
 8. **型チェック・テスト・lint・静的解析**
 
    ```sh
-   pnpm typecheck      # 全パッケージの tsc --noEmit
-   pnpm test           # 全パッケージのユニットテストを1回のvitestで実行
-   pnpm test:coverage  # 同上 + coverage/coverage-final.json を出力
-   pnpm lint           # Biome による lint とフォーマット検査
-   pnpm format         # Biome によるフォーマット適用
-   pnpm analyze        # カバレッジを取り直して fallow の全解析を実行
-   pnpm audit          # 変更ファイルだけを fallow で検査（コミット前向け）
+   pnpm typecheck         # 全パッケージの tsc --noEmit
+   pnpm test              # shared と client のユニットテストを1回の vitest で実行
+   pnpm test:coverage     # 同上 + coverage/coverage-final.json を出力
+   pnpm lint              # Biome による lint とフォーマット検査
+   pnpm format            # Biome によるフォーマット適用
+   pnpm analyze           # CIと同じ fallow 一式（dead-code / dupes / health / security）
+   pnpm analyze:changed   # 変更ファイルだけを fallow で検査（コミット前向け）
    ```
 
-   テストは shared の物理・入力ガード、client の予測・補間・入力・カメラを対象とします。
-   `fallow health` は `coverage/coverage-final.json` を読んで正確な CRAP スコアを出すため、
-   単体で走らせる場合は先に `pnpm test:coverage` を実行してください（`pnpm analyze` は込みです）。
+   テストは shared の物理・入力ガード、client の予測・補間・入力・カメラを対象とします
+   （`packages/server` はリデューサーのみでテスト対象がないため、純粋ロジックは `shared` 側にあります）。
+   `fallow health` は `coverage/coverage-final.json` を**必須**とし、無ければエラー終了します。
+   `fallow` を直接叩くときは先に `pnpm test:coverage` を実行してください
+   （`pnpm analyze` / `pnpm analyze:changed` と CI は込みです）。
 
 ## デプロイ（公開手順）
 

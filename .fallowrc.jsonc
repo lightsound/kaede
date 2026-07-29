@@ -53,15 +53,18 @@
     ],
     "coverage": {
       "requireAllFiles": true,
-      // Root-level tooling config; not part of the package architecture.
-      "allowUnmatched": ["*.ts", "*.js", "*.mjs"]
+      // The only file outside the three packages. Listed by name rather than
+      // as a root glob, so a future root-level source file is not exempted
+      // silently — it has to be classified or added here deliberately.
+      "allowUnmatched": ["vitest.config.ts"]
     }
   },
 
   "health": {
     // Real per-function CRAP instead of coverage estimated from the module
-    // graph, which scores well-tested code as risky. Produced by
-    // `pnpm test:coverage`; absent, fallow falls back to the estimate.
+    // graph, which scores well-tested code as risky. REQUIRED, not optional:
+    // fallow exits 2 if this file is missing, so run `pnpm test:coverage`
+    // first (`pnpm analyze` and the CI job both do).
     "coverage": "coverage/coverage-final.json"
   },
 

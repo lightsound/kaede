@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- drives PixiJS against a live WebGL canvas; verified by the browser smoke test, not unit tests
+// fallow-ignore-file coverage-gaps -- drives PixiJS against a live WebGL canvas; the logic worth testing is extracted into camera.ts, input.ts, and smoothing.ts, which are unit-tested
 import {
   type CollisionMap,
   DEFAULT_MAP,

@@ -13,6 +13,12 @@ concurrency:
 env:
   # Pin the CLI so the bindings drift check doesn't break when a new release
   # changes codegen. Bump together with a bindings regeneration commit.
+  #
+  # This is deliberately behind the npm SDK: `spacetimedb` is on 2.7.x, but the
+  # newest published CLI release is v2.6.1. Verified that 2.6.1 builds the 2.7
+  # module, emits byte-identical bindings, and publishes a database two browser
+  # clients sync against. When a 2.7 CLI ships, bump this and regenerate the
+  # bindings in the same commit.
   SPACETIME_VERSION: v2.6.1
 
 jobs:
@@ -20,6 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # fallow health's churn/hotspot analysis walks git history; the
+          # default shallow clone would silently reduce it to nothing.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
