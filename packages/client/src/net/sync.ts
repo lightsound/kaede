@@ -2,7 +2,7 @@
 import { stateFromRow } from '@maple/shared';
 import type { GameApp } from '../game/GameApp';
 import type { DbConnection } from '../module_bindings';
-import { connect } from './connection';
+import { connect, target } from './connection';
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
 
@@ -39,6 +39,9 @@ export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) 
   let everConnected = false;
   let retryDelayMs = RETRY_INITIAL_MS;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  // Connects that have failed in a row since the last success; connect() uses
+  // it to decide when the stored identity token has become the likely culprit.
+  let consecutiveFailures = 0;
 
   // Prediction lives per connection: it is created once the authoritative own
   // row is known, and torn down (with the remote views) when the connection
@@ -63,10 +66,28 @@ export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) 
     gameApp.clearRemotePlayers();
   }
 
+  /** Ask the server to spawn or resume our row; the answer arrives as a row event. */
+  function joinWorld(c: DbConnection): void {
+    // A rejected join leaves us connected but never spawned, which on screen is
+    // indistinguishable from a stalled connection. Say so.
+    c.reducers.join({}).catch((err: unknown) => {
+      console.error('SpacetimeDB: join failed, this client will not spawn', err);
+    });
+  }
+
+  /**
+   * Arms the next attempt, at most once per failure. A failed connect both
+   * rejects and closes the socket, so this is called twice for the same
+   * failure; without the guard the backoff doubled twice per round (1s, 4s,
+   * 16s...) and each extra timer was dropped from retryTimer unreferenced.
+   */
   function scheduleRetry(): void {
-    if (disposed) return;
+    if (disposed || retryTimer !== undefined) return;
     onStatus(everConnected ? 'reconnecting' : 'connecting');
-    retryTimer = setTimeout(attempt, retryDelayMs);
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined;
+      attempt();
+    }, retryDelayMs);
     retryDelayMs = Math.min(retryDelayMs * 2, RETRY_MAX_MS);
   }
 
@@ -79,6 +100,9 @@ export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) 
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
+            // Batches lost to a dropping connection are expected and already
+            // recovered by the resend watchdog, so a per-batch failure is not
+            // worth reporting; logging one per flush would bury everything else.
             conn?.reducers.submitInputs({ startTick, inputs: packed }).catch(() => {});
           },
           resetLocal(state, tick) {
@@ -133,7 +157,15 @@ export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) 
     });
     c.db.player.onDelete((_ctx, row) => {
       const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) return;
+      if (idHex === myIdHex) {
+        // The retention sweep reclaimed our row: a backgrounded tab stops
+        // ticking, so it stops refreshing the row and eventually looks
+        // abandoned. Re-join and let the replacement row restart prediction,
+        // rather than predicting forward against a row that no longer exists.
+        prediction = undefined;
+        joinWorld(c);
+        return;
+      }
       remoteViews.remove(idHex);
       gameApp.removeRemotePlayer(idHex);
     });
@@ -142,13 +174,17 @@ export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) 
   function attempt(): void {
     if (disposed) return;
     onStatus(everConnected ? 'reconnecting' : 'connecting');
-    connect({
-      onDisconnect() {
-        if (disposed) return;
-        dropSession();
-        scheduleRetry();
+    connect(
+      {
+        onDisconnect() {
+          if (disposed) return;
+          console.warn('SpacetimeDB: connection dropped, reconnecting');
+          dropSession();
+          scheduleRetry();
+        },
       },
-    })
+      consecutiveFailures,
+    )
       .then(({ conn: c, myIdHex }) => {
         if (disposed) {
           c.disconnect();
@@ -156,12 +192,24 @@ export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) 
         }
         conn = c;
         everConnected = true;
+        consecutiveFailures = 0;
         retryDelayMs = RETRY_INITIAL_MS;
         onStatus('connected');
         wireSession(c, myIdHex);
-        c.reducers.join({}).catch(() => {});
+        joinWorld(c);
       })
-      .catch(() => scheduleRetry());
+      // The overlay can only ever say "connecting", so without this the actual
+      // cause (host not running, unknown database name, stale schema) never
+      // reaches anyone. Naming the target makes the common misconfigurations
+      // self-evident from the first line of the log.
+      .catch((err: unknown) => {
+        consecutiveFailures += 1;
+        console.error(
+          `SpacetimeDB: connection to ${target} failed, retrying in ${retryDelayMs}ms`,
+          err,
+        );
+        scheduleRetry();
+      });
   }
 
   attempt();

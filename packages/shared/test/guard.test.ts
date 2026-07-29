@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   evaluateInputBatch,
   INPUT_BATCH_MAX_TICKS,
-  isExpiredOffline,
+  isExpiredRow,
   MAX_TICK_BANK,
   OFFLINE_RETENTION_MS,
   TICK_ALLOWANCE_SLACK,
@@ -120,19 +120,22 @@ describe('evaluateInputBatch', () => {
   });
 });
 
-describe('isExpiredOffline', () => {
-  it('never expires a row that is still online, however old', () => {
-    expect(isExpiredOffline(true, OFFLINE_RETENTION_MS * 10)).toBe(false);
-  });
-
-  it('keeps an offline row until the retention window has fully elapsed', () => {
-    expect(isExpiredOffline(false, 0)).toBe(false);
-    expect(isExpiredOffline(false, OFFLINE_RETENTION_MS - 1)).toBe(false);
+describe('isExpiredRow', () => {
+  it('keeps a row until the retention window has fully elapsed', () => {
+    expect(isExpiredRow(0)).toBe(false);
+    expect(isExpiredRow(OFFLINE_RETENTION_MS - 1)).toBe(false);
     // Exactly at the window the row is still kept: the comparison is strict.
-    expect(isExpiredOffline(false, OFFLINE_RETENTION_MS)).toBe(false);
+    expect(isExpiredRow(OFFLINE_RETENTION_MS)).toBe(false);
   });
 
-  it('expires an offline row once past the window', () => {
-    expect(isExpiredOffline(false, OFFLINE_RETENTION_MS + 1)).toBe(true);
+  it('expires a row once past the window', () => {
+    expect(isExpiredRow(OFFLINE_RETENTION_MS + 1)).toBe(true);
+  });
+
+  // Regression: the sweep used to require online === false, so a row stranded
+  // at online = true by a host that died before client_disconnected ran was
+  // never collected and rendered as a motionless player to everyone, forever.
+  it('expires a stranded row regardless of how it was left flagged', () => {
+    expect(isExpiredRow(OFFLINE_RETENTION_MS * 10)).toBe(true);
   });
 });
