@@ -34,9 +34,10 @@
 - **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
 - **`sealed`** — 設定が外部の `extends` を引き込めないようにします。
 
-グローバルに無効化しているルールはありません。例外は必ず個別のコメント
-（`// fallow-ignore-file <rule> -- <理由>`）で表明し、`require-suppression-reason` により
-理由のない抑制は許されません（`pnpm exec fallow suppressions` で一覧できます）。
+グローバルに無効化しているルールはありません。例外は個別の抑制コメント
+（`// fallow-ignore-file <rule> -- <理由>` またはその行だけに効く `// fallow-ignore-next-line ...`）
+でのみ表明し、`require-suppression-reason` により理由のない抑制は許されません
+（`pnpm exec fallow suppressions` で全件を一覧できます）。
 なお `feature-flags` だけは `error` にしても実際には終了コードを変えない報告専用ルールです
 （インベントリは `fallow flags` で確認できます）。
 
@@ -92,7 +93,11 @@
 
 1. **SpacetimeDB CLIのインストール**
    [https://spacetimedb.com/install](https://spacetimedb.com/install) の案内に従ってインストールします。
-   （GitHub Releases の `spacetime-x86_64-unknown-linux-gnu.tar.gz` などのバイナリを直接配置しても構いません。）
+   以降の手順は、インストーラが用意する `spacetime` コマンドを前提にしています。
+   （GitHub Releases の `spacetime-x86_64-unknown-linux-gnu.tar.gz` を直接展開する場合、
+   中身は `spacetimedb-cli` と `spacetimedb-standalone` で `spacetime` は含まれません。
+   その場合は以降の `spacetime ...` を `spacetimedb-cli ...` に読み替えてください。
+   CI もこの理由で `spacetimedb-cli` を呼んでいます。）
 
 2. **依存関係のインストール**
 
@@ -196,7 +201,8 @@
 4. **CI**
 
    `main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
-   build・fallow（dead-code / dupes / health / security）に加えて、`spacetime generate`（バージョン固定）の再実行によりコミット済み
+   build・fallow（dead-code / dupes / health / security）に加えて、バージョンを固定した CLI
+   （`spacetimedb-cli generate`）の再実行によりコミット済み
    TypeScript バインディングがサーバースキーマとずれていないことを検証します。同一ブランチへの連続 push は
    古い実行をキャンセルします。
 

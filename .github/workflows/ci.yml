@@ -12,8 +12,8 @@ concurrency:
 
 env:
   # Pin the CLI so the bindings drift check doesn't break when a new release
-  # changes codegen — the generated files carry the CLI version, so any bump
-  # must land together with a bindings regeneration commit.
+  # changes codegen — module_bindings/index.ts records the CLI version, so any
+  # bump must land together with a bindings regeneration commit.
   #
   # Kept on the same 2.7 line as the `spacetimedb` npm dependency. Note the tag
   # is not a plain vX.Y.Z: the newest 2.7 release is a hotfix tag, which is what
@@ -26,8 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # fallow health's churn/hotspot analysis walks git history; the
-          # default shallow clone would silently reduce it to nothing.
+          # fallow health's churn/hotspot analysis walks git history, and the
+          # default shallow clone empties it (fallow warns and carries on, so
+          # this would degrade the report rather than fail the job).
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
@@ -80,7 +81,7 @@ jobs:
           spacetimedb-cli generate --lang typescript --module-path packages/server \
             --out-dir packages/client/src/module_bindings --yes
           if [ -n "$(git status --porcelain packages/client/src/module_bindings)" ]; then
-            echo "::error::module_bindings drifted from the server schema. Run 'spacetime generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings' and commit the result."
+            echo "::error::module_bindings drifted from the server schema. Run 'spacetime generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings' with CLI ${SPACETIME_VERSION} and commit the result."
             git diff packages/client/src/module_bindings
             exit 1
           fi

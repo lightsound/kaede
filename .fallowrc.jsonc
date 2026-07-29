@@ -77,7 +77,9 @@
 
   // Every rule fallow ships, all 53 of them, at `error`. The defaults leave
   // cleanup, styling, and framework-hygiene rules at `warn` and the opinionated
-  // ones `off`; we want all of them reported and gating.
+  // ones `off`; we want all of them reported, and gating wherever fallow lets
+  // severity drive the exit code (see `feature-flags` below for the one rule
+  // where it does not).
   "rules": {
     "unused-files": "error",
     "unused-exports": "error",
