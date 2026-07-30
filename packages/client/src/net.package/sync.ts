@@ -1,5 +1,13 @@
-// fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host
-import { stateFromRow } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on (decideAdmission, asMembership) are pure and unit-tested in @maple/shared
+import {
+  type Admission,
+  admissionOf,
+  asMembership,
+  decideAdmission,
+  type MemberRole,
+  type MemberStatus,
+  stateFromRow,
+} from '@maple/shared';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type AuthTokenGetter, connect, target } from './connection';
@@ -17,6 +25,35 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting';
 const RETRY_INITIAL_MS = 1000;
 const RETRY_MAX_MS = 30_000;
 
+/** One space_member row, shaped for the admin UI. */
+export interface SpaceMemberView {
+  /** Hex identity: the stable key, and the handle for approve/remove calls. */
+  idHex: string;
+  /** The member's chosen name; undefined until they set one. */
+  displayName: string | undefined;
+  status: MemberStatus;
+  role: MemberRole;
+  /** When the membership was first filed, for a stable oldest-first order. */
+  requestedAtMs: number;
+}
+
+/**
+ * Everything membership-related the UI renders: this client's own admission
+ * and standing, the space settings, and the member directory (public to all
+ * clients; only admins get UI on top of it). Published on every
+ * space_member / space_setting change. Not reset on disconnect — the last
+ * known view holds until the next session republishes, and the UI gates
+ * admin actions on the connection status instead.
+ */
+export interface SpaceView {
+  admission: Admission;
+  /** This client's own membership row, or undefined for guests. */
+  self: SpaceMemberView | undefined;
+  guestsAllowed: boolean;
+  /** The whole directory, oldest membership first. */
+  members: SpaceMemberView[];
+}
+
 export interface Net {
   dispose(): void;
   /**
@@ -27,6 +64,16 @@ export interface Net {
    * and resubmit.
    */
   setDisplayName(name: string): void;
+  /**
+   * Admin actions (approve_member / remove_member / set_guests_allowed).
+   * The server re-checks that the sender is an acting admin; these methods
+   * exist for the admin panel, whose gating is cosmetic. Success arrives as
+   * space_member / space_setting row events (a fresh SpaceView); failures
+   * only log, and the unchanged view is the visible outcome.
+   */
+  approveMember(memberIdHex: string): void;
+  removeMember(memberIdHex: string): void;
+  setGuestsAllowed(allowed: boolean): void;
 }
 
 /**
@@ -41,6 +88,12 @@ export interface Net {
  * stored anonymous token otherwise (see connection.ts) — so the server hands
  * back the same player row and the local sim snaps to that authoritative state.
  *
+ * Entering the world is gated by admission (承認制 / ゲスト入場設定): the
+ * client rules on the same subscribed rows the server's join checks
+ * (decideAdmission), sends join only when it would be admitted, and reacts
+ * to approvals and setting flips the moment the rows change. `onSpace`
+ * reports every such change; see SpaceView.
+ *
  * `onOwnName` reports the authoritative display name whenever it changes,
  * and `undefined` whenever the own row stops being known to exist (before
  * the first spawn, after a disconnect, after the row is deleted by the
@@ -52,6 +105,7 @@ export function startNet(
   onStatus: (status: ConnectionStatus) => void,
   getAuthToken: AuthTokenGetter,
   onOwnName: (name: string | undefined) => void,
+  onSpace: (view: SpaceView) => void,
 ): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
@@ -111,8 +165,8 @@ export function startNet(
 
   /** Ask the server to spawn or resume our row; the answer arrives as a row event. */
   function joinWorld(c: DbConnection): void {
-    // A rejected join leaves us connected but never spawned, which on screen is
-    // indistinguishable from a stalled connection. Say so.
+    // Admission is checked before calling this, so a refusal here means the
+    // client's view of the rules drifted from the server's — worth a log.
     c.reducers.join({}).catch((err: unknown) => {
       console.error('SpacetimeDB: join failed, this client will not spawn', err);
     });
@@ -173,6 +227,91 @@ export function startNet(
       );
     };
 
+    // ----- Admission (承認制 / ゲスト入場設定) -----
+
+    // Whether this session has seen its own membership row: its later
+    // absence then means an admin removed us (decideAdmission's `reapply`),
+    // not that we are a guest.
+    let wasMember = false;
+    // The reapply reconnect must fire once, though several row deletions
+    // (membership, account side effects, own player row) each re-evaluate.
+    let reapplied = false;
+
+    const guestsAllowedNow = (): boolean => {
+      for (const row of c.db.spaceSetting.iter()) {
+        if (row.id === 0) return row.guestsAllowed;
+      }
+      return true; // no settings row yet: the default is to allow guests
+    };
+
+    const ownMemberRow = () => {
+      for (const row of c.db.spaceMember.iter()) {
+        if (row.identity.toHexString() === myIdHex) return row;
+      }
+      return undefined;
+    };
+
+    const buildSpaceView = (admission: Admission): SpaceView => {
+      let self: SpaceMemberView | undefined;
+      const members: SpaceMemberView[] = [];
+      for (const row of c.db.spaceMember.iter()) {
+        const view: SpaceMemberView = {
+          idHex: row.identity.toHexString(),
+          displayName: row.displayName,
+          ...asMembership(row),
+          requestedAtMs: Number(row.requestedAt.toMillis()),
+        };
+        members.push(view);
+        if (view.idHex === myIdHex) self = view;
+      }
+      members.sort((a, b) => a.requestedAtMs - b.requestedAtMs);
+      return { admission, self, guestsAllowed: guestsAllowedNow(), members };
+    };
+
+    /** The admission the current row cache implies for this client. */
+    const currentDecision = () => {
+      const memberRow = ownMemberRow();
+      if (memberRow) wasMember = true;
+      return decideAdmission({
+        membership: memberRow && asMembership(memberRow),
+        wasMember,
+        guestsAllowed: guestsAllowedNow(),
+      });
+    };
+
+    /**
+     * The reapply reconnect, at most once per session: our membership
+     * vanished (an admin removed us), so drop this connection and let the
+     * fresh one file a new pending membership (decideAdmission's rationale).
+     * Several row deletions in the same removal transaction (membership,
+     * own player row) each re-evaluate admission, hence the guard.
+     */
+    const reapplyOnce = (): void => {
+      if (reapplied) return;
+      reapplied = true;
+      console.info('SpacetimeDB: membership removed; reconnecting to re-apply');
+      c.disconnect(); // onDisconnect drops the session and schedules the reconnect
+    };
+
+    /**
+     * Re-evaluates this client's admission against the current row cache,
+     * reports it (which drives the waiting-room / guest-refusal UI and the
+     * admin panel), and acts on it: join when admitted and not already in
+     * the world, reconnect when removed. Runs after every space_member /
+     * space_setting row event and after our own player row is deleted, so
+     * approvals, setting flips, kicks and retention sweeps all funnel
+     * through this one rule.
+     */
+    const applyAdmission = (): void => {
+      const decision = currentDecision();
+      onSpace(buildSpaceView(admissionOf(decision)));
+      if (decision === 'join') {
+        if (!prediction) joinWorld(c);
+      } else if (decision === 'reapply') {
+        reapplyOnce();
+      }
+    };
+
     // Seed players already in the world (an existing own row means we resumed
     // our identity after a reload/blip; continue from it rather than re-spawn).
     for (const row of c.db.player.iter()) {
@@ -215,20 +354,54 @@ export function startNet(
       if (disposed) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
-        // The retention sweep reclaimed our row: a backgrounded tab stops
-        // ticking, so it stops refreshing the row and eventually looks
-        // abandoned. Re-join and let the replacement row restart prediction,
-        // rather than predicting forward against a row that no longer exists.
+        // Our row was reclaimed: by the retention sweep (a backgrounded tab
+        // stops ticking and eventually looks abandoned), by the guest kick
+        // that a guests-off flip performs, or by an admin removing us. Stop
+        // predicting against a row that no longer exists, then let the
+        // admission rule decide whether to re-join — the sweep case — or to
+        // stay out and say why.
         prediction = undefined;
-        // No row again until the re-join lands; disable the rename form so a
+        // No row again until a re-join lands; disable the rename form so a
         // submit cannot race into the server's no-target refusal.
         publishOwnName(undefined);
-        joinWorld(c);
+        applyAdmission();
         return;
       }
       remoteViews.remove(idHex);
       gameApp.removeRemotePlayer(idHex);
     });
+
+    // Membership and settings drive admission and the admin panel; every
+    // change re-runs the one admission rule and republishes the view.
+    c.db.spaceMember.onInsert((_ctx, _row) => {
+      if (disposed) return;
+      applyAdmission();
+    });
+    c.db.spaceMember.onUpdate((_ctx, _old, _row) => {
+      if (disposed) return;
+      applyAdmission();
+    });
+    c.db.spaceMember.onDelete((_ctx, _row) => {
+      if (disposed) return;
+      applyAdmission();
+    });
+    c.db.spaceSetting.onInsert((_ctx, _row) => {
+      if (disposed) return;
+      applyAdmission();
+    });
+    c.db.spaceSetting.onUpdate((_ctx, _old, _row) => {
+      if (disposed) return;
+      applyAdmission();
+    });
+    c.db.spaceSetting.onDelete((_ctx, _row) => {
+      if (disposed) return;
+      applyAdmission();
+    });
+
+    // The first decision: join (the pre-admission behavior), or hold and
+    // show why. The subscription was applied before wireSession, so this
+    // rules on real rows.
+    applyAdmission();
   }
 
   function attempt(): void {
@@ -257,7 +430,6 @@ export function startNet(
         retryDelayMs = RETRY_INITIAL_MS;
         onStatus('connected');
         wireSession(c, myIdHex);
-        joinWorld(c);
       })
       // The overlay can only ever say "connecting", so without this the actual
       // cause (host not running, unknown database name, stale schema) never
@@ -274,6 +446,41 @@ export function startNet(
   }
 
   attempt();
+
+  /** Resolves an admin-panel handle back to the live row's Identity value. */
+  function findMemberIdentity(c: DbConnection, memberIdHex: string) {
+    for (const row of c.db.spaceMember.iter()) {
+      if (row.identity.toHexString() === memberIdHex) return row.identity;
+    }
+    return undefined;
+  }
+
+  /** Shared shape of the three admin actions: guard, call, log a refusal. */
+  function callAdminReducer(name: string, call: (c: DbConnection) => Promise<unknown>): void {
+    if (!conn) {
+      console.warn(`SpacetimeDB: not connected, ${name} dropped`);
+      return;
+    }
+    call(conn).catch((err: unknown) => {
+      console.error(`SpacetimeDB: ${name} rejected`, err);
+    });
+  }
+
+  /** An admin action aimed at one member, resolved from its admin-panel handle. */
+  function callMemberReducer(
+    name: string,
+    memberIdHex: string,
+    call: (
+      c: DbConnection,
+      identity: NonNullable<ReturnType<typeof findMemberIdentity>>,
+    ) => Promise<unknown>,
+  ): void {
+    callAdminReducer(name, (c) => {
+      const identity = findMemberIdentity(c, memberIdHex);
+      if (!identity) return Promise.resolve(); // already gone: the next view shows it
+      return call(c, identity);
+    });
+  }
 
   return {
     dispose() {
@@ -298,6 +505,19 @@ export function startNet(
       conn.reducers.setDisplayName({ name }).catch((err: unknown) => {
         console.error('SpacetimeDB: set_display_name rejected', err);
       });
+    },
+    approveMember(memberIdHex) {
+      callMemberReducer('approve_member', memberIdHex, (c, identity) =>
+        c.reducers.approveMember({ identity }),
+      );
+    },
+    removeMember(memberIdHex) {
+      callMemberReducer('remove_member', memberIdHex, (c, identity) =>
+        c.reducers.removeMember({ identity }),
+      );
+    },
+    setGuestsAllowed(allowed) {
+      callAdminReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
     },
   };
 }

@@ -1,12 +1,19 @@
 // fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredRow in @maple/shared and unit-tested there
 import {
+  asMembership,
   type BatchRejectReason,
   type ConnectionPolicy,
   classifyConnection,
   DEFAULT_MAP,
+  evaluateApproval,
   evaluateInputBatch,
+  evaluateJoin,
+  evaluateRemoval,
   evaluateRename,
+  evaluateSettingChange,
+  initialMembership,
   isExpiredRow,
+  type Membership,
   replayInputs,
   resolveJoinName,
   SPAWN_X,
@@ -18,6 +25,9 @@ import { spacetimedb } from './tables';
 
 /** The reducer context for this module's schema, for helpers that touch the db. */
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+/** The Identity type as this schema's rows carry it (not re-exported by the server SDK). */
+type SenderIdentity = Ctx['sender'];
 
 /**
  * The Clerk **development** instance. Its sign-up flow is open, so it must be
@@ -68,9 +78,45 @@ function ensureAccount(ctx: Ctx): void {
 }
 
 /**
- * Vets every connection before it can act in the world. Member privileges do
- * not exist yet beyond the account row created here; the approval gate that
- * will consume this verdict is still ahead (ROADMAP Phase 1, 承認制).
+ * Guarantees a member has a membership row in the space, alongside its
+ * account. The very first member ever seen becomes the approved admin — the
+ * seeding rationale lives on initialMembership in @maple/shared — and
+ * everyone after starts pending, which is what the waiting room shows.
+ *
+ * Also the re-application path: a removed member's rows are gone, so its
+ * next connection lands here and files a fresh pending membership.
+ */
+function ensureSpaceMember(ctx: Ctx): void {
+  if (ctx.db.spaceMember.identity.find(ctx.sender)) return;
+  ctx.db.spaceMember.insert({
+    identity: ctx.sender,
+    // The public projection of the account's persisted name (may predate
+    // this table on databases published before it existed).
+    displayName: ctx.db.account.identity.find(ctx.sender)?.displayName,
+    ...initialMembership(ctx.db.spaceMember.count() === 0n),
+    requestedAt: ctx.timestamp,
+    updatedAt: ctx.timestamp,
+  });
+}
+
+/** The sender-facing standing of an identity: its membership, or undefined for guests. */
+function membershipOf(ctx: Ctx, identity: SenderIdentity): Membership | undefined {
+  const row = ctx.db.spaceMember.identity.find(identity);
+  return row === null ? undefined : asMembership(row);
+}
+
+/** The guest-admission setting; a missing singleton row means the default (allowed). */
+function guestsAllowed(ctx: Ctx): boolean {
+  return ctx.db.spaceSetting.id.find(0)?.guestsAllowed ?? true;
+}
+
+/**
+ * Vets every connection before it can act in the world. Note this reducer
+ * only classifies and records — it never refuses admittable kinds. Refusals
+ * live in `join`: a SenderError thrown here would close the socket, and the
+ * client's reconnect loop (exponential backoff in sync.ts) would swallow the
+ * reason before any UI could show it. `join` refusals arrive as ordinary
+ * reducer errors on an open connection instead.
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
@@ -79,6 +125,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
   }
   if (auth.kind === 'member') {
     ensureAccount(ctx);
+    ensureSpaceMember(ctx);
     console.info(`member connected: sub=${auth.subject}`);
     return;
   }
@@ -170,9 +217,28 @@ function sweepExpiredRows(ctx: Ctx): void {
 // Spawning is an explicit opt-in, not a connection side effect: observer
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
+//
+// This is also where admission is enforced (承認制 / ゲスト入場設定): a
+// pending member or an unadmitted guest gets a SenderError, not a spawn.
+// Member-versus-guest is decided by the space_member row's existence —
+// only classified members ever get one (clientConnected), and senderAuth
+// is not readable outside clientConnected. Clients rule on the same
+// subscribed rows via decideAdmission and normally never send a join that
+// would be refused; this check is the authority they cannot bypass.
 export const join = spacetimedb.reducer((ctx) => {
+  const admission = evaluateJoin({
+    membership: membershipOf(ctx, ctx.sender),
+    guestsAllowed: guestsAllowed(ctx),
+  });
+  if (!admission.ok) {
+    throw new SenderError(`Join refused (${admission.reason})`);
+  }
   sweepExpiredRows(ctx);
+  spawnOrResume(ctx);
+});
 
+/** Resumes the sender's surviving player row, or spawns a fresh one. */
+function spawnOrResume(ctx: Ctx): void {
   const existing = ctx.db.player.identity.find(ctx.sender);
   // Precedence (persisted account name > resumed row's name > default) lives
   // in resolveJoinName, unit-tested in @maple/shared.
@@ -210,7 +276,7 @@ export const join = spacetimedb.reducer((ctx) => {
     allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
     updatedAt: ctx.timestamp,
   });
-});
+}
 
 // Renames the sender everywhere it is visible right now (its player row) and,
 // for members, persists the name on the account so every future join — any
@@ -219,23 +285,125 @@ export const join = spacetimedb.reducer((ctx) => {
 // Admission (name validation, refusing a rename with nowhere to land) is the
 // pure evaluateRename, unit-tested in @maple/shared — the same rules the
 // client checks against before sending.
-export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
+/**
+ * Persists a member's name on its account (the source of truth) and mirrors
+ * it onto the public space_member projection, so the admin UI and the
+ * waiting room show the same name the next join will spawn under.
+ */
+function persistMemberName(ctx: Ctx, name: string): void {
   const account = ctx.db.account.identity.find(ctx.sender);
+  if (account !== null) {
+    ctx.db.account.id.update({ ...account, displayName: name, updatedAt: ctx.timestamp });
+  }
+  const member = ctx.db.spaceMember.identity.find(ctx.sender);
+  if (member !== null) {
+    ctx.db.spaceMember.identity.update({ ...member, displayName: name, updatedAt: ctx.timestamp });
+  }
+}
+
+export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
+  const hasAccount = ctx.db.account.identity.find(ctx.sender) !== null;
   const row = ctx.db.player.identity.find(ctx.sender);
   const verdict = evaluateRename({
     rawName: name,
-    hasAccount: account !== null,
+    hasAccount,
     hasPlayerRow: row !== null,
   });
   if (!verdict.ok) {
     throw new SenderError(`Rename refused (${verdict.reason})`);
   }
-  if (account !== null) {
-    ctx.db.account.id.update({ ...account, displayName: verdict.name, updatedAt: ctx.timestamp });
-  }
+  persistMemberName(ctx, verdict.name);
   if (row !== null) {
     ctx.db.player.identity.update({ ...row, name: verdict.name, updatedAt: ctx.timestamp });
   }
+});
+
+// Flips a pending membership to approved (承認制の承認側). The admin check is
+// server-side and final — the client-side gating of the admin panel is
+// cosmetic. The approved member's waiting client sees its space_member row
+// update and joins on its own.
+export const approveMember = spacetimedb.reducer(
+  { identity: t.identity() },
+  (ctx, { identity }) => {
+    const target = ctx.db.spaceMember.identity.find(identity);
+    const verdict = evaluateApproval({
+      actor: membershipOf(ctx, ctx.sender),
+      target: target === null ? undefined : asMembership(target),
+    });
+    if (!verdict.ok) {
+      throw new SenderError(`approve_member refused (${verdict.reason})`);
+    }
+    if (target !== null) {
+      ctx.db.spaceMember.identity.update({
+        ...target,
+        status: 'approved',
+        updatedAt: ctx.timestamp,
+      });
+    }
+  },
+);
+
+// Removes a member entirely: membership, account, and any player row go in
+// one transaction, so the avatar leaves the world the moment the admin acts.
+// Deleting the account too is deliberate — the next connection recreates it
+// pending (= a fresh application) via ensureAccount/ensureSpaceMember, at
+// the cost of the removed member's persisted profile, which is what
+// "removal" should mean. The removed client reacts to its vanished
+// membership row by reconnecting into that re-application (decideAdmission's
+// `reapply`), rather than falling through to the guest path.
+export const removeMember = spacetimedb.reducer({ identity: t.identity() }, (ctx, { identity }) => {
+  const verdict = evaluateRemoval({
+    actor: membershipOf(ctx, ctx.sender),
+    target: membershipOf(ctx, identity),
+  });
+  if (!verdict.ok) {
+    throw new SenderError(`remove_member refused (${verdict.reason})`);
+  }
+  ctx.db.spaceMember.identity.delete(identity);
+  ctx.db.account.identity.delete(identity);
+  ctx.db.player.identity.delete(identity);
+});
+
+/** Writes the guest-admission flag to the settings singleton (id 0). */
+function upsertGuestsAllowed(ctx: Ctx, allowed: boolean): void {
+  const existing = ctx.db.spaceSetting.id.find(0);
+  if (existing) {
+    ctx.db.spaceSetting.id.update({ ...existing, guestsAllowed: allowed });
+    return;
+  }
+  ctx.db.spaceSetting.insert({ id: 0, guestsAllowed: allowed });
+}
+
+/**
+ * Deletes every player row that has no membership behind it — i.e. the
+ * guests. Identities are collected first so nothing is removed out from
+ * under the iterator (the sweepExpiredRows precedent).
+ */
+function sweepGuestPlayers(ctx: Ctx): void {
+  const guests = [];
+  for (const row of ctx.db.player.iter()) {
+    if (ctx.db.spaceMember.identity.find(row.identity) === null) {
+      guests.push(row.identity);
+    }
+  }
+  for (const identity of guests) ctx.db.player.identity.delete(identity);
+}
+
+// Toggles guest admission (ゲスト入場の許可/不許可 — the single-space
+// prototype of the future per-organization setting). Turning guests off
+// kicks the guests already in the world in the same transaction, rather
+// than letting them linger until their next join: the setting exists so an
+// admin can say "no guests in the room right now" (e.g. before a sensitive
+// conversation), and in an always-connected office "from the next entry"
+// may as well mean never. The kicked clients see the setting row flip and
+// show the refusal notice instead of auto-rejoining.
+export const setGuestsAllowed = spacetimedb.reducer({ allowed: t.bool() }, (ctx, { allowed }) => {
+  const verdict = evaluateSettingChange({ actor: membershipOf(ctx, ctx.sender) });
+  if (!verdict.ok) {
+    throw new SenderError(`set_guests_allowed refused (${verdict.reason})`);
+  }
+  upsertGuestsAllowed(ctx, allowed);
+  if (!allowed) sweepGuestPlayers(ctx);
 });
 
 // Keep the row on disconnect (marked offline) so a quick reconnect under the

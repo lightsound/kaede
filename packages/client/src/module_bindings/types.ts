@@ -36,3 +36,19 @@ export const Player = __t.object("Player", {
 });
 export type Player = __Infer<typeof Player>;
 
+export const SpaceMember = __t.object("SpaceMember", {
+  identity: __t.identity(),
+  displayName: __t.option(__t.string()),
+  status: __t.string(),
+  role: __t.string(),
+  requestedAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type SpaceMember = __Infer<typeof SpaceMember>;
+
+export const SpaceSetting = __t.object("SpaceSetting", {
+  id: __t.u8(),
+  guestsAllowed: __t.bool(),
+});
+export type SpaceSetting = __Infer<typeof SpaceSetting>;
+

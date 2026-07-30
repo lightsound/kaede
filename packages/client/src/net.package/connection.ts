@@ -83,10 +83,14 @@ export async function connect(
         // it would strand the guest identity after sign-out.
         if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
         const myIdHex = identity.toHexString();
+        // The world (player) plus everything admission is decided from:
+        // the member directory and the space settings. All three must be
+        // applied before we resolve, so the first admission decision rules
+        // on real rows rather than an empty cache.
         conn
           .subscriptionBuilder()
           .onApplied(() => resolve({ conn, myIdHex }))
-          .subscribe(tables.player);
+          .subscribe([tables.player, tables.spaceMember, tables.spaceSetting]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping
       // the identity here used to spawn a fresh character (and strand the old

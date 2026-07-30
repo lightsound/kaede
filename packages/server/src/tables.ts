@@ -30,6 +30,49 @@ export const spacetimedb = schema({
       updatedAt: t.timestamp(),
     },
   ),
+  // Membership of the single MVP space (承認制・管理者ロール — ROADMAP
+  // Phase 1). This is deliberately a table of its own rather than columns on
+  // `account`: an account is global (Discord model), while being admitted to
+  // a space is per-space — multi-tenancy (Phase 6) adds an org-scoped
+  // sibling additively and this table's shape already matches it.
+  //
+  // Public, unlike `account`, because it is how a client learns its own
+  // standing: a pending member subscribes to this table and sees its row
+  // flip to approved the instant an admin acts (no polling, no join
+  // retries), and the admin UI reads the pending list from the same rows.
+  // What it exposes — who is a member, their status/role and display name —
+  // is the space's member directory, comparable to what the public `player`
+  // table already shows about everyone in the world; the private
+  // identity-to-account-id mapping and future belongings stay on `account`.
+  // `displayName` is a projection of account.displayName (kept in sync by
+  // set_display_name) so admins can tell pending members apart.
+  //
+  // Re-linking an account to a new provider identity (see `account`) must
+  // rewrite `identity` here too.
+  spaceMember: table(
+    { name: 'space_member', public: true },
+    {
+      identity: t.identity().primaryKey(),
+      displayName: t.string().optional(),
+      status: t.string(), // MemberStatus in @maple/shared: 'pending' | 'approved'
+      role: t.string(), // MemberRole in @maple/shared: 'member' | 'admin'
+      requestedAt: t.timestamp(),
+      updatedAt: t.timestamp(),
+    },
+  ),
+  // Space-wide settings (単一スペースのグローバル設定 — the prototype of the
+  // per-organization settings VISION plans for). One row, id 0; a missing
+  // row reads as the defaults (guests allowed), so no init hook is needed
+  // and existing databases pick the defaults up on re-publish. Public so
+  // guests can see the admission setting flip in real time and enter the
+  // moment an admin re-allows them.
+  spaceSetting: table(
+    { name: 'space_setting', public: true },
+    {
+      id: t.u8().primaryKey(),
+      guestsAllowed: t.bool(),
+    },
+  ),
   player: table(
     { name: 'player', public: true },
     {

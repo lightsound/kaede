@@ -5,6 +5,7 @@ export * from './e2eHook';
 export * from './guard';
 export * from './input';
 export * from './map';
+export * from './membership';
 export * from './physics';
 export * from './player';
 export * from './types';
