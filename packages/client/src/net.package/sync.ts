@@ -85,6 +85,12 @@ export function startNet(
   // React's same-value bailout. `undefined` means "no own row is known".
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
+    // A disposed stack must never write to consumers it shares with its
+    // replacement (onOwnName feeds the App's state): the socket closes
+    // asynchronously, so this stack's row handlers can still fire after
+    // dispose() and would otherwise re-enable the rename form against a
+    // session that has no row yet.
+    if (disposed) return;
     if (name === lastOwnName) return;
     lastOwnName = name;
     // The label keeps its last text while the row is gone: the local sprite
@@ -262,16 +268,19 @@ export function startNet(
 
   return {
     dispose() {
+      // The final "no row" signal, sent before `disposed` flips because
+      // publishOwnName refuses to run on a disposed stack. It cannot come
+      // from the disconnect handler (which skips dropSession once disposed),
+      // and without it a consumer surviving this stack (App remounting the
+      // net on an auth change, StrictMode's probe mount) would carry a stale
+      // name into the next session and enable the rename form before that
+      // session has a row. Everything up to `disposed = true` is synchronous,
+      // so no late row event can slip in between.
+      publishOwnName(undefined);
       disposed = true;
       if (retryTimer !== undefined) clearTimeout(retryTimer);
       conn?.disconnect();
       conn = undefined;
-      // The disconnect handler skips dropSession once disposed, so publish
-      // the "no row" signal here too — otherwise a consumer surviving this
-      // stack (App remounting the net on an auth change, StrictMode's probe
-      // mount) would carry a stale name into the next session and enable the
-      // rename form before that session has a row.
-      publishOwnName(undefined);
     },
     setDisplayName(name) {
       if (!conn) {
