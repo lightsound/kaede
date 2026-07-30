@@ -93,6 +93,9 @@ jobs:
   # (docs/ROADMAP.md Phase 1, deploy flow).
   e2e:
     runs-on: ubuntu-latest
+    # Everything here is bounded (30s host wait, 120s per-test cap × 3
+    # attempts), so a run that exceeds this is hung, not slow.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -152,7 +155,8 @@ jobs:
       - name: E2E smoke test
         run: pnpm test:e2e
 
-      # Traces for the failed attempts are embedded in the HTML report; the
+      # Traces for the retried attempts (trace: on-first-retry — the very
+      # first attempt records none) are embedded in the HTML report; the
       # host log covers server-side failures (e.g. a rejected reducer call).
       # Copied into the report directory so the artifact root stays flat
       # (mixing absolute and relative upload paths roots the archive at /).
