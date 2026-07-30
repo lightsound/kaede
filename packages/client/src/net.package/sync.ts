@@ -87,8 +87,9 @@ export function startNet(
   function publishOwnName(name: string | undefined): void {
     if (name === lastOwnName) return;
     lastOwnName = name;
-    // The label keeps its last text while the row is gone: the sprite is not
-    // visible then, and the replacement row brings the authoritative name.
+    // The label keeps its last text while the row is gone: the local sprite
+    // stays visible while offline (the sim keeps running), so blanking the
+    // label would flash; the replacement row brings the authoritative name.
     if (name !== undefined) gameApp.setLocalPlayerName(name);
     onOwnName(name);
   }
@@ -265,6 +266,12 @@ export function startNet(
       if (retryTimer !== undefined) clearTimeout(retryTimer);
       conn?.disconnect();
       conn = undefined;
+      // The disconnect handler skips dropSession once disposed, so publish
+      // the "no row" signal here too — otherwise a consumer surviving this
+      // stack (App remounting the net on an auth change, StrictMode's probe
+      // mount) would carry a stale name into the next session and enable the
+      // rename form before that session has a row.
+      publishOwnName(undefined);
     },
     setDisplayName(name) {
       if (!conn) {
