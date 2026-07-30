@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DISPLAY_NAME_MAX_LENGTH, normalizeDisplayName } from '../src';
+import {
+  DISPLAY_NAME_MAX_LENGTH,
+  evaluateRename,
+  normalizeDisplayName,
+  resolveJoinName,
+} from '../src';
 
 describe('normalizeDisplayName', () => {
   it('accepts a plain name unchanged', () => {
@@ -49,5 +54,49 @@ describe('normalizeDisplayName', () => {
   // \s covers most controls (\t, \n); the verdict must be on the collapsed text.
   it('treats whitespace-class controls as whitespace, not as forbidden', () => {
     expect(normalizeDisplayName('a\tb')).toEqual({ ok: true, name: 'a b' });
+  });
+});
+
+describe('evaluateRename', () => {
+  it('accepts a valid name when either target exists', () => {
+    expect(evaluateRename({ rawName: '楓', hasAccount: true, hasPlayerRow: false })).toEqual({
+      ok: true,
+      name: '楓',
+    });
+    expect(evaluateRename({ rawName: '楓', hasAccount: false, hasPlayerRow: true })).toEqual({
+      ok: true,
+      name: '楓',
+    });
+  });
+
+  // A rename with nowhere to land must fail loudly, not report success while
+  // the name evaporates (a guest before join, or after its row was swept).
+  it('refuses a rename when neither an account nor a player row exists', () => {
+    expect(evaluateRename({ rawName: '楓', hasAccount: false, hasPlayerRow: false })).toEqual({
+      ok: false,
+      reason: 'no-target',
+    });
+  });
+
+  it('refuses an invalid name even with targets present', () => {
+    expect(evaluateRename({ rawName: ' ', hasAccount: true, hasPlayerRow: true })).toEqual({
+      ok: false,
+      reason: 'empty',
+    });
+  });
+});
+
+describe('resolveJoinName', () => {
+  // A rename made on another device must win over this device's stale row.
+  it('prefers the persisted account name over the resumed row name', () => {
+    expect(resolveJoinName('楓', 'Player-abc123', 'abc123def')).toBe('楓');
+  });
+
+  it('keeps the resumed row name when no account name is set', () => {
+    expect(resolveJoinName(undefined, '楓の樹', 'abc123def')).toBe('楓の樹');
+  });
+
+  it('derives the default from the identity when nothing else exists', () => {
+    expect(resolveJoinName(undefined, undefined, 'abc123def')).toBe('Player-abc123');
   });
 });

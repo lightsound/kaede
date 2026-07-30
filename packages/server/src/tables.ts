@@ -24,8 +24,8 @@ export const spacetimedb = schema({
     {
       id: t.u64().primaryKey().autoInc(),
       identity: t.identity().unique(),
-      // '' until the member first sets a name; join falls back to a default.
-      displayName: t.string(),
+      // Absent until the member first sets a name; join falls back to a default.
+      displayName: t.string().optional(),
       createdAt: t.timestamp(),
       updatedAt: t.timestamp(),
     },

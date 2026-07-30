@@ -46,3 +46,44 @@ export function normalizeDisplayName(raw: string): DisplayNameVerdict {
   if ([...name].length > DISPLAY_NAME_MAX_LENGTH) return { ok: false, reason: 'too-long' };
   return { ok: true, name };
 }
+
+/**
+ * Why a rename request was refused: a bad name, or `no-target` when the
+ * rename would land nowhere — the sender has no account (guests never do)
+ * and no player row (never joined, or the row was swept).
+ */
+export type RenameRejectReason = DisplayNameRejectReason | 'no-target';
+
+export type RenameVerdict = { ok: true; name: string } | { ok: false; reason: RenameRejectReason };
+
+/**
+ * Pure admission check for one rename request, shared so the server reducer
+ * stays a thin wrapper and the rule itself is unit-testable (the
+ * evaluateInputBatch precedent). A rename that would update neither the
+ * account nor the player row must fail loudly instead of reporting success
+ * while the name evaporates; either target alone is fine — a member whose
+ * row was swept still deserves its account update.
+ */
+export function evaluateRename(request: {
+  rawName: string;
+  hasAccount: boolean;
+  hasPlayerRow: boolean;
+}): RenameVerdict {
+  if (!request.hasAccount && !request.hasPlayerRow) return { ok: false, reason: 'no-target' };
+  return normalizeDisplayName(request.rawName);
+}
+
+/**
+ * The display name a joining player spawns under: the account's persisted
+ * name when one is set, else the name the (resumed) row already carries, else
+ * a default derived from the identity. Pure, so the precedence — a rename
+ * made on another device must win over a lingering row on this one — is
+ * unit-tested in shared rather than buried in the join reducer.
+ */
+export function resolveJoinName(
+  persisted: string | undefined,
+  existingName: string | undefined,
+  identityHex: string,
+): string {
+  return persisted ?? existingName ?? `Player-${identityHex.slice(0, 6)}`;
+}

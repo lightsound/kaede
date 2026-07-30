@@ -13,7 +13,7 @@ import {
 export const Account = __t.object("Account", {
   id: __t.u64(),
   identity: __t.identity(),
-  displayName: __t.string(),
+  displayName: __t.option(__t.string()),
   createdAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
 });

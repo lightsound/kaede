@@ -75,7 +75,10 @@ export function NameEditor({
       return;
     }
     setError(undefined);
-    setDraft('');
+    // The draft is deliberately NOT cleared: the success signal is the applied
+    // name coming back through the player row onto the avatar label, and a
+    // rename dropped in transit (disconnect racing the submit) leaves the text
+    // here to resubmit rather than silently discarding it.
     onSubmit(verdict.name);
   };
 

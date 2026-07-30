@@ -44,9 +44,8 @@ test('表示名を変更すると両ブラウザに反映され、リロード�
     })
     .toBe(NEW_NAME);
 
-  // Reload resumes the same identity (sessionStorage token), so the server
-  // hands back the row still carrying the name.
-  await pageA.reload();
+  // A fresh navigation resumes the same identity (sessionStorage token), so
+  // the server hands back the row still carrying the name.
   await enterWorld(pageA);
   expect((await snapshot(pageA)).local.name).toBe(NEW_NAME);
 

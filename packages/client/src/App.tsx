@@ -29,15 +29,15 @@ export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const getAuthToken = useContext(AuthTokenContext);
-  // A ref, not state: the net stack is created inside the effect, and the
-  // name form only needs it at submit time.
+  // The one handle on the net stack: created inside the effect, disposed by
+  // its cleanup, read by the name form at submit time. A ref rather than
+  // state because nothing needs to re-render when it changes.
   const netRef = useRef<Net>(undefined);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     let game: GameApp | undefined;
-    let net: Net | undefined;
     let cancelled = false;
 
     void (async () => {
@@ -49,13 +49,12 @@ export function App() {
         return;
       }
       game = created;
-      net = startNet(created, setStatus, getAuthToken);
-      netRef.current = net;
+      netRef.current = startNet(created, setStatus, getAuthToken);
     })();
 
     return () => {
       cancelled = true;
-      net?.dispose();
+      netRef.current?.dispose();
       netRef.current = undefined;
       game?.destroy();
     };

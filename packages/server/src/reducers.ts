@@ -5,9 +5,10 @@ import {
   classifyConnection,
   DEFAULT_MAP,
   evaluateInputBatch,
+  evaluateRename,
   isExpiredRow,
-  normalizeDisplayName,
   replayInputs,
+  resolveJoinName,
   SPAWN_X,
   SPAWN_Y,
   stateFromRow,
@@ -55,7 +56,7 @@ function ensureAccount(ctx: Ctx): void {
   ctx.db.account.insert({
     id: 0n, // 0 asks autoInc to assign the real id
     identity: ctx.sender,
-    displayName: '',
+    displayName: undefined,
     createdAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
   });
@@ -161,33 +162,27 @@ function sweepExpiredRows(ctx: Ctx): void {
   for (const identity of stale) ctx.db.player.identity.delete(identity);
 }
 
-/**
- * The sender's persisted display name, or undefined when there is nothing to
- * apply: guests have no account, and a fresh member has not named itself yet.
- */
-function persistedDisplayName(ctx: Ctx): string | undefined {
-  const account = ctx.db.account.identity.find(ctx.sender);
-  if (!account || account.displayName === '') return undefined;
-  return account.displayName;
-}
-
 // Spawning is an explicit opt-in, not a connection side effect: observer
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
 export const join = spacetimedb.reducer((ctx) => {
   sweepExpiredRows(ctx);
 
-  // A member's account name wins over whatever the row last said, so a rename
-  // made on another device lands here on the next (re)join.
-  const persisted = persistedDisplayName(ctx);
-
   const existing = ctx.db.player.identity.find(ctx.sender);
+  // Precedence (persisted account name > resumed row's name > default) lives
+  // in resolveJoinName, unit-tested in @maple/shared.
+  const name = resolveJoinName(
+    ctx.db.account.identity.find(ctx.sender)?.displayName,
+    existing?.name,
+    ctx.sender.toHexString(),
+  );
+
   if (existing) {
     // Reload / network blip within the retention window: resume the saved
     // character where it stood, with a fresh input allowance.
     ctx.db.player.identity.update({
       ...existing,
-      name: persisted ?? existing.name,
+      name,
       online: true,
       allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
       updatedAt: ctx.timestamp,
@@ -195,7 +190,6 @@ export const join = spacetimedb.reducer((ctx) => {
     return;
   }
 
-  const name = persisted ?? `Player-${ctx.sender.toHexString().slice(0, 6)}`;
   ctx.db.player.insert({
     identity: ctx.sender,
     name,
@@ -217,20 +211,23 @@ export const join = spacetimedb.reducer((ctx) => {
 // for members, persists the name on the account so every future join — any
 // device, any reconnect — spawns under it. Guests have no account, so their
 // rename lives only as long as their per-tab identity's player row.
-// Validation is the shared normalizeDisplayName, the same rules the client
-// checks against before sending.
+// Admission (name validation, refusing a rename with nowhere to land) is the
+// pure evaluateRename, unit-tested in @maple/shared — the same rules the
+// client checks against before sending.
 export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
-  const verdict = normalizeDisplayName(name);
-  if (!verdict.ok) {
-    throw new SenderError(`Invalid display name (${verdict.reason})`);
-  }
-
   const account = ctx.db.account.identity.find(ctx.sender);
+  const row = ctx.db.player.identity.find(ctx.sender);
+  const verdict = evaluateRename({
+    rawName: name,
+    hasAccount: account !== null,
+    hasPlayerRow: row !== null,
+  });
+  if (!verdict.ok) {
+    throw new SenderError(`Rename refused (${verdict.reason})`);
+  }
   if (account) {
     ctx.db.account.id.update({ ...account, displayName: verdict.name, updatedAt: ctx.timestamp });
   }
-
-  const row = ctx.db.player.identity.find(ctx.sender);
   if (row) {
     ctx.db.player.identity.update({ ...row, name: verdict.name, updatedAt: ctx.timestamp });
   }
