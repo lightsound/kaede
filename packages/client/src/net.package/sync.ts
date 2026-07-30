@@ -83,14 +83,12 @@ export function startNet(
   // consumer cannot drift apart, and so the ack firehose (every own-row
   // update, several per second) is deduplicated here instead of leaning on
   // React's same-value bailout. `undefined` means "no own row is known".
+  // Caller contract: any caller on an async event path must be
+  // dispose-guarded at its entry point (see wireSession's handlers) —
+  // dispose() itself is the only caller that may run after the flip, and
+  // only with `undefined`.
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
-    // A disposed stack must never write to consumers it shares with its
-    // replacement (onOwnName feeds the App's state): the socket closes
-    // asynchronously, so this stack's row handlers can still fire after
-    // dispose() and would otherwise re-enable the rename form against a
-    // session that has no row yet.
-    if (disposed) return;
     if (name === lastOwnName) return;
     lastOwnName = name;
     // The label keeps its last text while the row is gone: the local sprite
@@ -183,7 +181,16 @@ export function startNet(
       else recordRemote(idHex, row);
     }
 
+    // Every handler below refuses to run once disposed: the socket closes
+    // asynchronously, so this session's row events can still be delivered
+    // after dispose(), and acting on one would drive the destroyed Pixi app
+    // (gameApp.start, prediction), re-install the e2e hook from the doomed
+    // instance, or write to consumers shared with the replacement session
+    // (onOwnName feeds the App's rename form). Guarding the event entry
+    // points covers every side effect at once; the synchronous seeding above
+    // needs no guard because dispose() cannot interleave with it.
     c.db.player.onInsert((_ctx, row) => {
+      if (disposed) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
         handleOwnRow(row);
@@ -192,6 +199,7 @@ export function startNet(
       recordRemote(idHex, row);
     });
     c.db.player.onUpdate((_ctx, _old, row) => {
+      if (disposed) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
         // An own-row update IS the acknowledgement (row.tick = applied count).
@@ -204,6 +212,7 @@ export function startNet(
       recordRemote(idHex, row);
     });
     c.db.player.onDelete((_ctx, row) => {
+      if (disposed) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
         // The retention sweep reclaimed our row: a backgrounded tab stops
@@ -268,19 +277,18 @@ export function startNet(
 
   return {
     dispose() {
-      // The final "no row" signal, sent before `disposed` flips because
-      // publishOwnName refuses to run on a disposed stack. It cannot come
-      // from the disconnect handler (which skips dropSession once disposed),
-      // and without it a consumer surviving this stack (App remounting the
-      // net on an auth change, StrictMode's probe mount) would carry a stale
-      // name into the next session and enable the rename form before that
-      // session has a row. Everything up to `disposed = true` is synchronous,
-      // so no late row event can slip in between.
-      publishOwnName(undefined);
       disposed = true;
       if (retryTimer !== undefined) clearTimeout(retryTimer);
       conn?.disconnect();
       conn = undefined;
+      // The final "no row" signal. It cannot come from the disconnect
+      // handler (which skips dropSession once disposed), and without it a
+      // consumer surviving this stack (App remounting the net on an auth
+      // change, StrictMode's probe mount) would carry a stale name into the
+      // next session and enable the rename form before that session has a
+      // row. Nothing can overwrite it: the row handlers refuse to run once
+      // disposed.
+      publishOwnName(undefined);
     },
     setDisplayName(name) {
       if (!conn) {
