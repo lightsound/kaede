@@ -182,6 +182,8 @@ Gather/oVice に対する明確な差別化。
   プラン状態は Webhook 中継で SpacetimeDB に同期 — VISION 参照）
 - アカウントの本人削除フロー（Clerk のユーザー削除 Webhook → Worker 中継 →
   SpacetimeDB 側のデータ掃除）
+- 英語対応（Paraglide に en ロケールを追加。翻訳の自動化として
+  **Lingo.dev CLI** をこのタイミングで評価 — VISION の i18n 行を参照）
 - モバイル対応
 - `CallProvider` のコスト構造見直し（RealtimeKit 継続 or LiveKit/セルフホスト移行）
 
