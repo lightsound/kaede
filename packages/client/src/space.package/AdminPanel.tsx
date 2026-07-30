@@ -1,6 +1,14 @@
 // fallow-ignore-file coverage-gaps -- a React panel over the subscribed member directory; needs a DOM, and no DOM test environment is configured. The authority for every action here is server-side (evaluateApproval / evaluateRemoval / evaluateSettingChange, unit-tested in @maple/shared)
 import type { CSSProperties } from 'react';
 import type { SpaceMemberView } from '../net.package';
+import {
+  UI_BUTTON_BG,
+  UI_FONT,
+  UI_GOLD,
+  UI_GOLD_BORDER,
+  UI_PANEL_BG,
+  UI_TEXT_COLOR,
+} from '../theme';
 
 const panelStyle: CSSProperties = {
   position: 'absolute',
@@ -11,15 +19,15 @@ const panelStyle: CSSProperties = {
   overflowY: 'auto',
   padding: '10px 12px',
   borderRadius: 8,
-  background: 'rgba(11, 13, 18, 0.85)',
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  color: '#eceff4',
-  font: '13px sans-serif',
+  background: UI_PANEL_BG,
+  border: UI_GOLD_BORDER,
+  color: UI_TEXT_COLOR,
+  font: UI_FONT,
 };
 
 const headingStyle: CSSProperties = {
-  font: 'bold 13px sans-serif',
-  color: '#d8a657',
+  font: `bold ${UI_FONT}`,
+  color: UI_GOLD,
   margin: '8px 0 4px',
 };
 
@@ -40,9 +48,9 @@ const nameStyle: CSSProperties = {
 const buttonStyle: CSSProperties = {
   padding: '2px 8px',
   borderRadius: 6,
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  background: 'rgba(216, 166, 87, 0.15)',
-  color: '#eceff4',
+  border: UI_GOLD_BORDER,
+  background: UI_BUTTON_BG,
+  color: UI_TEXT_COLOR,
   font: 'inherit',
   cursor: 'pointer',
   flexShrink: 0,
@@ -71,8 +79,8 @@ export function AdminPanel({
   /** The whole member directory, oldest first (see SpaceView.members). */
   members: SpaceMemberView[];
   guestsAllowed: boolean;
-  onApprove: (idHex: string) => void;
-  onRemove: (idHex: string) => void;
+  onApprove: (member: SpaceMemberView) => void;
+  onRemove: (member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
 }) {
   const pending = members.filter((m) => m.status === 'pending');
@@ -97,10 +105,10 @@ export function AdminPanel({
         <div key={member.idHex} style={rowStyle}>
           <span style={nameStyle}>{labelOf(member)}</span>
           <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            <button type="button" style={buttonStyle} onClick={() => onApprove(member.idHex)}>
+            <button type="button" style={buttonStyle} onClick={() => onApprove(member)}>
               承認
             </button>
-            <button type="button" style={buttonStyle} onClick={() => onRemove(member.idHex)}>
+            <button type="button" style={buttonStyle} onClick={() => onRemove(member)}>
               削除
             </button>
           </span>
@@ -116,7 +124,7 @@ export function AdminPanel({
           </span>
           {/* Admins are not removable (server-enforced too), so no dead button. */}
           {member.role !== 'admin' && (
-            <button type="button" style={buttonStyle} onClick={() => onRemove(member.idHex)}>
+            <button type="button" style={buttonStyle} onClick={() => onRemove(member)}>
               削除
             </button>
           )}

@@ -5,6 +5,7 @@ import { createGameApp, type GameApp } from './game.package';
 import { type ConnectionStatus, type Net, type SpaceView, startNet } from './net.package';
 import { RenameControl } from './profile.package';
 import { AdminSection, AdmissionOverlay } from './space.package';
+import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
 
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
   connecting: 'サーバーに接続中…',
@@ -18,10 +19,10 @@ const overlayStyle: CSSProperties = {
   transform: 'translateX(-50%)',
   padding: '6px 14px',
   borderRadius: 999,
-  background: 'rgba(11, 13, 18, 0.85)',
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  color: '#eceff4',
-  font: '13px sans-serif',
+  background: UI_PANEL_BG,
+  border: UI_GOLD_BORDER,
+  color: UI_TEXT_COLOR,
+  font: UI_FONT,
   whiteSpace: 'nowrap',
   pointerEvents: 'none',
 };
@@ -88,7 +89,13 @@ export function App() {
         self={space?.self}
         onSubmit={(name) => netRef.current?.setDisplayName(name)}
       />
-      <AdminSection connected={connected} space={space} netRef={netRef} />
+      <AdminSection
+        connected={connected}
+        space={space}
+        onApprove={(member) => netRef.current?.approveMember(member.identity)}
+        onRemove={(member) => netRef.current?.removeMember(member.identity)}
+        onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
+      />
     </div>
   );
 }

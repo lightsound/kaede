@@ -5,6 +5,15 @@ import {
   normalizeDisplayName,
 } from '@maple/shared';
 import { type CSSProperties, type FormEvent, useState } from 'react';
+import {
+  UI_BUTTON_BG,
+  UI_ERROR_COLOR,
+  UI_FONT,
+  UI_GOLD_BORDER,
+  UI_GOLD_BORDER_SOFT,
+  UI_PANEL_BG,
+  UI_TEXT_COLOR,
+} from '../theme';
 
 const REJECT_MESSAGES: Record<DisplayNameRejectReason, string> = {
   empty: '表示名を入力してください',
@@ -21,33 +30,33 @@ const formStyle: CSSProperties = {
   gap: 6,
   padding: '6px 8px',
   borderRadius: 8,
-  background: 'rgba(11, 13, 18, 0.85)',
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  font: '13px sans-serif',
+  background: UI_PANEL_BG,
+  border: UI_GOLD_BORDER,
+  font: UI_FONT,
 };
 
 const inputStyle: CSSProperties = {
   width: 160,
   padding: '4px 8px',
   borderRadius: 6,
-  border: '1px solid rgba(216, 166, 87, 0.4)',
+  border: UI_GOLD_BORDER_SOFT,
   background: 'rgba(0, 0, 0, 0.4)',
-  color: '#eceff4',
+  color: UI_TEXT_COLOR,
   font: 'inherit',
 };
 
 const buttonStyle: CSSProperties = {
   padding: '4px 10px',
   borderRadius: 6,
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  background: 'rgba(216, 166, 87, 0.15)',
-  color: '#eceff4',
+  border: UI_GOLD_BORDER,
+  background: UI_BUTTON_BG,
+  color: UI_TEXT_COLOR,
   font: 'inherit',
   cursor: 'pointer',
 };
 
 const errorStyle: CSSProperties = {
-  color: '#e8a2a2',
+  color: UI_ERROR_COLOR,
 };
 
 /**

@@ -2,7 +2,11 @@
 import type { SpaceMemberView } from '../net.package';
 import { NameEditor } from './NameEditor';
 
-/** The placeholder: the in-world name, else the name on the membership. */
+/**
+ * The placeholder: the in-world name, else the name on the membership.
+ * A separate function (not inlined) to keep the untestable component under
+ * the CRAP budget fallow enforces for uncovered functions.
+ */
 function currentNameOf(
   ownName: string | undefined,
   self: SpaceMemberView | undefined,

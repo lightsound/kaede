@@ -1,4 +1,5 @@
 // fallow-ignore-file coverage-gaps -- opens a SpacetimeDB WebSocket; needs a running host, not a unit test
+import type { Identity } from 'spacetimedb';
 import { DbConnection, tables } from '../module_bindings';
 
 // Production builds default to Maincloud so a missing env var can't silently
@@ -22,6 +23,9 @@ const TOKEN_KEY = 'maple.spacetime.token';
 
 export interface Connected {
   conn: DbConnection;
+  /** This connection's identity: the key into own rows and reducer targets. */
+  myIdentity: Identity;
+  /** Its hex form, pre-computed once: the map key for remote-player views. */
   myIdHex: string;
 }
 
@@ -82,14 +86,13 @@ export async function connect(
         // be re-minted per connect, and overwriting the anonymous token with
         // it would strand the guest identity after sign-out.
         if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
-        const myIdHex = identity.toHexString();
         // The world (player) plus everything admission is decided from:
         // the member directory and the space settings. All three must be
         // applied before we resolve, so the first admission decision rules
         // on real rows rather than an empty cache.
         conn
           .subscriptionBuilder()
-          .onApplied(() => resolve({ conn, myIdHex }))
+          .onApplied(() => resolve({ conn, myIdentity: identity, myIdHex: identity.toHexString() }))
           .subscribe([tables.player, tables.spaceMember, tables.spaceSetting]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping

@@ -25,10 +25,19 @@ async function sql(query: string): Promise<void> {
   await exec(SPACETIME_BIN, ['sql', 'maple-like', query, '--server', 'local']);
 }
 
-/** Sets the guest-admission flag by replacing the settings singleton (id 0). */
-async function setGuestsAllowed(allowed: boolean): Promise<void> {
+/**
+ * Replaces the settings singleton (id 0). Only safe while no browser under
+ * test is connected: between the DELETE and the INSERT the row is missing,
+ * which reads as the default (guests allowed) to live subscribers.
+ */
+async function seedGuestsAllowed(allowed: boolean): Promise<void> {
   await sql('DELETE FROM space_setting WHERE id = 0');
   await sql(`INSERT INTO space_setting (id, guests_allowed) VALUES (0, ${allowed})`);
+}
+
+/** Flips the seeded singleton in one atomic statement; safe mid-test. */
+async function setGuestsAllowed(allowed: boolean): Promise<void> {
+  await sql(`UPDATE space_setting SET guests_allowed = ${allowed} WHERE id = 0`);
 }
 
 /**
@@ -41,7 +50,7 @@ async function setGuestsAllowed(allowed: boolean): Promise<void> {
  * identities.
  */
 test('ゲスト入場を不許可にすると入場できず、再許可で自動的に入場する', async ({ browser }) => {
-  await setGuestsAllowed(false);
+  await seedGuestsAllowed(false);
   try {
     const context = await browser.newContext();
     const page = await context.newPage();

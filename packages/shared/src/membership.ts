@@ -66,10 +66,16 @@ export function isActingAdmin(membership: Membership | undefined): boolean {
 }
 
 /**
- * Why a join was refused: the member has not been approved yet, or the
- * connection has no membership and guests are currently not admitted.
+ * The one vocabulary for "may this client be in the world": `admitted`, or
+ * one of the two refusals (a member not approved yet / a guest while guests
+ * are not admitted). The same three words name the server's join verdict,
+ * the client's decision, and what the UI shows, so a state never gets
+ * re-spelled on its way through the stack.
  */
-export type JoinRefusalReason = 'pending-approval' | 'guests-not-allowed';
+export type Admission = 'admitted' | 'pending-approval' | 'guests-not-allowed';
+
+/** Why a join was refused: every admission except being admitted. */
+export type JoinRefusalReason = Exclude<Admission, 'admitted'>;
 
 export type JoinVerdict = { ok: true } | { ok: false; reason: JoinRefusalReason };
 
@@ -153,19 +159,17 @@ export function evaluateSettingChange(request: {
  * What the client should do about entering the world, decided from the same
  * subscribed state the server rules on (space_member / space_setting), so the
  * client never sends a join it can predict will be refused, and reacts the
- * moment an approval or a setting flip arrives:
+ * moment an approval or a setting flip arrives.
  *
- * - `join`: allowed in — send join (or re-join after a retention sweep).
- * - `wait-approval`: membership is pending — show the waiting room.
- * - `guest-refused`: no membership and guests are not admitted — show the
- *   refusal notice.
- * - `reapply`: this session had a membership and it vanished, i.e. an admin
- *   removed us. Reconnect: the fresh connection recreates the account and a
- *   pending membership (= a re-application). Deciding this here also stops
- *   the own-row-deleted auto-rejoin from slipping the removed member back in
- *   as a guest in the same session.
+ * The decision is the admission itself (`admitted` = enter the world, a
+ * refusal = show it), plus one client-only case: `reapply` — this session
+ * had a membership and it vanished, i.e. an admin removed us. Reconnect:
+ * the fresh connection recreates the account and a pending membership (= a
+ * re-application). Deciding this here also stops the own-row-deleted
+ * auto-rejoin from slipping the removed member back in as a guest in the
+ * same session.
  */
-export type AdmissionDecision = 'join' | 'wait-approval' | 'guest-refused' | 'reapply';
+export type AdmissionDecision = Admission | 'reapply';
 
 export function decideAdmission(request: {
   membership: Membership | undefined;
@@ -175,18 +179,14 @@ export function decideAdmission(request: {
 }): AdmissionDecision {
   if (request.membership === undefined && request.wasMember) return 'reapply';
   const verdict = evaluateJoin(request);
-  if (verdict.ok) return 'join';
-  return verdict.reason === 'pending-approval' ? 'wait-approval' : 'guest-refused';
+  return verdict.ok ? 'admitted' : verdict.reason;
 }
 
 /**
- * What the UI should say about an admission decision. `reapply` reads as
- * pending-approval: the reapply reconnect files a fresh pending membership,
- * so the waiting room is the truthful UI for the moment in between.
+ * The guest-admission flag a (possibly missing) settings singleton means:
+ * an absent row reads as the default, allowed. Shared so the server's join
+ * rule and the client's mirror of it cannot drift on the default.
  */
-export type Admission = 'admitted' | 'pending-approval' | 'guest-refused';
-
-export function admissionOf(decision: AdmissionDecision): Admission {
-  if (decision === 'join') return 'admitted';
-  return decision === 'guest-refused' ? 'guest-refused' : 'pending-approval';
+export function guestsAllowedFrom(row: { guestsAllowed: boolean } | undefined): boolean {
+  return row?.guestsAllowed ?? true;
 }

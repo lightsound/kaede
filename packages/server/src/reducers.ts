@@ -11,6 +11,7 @@ import {
   evaluateRemoval,
   evaluateRename,
   evaluateSettingChange,
+  guestsAllowedFrom,
   initialMembership,
   isExpiredRow,
   type Membership,
@@ -105,9 +106,9 @@ function membershipOf(ctx: Ctx, identity: SenderIdentity): Membership | undefine
   return row === null ? undefined : asMembership(row);
 }
 
-/** The guest-admission setting; a missing singleton row means the default (allowed). */
+/** The guest-admission setting, read with the shared missing-row default. */
 function guestsAllowed(ctx: Ctx): boolean {
-  return ctx.db.spaceSetting.id.find(0)?.guestsAllowed ?? true;
+  return guestsAllowedFrom(ctx.db.spaceSetting.id.find(0) ?? undefined);
 }
 
 /**
@@ -278,13 +279,6 @@ function spawnOrResume(ctx: Ctx): void {
   });
 }
 
-// Renames the sender everywhere it is visible right now (its player row) and,
-// for members, persists the name on the account so every future join — any
-// device, any reconnect — spawns under it. Guests have no account, so their
-// rename lives only as long as their per-tab identity's player row.
-// Admission (name validation, refusing a rename with nowhere to land) is the
-// pure evaluateRename, unit-tested in @maple/shared — the same rules the
-// client checks against before sending.
 /**
  * Persists a member's name on its account (the source of truth) and mirrors
  * it onto the public space_member projection, so the admin UI and the
@@ -301,6 +295,13 @@ function persistMemberName(ctx: Ctx, name: string): void {
   }
 }
 
+// Renames the sender everywhere it is visible right now (its player row) and,
+// for members, persists the name on the account so every future join — any
+// device, any reconnect — spawns under it. Guests have no account, so their
+// rename lives only as long as their per-tab identity's player row.
+// Admission (name validation, refusing a rename with nowhere to land) is the
+// pure evaluateRename, unit-tested in @maple/shared — the same rules the
+// client checks against before sending.
 export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
   const hasAccount = ctx.db.account.identity.find(ctx.sender) !== null;
   const row = ctx.db.player.identity.find(ctx.sender);
@@ -333,13 +334,16 @@ export const approveMember = spacetimedb.reducer(
     if (!verdict.ok) {
       throw new SenderError(`approve_member refused (${verdict.reason})`);
     }
-    if (target !== null) {
-      ctx.db.spaceMember.identity.update({
-        ...target,
-        status: 'approved',
-        updatedAt: ctx.timestamp,
-      });
+    if (target === null) {
+      // Unreachable — evaluateApproval refuses a missing target as
+      // no-such-member — but narrowing must not read as a silent no-op.
+      throw new SenderError('approve_member refused (no-such-member)');
     }
+    ctx.db.spaceMember.identity.update({
+      ...target,
+      status: 'approved',
+      updatedAt: ctx.timestamp,
+    });
   },
 );
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  admissionOf,
   asMembership,
   decideAdmission,
   evaluateApproval,
   evaluateJoin,
   evaluateRemoval,
   evaluateSettingChange,
+  guestsAllowedFrom,
   initialMembership,
   isActingAdmin,
   type Membership,
@@ -73,6 +73,14 @@ describe('evaluateJoin', () => {
       ok: false,
       reason: 'guests-not-allowed',
     });
+  });
+
+  // The setting rides a singleton row that does not exist until an admin
+  // first touches it; no row must mean the default, allowed.
+  it('reads a missing settings row as the default (guests allowed)', () => {
+    expect(guestsAllowedFrom(undefined)).toBe(true);
+    expect(guestsAllowedFrom({ guestsAllowed: false })).toBe(false);
+    expect(guestsAllowedFrom({ guestsAllowed: true })).toBe(true);
   });
 
   // Turning guests away must never lock members out of their own office.
@@ -176,24 +184,24 @@ describe('evaluateSettingChange', () => {
 });
 
 describe('decideAdmission', () => {
-  it('joins when the server would admit', () => {
+  it('enters when the server would admit', () => {
     expect(
       decideAdmission({ membership: APPROVED_MEMBER, wasMember: true, guestsAllowed: false }),
-    ).toBe('join');
+    ).toBe('admitted');
     expect(decideAdmission({ membership: undefined, wasMember: false, guestsAllowed: true })).toBe(
-      'join',
+      'admitted',
     );
   });
 
   it('waits while the membership is pending', () => {
     expect(
       decideAdmission({ membership: PENDING_MEMBER, wasMember: true, guestsAllowed: true }),
-    ).toBe('wait-approval');
+    ).toBe('pending-approval');
   });
 
   it('shows the refusal to a guest while guests are not admitted', () => {
     expect(decideAdmission({ membership: undefined, wasMember: false, guestsAllowed: false })).toBe(
-      'guest-refused',
+      'guests-not-allowed',
     );
   });
 
@@ -208,19 +216,5 @@ describe('decideAdmission', () => {
     expect(decideAdmission({ membership: undefined, wasMember: true, guestsAllowed: false })).toBe(
       'reapply',
     );
-  });
-});
-
-describe('admissionOf', () => {
-  it('maps each decision onto what the UI should say', () => {
-    expect(admissionOf('join')).toBe('admitted');
-    expect(admissionOf('wait-approval')).toBe('pending-approval');
-    expect(admissionOf('guest-refused')).toBe('guest-refused');
-  });
-
-  // The reapply reconnect files a fresh pending membership, so the waiting
-  // room is the truthful UI for the moment in between.
-  it('shows the waiting room during a reapply', () => {
-    expect(admissionOf('reapply')).toBe('pending-approval');
   });
 });
