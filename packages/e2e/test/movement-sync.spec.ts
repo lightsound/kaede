@@ -25,11 +25,12 @@ const remoteCount = async (page: Page) => (await snapshot(page)).remotePlayers.l
 /** The single remote player's x, or undefined during a transient empty list. */
 const remoteX = async (page: Page) => (await snapshot(page)).remotePlayers[0]?.x;
 
-// Hold ArrowRight for WALK_MS on the flat ground around the spawn. Half the
-// ideal distance keeps the assertion far from both "did not move" and the
-// tick jitter of a loaded CI runner.
-const WALK_MS = 1000;
-const MIN_WALK_DISTANCE = (MOVE_SPEED * WALK_MS) / 1000 / 2;
+// Walk far enough that sync is unmistakable: half a second of walking on the
+// flat ground around the spawn. The key is held until the position actually
+// passes this mark (not for a fixed duration), so a low-FPS CI renderer —
+// where MAX_FRAME caps how much simulation each frame may advance — only
+// makes the walk take longer, never fail.
+const MIN_WALK_DISTANCE = MOVE_SPEED / 2;
 
 test('ゲスト2ブラウザで入場すると互いに見え、移動が同期する', async ({ browser }) => {
   // Two isolated contexts = two tabs with their own sessionStorage, so the
@@ -48,17 +49,16 @@ test('ゲスト2ブラウザで入場すると互いに見え、移動が同期�
 
   const startX = (await snapshot(pageA)).local.x;
 
-  // Walk player A to the right for a fixed duration; movement is time-based
-  // (held key sampled at 60Hz), so this wait is inherent to the scenario.
+  // Walk player A to the right until its own prediction has covered the
+  // distance (this poll is itself the "A moved" assertion).
   await pageA.keyboard.down('ArrowRight');
-  await pageA.waitForTimeout(WALK_MS);
+  await expect
+    .poll(async () => (await snapshot(pageA)).local.x, { timeout: 15_000 })
+    .toBeGreaterThan(startX + MIN_WALK_DISTANCE);
   await pageA.keyboard.up('ArrowRight');
 
-  // A's own prediction moved...
-  expect((await snapshot(pageA)).local.x).toBeGreaterThan(startX + MIN_WALK_DISTANCE);
-
-  // ...and B's interpolated view of A follows. (?? -Infinity: an offline
-  // flicker empties the remote list; keep polling instead of throwing.)
+  // B's interpolated view of A follows. (?? -Infinity: an offline flicker
+  // empties the remote list; keep polling instead of throwing.)
   await expect
     .poll(async () => (await remoteX(pageB)) ?? Number.NEGATIVE_INFINITY, { timeout: 10_000 })
     .toBeGreaterThan(startX + MIN_WALK_DISTANCE);

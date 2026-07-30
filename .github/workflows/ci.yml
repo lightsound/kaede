@@ -114,6 +114,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          # A partial hit still reports cache-hit != 'true', so the full
+          # install path runs and re-saves — but skips browser builds that are
+          # already present instead of re-downloading ~100MB per lockfile bump.
+          restore-keys: playwright-${{ runner.os }}-
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -150,12 +154,18 @@ jobs:
 
       # Traces for the failed attempts are embedded in the HTML report; the
       # host log covers server-side failures (e.g. a rejected reducer call).
+      # Copied into the report directory so the artifact root stays flat
+      # (mixing absolute and relative upload paths roots the archive at /).
+      - name: Collect failure artifacts
+        if: failure()
+        run: |
+          mkdir -p packages/e2e/playwright-report
+          cp /tmp/spacetimedb.log packages/e2e/playwright-report/spacetimedb.log || true
+
       - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-failure-artifacts
-          path: |
-            packages/e2e/playwright-report/
-            /tmp/spacetimedb.log
+          path: packages/e2e/playwright-report/
           retention-days: 14
