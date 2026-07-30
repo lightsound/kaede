@@ -31,9 +31,18 @@
 **ゴール**: メンバーが複数デバイスから同じ名前・同じアバターで入れる。
 メンバー以外は入れない。
 
-- **最初のタスク: Clerk ↔ SpacetimeDB 接続スパイク**（JWT テンプレート＋issuer 登録
-  →接続→再接続時のトークン再取得までを検証。実装に無理がある場合は
-  フォールバック第一候補 **Kinde** で同スパイクをやり直し、VISION を更新）
+- **最初のタスク: Clerk ↔ SpacetimeDB 接続スパイク** ✅ **完了（2026-07-30）**:
+  実装に無理はなく、フォールバック（Kinde）は不要。検証内容: ①Clerk 開発
+  インスタンスに JWT テンプレート `spacetimedb`（`aud: kaede-spacetimedb`、
+  寿命 60 秒）を Backend API で作成 ②SpacetimeDB に issuer の事前登録機構は
+  なく、モジュール側 `clientConnected` リデューサーで issuer＋audience を検証
+  するのが公式ベストプラクティスと確認（実装済み） ③フレッシュトークンでの
+  再接続 2 回で**同一 Identity** を確認（Identity は iss＋sub から導出）
+  ④aud なしトークン（素のセッショントークン）はモジュールが拒否
+  ⑤トークンなしのゲスト接続は従来どおり別 Identity で入れる。
+  補足: ローカル standalone のサーバー発行トークン（匿名 Identity）の issuer
+  は `localhost`。クライアントは接続試行のたびに `getToken({ skipCache })` で
+  新トークンを取得する配線に変更済み
 - Clerk ＋ Google ログイン（既存の `sessionStorage` 匿名トークン方式を置換。
   再接続のたびに `getToken()` で新トークンを取得する。本番 Clerk インスタンスを
   実ユーザー投入前に確定させる — VISION の実装上の注意を参照）

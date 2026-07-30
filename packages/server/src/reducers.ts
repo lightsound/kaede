@@ -9,11 +9,42 @@ import {
   SPAWN_Y,
   stateFromRow,
 } from '@maple/shared';
-import { type InferSchema, type ReducerCtx, t } from 'spacetimedb/server';
+import { type InferSchema, type ReducerCtx, SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
 
 /** The reducer context for this module's schema, for helpers that touch the db. */
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+
+/**
+ * OIDC issuers whose JWTs we accept, and the audience our Clerk JWT template
+ * pins (`aud: kaede-spacetimedb`). SpacetimeDB validates any well-formed OIDC
+ * token's signature, so restricting issuer+audience here is what "registering"
+ * our issuer means — without it, a valid token from any provider would connect.
+ *
+ * Spike scope: the Clerk development instance. The production instance (its
+ * issuer will be a kaede.town subdomain) is added when it exists.
+ */
+const TRUSTED_OIDC_ISSUERS = ['https://famous-hornet-40.clerk.accounts.dev'];
+const REQUIRED_JWT_AUDIENCE = 'kaede-spacetimedb';
+
+// Guests connect tokenless (jwt == null) and anonymous reconnects present a
+// SpacetimeDB server-issued token; both stay admitted. What we reject is a
+// third-party OIDC token we never registered — or a Clerk token minted for
+// some other app — before it gets an identity in the world.
+export const onConnect = spacetimedb.clientConnected((ctx) => {
+  const jwt = ctx.senderAuth.jwt;
+  if (jwt == null) return;
+  if (TRUSTED_OIDC_ISSUERS.includes(jwt.issuer)) {
+    if (!jwt.audience.includes(REQUIRED_JWT_AUDIENCE)) {
+      throw new SenderError('Unauthorized: token was not minted for this app');
+    }
+    console.info(`clerk client connected: sub=${jwt.subject}`);
+    return;
+  }
+  // Server-issued (anonymous) tokens fall through here; log the issuer so the
+  // spike can observe what it looks like before we enforce a full allow-list.
+  console.info(`client connected with non-Clerk issuer: ${jwt.issuer}`);
+});
 
 /**
  * Records why a batch was refused. `stale-tick` is the resend watchdog's normal

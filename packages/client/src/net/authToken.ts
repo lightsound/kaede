@@ -1,0 +1,23 @@
+// fallow-ignore-file coverage-gaps -- thin wrapper over Clerk's browser SDK; needs a loaded Clerk instance, not a unit test
+import { getToken } from '@clerk/react';
+
+/**
+ * The Clerk JWT template used for SpacetimeDB connections. It pins the `aud`
+ * claim so the module can verify the token was minted for this app and not
+ * repurposed from another Clerk-backed service.
+ */
+const CLERK_JWT_TEMPLATE = 'spacetimedb';
+
+/**
+ * Fetches a fresh Clerk session JWT for the SpacetimeDB connection, or
+ * undefined when Clerk is not configured or nobody is signed in (the guest
+ * path). Clerk session tokens are short-lived, so this must be called anew on
+ * every (re)connect attempt — never cache the result (VISION 技術方針).
+ */
+export async function getClerkToken(): Promise<string | undefined> {
+  if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) return undefined;
+  // skipCache: a token minted seconds ago may expire before the WebSocket
+  // handshake completes on a slow reconnect; always mint fresh.
+  const token = await getToken({ template: CLERK_JWT_TEMPLATE, skipCache: true });
+  return token ?? undefined;
+}

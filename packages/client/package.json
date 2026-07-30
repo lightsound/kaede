@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/react": "^6.12.9",
     "@maple/shared": "workspace:*",
     "pixi.js": "^8.19.0",
     "react": "^19.2.8",
