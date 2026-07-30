@@ -2,7 +2,7 @@
 import { stateFromRow } from '@maple/shared';
 import type { GameApp } from '../game/GameApp';
 import type { DbConnection } from '../module_bindings';
-import { connect, target } from './connection';
+import { type AuthTokenGetter, connect, target } from './connection';
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
 
@@ -28,11 +28,16 @@ export interface Net {
  * Remote players are rendered interpolated INTERP_DELAY_MS in the past.
  *
  * Connection failures and drops are retried forever with exponential backoff;
- * `onStatus` keeps the UI informed. On reconnect the tab resumes its identity
- * (see connection.ts), so the server hands back the same player row and the
- * local sim snaps to that authoritative state.
+ * `onStatus` keeps the UI informed. On reconnect the identity is resumed —
+ * via a fresh OIDC token from `getAuthToken` when signed in, or this tab's
+ * stored anonymous token otherwise (see connection.ts) — so the server hands
+ * back the same player row and the local sim snaps to that authoritative state.
  */
-export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) => void): Net {
+export function startNet(
+  gameApp: GameApp,
+  onStatus: (status: ConnectionStatus) => void,
+  getAuthToken: AuthTokenGetter,
+): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
   let disposed = false;
@@ -184,6 +189,7 @@ export function startNet(gameApp: GameApp, onStatus: (status: ConnectionStatus) 
         },
       },
       consecutiveFailures,
+      getAuthToken,
     )
       .then(({ conn: c, myIdHex }) => {
         if (disposed) {

@@ -43,27 +43,45 @@ export interface ConnectHandlers {
 }
 
 /**
- * Opens a connection (resuming this tab's identity if we have a token) and
- * resolves once the initial player subscription has been applied, so the row
- * cache is populated.
+ * Produces the OIDC JWT to authenticate with, or undefined for the guest
+ * (anonymous) path. Called anew on every connect attempt because provider
+ * session tokens are short-lived: a token fetched once and reused would be
+ * expired by the time a reconnect needs it.
+ */
+export type AuthTokenGetter = () => Promise<string | undefined>;
+
+/**
+ * Opens a connection and resolves once the initial player subscription has
+ * been applied, so the row cache is populated.
+ *
+ * Signed-in users authenticate with a fresh OIDC JWT from `getAuthToken`;
+ * their identity is derived server-side from the token's issuer+subject, so
+ * it is stable across tabs, devices, and reconnects. Without one we fall back
+ * to the per-tab anonymous identity (a server-issued token in sessionStorage).
  *
  * `consecutiveFailures` is how many connects have failed in a row since this
- * client last succeeded; past RESUME_MAX_FAILURES the stored token is treated
- * as the suspect and the next attempt goes out anonymous.
+ * client last succeeded; past RESUME_MAX_FAILURES the stored anonymous token
+ * is treated as the suspect and the next attempt goes out fresh.
  */
-export function connect(
+export async function connect(
   handlers: ConnectHandlers,
   consecutiveFailures: number,
+  getAuthToken: AuthTokenGetter,
 ): Promise<Connected> {
+  const authToken = await getAuthToken();
   return new Promise((resolve, reject) => {
     const resume = consecutiveFailures < RESUME_MAX_FAILURES;
-    const token = resume ? (sessionStorage.getItem(TOKEN_KEY) ?? undefined) : undefined;
+    const token =
+      authToken ?? (resume ? (sessionStorage.getItem(TOKEN_KEY) ?? undefined) : undefined);
     DbConnection.builder()
       .withUri(URI)
       .withDatabaseName(DB)
       .withToken(token)
       .onConnect((conn, identity, freshToken) => {
-        sessionStorage.setItem(TOKEN_KEY, freshToken);
+        // Persist only anonymous (server-issued) tokens. An OIDC session must
+        // be re-minted per connect, and overwriting the anonymous token with
+        // it would strand the guest identity after sign-out.
+        if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
         const myIdHex = identity.toHexString();
         conn
           .subscriptionBuilder()
