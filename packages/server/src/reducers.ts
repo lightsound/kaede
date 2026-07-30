@@ -6,6 +6,7 @@ import {
   DEFAULT_MAP,
   evaluateInputBatch,
   isExpiredRow,
+  normalizeDisplayName,
   replayInputs,
   SPAWN_X,
   SPAWN_Y,
@@ -43,9 +44,27 @@ const CONNECTION_POLICY: ConnectionPolicy = {
 };
 
 /**
- * Vets every connection before it can act in the world. Member privileges do not
- * exist yet: the approval gate that will consume this verdict arrives with the
- * account table in Phase 1.
+ * Guarantees a member has an account row. Only members get one: a member's
+ * Identity is stable across devices and reconnects (derived from the
+ * provider's issuer+subject), so the row it maps to genuinely is the same
+ * person; a guest Identity is per-tab and transient, and an account keyed by
+ * it would be garbage the moment the tab closes.
+ */
+function ensureAccount(ctx: Ctx): void {
+  if (ctx.db.account.identity.find(ctx.sender)) return;
+  ctx.db.account.insert({
+    id: 0n, // 0 asks autoInc to assign the real id
+    identity: ctx.sender,
+    displayName: '',
+    createdAt: ctx.timestamp,
+    updatedAt: ctx.timestamp,
+  });
+}
+
+/**
+ * Vets every connection before it can act in the world. Member privileges do
+ * not exist yet beyond the account row created here; the approval gate that
+ * will consume this verdict is still ahead (ROADMAP Phase 1, 承認制).
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
@@ -53,6 +72,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     throw new SenderError('Unauthorized: this token was minted for another application');
   }
   if (auth.kind === 'member') {
+    ensureAccount(ctx);
     console.info(`member connected: sub=${auth.subject}`);
     return;
   }
@@ -141,11 +161,25 @@ function sweepExpiredRows(ctx: Ctx): void {
   for (const identity of stale) ctx.db.player.identity.delete(identity);
 }
 
+/**
+ * The sender's persisted display name, or undefined when there is nothing to
+ * apply: guests have no account, and a fresh member has not named itself yet.
+ */
+function persistedDisplayName(ctx: Ctx): string | undefined {
+  const account = ctx.db.account.identity.find(ctx.sender);
+  if (!account || account.displayName === '') return undefined;
+  return account.displayName;
+}
+
 // Spawning is an explicit opt-in, not a connection side effect: observer
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
 // they no longer flash into the world as phantom players.
 export const join = spacetimedb.reducer((ctx) => {
   sweepExpiredRows(ctx);
+
+  // A member's account name wins over whatever the row last said, so a rename
+  // made on another device lands here on the next (re)join.
+  const persisted = persistedDisplayName(ctx);
 
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing) {
@@ -153,6 +187,7 @@ export const join = spacetimedb.reducer((ctx) => {
     // character where it stood, with a fresh input allowance.
     ctx.db.player.identity.update({
       ...existing,
+      name: persisted ?? existing.name,
       online: true,
       allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
       updatedAt: ctx.timestamp,
@@ -160,7 +195,7 @@ export const join = spacetimedb.reducer((ctx) => {
     return;
   }
 
-  const name = `Player-${ctx.sender.toHexString().slice(0, 6)}`;
+  const name = persisted ?? `Player-${ctx.sender.toHexString().slice(0, 6)}`;
   ctx.db.player.insert({
     identity: ctx.sender,
     name,
@@ -176,6 +211,29 @@ export const join = spacetimedb.reducer((ctx) => {
     allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
     updatedAt: ctx.timestamp,
   });
+});
+
+// Renames the sender everywhere it is visible right now (its player row) and,
+// for members, persists the name on the account so every future join — any
+// device, any reconnect — spawns under it. Guests have no account, so their
+// rename lives only as long as their per-tab identity's player row.
+// Validation is the shared normalizeDisplayName, the same rules the client
+// checks against before sending.
+export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
+  const verdict = normalizeDisplayName(name);
+  if (!verdict.ok) {
+    throw new SenderError(`Invalid display name (${verdict.reason})`);
+  }
+
+  const account = ctx.db.account.identity.find(ctx.sender);
+  if (account) {
+    ctx.db.account.id.update({ ...account, displayName: verdict.name, updatedAt: ctx.timestamp });
+  }
+
+  const row = ctx.db.player.identity.find(ctx.sender);
+  if (row) {
+    ctx.db.player.identity.update({ ...row, name: verdict.name, updatedAt: ctx.timestamp });
+  }
 });
 
 // Keep the row on disconnect (marked offline) so a quick reconnect under the
