@@ -19,6 +19,14 @@ const RETRY_MAX_MS = 30_000;
 
 export interface Net {
   dispose(): void;
+  /**
+   * Asks the server to rename this player (set_display_name). The result
+   * arrives as an own-row update, which is also the caller's success signal.
+   * Failures (a disconnect racing the submit, a server rejection) only log:
+   * the form keeps its draft, so the user can see the label didn't change
+   * and resubmit.
+   */
+  setDisplayName(name: string): void;
 }
 
 /**
@@ -156,6 +164,9 @@ export function startNet(
       if (idHex === myIdHex) {
         // An own-row update IS the acknowledgement (row.tick = applied count).
         prediction?.onAck(stateFromRow(row), row.tick, performance.now());
+        // The row also carries the display name, which a set_display_name
+        // round trip may just have changed.
+        gameApp.setLocalPlayerName(row.name);
         return;
       }
       recordRemote(idHex, row);
@@ -226,6 +237,15 @@ export function startNet(
       if (retryTimer !== undefined) clearTimeout(retryTimer);
       conn?.disconnect();
       conn = undefined;
+    },
+    setDisplayName(name) {
+      if (!conn) {
+        console.warn('SpacetimeDB: not connected, display name change dropped');
+        return;
+      }
+      conn.reducers.setDisplayName({ name }).catch((err: unknown) => {
+        console.error('SpacetimeDB: set_display_name rejected', err);
+      });
     },
   };
 }

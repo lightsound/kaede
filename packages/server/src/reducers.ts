@@ -5,8 +5,10 @@ import {
   classifyConnection,
   DEFAULT_MAP,
   evaluateInputBatch,
+  evaluateRename,
   isExpiredRow,
   replayInputs,
+  resolveJoinName,
   SPAWN_X,
   SPAWN_Y,
   stateFromRow,
@@ -43,9 +45,27 @@ const CONNECTION_POLICY: ConnectionPolicy = {
 };
 
 /**
- * Vets every connection before it can act in the world. Member privileges do not
- * exist yet: the approval gate that will consume this verdict arrives with the
- * account table in Phase 1.
+ * Guarantees a member has an account row. Only members get one: a member's
+ * Identity is stable across devices and reconnects (derived from the
+ * provider's issuer+subject), so the row it maps to genuinely is the same
+ * person; a guest Identity is per-tab and transient, and an account keyed by
+ * it would be garbage the moment the tab closes.
+ */
+function ensureAccount(ctx: Ctx): void {
+  if (ctx.db.account.identity.find(ctx.sender)) return;
+  ctx.db.account.insert({
+    id: 0n, // 0 asks autoInc to assign the real id
+    identity: ctx.sender,
+    displayName: undefined,
+    createdAt: ctx.timestamp,
+    updatedAt: ctx.timestamp,
+  });
+}
+
+/**
+ * Vets every connection before it can act in the world. Member privileges do
+ * not exist yet beyond the account row created here; the approval gate that
+ * will consume this verdict is still ahead (ROADMAP Phase 1, 承認制).
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
@@ -53,6 +73,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     throw new SenderError('Unauthorized: this token was minted for another application');
   }
   if (auth.kind === 'member') {
+    ensureAccount(ctx);
     console.info(`member connected: sub=${auth.subject}`);
     return;
   }
@@ -148,11 +169,20 @@ export const join = spacetimedb.reducer((ctx) => {
   sweepExpiredRows(ctx);
 
   const existing = ctx.db.player.identity.find(ctx.sender);
+  // Precedence (persisted account name > resumed row's name > default) lives
+  // in resolveJoinName, unit-tested in @maple/shared.
+  const name = resolveJoinName(
+    ctx.db.account.identity.find(ctx.sender)?.displayName,
+    existing?.name,
+    ctx.sender.toHexString(),
+  );
+
   if (existing) {
     // Reload / network blip within the retention window: resume the saved
     // character where it stood, with a fresh input allowance.
     ctx.db.player.identity.update({
       ...existing,
+      name,
       online: true,
       allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
       updatedAt: ctx.timestamp,
@@ -160,7 +190,6 @@ export const join = spacetimedb.reducer((ctx) => {
     return;
   }
 
-  const name = `Player-${ctx.sender.toHexString().slice(0, 6)}`;
   ctx.db.player.insert({
     identity: ctx.sender,
     name,
@@ -176,6 +205,32 @@ export const join = spacetimedb.reducer((ctx) => {
     allowanceMicros: ctx.timestamp.microsSinceUnixEpoch,
     updatedAt: ctx.timestamp,
   });
+});
+
+// Renames the sender everywhere it is visible right now (its player row) and,
+// for members, persists the name on the account so every future join — any
+// device, any reconnect — spawns under it. Guests have no account, so their
+// rename lives only as long as their per-tab identity's player row.
+// Admission (name validation, refusing a rename with nowhere to land) is the
+// pure evaluateRename, unit-tested in @maple/shared — the same rules the
+// client checks against before sending.
+export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
+  const account = ctx.db.account.identity.find(ctx.sender);
+  const row = ctx.db.player.identity.find(ctx.sender);
+  const verdict = evaluateRename({
+    rawName: name,
+    hasAccount: account !== null,
+    hasPlayerRow: row !== null,
+  });
+  if (!verdict.ok) {
+    throw new SenderError(`Rename refused (${verdict.reason})`);
+  }
+  if (account) {
+    ctx.db.account.id.update({ ...account, displayName: verdict.name, updatedAt: ctx.timestamp });
+  }
+  if (row) {
+    ctx.db.player.identity.update({ ...row, name: verdict.name, updatedAt: ctx.timestamp });
+  }
 });
 
 // Keep the row on disconnect (marked offline) so a quick reconnect under the

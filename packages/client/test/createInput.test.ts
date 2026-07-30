@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInput } from '../src/game.package/input';
 
-type Listener = (e: { code: string; preventDefault(): void }) => void;
+type Listener = (e: { code: string; target: unknown; preventDefault(): void }) => void;
 
 /**
  * The smallest stand-in for `window` that createInput uses: a listener registry
@@ -19,10 +19,11 @@ function fakeWindow() {
     removeEventListener(type: string, fn: Listener) {
       listeners.get(type)?.delete(fn);
     },
-    press(type: 'keydown' | 'keyup', code: string) {
+    press(type: 'keydown' | 'keyup', code: string, target: unknown = null) {
       let defaultPrevented = false;
       const event = {
         code,
+        target,
         preventDefault() {
           defaultPrevented = true;
         },
@@ -90,6 +91,29 @@ describe('createInput', () => {
     expect(win.press('keydown', 'ArrowDown')).toBe(true);
     expect(win.press('keyup', 'Space')).toBe(true);
     expect(win.press('keydown', 'KeyQ')).toBe(false);
+    input.dispose();
+  });
+
+  // Typing a name (or, later, chatting) must not walk the avatar around.
+  it('ignores keys pressed inside a text-entry element', () => {
+    const win = install();
+    const input = createInput();
+    expect(win.press('keydown', 'ArrowRight', { tagName: 'INPUT' })).toBe(false);
+    expect(input.sample().right).toBe(false);
+    win.press('keydown', 'ArrowDown', { tagName: 'TEXTAREA' });
+    win.press('keydown', 'Space', { isContentEditable: true });
+    expect(input.sample()).toMatchObject({ down: false, jump: false });
+    input.dispose();
+  });
+
+  // Press in the world, release over the form: the key must not stay held.
+  it('releases a held key even when the keyup lands on a text-entry element', () => {
+    const win = install();
+    const input = createInput();
+    win.press('keydown', 'ArrowRight');
+    expect(input.sample().right).toBe(true);
+    expect(win.press('keyup', 'ArrowRight', { tagName: 'INPUT' })).toBe(false);
+    expect(input.sample().right).toBe(false);
     input.dispose();
   });
 

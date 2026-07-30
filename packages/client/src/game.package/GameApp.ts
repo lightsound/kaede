@@ -92,10 +92,11 @@ function createE2EHook(
   return {
     snapshot: () => ({
       tick: currentTick(),
-      local: { x: local.root.x, y: local.root.y },
+      local: { x: local.root.x, y: local.root.y, name: local.label.text },
       remotePlayers: [...remotes.values()].map((view) => ({
         x: view.root.x,
         y: view.root.y,
+        name: view.label.text,
       })),
     }),
   };

@@ -7,8 +7,10 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import JoinReducer from "../join_reducer";
+import SetDisplayNameReducer from "../set_display_name_reducer";
 import SubmitInputsReducer from "../submit_inputs_reducer";
 
 export type JoinParams = __Infer<typeof JoinReducer>;
+export type SetDisplayNameParams = __Infer<typeof SetDisplayNameReducer>;
 export type SubmitInputsParams = __Infer<typeof SubmitInputsReducer>;
 
