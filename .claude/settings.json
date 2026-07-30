@@ -1,8 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(stripe:*)",
-      "Bash(stripe projects:*)"
-    ]
+    "allow": ["Bash(stripe:*)", "Bash(stripe projects:*)"]
   }
 }
