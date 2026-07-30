@@ -23,13 +23,14 @@ export async function getClerkToken(): Promise<string | undefined> {
   // skipCache: a token minted seconds ago may expire before the WebSocket
   // handshake completes on a slow reconnect; always mint fresh.
   const token = await getToken({ template: CLERK_JWT_TEMPLATE, skipCache: true });
-  if (token) return token;
-  // getToken() has awaited Clerk's load, so window.Clerk is populated here. A
-  // null token with a signed-in user is an anomaly (expired session mid-mint,
-  // misconfigured template), not a guest.
-  const clerk = (window as { Clerk?: { user?: unknown } }).Clerk;
-  if (clerk?.user) {
+  // getToken() has awaited Clerk's load, so window.Clerk is populated here.
+  // The token is only trusted while Clerk still reports a signed-in user:
+  // token-without-user is a sign-out race (drop the stale token, go guest),
+  // user-without-token is an anomaly (expired session mid-mint, misconfigured
+  // template) that must fail the attempt rather than demote to guest.
+  const signedIn = (window as { Clerk?: { user?: unknown } }).Clerk?.user != null;
+  if (signedIn && !token) {
     throw new Error('Clerk reports a signed-in user but returned no session token');
   }
-  return undefined;
+  return signedIn && token ? token : undefined;
 }
