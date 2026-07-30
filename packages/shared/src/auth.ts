@@ -1,11 +1,11 @@
 /** The JWT claims the module needs to decide what a connection may become. */
 export interface ConnectionClaims {
   /** The `iss` claim: which provider minted this token. */
-  issuer: string;
+  readonly issuer: string;
   /** The `aud` claim: which application the issuer minted it for. */
-  audience: readonly string[];
+  readonly audience: readonly string[];
   /** The `sub` claim: the issuer's stable id for this user. */
-  subject: string;
+  readonly subject: string;
 }
 
 /** Which issuers we trust, and for what. */
@@ -23,41 +23,40 @@ export interface ConnectionPolicy {
 }
 
 /**
- * How a connection authenticated. `member` is the only verdict that may ever be
- * granted member privileges; `guest` covers both tokenless entry and identities
- * we cannot attribute to our provider.
+ * What a connecting client is. `member` is the only verdict that may ever carry
+ * member privileges. `unregistered-issuer` is separate from `guest` because it
+ * is a state we intend to stop admitting: the ROADMAP Phase 1 gate that refuses
+ * it turns handling this verdict into a rejection, and nothing else.
  */
 export type ConnectionAuth =
   | { kind: 'member'; subject: string }
-  | { kind: 'guest'; issuer: string | null; issuerRecognised: boolean }
-  | { kind: 'rejected'; reason: 'audience-mismatch' };
+  | { kind: 'guest' }
+  | { kind: 'unregistered-issuer'; issuer: string }
+  | { kind: 'audience-mismatch' };
 
 /**
  * Decides what a connecting client is, from its token alone.
  *
  * Only a token minted by one of `policy.memberIssuers` **and** pinned to
  * `policy.memberAudience` is a member: a token our own provider minted for a
- * different application is refused outright rather than quietly demoted, since
- * accepting it would let another Clerk-backed app's users in as ours.
+ * different application yields `audience-mismatch` rather than a quiet demotion
+ * to guest, since accepting it would let another Clerk-backed app's users in as
+ * ours.
  *
- * Everything else is a guest. An issuer in neither list yields
- * `issuerRecognised: false`, which the caller reports: such a token is admitted
- * only because a guest holds no privileges to escalate to, and closing that
- * door means naming every host issuer we deploy to first (see ROADMAP Phase 1).
+ * A token from an issuer in neither list is `unregistered-issuer`, which callers
+ * still admit today — a guest holds no privileges to escalate to, and refusing
+ * it means naming every host issuer we deploy to first.
  */
 export function classifyConnection(
   claims: ConnectionClaims | null,
   policy: ConnectionPolicy,
 ): ConnectionAuth {
-  if (claims === null) return { kind: 'guest', issuer: null, issuerRecognised: true };
+  if (claims === null) return { kind: 'guest' };
   if (policy.memberIssuers.includes(claims.issuer)) {
     return claims.audience.includes(policy.memberAudience)
       ? { kind: 'member', subject: claims.subject }
-      : { kind: 'rejected', reason: 'audience-mismatch' };
+      : { kind: 'audience-mismatch' };
   }
-  return {
-    kind: 'guest',
-    issuer: claims.issuer,
-    issuerRecognised: policy.guestIssuers.includes(claims.issuer),
-  };
+  if (policy.guestIssuers.includes(claims.issuer)) return { kind: 'guest' };
+  return { kind: 'unregistered-issuer', issuer: claims.issuer };
 }

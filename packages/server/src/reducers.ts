@@ -43,23 +43,20 @@ const CONNECTION_POLICY: ConnectionPolicy = {
 };
 
 /**
- * Classifies every connection before it can act in the world.
- *
- * Refused outright: a token from our own provider minted for a different
- * application. Admitted as guests: tokenless clients, host-issued guest tokens,
- * and — for now — tokens from providers we never configured, which hold no
- * privileges a guest lacks but are logged so the gap stays visible. Member
- * privileges do not exist yet; the approval gate that will consume this verdict
- * arrives with the account table in Phase 1.
+ * Vets every connection before it can act in the world. Member privileges do not
+ * exist yet: the approval gate that will consume this verdict arrives with the
+ * account table in Phase 1. A plain `guest` needs nothing done to it.
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
-  if (auth.kind === 'rejected') throw new SenderError(`Unauthorized: ${auth.reason}`);
+  if (auth.kind === 'audience-mismatch') {
+    throw new SenderError('Unauthorized: this token was minted for another application');
+  }
   if (auth.kind === 'member') {
     console.info(`member connected: sub=${auth.subject}`);
     return;
   }
-  if (!auth.issuerRecognised) {
+  if (auth.kind === 'unregistered-issuer') {
     console.warn(`guest connected with an unregistered issuer: ${auth.issuer}`);
   }
 });

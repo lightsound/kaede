@@ -26,34 +26,26 @@ describe('classifyConnection', () => {
   });
 
   it('admits a tokenless connection as a guest', () => {
-    expect(classifyConnection(null, policy)).toEqual({
-      kind: 'guest',
-      issuer: null,
-      issuerRecognised: true,
-    });
+    expect(classifyConnection(null, policy)).toEqual({ kind: 'guest' });
   });
 
   it('admits a host-issued token as a guest, not a member', () => {
     expect(classifyConnection(claims({ issuer: 'localhost', audience: [] }), policy)).toEqual({
       kind: 'guest',
-      issuer: 'localhost',
-      issuerRecognised: true,
     });
   });
 
   // A token our own provider minted for another application must not become a
   // member: that is how a second Clerk-backed app's users would get in as ours.
-  it('rejects a token from our provider that pins another audience', () => {
+  it('refuses a token from our provider that pins another audience', () => {
     expect(classifyConnection(claims({ audience: ['some-other-app'] }), policy)).toEqual({
-      kind: 'rejected',
-      reason: 'audience-mismatch',
+      kind: 'audience-mismatch',
     });
   });
 
-  it('rejects a token from our provider that pins no audience at all', () => {
+  it('refuses a token from our provider that pins no audience at all', () => {
     expect(classifyConnection(claims({ audience: [] }), policy)).toEqual({
-      kind: 'rejected',
-      reason: 'audience-mismatch',
+      kind: 'audience-mismatch',
     });
   });
 
@@ -61,18 +53,25 @@ describe('classifyConnection', () => {
   // is simply absent from memberIssuers, so its users are guests at most.
   it('never makes a member of an issuer outside the policy, even with our audience', () => {
     expect(classifyConnection(claims({ issuer: CLERK_DEVELOPMENT }), policy)).toEqual({
-      kind: 'guest',
+      kind: 'unregistered-issuer',
       issuer: CLERK_DEVELOPMENT,
-      issuerRecognised: false,
     });
   });
 
-  it('flags an issuer in neither list so the caller can report it', () => {
-    const auth = classifyConnection(claims({ issuer: 'https://accounts.google.com' }), policy);
-    expect(auth).toEqual({
-      kind: 'guest',
-      issuer: 'https://accounts.google.com',
-      issuerRecognised: false,
+  // The window ROADMAP gate 1 warns about: production is live while the
+  // development instance is still trusted, and both mint members.
+  it('makes members of every issuer the policy lists', () => {
+    const bothInstances: ConnectionPolicy = {
+      ...policy,
+      memberIssuers: [CLERK_PRODUCTION, CLERK_DEVELOPMENT],
+    };
+    expect(classifyConnection(claims({ issuer: CLERK_DEVELOPMENT }), bothInstances)).toEqual({
+      kind: 'member',
+      subject: 'user_abc',
+    });
+    expect(classifyConnection(claims(), bothInstances)).toEqual({
+      kind: 'member',
+      subject: 'user_abc',
     });
   });
 });

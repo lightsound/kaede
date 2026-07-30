@@ -50,6 +50,9 @@ const signInButtonStyle: CSSProperties = {
  * member tree always demands a Clerk token (a failed mint fails the connect
  * and retries — never a silent guest demotion) and the guest tree never
  * offers one (a stale token minted during sign-out can't leak in).
+ *
+ * Mount only under `<ClerkLoaded>`: `isSignedIn` is undefined until Clerk has
+ * loaded, and would silently read as "guest" here.
  */
 function AuthBoundary({ children }: { children: ReactNode }) {
   const { isSignedIn } = useAuth();
@@ -95,7 +98,7 @@ export function ClerkGate({ children }: { children: ReactNode }) {
       </ClerkLoaded>
       <ClerkFailed>
         <div style={noticeStyle}>ログイン機能を読み込めませんでした。ゲストとして参加します。</div>
-        <AuthTokenContext.Provider value={guestToken}>{children}</AuthTokenContext.Provider>
+        {children}
       </ClerkFailed>
     </ClerkProvider>
   );
