@@ -52,9 +52,11 @@ const errorStyle: CSSProperties = {
 
 /**
  * The minimal display-name form (ROADMAP Phase 1: プロフィールの永続化).
- * Validates with the same shared rules the server enforces, so a submitted
- * name is never rejected server-side; the applied name comes back through the
- * player row and shows above the avatar.
+ * Validates with the same shared rules the server enforces, so a well-formed
+ * name is never rejected for its content; the one remaining server refusal
+ * (`no-target`, a rename with nowhere to land) surfaces as the label not
+ * changing. The applied name comes back through the player row and shows
+ * above the avatar.
  */
 export function NameEditor({
   disabled,

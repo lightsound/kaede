@@ -27,7 +27,6 @@ test('表示名を変更すると両ブラウザに反映され、リロード�
   await expect
     .poll(async () => (await snapshot(pageB)).remotePlayers.length, { timeout: 15_000 })
     .toBe(1);
-  const defaultName = (await snapshot(pageA)).local.name;
 
   await pageA.getByLabel('表示名').fill(NEW_NAME);
   await pageA.getByRole('button', { name: '変更' }).click();
@@ -36,12 +35,10 @@ test('表示名を変更すると両ブラウザに反映され、リロード�
   await expect
     .poll(async () => (await snapshot(pageA)).local.name, { timeout: 10_000 })
     .toBe(NEW_NAME);
-  // (?? previous name: an offline flicker empties the remote list; keep
-  // polling instead of failing on a transient undefined.)
+  // (A transiently empty remote list yields undefined, which just keeps the
+  // poll going.)
   await expect
-    .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.name ?? defaultName, {
-      timeout: 10_000,
-    })
+    .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.name, { timeout: 10_000 })
     .toBe(NEW_NAME);
 
   // A fresh navigation resumes the same identity (sessionStorage token), so
