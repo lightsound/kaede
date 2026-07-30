@@ -26,7 +26,8 @@
     "projects": [
       "packages/shared/tsconfig.json",
       "packages/client/tsconfig.json",
-      "packages/server/tsconfig.json"
+      "packages/server/tsconfig.json",
+      "packages/e2e/tsconfig.json"
     ],
     "require": "complete"
   },
@@ -45,12 +46,16 @@
     "zones": [
       { "name": "shared", "patterns": ["packages/shared/**"] },
       { "name": "client", "patterns": ["packages/client/**"] },
-      { "name": "server", "patterns": ["packages/server/**"] }
+      { "name": "server", "patterns": ["packages/server/**"] },
+      { "name": "e2e", "patterns": ["packages/e2e/**"] }
     ],
     "rules": [
       { "from": "shared", "allow": [] },
       { "from": "client", "allow": ["shared"] },
-      { "from": "server", "allow": ["shared"] }
+      { "from": "server", "allow": ["shared"] },
+      // E2E drives the running app from outside through the browser; it must
+      // never import application code (only @playwright/test).
+      { "from": "e2e", "allow": [] }
     ],
     "coverage": {
       "requireAllFiles": true,

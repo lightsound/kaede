@@ -7,6 +7,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "pnpm --filter @maple/e2e test",
     "lint": "biome check . && import-lint",
     "lint:imports": "import-lint",
     "format": "biome check --write .",
