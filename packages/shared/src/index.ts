@@ -1,5 +1,6 @@
 export * from './auth';
 export * from './constants';
+export * from './displayName';
 export * from './e2eHook';
 export * from './guard';
 export * from './input';
