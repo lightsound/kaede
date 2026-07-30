@@ -34,6 +34,24 @@ const REMOTE_COLOR = 0xd08770;
 
 const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
 
+/** Read-only view of the rendered world for the E2E smoke tests. */
+interface E2ESnapshot {
+  local: Vec2;
+  remotePlayers: { id: string; name: string; x: number; y: number }[];
+}
+
+declare global {
+  interface Window {
+    /**
+     * The world lives on a WebGL canvas, so browser tests cannot assert on the
+     * DOM; this hook exposes rendered positions instead. Installed by start()
+     * — its presence signals the world has been entered — and consumed by the
+     * Playwright specs in packages/e2e.
+     */
+    __mapleE2E?: { snapshot(): E2ESnapshot };
+  }
+}
+
 export interface GameApp {
   destroy(): void;
   setLocalPlayerName(name: string): void;
@@ -172,8 +190,23 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     renderLocal(ticker.deltaMS);
   });
 
+  const e2eHook = {
+    snapshot: (): E2ESnapshot => ({
+      local: { x: local.root.x, y: local.root.y },
+      remotePlayers: [...remotes.entries()].map(([id, view]) => ({
+        id,
+        name: view.label.text,
+        x: view.root.x,
+        y: view.root.y,
+      })),
+    }),
+  };
+
   return {
     destroy() {
+      // Guarded so a torn-down instance cannot erase a hook installed by the
+      // instance that outlives it (StrictMode mounts two in parallel).
+      if (window.__mapleE2E === e2eHook) window.__mapleE2E = undefined;
       input.dispose();
       touch?.dispose();
       app.destroy(true, { children: true });
@@ -186,6 +219,11 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       tick = t;
       acc = 0; // clamp so the first running frame doesn't replay a burst
       localOffset = { x: 0, y: 0 };
+      // Installed here rather than at creation: only the instance that the
+      // network wires up ever starts, whereas StrictMode creates two instances
+      // concurrently and creation-time installs can interleave so that the
+      // doomed instance installs last and its destroy() clears the hook.
+      window.__mapleE2E = e2eHook;
     },
     resetLocal(state, t) {
       // Carry the visual error: where we render now (incl. the live offset) vs.
