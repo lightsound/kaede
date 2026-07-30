@@ -3,6 +3,7 @@ import {
   type CollisionMap,
   DEFAULT_MAP,
   DT,
+  type E2EHook,
   type Facing,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
@@ -74,6 +75,27 @@ function createPlayerView(world: Container, name: string, color: number): Player
   root.addChild(body, label);
   world.addChild(root);
   return { root, body, label };
+}
+
+/**
+ * Test affordance for the Playwright smoke tests — see E2EHook in
+ * @maple/shared for the contract and who consumes it. Constructed only in dev
+ * builds, so the build-time DEV constant lets production bundles drop the
+ * hook code entirely.
+ */
+function createE2EHook(local: PlayerView, remotes: Map<string, PlayerView>): E2EHook | undefined {
+  if (!import.meta.env.DEV) return undefined;
+  return {
+    snapshot: () => ({
+      local: { x: local.root.x, y: local.root.y },
+      remotePlayers: [...remotes.entries()].map(([id, view]) => ({
+        id,
+        name: view.label.text,
+        x: view.root.x,
+        y: view.root.y,
+      })),
+    }),
+  };
 }
 
 /**
@@ -172,8 +194,13 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     renderLocal(ticker.deltaMS);
   });
 
+  const e2eHook = createE2EHook(local, remotes);
+
   return {
     destroy() {
+      // Guarded so a torn-down instance cannot erase a hook installed by the
+      // instance that outlives it (StrictMode mounts two in parallel).
+      if (e2eHook && window.__mapleE2E === e2eHook) window.__mapleE2E = undefined;
       input.dispose();
       touch?.dispose();
       app.destroy(true, { children: true });
@@ -186,6 +213,11 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       tick = t;
       acc = 0; // clamp so the first running frame doesn't replay a burst
       localOffset = { x: 0, y: 0 };
+      // Installed here rather than at creation: only the instance that the
+      // network wires up ever starts, whereas StrictMode creates two instances
+      // concurrently and creation-time installs can interleave so that the
+      // doomed instance installs last and its destroy() clears the hook.
+      if (e2eHook) window.__mapleE2E = e2eHook;
     },
     resetLocal(state, t) {
       // Carry the visual error: where we render now (incl. the live offset) vs.
