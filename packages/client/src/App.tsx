@@ -28,6 +28,12 @@ const overlayStyle: CSSProperties = {
 export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
+  // The authoritative display name from the own player row; undefined
+  // whenever no row is known to exist (before the first spawn, during a
+  // reconnect, after a retention sweep — see startNet's onOwnName contract).
+  // While undefined a rename has nowhere to land (the server would refuse it
+  // as no-target), so the form stays disabled.
+  const [ownName, setOwnName] = useState<string>();
   const getAuthToken = useContext(AuthTokenContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -49,7 +55,7 @@ export function App() {
         return;
       }
       game = created;
-      netRef.current = startNet(created, setStatus, getAuthToken);
+      netRef.current = startNet(created, setStatus, getAuthToken, setOwnName);
     })();
 
     return () => {
@@ -65,7 +71,8 @@ export function App() {
       <div ref={hostRef} />
       {status !== 'connected' && <div style={overlayStyle}>{STATUS_MESSAGES[status]}</div>}
       <NameEditor
-        disabled={status !== 'connected'}
+        disabled={status !== 'connected' || ownName === undefined}
+        currentName={ownName}
         onSubmit={(name) => netRef.current?.setDisplayName(name)}
       />
     </div>

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInput } from '../src/game.package/input';
 
-type Listener = (e: { code: string; target: unknown; preventDefault(): void }) => void;
+type Listener = (e: { code?: string; target: unknown; preventDefault?(): void }) => void;
 
 /**
  * The smallest stand-in for `window` that createInput uses: a listener registry
@@ -30,6 +30,9 @@ function fakeWindow() {
       };
       for (const fn of listeners.get(type) ?? []) fn(event);
       return defaultPrevented;
+    },
+    focusIn(target: unknown) {
+      for (const fn of listeners.get('focusin') ?? []) fn({ target });
     },
   };
 }
@@ -117,13 +120,37 @@ describe('createInput', () => {
     input.dispose();
   });
 
-  it('unregisters both listeners on dispose', () => {
+  // A key held across a click into the name form gets no further events the
+  // world can see (its auto-repeats target the field), so the focus change
+  // itself must release it or the avatar walks while the player types.
+  it('releases held keys when focus enters a text-entry element', () => {
+    const win = install();
+    const input = createInput();
+    win.press('keydown', 'ArrowRight');
+    expect(input.sample().right).toBe(true);
+    win.focusIn({ tagName: 'INPUT' });
+    expect(input.sample().right).toBe(false);
+    input.dispose();
+  });
+
+  it('keeps held keys when focus moves between non-text elements', () => {
+    const win = install();
+    const input = createInput();
+    win.press('keydown', 'ArrowRight');
+    win.focusIn({ tagName: 'CANVAS' });
+    expect(input.sample().right).toBe(true);
+    input.dispose();
+  });
+
+  it('unregisters all listeners on dispose', () => {
     const win = install();
     const input = createInput();
     expect(win.listenerCount('keydown')).toBe(1);
     expect(win.listenerCount('keyup')).toBe(1);
+    expect(win.listenerCount('focusin')).toBe(1);
     input.dispose();
     expect(win.listenerCount('keydown')).toBe(0);
     expect(win.listenerCount('keyup')).toBe(0);
+    expect(win.listenerCount('focusin')).toBe(0);
   });
 });

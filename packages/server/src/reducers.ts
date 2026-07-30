@@ -50,6 +50,11 @@ const CONNECTION_POLICY: ConnectionPolicy = {
  * provider's issuer+subject), so the row it maps to genuinely is the same
  * person; a guest Identity is per-tab and transient, and an account keyed by
  * it would be garbage the moment the tab closes.
+ *
+ * find-then-insert is race-free here: reducers are atomic transactions that
+ * the host serializes, so two first-time connections from the same member
+ * (two tabs, two devices) cannot interleave — the second clientConnected
+ * runs after the first committed and finds its row.
  */
 function ensureAccount(ctx: Ctx): void {
   if (ctx.db.account.identity.find(ctx.sender)) return;
@@ -171,11 +176,11 @@ export const join = spacetimedb.reducer((ctx) => {
   const existing = ctx.db.player.identity.find(ctx.sender);
   // Precedence (persisted account name > resumed row's name > default) lives
   // in resolveJoinName, unit-tested in @maple/shared.
-  const name = resolveJoinName(
-    ctx.db.account.identity.find(ctx.sender)?.displayName,
-    existing?.name,
-    ctx.sender.toHexString(),
-  );
+  const name = resolveJoinName({
+    persistedName: ctx.db.account.identity.find(ctx.sender)?.displayName,
+    resumedRowName: existing?.name,
+    identityHex: ctx.sender.toHexString(),
+  });
 
   if (existing) {
     // Reload / network blip within the retention window: resume the saved
@@ -225,10 +230,10 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
   if (!verdict.ok) {
     throw new SenderError(`Rename refused (${verdict.reason})`);
   }
-  if (account) {
+  if (account !== null) {
     ctx.db.account.id.update({ ...account, displayName: verdict.name, updatedAt: ctx.timestamp });
   }
-  if (row) {
+  if (row !== null) {
     ctx.db.player.identity.update({ ...row, name: verdict.name, updatedAt: ctx.timestamp });
   }
 });

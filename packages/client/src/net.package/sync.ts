@@ -40,11 +40,18 @@ export interface Net {
  * via a fresh OIDC token from `getAuthToken` when signed in, or this tab's
  * stored anonymous token otherwise (see connection.ts) — so the server hands
  * back the same player row and the local sim snaps to that authoritative state.
+ *
+ * `onOwnName` reports the authoritative display name whenever it changes,
+ * and `undefined` whenever the own row stops being known to exist (before
+ * the first spawn, after a disconnect, after the row is deleted by the
+ * retention sweep). "Defined" therefore means "a row exists for
+ * set_display_name to land on", which is what gates the name form.
  */
 export function startNet(
   gameApp: GameApp,
   onStatus: (status: ConnectionStatus) => void,
   getAuthToken: AuthTokenGetter,
+  onOwnName: (name: string | undefined) => void,
 ): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
@@ -72,11 +79,36 @@ export function startNet(
     remoteViews.renderFrame(now, gameApp.upsertRemotePlayer);
   });
 
+  // The single path for own-name changes, so the label and the onOwnName
+  // consumer cannot drift apart, and so the ack firehose (every own-row
+  // update, several per second) is deduplicated here instead of leaning on
+  // React's same-value bailout. `undefined` means "no own row is known".
+  let lastOwnName: string | undefined;
+  function publishOwnName(name: string | undefined): void {
+    // A disposed stack must never write to consumers it shares with its
+    // replacement (onOwnName feeds the App's state): the socket closes
+    // asynchronously, so this stack's row handlers can still fire after
+    // dispose() and would otherwise re-enable the rename form against a
+    // session that has no row yet.
+    if (disposed) return;
+    if (name === lastOwnName) return;
+    lastOwnName = name;
+    // The label keeps its last text while the row is gone: the local sprite
+    // stays visible while offline (the sim keeps running), so blanking the
+    // label would flash; the replacement row brings the authoritative name.
+    if (name !== undefined) gameApp.setLocalPlayerName(name);
+    onOwnName(name);
+  }
+
   function dropSession(): void {
     prediction = undefined;
     conn = undefined;
     remoteViews.clear();
     gameApp.clearRemotePlayers();
+    // Whether our row survives the retention window is unknowable while
+    // offline; report it gone so the rename form disables until the row
+    // (re)appears after the next join.
+    publishOwnName(undefined);
   }
 
   /** Ask the server to spawn or resume our row; the answer arrives as a row event. */
@@ -109,7 +141,7 @@ export function startNet(
     // below. Start/refresh the simulation from that authoritative state.
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
-      gameApp.setLocalPlayerName(row.name);
+      publishOwnName(row.name);
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
@@ -166,7 +198,7 @@ export function startNet(
         prediction?.onAck(stateFromRow(row), row.tick, performance.now());
         // The row also carries the display name, which a set_display_name
         // round trip may just have changed.
-        gameApp.setLocalPlayerName(row.name);
+        publishOwnName(row.name);
         return;
       }
       recordRemote(idHex, row);
@@ -179,6 +211,9 @@ export function startNet(
         // abandoned. Re-join and let the replacement row restart prediction,
         // rather than predicting forward against a row that no longer exists.
         prediction = undefined;
+        // No row again until the re-join lands; disable the rename form so a
+        // submit cannot race into the server's no-target refusal.
+        publishOwnName(undefined);
         joinWorld(c);
         return;
       }
@@ -233,6 +268,15 @@ export function startNet(
 
   return {
     dispose() {
+      // The final "no row" signal, sent before `disposed` flips because
+      // publishOwnName refuses to run on a disposed stack. It cannot come
+      // from the disconnect handler (which skips dropSession once disposed),
+      // and without it a consumer surviving this stack (App remounting the
+      // net on an auth change, StrictMode's probe mount) would carry a stale
+      // name into the next session and enable the rename form before that
+      // session has a row. Everything up to `disposed = true` is synchronous,
+      // so no late row event can slip in between.
+      publishOwnName(undefined);
       disposed = true;
       if (retryTimer !== undefined) clearTimeout(retryTimer);
       conn?.disconnect();

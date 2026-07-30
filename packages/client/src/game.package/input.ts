@@ -40,9 +40,18 @@ export function createInput(): { sample(): PlayerInput; dispose(): void } {
     if (isTextEntry(e.target)) return;
     if (MOVE_KEYS.has(e.code)) e.preventDefault();
   };
+  // A key still physically held when focus enters a text field would keep
+  // the avatar walking while the player types: its keydown landed before the
+  // focus change and its auto-repeats are ignored above, so nothing else
+  // would ever clear it. Releasing everything on entry is safe — the world
+  // ignores keys while the field has focus anyway.
+  const onFocusIn = (e: FocusEvent) => {
+    if (isTextEntry(e.target)) held.clear();
+  };
 
   window.addEventListener('keydown', onDown);
   window.addEventListener('keyup', onUp);
+  window.addEventListener('focusin', onFocusIn);
 
   return {
     sample: () => ({
@@ -55,6 +64,7 @@ export function createInput(): { sample(): PlayerInput; dispose(): void } {
     dispose: () => {
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
+      window.removeEventListener('focusin', onFocusIn);
     },
   };
 }
