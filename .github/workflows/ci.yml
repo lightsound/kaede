@@ -88,3 +88,62 @@ jobs:
             git diff packages/client/src/module_bindings
             exit 1
           fi
+
+  # E2E smoke: boots the full stack (local SpacetimeDB host + Vite dev client)
+  # and drives two guest browsers through the entry → movement-sync scenario
+  # (packages/e2e). Runs in parallel with `ci`; the future auto-deploy job must
+  # list BOTH jobs in `needs` so nothing ships without the smoke test passing
+  # (docs/ROADMAP.md Phase 1, deploy flow).
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @maple/e2e exec playwright install --with-deps chromium
+
+      - name: Install SpacetimeDB CLI (pinned)
+        run: |
+          curl -sSfL -o /tmp/spacetime.tar.gz \
+            "https://github.com/clockworklabs/SpacetimeDB/releases/download/${SPACETIME_VERSION}/spacetime-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Start SpacetimeDB and publish the module
+        run: |
+          spacetimedb-cli start &> /tmp/spacetimedb.log &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3000/v1/ping > /dev/null; then
+              break
+            fi
+            if [ "$i" = 30 ]; then
+              echo "::error::SpacetimeDB host did not come up on :3000 within 30s"
+              cat /tmp/spacetimedb.log
+              exit 1
+            fi
+            sleep 1
+          done
+          spacetimedb-cli publish maple-like --server local --yes
+
+      - name: E2E smoke test
+        run: pnpm test:e2e
+
+      # Traces for the failed attempts are embedded in the HTML report.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: packages/e2e/playwright-report/
+          retention-days: 14
