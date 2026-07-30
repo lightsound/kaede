@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createInput } from '../src/game/input';
+import { createInput } from '../src/game.package/input';
 
 type Listener = (e: { code: string; preventDefault(): void }) => void;
 

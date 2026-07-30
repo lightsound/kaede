@@ -11,7 +11,7 @@ import {
   stepPlayer,
 } from '@maple/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createPrediction, type PredictionDeps } from '../src/net/prediction';
+import { createPrediction, type PredictionDeps } from '../src/net.package/prediction';
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
 

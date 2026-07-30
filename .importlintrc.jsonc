@@ -1,0 +1,69 @@
+// .importlintrc.jsonc
+//
+// Every first-level directory below packages/*/src is an encapsulation
+// boundary. This makes enforcement fail-closed for future modules: `src/chat/`
+// is sealed even if its author forgets the naming convention. `*.package`
+// additionally supports explicit nested boundaries.
+//
+// Everything inside a boundary imports freely from everything else inside it;
+// nothing outside can import from it unless the export is tagged `@public`, or
+// re-exported (unannotated) from the boundary's own index.ts. The index
+// loophole below promotes those exports to the parent's package, so wider
+// exposure is always a deliberate, visible one-level-at-a-time edit.
+{
+  // Application source lives under packages/. Root tooling files remain in
+  // the project-wide package and do not need directory-level boundaries.
+  "include": ["packages"],
+
+  // Tests intentionally reach package-private internals; generated bindings
+  // are owned by the SpacetimeDB CLI and must not acquire hand-written tags.
+  "exclude": ["**/test/**", "**/module_bindings/**"],
+
+  // Path to tsconfig.json (for resolver `paths`/`baseUrl`), relative to the
+  // project root. Defaults to "<project root>/tsconfig.json" if it exists.
+  // "tsconfig": "./tsconfig.json",
+
+  "rules": {
+    "package-access": {
+      // "error" | "warn" | "off". An `off` rule is never checked.
+      "severity": "error",
+
+      // Below: identical options, names, and defaults to
+      // eslint-plugin-import-access's `import-access/jsdoc` rule.
+
+      // Treat a file named "index.{js,ts,jsx,tsx,mjs,cjs,...}" as if its parent
+      // directory were the exporting file, for package-boundary purposes. This is
+      // the escape valve for the `*.package` convention: a bare re-export from a
+      // boundary's index.ts promotes that export to the parent's package.
+      "indexLoophole": true,
+
+      // Treat "foo/bar.ts" as in-package with "foo.ts" (one directory level,
+      // matching the importer's own filename stem). Turn on for the
+      // companion-file pattern: a "sub.ts" file living next to the "sub/"
+      // directory it belongs to.
+      // "filenameLoophole": true,
+      "filenameLoophole": false,
+
+      // Access level assumed for an export with no recognized JSDoc access tag.
+      // "public" | "package" | "private". "package" makes every configured
+      // boundary private by default, with no JSDoc tag required.
+      "defaultImportability": "package",
+
+      // How a bare specifier matching the importer's own package name is
+      // classified. "external" (never checked) | "internal" (checked normally).
+      "treatSelfReferenceAs": "external",
+
+      // Generated SpacetimeDB bindings are consumed as an opaque public API;
+      // they must not acquire hand-written access annotations.
+      "excludeSourcePatterns": ["**/module_bindings/**"],
+
+      // Glob patterns identifying "package" directories (matched against both
+      // basename and project-relative path). A file with no matching ancestor
+      // belongs to a single project-root package. Every first-level src/
+      // directory is automatically sealed so a future `src/chat/` cannot
+      // silently skip enforcement. `*.package` additionally permits explicit
+      // nested boundaries.
+      "packageDirectory": ["packages/*/src/*", "**/*.package"]
+    }
+  }
+}

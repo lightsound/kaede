@@ -11,6 +11,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.6
         version: 2.5.6
+      '@import-lint/cli':
+        specifier: 0.1.6
+        version: 0.1.6
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
@@ -222,6 +225,44 @@ packages:
 
   '@fallow-cli/win32-x64-msvc@3.10.0':
     resolution: {integrity: sha512-eKTBjBQONmSok06JyPYdlOyfmaHIIKMUZvoeMyQfUYIGo1wrfE6a3vY473yLKLSBInSZeyGbPya5yfVxSngizQ==}
+    cpu: [x64]
+    os: [win32]
+
+  '@import-lint/cli@0.1.6':
+    resolution: {integrity: sha512-ttMMf9MjJPMoKzkOKtqj38Ts2he25CoP62Yk3oxiQXvT7b/B14X4UXxxxb6Tspb5nSa0ysaoJfY+EydEkvMO9Q==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  '@import-lint/darwin-arm64@0.1.6':
+    resolution: {integrity: sha512-op5H23fNegtSf/vC5qjRZZ7aqT9zD7lUIEQ16kxq+bOZUXFseMtSRqfhcSqfWkOsOt5BbW0LHdpAtv96i4QfEA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@import-lint/darwin-x64@0.1.6':
+    resolution: {integrity: sha512-Aa7kYZ0VzFY9IRcOfL+Vu2XkjJ9DWYLEasmcHpgPsq7bfzHMMZ0P16UY0E5QhzQokYelh0eVBcM7ura+ASxoBg==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@import-lint/linux-arm64-gnu@0.1.6':
+    resolution: {integrity: sha512-hCwatiaoj/C8F4KDr4AtE9waC30sWHoTDaUBGepSGnnL3GrlPe83WeJHB5MbZwjv7+ssXsEnxcSP3JJRWu/caA==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@import-lint/linux-x64-gnu@0.1.6':
+    resolution: {integrity: sha512-OgwikrcOw0GlRx+9jPzHZLgIMQXRLxSRNrRjHFoFOIeo0ZGfBWNtnMobwaOz1ZYptjnPTnQuQ2bkhUoPvtvtEw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@import-lint/linux-x64-musl@0.1.6':
+    resolution: {integrity: sha512-P4qWSa8sNm+Efb7GeR6zEO+urwKFwEkaKVxHcZkhJJsX/yVv0ANBZwr9EK46vXQlO1XKibrs0e6UohJ+QfVyPQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@import-lint/win32-x64@0.1.6':
+    resolution: {integrity: sha512-ktUm0TV+/rzwOeP6WoGDctL3gTdRtuFZGrDmkZ315rtvRDCdf8Lq9Hvlf/ubpvsNrPZkqhhTi4N8zuHI8YgjtQ==}
     cpu: [x64]
     os: [win32]
 
@@ -1086,6 +1127,33 @@ snapshots:
     optional: true
 
   '@fallow-cli/win32-x64-msvc@3.10.0':
+    optional: true
+
+  '@import-lint/cli@0.1.6':
+    optionalDependencies:
+      '@import-lint/darwin-arm64': 0.1.6
+      '@import-lint/darwin-x64': 0.1.6
+      '@import-lint/linux-arm64-gnu': 0.1.6
+      '@import-lint/linux-x64-gnu': 0.1.6
+      '@import-lint/linux-x64-musl': 0.1.6
+      '@import-lint/win32-x64': 0.1.6
+
+  '@import-lint/darwin-arm64@0.1.6':
+    optional: true
+
+  '@import-lint/darwin-x64@0.1.6':
+    optional: true
+
+  '@import-lint/linux-arm64-gnu@0.1.6':
+    optional: true
+
+  '@import-lint/linux-x64-gnu@0.1.6':
+    optional: true
+
+  '@import-lint/linux-x64-musl@0.1.6':
+    optional: true
+
+  '@import-lint/win32-x64@0.1.6':
     optional: true
 
   '@jridgewell/resolve-uri@3.1.2': {}

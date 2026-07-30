@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraOffset } from '../src/game/camera';
+import { cameraOffset } from '../src/game.package/camera';
 
 // A 1000x600 world seen through an 800x400 viewport: 200px of horizontal and
 // 200px of vertical scroll before the camera hits an edge.
