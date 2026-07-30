@@ -83,6 +83,10 @@ export function startNet(
   // consumer cannot drift apart, and so the ack firehose (every own-row
   // update, several per second) is deduplicated here instead of leaning on
   // React's same-value bailout. `undefined` means "no own row is known".
+  // Caller contract: any caller on an async event path must be
+  // dispose-guarded at its entry point (see wireSession's handlers) —
+  // dispose() itself is the only caller that may run after the flip, and
+  // only with `undefined`.
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
     if (name === lastOwnName) return;
