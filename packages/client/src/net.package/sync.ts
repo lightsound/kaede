@@ -251,6 +251,13 @@ export function startNet(
       return undefined;
     };
 
+    const ownPlayerRow = (): PlayerRow | undefined => {
+      for (const row of c.db.player.iter()) {
+        if (row.identity.toHexString() === myIdHex) return row;
+      }
+      return undefined;
+    };
+
     const buildSpaceView = (admission: Admission): SpaceView => {
       let self: SpaceMemberView | undefined;
       const members: SpaceMemberView[] = [];
@@ -294,30 +301,53 @@ export function startNet(
     };
 
     /**
+     * Enters the world once admission says so: resume the surviving own row
+     * (a reload / blip within the retention window), or ask the server to
+     * spawn one. Sitting behind the admission decision means a stale own
+     * row can never start the simulation for a client that is not admitted.
+     */
+    const enterWorld = (): void => {
+      if (prediction) return;
+      const own = ownPlayerRow();
+      if (own) {
+        handleOwnRow(own);
+        return;
+      }
+      joinWorld(c);
+    };
+
+    /**
      * Re-evaluates this client's admission against the current row cache,
      * reports it (which drives the waiting-room / guest-refusal UI and the
-     * admin panel), and acts on it: join when admitted and not already in
+     * admin panel), and acts on it: enter when admitted and not already in
      * the world, reconnect when removed. Runs after every space_member /
      * space_setting row event and after our own player row is deleted, so
      * approvals, setting flips, kicks and retention sweeps all funnel
      * through this one rule.
+     *
+     * Consistency note: the SDK applies a whole transaction to the row
+     * cache before dispatching any of its callbacks, so when a removal
+     * deletes our player row and our membership together, this decision —
+     * from whichever callback runs it first — already sees both gone and
+     * lands on `reapply`, never on a rejoin-as-guest in between.
      */
     const applyAdmission = (): void => {
       const decision = currentDecision();
       onSpace(buildSpaceView(admissionOf(decision)));
       if (decision === 'join') {
-        if (!prediction) joinWorld(c);
+        enterWorld();
       } else if (decision === 'reapply') {
         reapplyOnce();
       }
     };
 
-    // Seed players already in the world (an existing own row means we resumed
-    // our identity after a reload/blip; continue from it rather than re-spawn).
+    // Seed the remote players already in the world. Our own surviving row is
+    // deliberately not resumed here: entering goes through applyAdmission
+    // below (its enterWorld picks the row up), so the simulation can never
+    // start for a client the admission rules would hold out.
     for (const row of c.db.player.iter()) {
       const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) handleOwnRow(row);
-      else recordRemote(idHex, row);
+      if (idHex !== myIdHex) recordRemote(idHex, row);
     }
 
     // Every handler below refuses to run once disposed: the socket closes
