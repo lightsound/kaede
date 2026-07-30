@@ -89,14 +89,32 @@ describe('evaluateRename', () => {
 describe('resolveJoinName', () => {
   // A rename made on another device must win over this device's stale row.
   it('prefers the persisted account name over the resumed row name', () => {
-    expect(resolveJoinName('楓', 'Player-abc123', 'abc123def')).toBe('楓');
+    expect(
+      resolveJoinName({
+        persistedName: '楓',
+        resumedRowName: 'Player-abc123',
+        identityHex: 'abc123def',
+      }),
+    ).toBe('楓');
   });
 
   it('keeps the resumed row name when no account name is set', () => {
-    expect(resolveJoinName(undefined, '楓の樹', 'abc123def')).toBe('楓の樹');
+    expect(
+      resolveJoinName({
+        persistedName: undefined,
+        resumedRowName: '楓の樹',
+        identityHex: 'abc123def',
+      }),
+    ).toBe('楓の樹');
   });
 
   it('derives the default from the identity when nothing else exists', () => {
-    expect(resolveJoinName(undefined, undefined, 'abc123def')).toBe('Player-abc123');
+    expect(
+      resolveJoinName({
+        persistedName: undefined,
+        resumedRowName: undefined,
+        identityHex: 'abc123def',
+      }),
+    ).toBe('Player-abc123');
   });
 });

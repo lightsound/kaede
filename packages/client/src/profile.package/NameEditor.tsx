@@ -60,10 +60,13 @@ const errorStyle: CSSProperties = {
  */
 export function NameEditor({
   disabled,
+  currentName,
   onSubmit,
 }: {
-  /** True while there is no connection to carry the rename. */
+  /** True while there is nowhere for a rename to land (no connection or no player row yet). */
   disabled: boolean;
+  /** The name currently in effect, shown as the placeholder once known. */
+  currentName?: string;
   onSubmit: (name: string) => void;
 }) {
   const [draft, setDraft] = useState('');
@@ -93,7 +96,7 @@ export function NameEditor({
           setDraft(e.target.value);
           setError(undefined);
         }}
-        placeholder="表示名"
+        placeholder={currentName ?? '表示名'}
         aria-label="表示名"
         disabled={disabled}
       />

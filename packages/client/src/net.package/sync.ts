@@ -40,11 +40,17 @@ export interface Net {
  * via a fresh OIDC token from `getAuthToken` when signed in, or this tab's
  * stored anonymous token otherwise (see connection.ts) — so the server hands
  * back the same player row and the local sim snaps to that authoritative state.
+ *
+ * `onOwnName` reports the authoritative display name whenever the own row
+ * carries a new one. Its first call doubles as the "spawned" signal: until
+ * then no player row exists for set_display_name to land on, so the name
+ * form stays disabled.
  */
 export function startNet(
   gameApp: GameApp,
   onStatus: (status: ConnectionStatus) => void,
   getAuthToken: AuthTokenGetter,
+  onOwnName: (name: string) => void,
 ): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
@@ -110,6 +116,7 @@ export function startNet(
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
       gameApp.setLocalPlayerName(row.name);
+      onOwnName(row.name);
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
@@ -167,6 +174,7 @@ export function startNet(
         // The row also carries the display name, which a set_display_name
         // round trip may just have changed.
         gameApp.setLocalPlayerName(row.name);
+        onOwnName(row.name);
         return;
       }
       recordRemote(idHex, row);

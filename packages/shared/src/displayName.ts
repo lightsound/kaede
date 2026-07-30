@@ -78,12 +78,19 @@ export function evaluateRename(request: {
  * name when one is set, else the name the (resumed) row already carries, else
  * a default derived from the identity. Pure, so the precedence — a rename
  * made on another device must win over a lingering row on this one — is
- * unit-tested in shared rather than buried in the join reducer.
+ * unit-tested in shared rather than buried in the join reducer. Named fields
+ * rather than positional parameters: two adjacent optional strings would let
+ * a swapped call site invert exactly the precedence this function protects.
  */
-export function resolveJoinName(
-  persisted: string | undefined,
-  existingName: string | undefined,
-  identityHex: string,
-): string {
-  return persisted ?? existingName ?? `Player-${identityHex.slice(0, 6)}`;
+export function resolveJoinName(source: {
+  /** The account's display name, when the member has set one. */
+  persistedName: string | undefined;
+  /** The name on the player row being resumed, when one survived. */
+  resumedRowName: string | undefined;
+  /** Hex form of the joining identity, seeding the default name. */
+  identityHex: string;
+}): string {
+  return (
+    source.persistedName ?? source.resumedRowName ?? `Player-${source.identityHex.slice(0, 6)}`
+  );
 }
