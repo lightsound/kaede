@@ -57,14 +57,17 @@
   本番（Maincloud ＋ Clerk 本番インスタンス）の分離、環境変数・シークレットの
   整理（Cloudflare のシークレットは Alchemy / CI から注入）、
   ステージング環境の要否の判断
-- **Stripe Projects のセットアップ（採用検証）**: `stripe projects` CLI で
-  Clerk・Cloudflare・Sentry のプロビジョニング／リンクを試し、①既存アカウントへの
-  リンク可否（特に Cloudflare — 新規開設フローしかない場合は Cloudflare のみ
-  通常アカウント運用にする）②`.env` 同期と上記の環境戦略の整合、の2点を確認して
-  正式採用を判断する（VISION「プロビジョニング・請求」参照）。前提:
-  実行環境（Claude Code on the web）のネットワークポリシーで stripe.com /
-  projects.dev への接続を許可しておくこと（2026-07-30 の初回トライは遮断されて
-  いて実施不可だった）。`stripe login` のブラウザ承認のみ人間の操作が必要
+- **Stripe Projects のセットアップ（採用検証）** ✅ **完了・正式採用（2026-07-30）**:
+  プロジェクト「kaede」を初期化し、Clerk（hobby＋auth）・Sentry（developer＋
+  project）・Cloudflare（workers:free＋workers）を無料枠でプロビジョニング済み。
+  検証結果: ①Cloudflare は**既存アカウントへの OAuth リンクに成功**（懸念だった
+  新規開設強制はなし）。Clerk・Sentry は Projects 管理の新規アカウント作成方式
+  （いずれも未セットアップだったため問題なし）②`.env` 自動同期と名前付き環境
+  （`env create` / `env use`、リソースの環境別割当）が環境戦略と整合。
+  残タスク: kaede.town 取得後に Clerk を `production_domain` 付きで
+  再プロビジョニングして本番インスタンスを作る（プロビジョニング後の設定変更は
+  不可）。留意: Cloudflare のカタログに R2 はなく汎用 API トークンも発行されない
+  ため、Alchemy 用の API トークンは従来どおり別途発行する（役割分担どおり）
 - **バックアップ・復旧手段の確認**: Maincloud のバックアップ／エクスポート機能を
   調査し、恒久データ（アカウント・持ち物）の復旧手順を決めておく。
   スキーママイグレーション事故への保険でもあるため**実ユーザー投入前に必須**

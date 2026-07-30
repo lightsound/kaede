@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "project": {
+    "initializedAt": "2026-07-30T06:30:00.526Z",
+    "merchantDisplayName": "Kaede",
+    "merchantId": "acct_1TynReI5Rh4xhuxN",
+    "projectId": "project_61V8BR2T16JswxOdz16V8BP0QNHNxDDN3Hbmac0oaUie",
+    "projectName": "kaede"
+  },
+  "providers": {
+    "clerk": {
+      "accountRequestId": "facctrq_61V8BXRMz9ATq2Pv316V8BP0QNHNxDDN3Hbmac0oa4Pg",
+      "configuration": {},
+      "linkedAt": "2026-07-30T06:36:39.924Z",
+      "providerId": "prvdr_61UGOeSW4e0T9Etwn537w",
+      "providerName": "Clerk",
+      "redirectUrl": null,
+      "requestedAt": "2026-07-30T06:36:39.924Z",
+      "status": "complete"
+    },
+    "cloudflare": {
+      "accountRequestId": "fprvcnn_61V8C7J3JzsoUZS9016V8BP0QNHNxDDN3Hbmac0oa2iu",
+      "configuration": {},
+      "linkedAt": "2026-07-30T07:13:41.353Z",
+      "providerId": "prvdr_61UQRSWMdrciFdBNs5Ipc",
+      "providerName": "Cloudflare",
+      "redirectUrl": null,
+      "requestedAt": "2026-07-30T07:13:41.353Z",
+      "status": "complete"
+    },
+    "sentry": {
+      "accountRequestId": "facctrq_61V8BXWmqb2JVjxKY16V8BP0QNHNxDDN3Hbmac0oa756",
+      "configuration": {},
+      "linkedAt": "2026-07-30T06:36:52.784Z",
+      "providerId": "prvdr_61UWhMpOMGYc7qQhs53su",
+      "providerName": "Sentry",
+      "redirectUrl": null,
+      "requestedAt": "2026-07-30T06:36:52.784Z",
+      "status": "complete"
+    }
+  },
+  "resources": {
+    "clerk-auth": {
+      "configuration": {
+        "app_name": "kaede"
+      },
+      "createdAt": "2026-07-30T06:37:40.239Z",
+      "lastRevealedAt": "2026-07-30T06:37:40.449Z",
+      "lastStatus": "complete",
+      "name": "clerk-auth",
+      "providerId": "prvdr_61UGOeSW4e0T9Etwn537w",
+      "providerName": "Clerk",
+      "resourceId": "fres_61V8BYRUeMB4qkE2Q16V8BP0QNHNxDDN3Hbmac0oaMsK",
+      "serviceId": "auth"
+    },
+    "clerk-plan": {
+      "configuration": {},
+      "createdAt": "2026-07-30T06:37:31.198Z",
+      "lastRevealedAt": "2026-07-30T06:37:31.419Z",
+      "lastStatus": "complete",
+      "name": "clerk-plan",
+      "providerId": "prvdr_61UGOeSW4e0T9Etwn537w",
+      "providerName": "Clerk",
+      "resourceId": "fres_61V8BYIr5rMQUlVt616V8BP0QNHNxDDN3Hbmac0oaXdo",
+      "serviceId": "hobby"
+    },
+    "cloudflare-plan": {
+      "configuration": {},
+      "createdAt": "2026-07-30T07:14:20.792Z",
+      "lastRevealedAt": "2026-07-30T07:14:21.036Z",
+      "lastStatus": "complete",
+      "name": "cloudflare-plan",
+      "providerId": "prvdr_61UQRSWMdrciFdBNs5Ipc",
+      "providerName": "Cloudflare",
+      "resourceId": "fres_61V8C7rh4YnlVcyTG16V8BP0QNHNxDDN3Hbmac0oaBAO",
+      "serviceId": "workers:free"
+    },
+    "cloudflare-workers": {
+      "configuration": {},
+      "createdAt": "2026-07-30T07:14:31.105Z",
+      "lastRevealedAt": "2026-07-30T07:14:31.380Z",
+      "lastStatus": "complete",
+      "name": "cloudflare-workers",
+      "providerId": "prvdr_61UQRSWMdrciFdBNs5Ipc",
+      "providerName": "Cloudflare",
+      "resourceId": "fres_61V8C8399mnSruzHQ16V8BP0QNHNxDDN3Hbmac0oaUJc",
+      "serviceId": "workers"
+    },
+    "sentry-plan": {
+      "configuration": {},
+      "createdAt": "2026-07-30T06:37:53.043Z",
+      "lastRevealedAt": "2026-07-30T06:37:53.275Z",
+      "lastStatus": "complete",
+      "name": "sentry-plan",
+      "providerId": "prvdr_61UWhMpOMGYc7qQhs53su",
+      "providerName": "Sentry",
+      "resourceId": "fres_61V8BYe1L0tG2ywX316V8BP0QNHNxDDN3Hbmac0oa2iW",
+      "serviceId": "developer"
+    },
+    "sentry-project": {
+      "configuration": {
+        "project_name": "kaede"
+      },
+      "createdAt": "2026-07-30T06:37:56.816Z",
+      "lastRevealedAt": "2026-07-30T06:37:57.075Z",
+      "lastStatus": "complete",
+      "name": "sentry-project",
+      "providerId": "prvdr_61UWhMpOMGYc7qQhs53su",
+      "providerName": "Sentry",
+      "resourceId": "fres_61V8BYh2rUhzigaH616V8BP0QNHNxDDN3Hbmac0oaB4S",
+      "serviceId": "project"
+    }
+  }
+}

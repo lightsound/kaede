@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "providers": {
+    "clerk": {
+      "name": "Clerk"
+    },
+    "cloudflare": {
+      "name": "Cloudflare"
+    },
+    "sentry": {
+      "name": "Sentry"
+    }
+  },
+  "resources": {
+    "clerk-auth": {
+      "name": "clerk-auth",
+      "providerName": "Clerk",
+      "serviceId": "auth"
+    },
+    "clerk-plan": {
+      "name": "clerk-plan",
+      "providerName": "Clerk",
+      "serviceId": "hobby"
+    },
+    "cloudflare-plan": {
+      "name": "cloudflare-plan",
+      "providerName": "Cloudflare",
+      "serviceId": "workers:free"
+    },
+    "cloudflare-workers": {
+      "name": "cloudflare-workers",
+      "providerName": "Cloudflare",
+      "serviceId": "workers"
+    },
+    "sentry-plan": {
+      "name": "sentry-plan",
+      "providerName": "Sentry",
+      "serviceId": "developer"
+    },
+    "sentry-project": {
+      "name": "sentry-project",
+      "providerName": "Sentry",
+      "serviceId": "project"
+    }
+  }
+}
