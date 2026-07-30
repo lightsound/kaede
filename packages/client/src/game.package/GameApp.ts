@@ -3,6 +3,7 @@ import {
   type CollisionMap,
   DEFAULT_MAP,
   DT,
+  type E2EHook,
   type Facing,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
@@ -33,24 +34,6 @@ const LOCAL_COLOR = 0x88c0d0;
 const REMOTE_COLOR = 0xd08770;
 
 const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
-
-/** Read-only view of the rendered world for the E2E smoke tests. */
-interface E2ESnapshot {
-  local: Vec2;
-  remotePlayers: { id: string; name: string; x: number; y: number }[];
-}
-
-declare global {
-  interface Window {
-    /**
-     * The world lives on a WebGL canvas, so browser tests cannot assert on the
-     * DOM; this hook exposes rendered positions instead. Installed by start()
-     * — its presence signals the world has been entered — and consumed by the
-     * Playwright specs in packages/e2e.
-     */
-    __mapleE2E?: { snapshot(): E2ESnapshot };
-  }
-}
 
 export interface GameApp {
   destroy(): void;
@@ -190,8 +173,9 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     renderLocal(ticker.deltaMS);
   });
 
-  const e2eHook = {
-    snapshot: (): E2ESnapshot => ({
+  // See E2EHook in @maple/shared for why this exists and who consumes it.
+  const e2eHook: E2EHook = {
+    snapshot: () => ({
       local: { x: local.root.x, y: local.root.y },
       remotePlayers: [...remotes.entries()].map(([id, view]) => ({
         id,
@@ -219,11 +203,12 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       tick = t;
       acc = 0; // clamp so the first running frame doesn't replay a burst
       localOffset = { x: 0, y: 0 };
-      // Installed here rather than at creation: only the instance that the
-      // network wires up ever starts, whereas StrictMode creates two instances
-      // concurrently and creation-time installs can interleave so that the
-      // doomed instance installs last and its destroy() clears the hook.
-      window.__mapleE2E = e2eHook;
+      // Test affordance only, so production bundles never ship it. Installed
+      // here rather than at creation: only the instance that the network wires
+      // up ever starts, whereas StrictMode creates two instances concurrently
+      // and creation-time installs can interleave so that the doomed instance
+      // installs last and its destroy() clears the hook.
+      if (import.meta.env.DEV) window.__mapleE2E = e2eHook;
     },
     resetLocal(state, t) {
       // Carry the visual error: where we render now (incl. the live offset) vs.
