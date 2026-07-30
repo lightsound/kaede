@@ -5,10 +5,16 @@
  * two sides are otherwise only coupled at runtime through the browser.
  */
 export interface E2EWorldSnapshot {
+  /**
+   * Applied simulation tick; -1 until the authoritative spawn row has started
+   * the local simulation, so `tick >= 0` is the "entered the world" signal
+   * regardless of when the hook itself gets installed.
+   */
+  tick: number;
   /** Rendered position of the local player (world pixels, y-down). */
   local: { x: number; y: number };
   /** Rendered positions of every remote player currently in the world. */
-  remotePlayers: { id: string; name: string; x: number; y: number }[];
+  remotePlayers: { x: number; y: number }[];
 }
 
 export interface E2EHook {
@@ -20,9 +26,9 @@ declare global {
     /**
      * The world lives on a WebGL canvas, so browser tests cannot assert on
      * the DOM; this hook exposes rendered positions instead. The client's
-     * GameApp.start() installs it in dev builds once the authoritative spawn
-     * row has started the local simulation, so its presence doubles as the
-     * "entered the world" signal.
+     * GameApp installs it in dev builds only. To wait for world entry, poll
+     * `snapshot().tick >= 0` — never this hook's mere presence, which is an
+     * install-timing implementation detail.
      */
     __mapleE2E?: E2EHook;
   }

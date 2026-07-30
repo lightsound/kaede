@@ -13,12 +13,12 @@ function snapshot(page: Page): Promise<E2EWorldSnapshot> {
 /**
  * Guest entry: load the client and wait until the authoritative spawn row has
  * started the local simulation (covers connect → join → own-row round trip).
- * The client installs the hook at that exact moment, so its presence is the
- * "entered the world" signal.
+ * `tick` is -1 until that moment, so the wait stays correct no matter when
+ * the hook itself gets installed.
  */
 async function enterWorld(page: Page): Promise<void> {
   await page.goto('/');
-  await page.waitForFunction(() => window.__mapleE2E !== undefined);
+  await page.waitForFunction(() => (window.__mapleE2E?.snapshot().tick ?? -1) >= 0);
 }
 
 const remoteCount = async (page: Page) => (await snapshot(page)).remotePlayers.length;

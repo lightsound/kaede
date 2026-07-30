@@ -83,14 +83,17 @@ function createPlayerView(world: Container, name: string, color: number): Player
  * builds, so the build-time DEV constant lets production bundles drop the
  * hook code entirely.
  */
-function createE2EHook(local: PlayerView, remotes: Map<string, PlayerView>): E2EHook | undefined {
+function createE2EHook(
+  local: PlayerView,
+  remotes: Map<string, PlayerView>,
+  currentTick: () => number,
+): E2EHook | undefined {
   if (!import.meta.env.DEV) return undefined;
   return {
     snapshot: () => ({
+      tick: currentTick(),
       local: { x: local.root.x, y: local.root.y },
-      remotePlayers: [...remotes.entries()].map(([id, view]) => ({
-        id,
-        name: view.label.text,
+      remotePlayers: [...remotes.values()].map((view) => ({
         x: view.root.x,
         y: view.root.y,
       })),
@@ -194,7 +197,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     renderLocal(ticker.deltaMS);
   });
 
-  const e2eHook = createE2EHook(local, remotes);
+  const e2eHook = createE2EHook(local, remotes, () => tick);
 
   return {
     destroy() {
