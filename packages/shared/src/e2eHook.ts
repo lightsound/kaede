@@ -26,9 +26,9 @@ declare global {
     /**
      * The world lives on a WebGL canvas, so browser tests cannot assert on
      * the DOM; this hook exposes rendered positions instead. The client's
-     * GameApp.start() installs it in dev builds once the authoritative spawn
-     * row has started the local simulation, so its presence doubles as the
-     * "entered the world" signal.
+     * GameApp installs it in dev builds only. To wait for world entry, poll
+     * `snapshot().tick >= 0` — never this hook's mere presence, which is an
+     * install-timing implementation detail.
      */
     __mapleE2E?: E2EHook;
   }
