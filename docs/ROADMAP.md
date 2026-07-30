@@ -48,9 +48,9 @@
   **Alchemy v2 による IaC 化**（`infra/` に隔離、バージョンをピン留め）、
   `vercel.json` の置き換え、CI/デプロイ手順と README の更新まで含む。
   実ユーザー投入前に済ませる）
-- **ドメインの取得と確定**（Cloudflare Registrar）: Clerk 本番インスタンス＝
-  Identity の発行者がドメインに紐づくため、**実ユーザー投入前の必須タスク**。
-  後からの変更は全ユーザー移行になる（VISION の「名前」行を参照）
+- **ドメインの取得**: **kaede.town で確定済み（2026-07-30）**。Cloudflare
+  Registrar で取得し、Clerk 本番インスタンスをこのドメインで設定する
+  （発行者＝Identity がこのドメインに紐づくため、以後変更不可 — VISION 参照）
 - 環境戦略の確立: ローカル開発（SpacetimeDB local ＋ Clerk 開発インスタンス）と
   本番（Maincloud ＋ Clerk 本番インスタンス）の分離、環境変数の整理、
   ステージング環境の要否の判断
