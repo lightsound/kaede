@@ -55,6 +55,7 @@
 | `packages/shared` | 物理シミュレーション・マップ・定数など、クライアントとサーバーで共有するロジック |
 | `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期） |
 | `packages/server` | SpacetimeDB モジュール（`player` テーブルと `submit_inputs` リデューサー。サーバー権威で物理を再生） |
+| `packages/e2e` | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証） |
 
 ## 同期方式
 
@@ -173,6 +174,25 @@
    `fallow health` は `coverage/coverage-final.json` を**必須**とし、無ければエラー終了します。
    `fallow` を直接叩くときは先に `pnpm test:coverage` を実行してください
    （`pnpm analyze` / `pnpm analyze:changed` と CI は込みです）。
+
+9. **E2E スモークテスト（Playwright）**
+
+   ```sh
+   pnpm test:e2e
+   ```
+
+   ゲスト2ブラウザで「入場→移動同期→停止後の収束」を検証します（`packages/e2e`）。
+   Vite の開発サーバーは Playwright が自動起動しますが、**ローカルの SpacetimeDB
+   ホストは起動済み・publish 済みが前提**です（手順 3〜4 と同じ。CI の `e2e`
+   ジョブも同じ手順を踏みます）。初回はブラウザのインストールが必要です:
+
+   ```sh
+   pnpm --filter @maple/e2e exec playwright install chromium
+   ```
+
+   世界は WebGL キャンバスに描画されるため DOM ではアサートできず、テストは
+   クライアントが公開する読み取り専用スナップショットフック `window.__mapleE2E`
+   （`GameApp.ts` が設置）でプレイヤー位置を読みます。
 
 ## デプロイ（公開手順）
 
