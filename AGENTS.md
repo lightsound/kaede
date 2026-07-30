@@ -1,5 +1,14 @@
 # AGENTS.md
 
+## Project direction (read first)
+
+This project has pivoted from a game MVP to **kaede**, a MapleStory-style 2D side-scrolling **work collaboration tool** (a virtual office replacing oVice for a small community, with future SaaS ambitions). Before starting any task, read:
+
+- `docs/VISION.md` — product vision, target users, and all settled technical decisions (auth, video calls, art pipeline, scope exclusions)
+- `docs/ROADMAP.md` — phase ordering, per-phase goals and completion criteria, and the oVice-migration milestone
+
+Do not add gameplay features (combat, mobs, XP); that direction was abandoned (PR #2 closed). Update `docs/ROADMAP.md` via PR when a phase completes or the plan changes.
+
 ## Cursor Cloud specific instructions
 
 `maple-like` is a single-product pnpm monorepo (a MapleStory-style 2D multiplayer game). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `lint`, `analyze`).
