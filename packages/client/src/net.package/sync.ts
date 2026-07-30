@@ -41,16 +41,17 @@ export interface Net {
  * stored anonymous token otherwise (see connection.ts) — so the server hands
  * back the same player row and the local sim snaps to that authoritative state.
  *
- * `onOwnName` reports the authoritative display name whenever the own row
- * carries a new one. Its first call doubles as the "spawned" signal: until
- * then no player row exists for set_display_name to land on, so the name
- * form stays disabled.
+ * `onOwnName` reports the authoritative display name whenever it changes,
+ * and `undefined` whenever the own row stops being known to exist (before
+ * the first spawn, after a disconnect, after the row is deleted by the
+ * retention sweep). "Defined" therefore means "a row exists for
+ * set_display_name to land on", which is what gates the name form.
  */
 export function startNet(
   gameApp: GameApp,
   onStatus: (status: ConnectionStatus) => void,
   getAuthToken: AuthTokenGetter,
-  onOwnName: (name: string) => void,
+  onOwnName: (name: string | undefined) => void,
 ): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
@@ -78,11 +79,29 @@ export function startNet(
     remoteViews.renderFrame(now, gameApp.upsertRemotePlayer);
   });
 
+  // The single path for own-name changes, so the label and the onOwnName
+  // consumer cannot drift apart, and so the ack firehose (every own-row
+  // update, several per second) is deduplicated here instead of leaning on
+  // React's same-value bailout. `undefined` means "no own row is known".
+  let lastOwnName: string | undefined;
+  function publishOwnName(name: string | undefined): void {
+    if (name === lastOwnName) return;
+    lastOwnName = name;
+    // The label keeps its last text while the row is gone: the sprite is not
+    // visible then, and the replacement row brings the authoritative name.
+    if (name !== undefined) gameApp.setLocalPlayerName(name);
+    onOwnName(name);
+  }
+
   function dropSession(): void {
     prediction = undefined;
     conn = undefined;
     remoteViews.clear();
     gameApp.clearRemotePlayers();
+    // Whether our row survives the retention window is unknowable while
+    // offline; report it gone so the rename form disables until the row
+    // (re)appears after the next join.
+    publishOwnName(undefined);
   }
 
   /** Ask the server to spawn or resume our row; the answer arrives as a row event. */
@@ -115,8 +134,7 @@ export function startNet(
     // below. Start/refresh the simulation from that authoritative state.
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
-      gameApp.setLocalPlayerName(row.name);
-      onOwnName(row.name);
+      publishOwnName(row.name);
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
@@ -173,8 +191,7 @@ export function startNet(
         prediction?.onAck(stateFromRow(row), row.tick, performance.now());
         // The row also carries the display name, which a set_display_name
         // round trip may just have changed.
-        gameApp.setLocalPlayerName(row.name);
-        onOwnName(row.name);
+        publishOwnName(row.name);
         return;
       }
       recordRemote(idHex, row);
@@ -187,6 +204,9 @@ export function startNet(
         // abandoned. Re-join and let the replacement row restart prediction,
         // rather than predicting forward against a row that no longer exists.
         prediction = undefined;
+        // No row again until the re-join lands; disable the rename form so a
+        // submit cannot race into the server's no-target refusal.
+        publishOwnName(undefined);
         joinWorld(c);
         return;
       }

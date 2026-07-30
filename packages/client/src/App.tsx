@@ -28,10 +28,11 @@ const overlayStyle: CSSProperties = {
 export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
-  // The authoritative display name from the own player row; undefined until
-  // the first spawn. Doubles as the "a row exists" signal: before it, a
-  // rename has nowhere to land (the server would refuse it as no-target),
-  // so the form stays disabled.
+  // The authoritative display name from the own player row; undefined
+  // whenever no row is known to exist (before the first spawn, during a
+  // reconnect, after a retention sweep — see startNet's onOwnName contract).
+  // While undefined a rename has nowhere to land (the server would refuse it
+  // as no-target), so the form stays disabled.
   const [ownName, setOwnName] = useState<string>();
   const getAuthToken = useContext(AuthTokenContext);
   // The one handle on the net stack: created inside the effect, disposed by
