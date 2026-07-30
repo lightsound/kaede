@@ -45,7 +45,7 @@ const CONNECTION_POLICY: ConnectionPolicy = {
 /**
  * Vets every connection before it can act in the world. Member privileges do not
  * exist yet: the approval gate that will consume this verdict arrives with the
- * account table in Phase 1. A plain `guest` needs nothing done to it.
+ * account table in Phase 1.
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
@@ -58,7 +58,11 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
   }
   if (auth.kind === 'unregistered-issuer') {
     console.warn(`guest connected with an unregistered issuer: ${auth.issuer}`);
+    return;
   }
+  // Admission falls through to "let them in", so a verdict added later must not
+  // land here silently. This costs no branch, unlike a fourth runtime case.
+  auth satisfies { kind: 'guest' };
 });
 
 /**

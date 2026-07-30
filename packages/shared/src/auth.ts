@@ -23,7 +23,8 @@ export interface ConnectionPolicy {
 }
 
 /**
- * What a connecting client is. `member` is the only verdict that may ever carry
+ * What a connecting client is, or why it is refused. `member` is the only
+ * verdict that may ever carry
  * member privileges. `unregistered-issuer` is separate from `guest` because it
  * is a state we intend to stop admitting: the ROADMAP Phase 1 gate that refuses
  * it turns handling this verdict into a rejection, and nothing else.
