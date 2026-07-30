@@ -11,10 +11,10 @@ export interface E2EWorldSnapshot {
    * regardless of when the hook itself gets installed.
    */
   tick: number;
-  /** Rendered position of the local player (world pixels, y-down). */
-  local: { x: number; y: number };
-  /** Rendered positions of every remote player currently in the world. */
-  remotePlayers: { x: number; y: number }[];
+  /** Rendered position and label of the local player (world pixels, y-down). */
+  local: { x: number; y: number; name: string };
+  /** Rendered positions and labels of every remote player currently in the world. */
+  remotePlayers: { x: number; y: number; name: string }[];
 }
 
 export interface E2EHook {
