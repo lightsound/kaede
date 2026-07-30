@@ -1,7 +1,7 @@
 // fallow-ignore-file coverage-gaps -- a React component that mounts the canvas and renders connection status; needs a DOM, and no DOM test environment is configured
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
+import { AuthTokenContext } from './auth/AuthTokenContext';
 import { createGameApp, type GameApp } from './game/GameApp';
-import { getClerkToken } from './net/authToken';
 import { type ConnectionStatus, type Net, startNet } from './net/sync';
 
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
@@ -27,6 +27,7 @@ const overlayStyle: CSSProperties = {
 export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
+  const getAuthToken = useContext(AuthTokenContext);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -44,7 +45,7 @@ export function App() {
         return;
       }
       game = created;
-      net = startNet(created, setStatus, getClerkToken);
+      net = startNet(created, setStatus, getAuthToken);
     })();
 
     return () => {
@@ -52,7 +53,7 @@ export function App() {
       net?.dispose();
       game?.destroy();
     };
-  }, []);
+  }, [getAuthToken]);
 
   return (
     <div style={{ position: 'relative' }}>

@@ -1,6 +1,8 @@
 // fallow-ignore-file coverage-gaps -- Clerk-bound React components; need a loaded Clerk instance and a DOM, and no DOM test environment is configured
 import { ClerkProvider, Show, SignInButton, UserButton, useAuth } from '@clerk/react';
 import type { CSSProperties, ReactNode } from 'react';
+import { guestToken, memberToken } from '../net/authToken';
+import { AuthTokenContext } from './AuthTokenContext';
 
 const headerStyle: CSSProperties = {
   position: 'absolute',
@@ -24,12 +26,17 @@ const signInButtonStyle: CSSProperties = {
  * connection is bound to one identity for its lifetime, so switching between
  * the guest identity and a Clerk identity requires tearing the whole net
  * stack down and reconnecting with the other token.
+ *
+ * The token source is provided together with the tree it belongs to: the
+ * member tree always demands a Clerk token (a failed mint fails the connect
+ * and retries — never a silent guest demotion) and the guest tree never
+ * offers one (a stale token minted during sign-out can't leak in).
  */
 function AuthBoundary({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return null;
   return (
-    <>
+    <AuthTokenContext.Provider value={isSignedIn ? memberToken : guestToken}>
       <header style={headerStyle}>
         <Show when="signed-out">
           <SignInButton mode="modal">
@@ -43,7 +50,7 @@ function AuthBoundary({ children }: { children: ReactNode }) {
         </Show>
       </header>
       <div key={isSignedIn ? 'member' : 'guest'}>{children}</div>
-    </>
+    </AuthTokenContext.Provider>
   );
 }
 
