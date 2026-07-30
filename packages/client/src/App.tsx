@@ -3,6 +3,7 @@ import { type CSSProperties, useContext, useEffect, useRef, useState } from 'rea
 import { AuthTokenContext } from './auth.package';
 import { createGameApp, type GameApp } from './game.package';
 import { type ConnectionStatus, type Net, startNet } from './net.package';
+import { NameEditor } from './profile.package';
 
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
   connecting: 'サーバーに接続中…',
@@ -28,6 +29,9 @@ export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const getAuthToken = useContext(AuthTokenContext);
+  // A ref, not state: the net stack is created inside the effect, and the
+  // name form only needs it at submit time.
+  const netRef = useRef<Net>(undefined);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -46,11 +50,13 @@ export function App() {
       }
       game = created;
       net = startNet(created, setStatus, getAuthToken);
+      netRef.current = net;
     })();
 
     return () => {
       cancelled = true;
       net?.dispose();
+      netRef.current = undefined;
       game?.destroy();
     };
   }, [getAuthToken]);
@@ -59,6 +65,10 @@ export function App() {
     <div style={{ position: 'relative' }}>
       <div ref={hostRef} />
       {status !== 'connected' && <div style={overlayStyle}>{STATUS_MESSAGES[status]}</div>}
+      <NameEditor
+        disabled={status !== 'connected'}
+        onSubmit={(name) => netRef.current?.setDisplayName(name)}
+      />
     </div>
   );
 }

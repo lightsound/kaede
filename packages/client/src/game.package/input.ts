@@ -2,6 +2,17 @@ import type { PlayerInput } from '@maple/shared';
 
 const MOVE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space']);
 
+/**
+ * True when the key event is aimed at a text-entry element (the display-name
+ * form today, chat later), so the avatar must not react to it. Structural
+ * rather than `instanceof HTMLElement`: the check needs no DOM globals, which
+ * also keeps it testable under the fake window the unit tests install.
+ */
+function isTextEntry(target: EventTarget | null): boolean {
+  const el = target as { tagName?: string; isContentEditable?: boolean } | null;
+  return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable === true;
+}
+
 /** Field-wise OR of two inputs, so multiple sources (keyboard, touch) combine. */
 export function mergeInputs(a: PlayerInput, b: PlayerInput): PlayerInput {
   return {
@@ -18,12 +29,16 @@ export function createInput(): { sample(): PlayerInput; dispose(): void } {
   const held = new Set<string>();
 
   const onDown = (e: KeyboardEvent) => {
+    if (isTextEntry(e.target)) return;
     if (MOVE_KEYS.has(e.code)) e.preventDefault();
     held.add(e.code);
   };
   const onUp = (e: KeyboardEvent) => {
-    if (MOVE_KEYS.has(e.code)) e.preventDefault();
+    // Always release: a key pressed in the world but released over a text
+    // field must not stay held forever. Only the world path eats the event.
     held.delete(e.code);
+    if (isTextEntry(e.target)) return;
+    if (MOVE_KEYS.has(e.code)) e.preventDefault();
   };
 
   window.addEventListener('keydown', onDown);
