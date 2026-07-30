@@ -1,6 +1,8 @@
 // fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredRow in @maple/shared and unit-tested there
 import {
   type BatchRejectReason,
+  type ConnectionPolicy,
+  classifyConnection,
   DEFAULT_MAP,
   evaluateInputBatch,
   isExpiredRow,
@@ -16,34 +18,50 @@ import { spacetimedb } from './tables';
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
 /**
- * OIDC issuers whose JWTs we accept, and the audience our Clerk JWT template
- * pins (`aud: kaede-spacetimedb`). SpacetimeDB validates any well-formed OIDC
- * token's signature, so restricting issuer+audience here is what "registering"
- * our issuer means — without it, a valid token from any provider would connect.
- *
- * Spike scope: the Clerk development instance. The production instance (its
- * issuer will be a kaede.town subdomain) is added when it exists.
+ * The Clerk **development** instance. Its sign-up flow is open, so it must be
+ * dropped from CONNECTION_POLICY.memberIssuers in the same change that adds the
+ * production instance — otherwise anyone who signs up on the dev instance holds
+ * a member token against production (ROADMAP Phase 1 lists this as a gate that
+ * has to close before real users).
  */
-const TRUSTED_OIDC_ISSUERS = ['https://famous-hornet-40.clerk.accounts.dev'];
-const REQUIRED_JWT_AUDIENCE = 'kaede-spacetimedb';
+const CLERK_DEVELOPMENT_ISSUER = 'https://famous-hornet-40.clerk.accounts.dev';
 
-// Guests connect tokenless (jwt == null) and anonymous reconnects present a
-// SpacetimeDB server-issued token; both stay admitted. What we reject is a
-// third-party OIDC token we never registered — or a Clerk token minted for
-// some other app — before it gets an identity in the world.
+/**
+ * SpacetimeDB validates any well-formed OIDC token's signature and derives an
+ * Identity from issuer+subject, so deciding which issuers mean what is the
+ * module's job — this policy is what "registering our issuer" amounts to.
+ *
+ * `guestIssuers` names the hosts whose own tokens we expect: a guest connects
+ * tokenless, is handed a host-issued token, and replays it to resume its
+ * per-tab identity. Only `localhost` is known today; Maincloud's issuer has to
+ * be observed and added before unrecognised issuers can be refused outright.
+ */
+const CONNECTION_POLICY: ConnectionPolicy = {
+  memberIssuers: [CLERK_DEVELOPMENT_ISSUER],
+  memberAudience: 'kaede-spacetimedb',
+  guestIssuers: ['localhost'],
+};
+
+/**
+ * Classifies every connection before it can act in the world.
+ *
+ * Refused outright: a token from our own provider minted for a different
+ * application. Admitted as guests: tokenless clients, host-issued guest tokens,
+ * and — for now — tokens from providers we never configured, which hold no
+ * privileges a guest lacks but are logged so the gap stays visible. Member
+ * privileges do not exist yet; the approval gate that will consume this verdict
+ * arrives with the account table in Phase 1.
+ */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
-  const jwt = ctx.senderAuth.jwt;
-  if (jwt == null) return;
-  if (TRUSTED_OIDC_ISSUERS.includes(jwt.issuer)) {
-    if (!jwt.audience.includes(REQUIRED_JWT_AUDIENCE)) {
-      throw new SenderError('Unauthorized: token was not minted for this app');
-    }
-    console.info(`clerk client connected: sub=${jwt.subject}`);
+  const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
+  if (auth.kind === 'rejected') throw new SenderError(`Unauthorized: ${auth.reason}`);
+  if (auth.kind === 'member') {
+    console.info(`member connected: sub=${auth.subject}`);
     return;
   }
-  // Server-issued (anonymous) tokens fall through here; log the issuer so the
-  // spike can observe what it looks like before we enforce a full allow-list.
-  console.info(`client connected with non-Clerk issuer: ${jwt.issuer}`);
+  if (!auth.issuerRecognised) {
+    console.warn(`guest connected with an unregistered issuer: ${auth.issuer}`);
+  }
 });
 
 /**
