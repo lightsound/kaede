@@ -1,8 +1,8 @@
 // fallow-ignore-file coverage-gaps -- Clerk-bound React components; need a loaded Clerk instance and a DOM, and no DOM test environment is configured
 import { ClerkProvider, Show, SignInButton, UserButton, useAuth } from '@clerk/react';
 import type { CSSProperties, ReactNode } from 'react';
-import { guestToken, memberToken } from '../net/authToken';
 import { AuthTokenContext } from './AuthTokenContext';
+import { guestToken, memberToken } from './authToken';
 
 const headerStyle: CSSProperties = {
   position: 'absolute',

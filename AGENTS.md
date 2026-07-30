@@ -11,7 +11,7 @@ Do not add gameplay features (combat, mobs, XP); that direction was abandoned (P
 
 ## Cursor Cloud specific instructions
 
-`maple-like` is a single-product pnpm monorepo (a MapleStory-style 2D multiplayer game). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `lint`, `analyze`).
+`maple-like` is a single-product pnpm monorepo (a MapleStory-style 2D multiplayer game). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `lint`, `lint:imports`, `analyze`).
 
 ### SpacetimeDB CLI binary name
 The pinned CLI (`v2.7.0-hotfix3`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`. If the binary is missing on a fresh VM, reinstall it:
@@ -32,6 +32,20 @@ The client defaults to `ws://localhost:3000` and DB `maple-like` in dev, so no e
 
 ### Static analysis / testing gotcha
 `fallow health` (part of `pnpm analyze` and CI) **requires** `coverage/coverage-final.json`; run `pnpm test:coverage` first if invoking `fallow` directly (`pnpm analyze` already does). `packages/server` has no unit tests — it only runs inside the SpacetimeDB host, so all testable pure logic lives in `packages/shared`.
+
+### Internal package boundaries
+ImportLint enforces directory-level encapsulation inside each workspace; fallow continues to
+enforce the workspace-level `client` / `server` / `shared` dependency graph.
+
+- Every first-level `packages/*/src/*` directory is automatically a boundary; use the
+  `*.package` suffix to make boundaries explicit and for nested packages.
+- Package-private exports are the default. Expose the intended API through the package's
+  `index.ts`; external consumers must import from that index, never an internal file.
+- Use `/** @public */` only when an export genuinely needs unrestricted project-wide access.
+- Run `pnpm lint:imports` after moving files or changing imports. `pnpm lint` runs both Biome and
+  ImportLint.
+- Tests are excluded so they may import package-private implementation details directly.
+- Read `.agents/skills/import-lint/SKILL.md` before fixing ImportLint diagnostics.
 
 <!-- stripe-projects-cli managed:agents-md:start -->
 ## Stripe Projects CLI

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createServerClock } from '../src/net/serverClock';
+import { createServerClock } from '../src/net.package/serverClock';
 
 describe('createServerClock', () => {
   it('has no estimate before any sample', () => {

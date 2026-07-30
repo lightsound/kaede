@@ -1,6 +1,6 @@
 // fallow-ignore-file coverage-gaps -- thin wrapper over Clerk's browser SDK; needs a loaded Clerk instance, not a unit test
 import { getToken } from '@clerk/react';
-import type { AuthTokenGetter } from './connection';
+import type { AuthTokenGetter } from '../net.package';
 
 /**
  * The Clerk JWT template used for SpacetimeDB connections. It pins the `aud`

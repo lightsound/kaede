@@ -42,7 +42,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: pnpm lint
+        run: pnpm exec biome check .
+
+      - name: Import boundaries
+        run: pnpm lint:imports --format github
 
       - name: Typecheck
         run: pnpm typecheck

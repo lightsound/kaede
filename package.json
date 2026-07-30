@@ -7,13 +7,15 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "lint": "biome check .",
+    "lint": "biome check . && import-lint",
+    "lint:imports": "import-lint",
     "format": "biome check --write .",
     "analyze": "pnpm test:coverage && fallow && fallow security",
     "analyze:changed": "pnpm test:coverage && fallow audit"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",
+    "@import-lint/cli": "0.1.6",
     "@vitest/coverage-v8": "^4.1.10",
     "fallow": "^3.10.0",
     "vitest": "^4.1.10"

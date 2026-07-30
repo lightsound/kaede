@@ -160,7 +160,8 @@
    pnpm typecheck         # 全パッケージの tsc --noEmit
    pnpm test              # shared と client のユニットテストを1回の vitest で実行
    pnpm test:coverage     # 同上 + coverage/coverage-final.json を出力
-   pnpm lint              # Biome による lint とフォーマット検査
+   pnpm lint              # Biome + ImportLint（内部パッケージ境界）の検査
+   pnpm lint:imports      # ImportLint のみ実行
    pnpm format            # Biome によるフォーマット適用
    pnpm analyze           # CIと同じ fallow 一式（dead-code / dupes / health / security）
    pnpm analyze:changed   # 変更ファイルだけを fallow で検査（コミット前向け）

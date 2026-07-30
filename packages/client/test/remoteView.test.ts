@@ -1,6 +1,10 @@
 import { type Facing, INTERP_DELAY_MS } from '@maple/shared';
 import { describe, expect, it } from 'vitest';
-import { createRemoteViews, REMOTE_EXTRAPOLATION_MAX_MS, sampleAt } from '../src/net/remoteView';
+import {
+  createRemoteViews,
+  REMOTE_EXTRAPOLATION_MAX_MS,
+  sampleAt,
+} from '../src/net.package/remoteView';
 
 const facing: Facing = 1;
 

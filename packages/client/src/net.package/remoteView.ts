@@ -2,19 +2,15 @@ import { type Facing, INTERP_DELAY_MS, toFacing } from '@maple/shared';
 import {
   correctionOffset,
   decayOffset,
+  type HermitePoint,
   hermite,
   REMOTE_DISCONTINUITY_SPEED,
   type Vec2,
-} from '../game/smoothing';
+} from '../smoothing.package';
 import { createServerClock } from './serverClock';
 
 /** One position sample for a remote player, timestamped on the SERVER clock. */
-export interface Snapshot {
-  t: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
+export interface Snapshot extends HermitePoint {
   facing: Facing;
 }
 

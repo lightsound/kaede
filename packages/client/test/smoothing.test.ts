@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { correctionOffset, decayOffset, hermite } from '../src/game/smoothing';
+import { correctionOffset, decayOffset, hermite } from '../src/smoothing.package/smoothing';
 
 describe('correctionOffset', () => {
   it('carries the render error after a small correction', () => {

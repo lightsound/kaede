@@ -15,9 +15,9 @@ import {
   WORLD_WIDTH,
 } from '@maple/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
 import { cameraOffset } from './camera';
 import { createInput, mergeInputs } from './input';
-import { correctionOffset, decayOffset, type Vec2 } from './smoothing';
 import { createTouchControls } from './touchControls';
 
 const VIEW_W = 1280;

@@ -1,6 +1,6 @@
 import type { PlayerInput } from '@maple/shared';
 import { describe, expect, it } from 'vitest';
-import { mergeInputs } from '../src/game/input';
+import { mergeInputs } from '../src/game.package/input';
 
 const NONE: PlayerInput = { left: false, right: false, up: false, down: false, jump: false };
 
