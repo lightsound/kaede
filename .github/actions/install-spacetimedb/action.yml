@@ -1,0 +1,20 @@
+name: Install SpacetimeDB CLI
+description: >-
+  Installs the pinned spacetimedb-cli / spacetimedb-standalone binaries from
+  the GitHub release tarball into ~/.local/bin and puts them on PATH. Shared
+  by every job that needs the CLI so the pin and extraction logic live once.
+inputs:
+  version:
+    description: Release tag to install (e.g. v2.7.0-hotfix3)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download and extract
+      shell: bash
+      run: |
+        curl -sSfL -o /tmp/spacetime.tar.gz \
+          "https://github.com/clockworklabs/SpacetimeDB/releases/download/${{ inputs.version }}/spacetime-x86_64-unknown-linux-gnu.tar.gz"
+        mkdir -p "$HOME/.local/bin"
+        tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"

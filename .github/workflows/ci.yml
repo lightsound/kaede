@@ -72,12 +72,9 @@ jobs:
         run: pnpm exec fallow security
 
       - name: Install SpacetimeDB CLI (pinned)
-        run: |
-          curl -sSfL -o /tmp/spacetime.tar.gz \
-            "https://github.com/clockworklabs/SpacetimeDB/releases/download/${SPACETIME_VERSION}/spacetime-x86_64-unknown-linux-gnu.tar.gz"
-          mkdir -p "$HOME/.local/bin"
-          tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/install-spacetimedb
+        with:
+          version: ${{ env.SPACETIME_VERSION }}
 
       - name: Check module bindings are up to date
         run: |
@@ -109,16 +106,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Browser binaries are heavy (~100MB); cache them keyed on the lockfile,
+      # which pins the @playwright/test version and thus the browser build.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @maple/e2e exec playwright install --with-deps chromium
 
+      # On a cache hit only the OS packages are (re-)checked, not the browser.
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @maple/e2e exec playwright install-deps chromium
+
       - name: Install SpacetimeDB CLI (pinned)
-        run: |
-          curl -sSfL -o /tmp/spacetime.tar.gz \
-            "https://github.com/clockworklabs/SpacetimeDB/releases/download/${SPACETIME_VERSION}/spacetime-x86_64-unknown-linux-gnu.tar.gz"
-          mkdir -p "$HOME/.local/bin"
-          tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/install-spacetimedb
+        with:
+          version: ${{ env.SPACETIME_VERSION }}
 
       - name: Start SpacetimeDB and publish the module
         run: |
@@ -139,11 +148,14 @@ jobs:
       - name: E2E smoke test
         run: pnpm test:e2e
 
-      # Traces for the failed attempts are embedded in the HTML report.
-      - name: Upload Playwright report
+      # Traces for the failed attempts are embedded in the HTML report; the
+      # host log covers server-side failures (e.g. a rejected reducer call).
+      - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: packages/e2e/playwright-report/
+          name: e2e-failure-artifacts
+          path: |
+            packages/e2e/playwright-report/
+            /tmp/spacetimedb.log
           retention-days: 14
