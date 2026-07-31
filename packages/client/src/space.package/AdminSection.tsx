@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a React gate around the admin panel; needs a DOM, and no DOM test environment is configured. The gating rule is isActingAdmin, unit-tested in @maple/shared
-import { isActingAdmin } from '@maple/shared';
+import { isActingAdmin, type MemberAction } from '@maple/shared';
 import type { SpaceMemberView, SpaceView } from '../net.package';
 import { AdminPanel } from './AdminPanel';
 
@@ -12,14 +12,12 @@ import { AdminPanel } from './AdminPanel';
 export function AdminSection({
   connected,
   space,
-  onApprove,
-  onRemove,
+  onMemberAction,
   onGuestsAllowedChange,
 }: {
   connected: boolean;
   space: SpaceView | undefined;
-  onApprove: (member: SpaceMemberView) => void;
-  onRemove: (member: SpaceMemberView) => void;
+  onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
 }) {
   if (!connected || space === undefined || !isActingAdmin(space.self)) return null;
@@ -27,8 +25,7 @@ export function AdminSection({
     <AdminPanel
       members={space.members}
       guestsAllowed={space.guestsAllowed}
-      onApprove={onApprove}
-      onRemove={onRemove}
+      onMemberAction={onMemberAction}
       onGuestsAllowedChange={onGuestsAllowedChange}
     />
   );

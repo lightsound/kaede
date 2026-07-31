@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
-import { stateFromRow } from '@maple/shared';
+import { type MemberAction, stateFromRow } from '@maple/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
@@ -30,17 +30,33 @@ export interface Net {
    */
   setDisplayName(name: string): void;
   /**
-   * Admin actions (approve_member / remove_member / set_guests_allowed).
-   * Targets are the identities carried by SpaceMemberView. The server
+   * Files (or re-files, after a rejection) this client's membership
+   * application. Success arrives as the own space_member row appearing in
+   * the subscription; the server refuses guests and duplicates.
+   */
+  applyForMembership(): void;
+  /**
+   * Admin actions: one member transition (MemberAction, on the identity a
+   * SpaceMemberView carries) or the guest-admission setting. The server
    * re-checks that the sender is an acting admin; these methods exist for
    * the admin panel, whose gating is cosmetic. Success arrives as
    * space_member / space_setting row events (a fresh SpaceView); failures
    * only log, and the unchanged view is the visible outcome.
    */
-  approveMember(member: Identity): void;
-  removeMember(member: Identity): void;
+  memberAction(action: MemberAction, member: Identity): void;
   setGuestsAllowed(allowed: boolean): void;
 }
+
+/** Each member transition's generated reducer call, keyed by the shared vocabulary. */
+const MEMBER_ACTION_CALLS: Record<
+  MemberAction,
+  (c: DbConnection, identity: Identity) => Promise<unknown>
+> = {
+  approve: (c, identity) => c.reducers.approveMember({ identity }),
+  reject: (c, identity) => c.reducers.rejectMember({ identity }),
+  ban: (c, identity) => c.reducers.banMember({ identity }),
+  unban: (c, identity) => c.reducers.unbanMember({ identity }),
+};
 
 /**
  * Wires the game to SpacetimeDB. The server is authoritative: the client sends
@@ -214,10 +230,6 @@ export function startNet(
     const admission = wireAdmission(c, myIdentity, {
       onSpace,
       enterWorld,
-      reapply() {
-        console.info('SpacetimeDB: membership removed; reconnecting to re-apply');
-        c.disconnect(); // onDisconnect drops the session and schedules the reconnect
-      },
       isDisposed: () => disposed,
     });
 
@@ -364,11 +376,11 @@ export function startNet(
     setDisplayName(name) {
       callReducer('set_display_name', (c) => c.reducers.setDisplayName({ name }));
     },
-    approveMember(member) {
-      callReducer('approve_member', (c) => c.reducers.approveMember({ identity: member }));
+    applyForMembership() {
+      callReducer('apply_for_membership', (c) => c.reducers.applyForMembership({}));
     },
-    removeMember(member) {
-      callReducer('remove_member', (c) => c.reducers.removeMember({ identity: member }));
+    memberAction(action, member) {
+      callReducer(`${action}_member`, (c) => MEMBER_ACTION_CALLS[action](c, member));
     },
     setGuestsAllowed(allowed) {
       callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));

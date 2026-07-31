@@ -34,7 +34,14 @@ export const spacetimedb = schema({
   // Phase 1). This is deliberately a table of its own rather than columns on
   // `account`: an account is global (Discord model), while being admitted to
   // a space is per-space — multi-tenancy (Phase 6) adds an org-scoped
-  // sibling additively and this table's shape already matches it.
+  // sibling additively and this table's shape already matches it. For the
+  // same reason, space-level actions (reject / ban) only ever move `status`
+  // on this row and never touch the account: one space's decision must not
+  // damage the profile a member carries across spaces. Rows are never
+  // deleted, which is what makes every admin action reversible.
+  //
+  // A row is created by the apply_for_membership reducer (joining is an
+  // explicit application, not a connection side effect).
   //
   // Public, unlike `account`, because it is how a client learns its own
   // standing: a pending member subscribes to this table and sees its row
@@ -45,7 +52,7 @@ export const spacetimedb = schema({
   // table already shows about everyone in the world; the private
   // identity-to-account-id mapping and future belongings stay on `account`.
   // `displayName` is a projection of account.displayName (kept in sync by
-  // set_display_name) so admins can tell pending members apart.
+  // set_display_name) so admins can tell applicants apart.
   //
   // Re-linking an account to a new provider identity (see `account`) must
   // rewrite `identity` here too.
@@ -54,9 +61,10 @@ export const spacetimedb = schema({
     {
       identity: t.identity().primaryKey(),
       displayName: t.string().optional(),
-      status: t.string(), // MemberStatus in @maple/shared: 'pending' | 'approved'
+      // MemberStatus in @maple/shared: 'pending' | 'approved' | 'rejected' | 'banned'
+      status: t.string(),
       role: t.string(), // MemberRole in @maple/shared: 'member' | 'admin'
-      requestedAt: t.timestamp(),
+      requestedAt: t.timestamp(), // when the (latest) application was filed
       updatedAt: t.timestamp(),
     },
   ),

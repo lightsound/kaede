@@ -2,18 +2,23 @@ import { describe, expect, it } from 'vitest';
 import {
   asMembership,
   decideAdmission,
-  evaluateApproval,
+  evaluateApplication,
   evaluateJoin,
-  evaluateRemoval,
+  evaluateMemberAction,
   evaluateSettingChange,
   guestsAllowedFrom,
   initialMembership,
   isActingAdmin,
+  type MemberAction,
   type Membership,
+  membershipPrompt,
+  profileNameFrom,
 } from '../src';
 
 const APPROVED_MEMBER: Membership = { status: 'approved', role: 'member' };
 const PENDING_MEMBER: Membership = { status: 'pending', role: 'member' };
+const REJECTED_MEMBER: Membership = { status: 'rejected', role: 'member' };
+const BANNED_MEMBER: Membership = { status: 'banned', role: 'member' };
 const ADMIN: Membership = { status: 'approved', role: 'admin' };
 /** An admin whose own approval was somehow lost must not keep acting as one. */
 const PENDING_ADMIN: Membership = { status: 'pending', role: 'admin' };
@@ -22,11 +27,13 @@ describe('asMembership', () => {
   it('passes through the recognised values', () => {
     expect(asMembership({ status: 'approved', role: 'admin' })).toEqual(ADMIN);
     expect(asMembership({ status: 'pending', role: 'member' })).toEqual(PENDING_MEMBER);
+    expect(asMembership({ status: 'rejected', role: 'member' })).toEqual(REJECTED_MEMBER);
+    expect(asMembership({ status: 'banned', role: 'member' })).toEqual(BANNED_MEMBER);
   });
 
   // Fail closed: a corrupted or future value must never widen privileges.
   it('reads any unrecognised value as the least-privileged one', () => {
-    expect(asMembership({ status: 'banned', role: 'owner' })).toEqual(PENDING_MEMBER);
+    expect(asMembership({ status: 'owner', role: 'owner' })).toEqual(PENDING_MEMBER);
     expect(asMembership({ status: '', role: '' })).toEqual(PENDING_MEMBER);
   });
 });
@@ -36,7 +43,7 @@ describe('initialMembership', () => {
     expect(initialMembership(true)).toEqual(ADMIN);
   });
 
-  it('makes every later member a pending member', () => {
+  it('makes every later applicant a pending member', () => {
     expect(initialMembership(false)).toEqual(PENDING_MEMBER);
   });
 });
@@ -50,28 +57,44 @@ describe('isActingAdmin', () => {
   });
 });
 
-describe('evaluateJoin', () => {
+describe('evaluateJoin / decideAdmission', () => {
   it('admits an approved member', () => {
     expect(evaluateJoin({ membership: APPROVED_MEMBER, guestsAllowed: true })).toEqual({
       ok: true,
     });
+    expect(decideAdmission({ membership: APPROVED_MEMBER, guestsAllowed: true })).toBe('admitted');
   });
 
-  it('holds a pending member in the waiting room', () => {
+  it('refuses each non-approved status under its own name', () => {
     expect(evaluateJoin({ membership: PENDING_MEMBER, guestsAllowed: true })).toEqual({
       ok: false,
       reason: 'pending-approval',
     });
+    expect(evaluateJoin({ membership: REJECTED_MEMBER, guestsAllowed: true })).toEqual({
+      ok: false,
+      reason: 'rejected',
+    });
+    expect(evaluateJoin({ membership: BANNED_MEMBER, guestsAllowed: true })).toEqual({
+      ok: false,
+      reason: 'banned',
+    });
   });
 
-  it('admits a guest while the setting allows guests', () => {
+  it('rules a connection without a membership by the guest setting', () => {
     expect(evaluateJoin({ membership: undefined, guestsAllowed: true })).toEqual({ ok: true });
-  });
-
-  it('refuses a guest while the setting disallows guests', () => {
     expect(evaluateJoin({ membership: undefined, guestsAllowed: false })).toEqual({
       ok: false,
       reason: 'guests-not-allowed',
+    });
+    expect(decideAdmission({ membership: undefined, guestsAllowed: false })).toBe(
+      'guests-not-allowed',
+    );
+  });
+
+  // Turning guests away must never lock members out of their own office.
+  it('never applies the guest setting to an approved member', () => {
+    expect(evaluateJoin({ membership: APPROVED_MEMBER, guestsAllowed: false })).toEqual({
+      ok: true,
     });
   });
 
@@ -83,90 +106,100 @@ describe('evaluateJoin', () => {
     expect(guestsAllowedFrom({ guestsAllowed: false })).toBe(false);
     expect(guestsAllowedFrom({ guestsAllowed: true })).toBe(true);
   });
+});
 
-  // Turning guests away must never lock members out of their own office.
-  it('never applies the guest setting to a member', () => {
-    expect(evaluateJoin({ membership: APPROVED_MEMBER, guestsAllowed: false })).toEqual({
+describe('evaluateApplication', () => {
+  it('lets a member file a first application', () => {
+    expect(evaluateApplication({ hasAccount: true, membership: undefined })).toEqual({ ok: true });
+  });
+
+  // Re-application after a rejection is an explicit act; allowing it is what
+  // keeps a mistaken rejection from ever locking someone out.
+  it('lets a rejected member re-apply', () => {
+    expect(evaluateApplication({ hasAccount: true, membership: REJECTED_MEMBER })).toEqual({
       ok: true,
     });
-    expect(evaluateJoin({ membership: PENDING_MEMBER, guestsAllowed: false })).toEqual({
+  });
+
+  it('refuses guests (no account to hang a membership on)', () => {
+    expect(evaluateApplication({ hasAccount: false, membership: undefined })).toEqual({
       ok: false,
-      reason: 'pending-approval',
+      reason: 'no-account',
+    });
+  });
+
+  it('refuses a duplicate application', () => {
+    expect(evaluateApplication({ hasAccount: true, membership: PENDING_MEMBER })).toEqual({
+      ok: false,
+      reason: 'already-applied',
+    });
+    expect(evaluateApplication({ hasAccount: true, membership: APPROVED_MEMBER })).toEqual({
+      ok: false,
+      reason: 'already-member',
+    });
+  });
+
+  it('refuses a banned member until an admin lifts the ban', () => {
+    expect(evaluateApplication({ hasAccount: true, membership: BANNED_MEMBER })).toEqual({
+      ok: false,
+      reason: 'banned',
     });
   });
 });
 
-describe('evaluateApproval', () => {
-  it('lets an acting admin approve a pending member', () => {
-    expect(evaluateApproval({ actor: ADMIN, target: PENDING_MEMBER })).toEqual({ ok: true });
-  });
+describe('evaluateMemberAction', () => {
+  const act = (action: MemberAction, target: Membership | undefined, actor = ADMIN) =>
+    evaluateMemberAction({ actor, target, action });
 
   // The UI gate is cosmetic; this server-side check is the actual authority.
   it('refuses every non-admin actor', () => {
-    expect(evaluateApproval({ actor: APPROVED_MEMBER, target: PENDING_MEMBER })).toEqual({
+    expect(act('approve', PENDING_MEMBER, APPROVED_MEMBER)).toEqual({
       ok: false,
       reason: 'not-admin',
     });
-    expect(evaluateApproval({ actor: PENDING_ADMIN, target: PENDING_MEMBER })).toEqual({
+    expect(act('approve', PENDING_MEMBER, PENDING_ADMIN)).toEqual({
       ok: false,
       reason: 'not-admin',
     });
-    expect(evaluateApproval({ actor: undefined, target: PENDING_MEMBER })).toEqual({
-      ok: false,
-      reason: 'not-admin',
-    });
+    expect(
+      evaluateMemberAction({ actor: undefined, target: PENDING_MEMBER, action: 'reject' }),
+    ).toEqual({ ok: false, reason: 'not-admin' });
   });
 
-  it('refuses approving a membership that no longer exists', () => {
-    expect(evaluateApproval({ actor: ADMIN, target: undefined })).toEqual({
-      ok: false,
-      reason: 'no-such-member',
-    });
+  it('refuses acting on a membership that no longer exists', () => {
+    expect(act('approve', undefined)).toEqual({ ok: false, reason: 'no-such-member' });
   });
 
-  it('refuses approving twice', () => {
-    expect(evaluateApproval({ actor: ADMIN, target: APPROVED_MEMBER })).toEqual({
-      ok: false,
-      reason: 'already-approved',
-    });
-  });
-});
-
-describe('evaluateRemoval', () => {
-  it('lets an acting admin remove a pending or approved member', () => {
-    expect(evaluateRemoval({ actor: ADMIN, target: PENDING_MEMBER })).toEqual({ ok: true });
-    expect(evaluateRemoval({ actor: ADMIN, target: APPROVED_MEMBER })).toEqual({ ok: true });
+  // Covers self-targeting too: with a single admin and no promotion path,
+  // acting on an admin would leave the space unmanageable.
+  it('refuses targeting an admin', () => {
+    expect(act('reject', ADMIN)).toEqual({ ok: false, reason: 'target-is-admin' });
+    expect(act('ban', PENDING_ADMIN)).toEqual({ ok: false, reason: 'target-is-admin' });
   });
 
-  it('refuses every non-admin actor', () => {
-    expect(evaluateRemoval({ actor: APPROVED_MEMBER, target: PENDING_MEMBER })).toEqual({
-      ok: false,
-      reason: 'not-admin',
-    });
-    expect(evaluateRemoval({ actor: undefined, target: PENDING_MEMBER })).toEqual({
-      ok: false,
-      reason: 'not-admin',
-    });
+  it('decides an application: approve, reject, or ban', () => {
+    expect(act('approve', PENDING_MEMBER)).toEqual({ ok: true, nextStatus: 'approved' });
+    expect(act('reject', PENDING_MEMBER)).toEqual({ ok: true, nextStatus: 'rejected' });
+    expect(act('ban', PENDING_MEMBER)).toEqual({ ok: true, nextStatus: 'banned' });
+    expect(act('unban', PENDING_MEMBER)).toEqual({ ok: false, reason: 'invalid-transition' });
   });
 
-  it('refuses removing a membership that no longer exists', () => {
-    expect(evaluateRemoval({ actor: ADMIN, target: undefined })).toEqual({
-      ok: false,
-      reason: 'no-such-member',
-    });
+  it('expels or bans an approved member, never re-approves one', () => {
+    expect(act('reject', APPROVED_MEMBER)).toEqual({ ok: true, nextStatus: 'rejected' });
+    expect(act('ban', APPROVED_MEMBER)).toEqual({ ok: true, nextStatus: 'banned' });
+    expect(act('approve', APPROVED_MEMBER)).toEqual({ ok: false, reason: 'invalid-transition' });
   });
 
-  // Covers self-removal too: with a single admin and no promotion path,
-  // removing an admin would leave the space unmanageable.
-  it('refuses removing an admin', () => {
-    expect(evaluateRemoval({ actor: ADMIN, target: ADMIN })).toEqual({
-      ok: false,
-      reason: 'target-is-admin',
-    });
-    expect(evaluateRemoval({ actor: ADMIN, target: PENDING_ADMIN })).toEqual({
-      ok: false,
-      reason: 'target-is-admin',
-    });
+  // Approve doubles as the recovery from a mistaken rejection or ban, so a
+  // wrong click is always one action away from being undone.
+  it('recovers a rejected or banned member by approving them', () => {
+    expect(act('approve', REJECTED_MEMBER)).toEqual({ ok: true, nextStatus: 'approved' });
+    expect(act('approve', BANNED_MEMBER)).toEqual({ ok: true, nextStatus: 'approved' });
+  });
+
+  it('escalates a rejection to a ban, and lifts a ban back to rejected', () => {
+    expect(act('ban', REJECTED_MEMBER)).toEqual({ ok: true, nextStatus: 'banned' });
+    expect(act('unban', BANNED_MEMBER)).toEqual({ ok: true, nextStatus: 'rejected' });
   });
 });
 
@@ -184,38 +217,42 @@ describe('evaluateSettingChange', () => {
   });
 });
 
-describe('decideAdmission', () => {
-  it('enters when the server would admit', () => {
-    expect(
-      decideAdmission({ membership: APPROVED_MEMBER, wasMember: true, guestsAllowed: false }),
-    ).toBe('admitted');
-    expect(decideAdmission({ membership: undefined, wasMember: false, guestsAllowed: true })).toBe(
-      'admitted',
-    );
+describe('membershipPrompt', () => {
+  it('offers a signed-in member without a membership the application', () => {
+    expect(membershipPrompt({ signedIn: true, membership: undefined })).toBe('apply');
   });
 
-  it('waits while the membership is pending', () => {
-    expect(
-      decideAdmission({ membership: PENDING_MEMBER, wasMember: true, guestsAllowed: true }),
-    ).toBe('pending-approval');
+  it('offers a rejected member the re-application', () => {
+    expect(membershipPrompt({ signedIn: true, membership: REJECTED_MEMBER })).toBe('reapply');
   });
 
-  it('shows the refusal to a guest while guests are not admitted', () => {
-    expect(decideAdmission({ membership: undefined, wasMember: false, guestsAllowed: false })).toBe(
-      'guests-not-allowed',
-    );
+  it('offers guests nothing (they cannot apply)', () => {
+    expect(membershipPrompt({ signedIn: false, membership: undefined })).toBeUndefined();
   });
 
-  // A vanished membership means an admin removed us: reconnect and re-apply,
-  // never fall through to the guest path — even while guests are admitted,
-  // because the own-row-deleted auto-rejoin would otherwise slip the removed
-  // member straight back into the world as a guest.
-  it('re-applies when the membership this session had vanishes', () => {
-    expect(decideAdmission({ membership: undefined, wasMember: true, guestsAllowed: true })).toBe(
-      'reapply',
-    );
-    expect(decideAdmission({ membership: undefined, wasMember: true, guestsAllowed: false })).toBe(
-      'reapply',
-    );
+  it('offers nothing when there is nothing to file', () => {
+    expect(membershipPrompt({ signedIn: true, membership: PENDING_MEMBER })).toBeUndefined();
+    expect(membershipPrompt({ signedIn: true, membership: APPROVED_MEMBER })).toBeUndefined();
+    expect(membershipPrompt({ signedIn: true, membership: BANNED_MEMBER })).toBeUndefined();
+  });
+});
+
+describe('profileNameFrom', () => {
+  it('extracts and normalizes the OIDC name claim', () => {
+    expect(profileNameFrom({ name: ' 楓  かえで ' })).toBe('楓 かえで');
+  });
+
+  // The Clerk JWT template may not carry the claim yet (ROADMAP), and other
+  // issuers never will; the caller then leaves the profile nameless.
+  it('yields nothing for a missing or non-string claim', () => {
+    expect(profileNameFrom({})).toBeUndefined();
+    expect(profileNameFrom({ name: 42 })).toBeUndefined();
+    expect(profileNameFrom(null)).toBeUndefined();
+    expect(profileNameFrom('name')).toBeUndefined();
+  });
+
+  it('yields nothing for a name the shared rules refuse', () => {
+    expect(profileNameFrom({ name: '   ' })).toBeUndefined();
+    expect(profileNameFrom({ name: 'x'.repeat(40) })).toBeUndefined();
   });
 });

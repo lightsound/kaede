@@ -11,8 +11,8 @@ import {
 } from '@clerk/react';
 import type { CSSProperties, ReactNode } from 'react';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
-import { AuthTokenContext } from './AuthTokenContext';
-import { guestToken, memberToken } from './authToken';
+import { AuthSessionContext } from './AuthSessionContext';
+import { guestSession, memberSession } from './authToken';
 
 const headerStyle: CSSProperties = {
   position: 'absolute',
@@ -47,10 +47,11 @@ const signInButtonStyle: CSSProperties = {
  * the guest identity and a Clerk identity requires tearing the whole net
  * stack down and reconnecting with the other token.
  *
- * The token source is provided together with the tree it belongs to: the
- * member tree always demands a Clerk token (a failed mint fails the connect
- * and retries — never a silent guest demotion) and the guest tree never
- * offers one (a stale token minted during sign-out can't leak in).
+ * The session (token source + member flag) is provided together with the
+ * tree it belongs to: the member tree always demands a Clerk token (a failed
+ * mint fails the connect and retries — never a silent guest demotion) and
+ * the guest tree never offers one (a stale token minted during sign-out
+ * can't leak in).
  *
  * Mount only under `<ClerkLoaded>`: `isSignedIn` is undefined until Clerk has
  * loaded, and would silently read as "guest" here.
@@ -58,7 +59,7 @@ const signInButtonStyle: CSSProperties = {
 function AuthBoundary({ children }: { children: ReactNode }) {
   const { isSignedIn } = useAuth();
   return (
-    <AuthTokenContext.Provider value={isSignedIn ? memberToken : guestToken}>
+    <AuthSessionContext.Provider value={isSignedIn ? memberSession : guestSession}>
       <header style={headerStyle}>
         <Show when="signed-out">
           <SignInButton mode="modal">
@@ -72,7 +73,7 @@ function AuthBoundary({ children }: { children: ReactNode }) {
         </Show>
       </header>
       <div key={isSignedIn ? 'member' : 'guest'}>{children}</div>
-    </AuthTokenContext.Provider>
+    </AuthSessionContext.Provider>
   );
 }
 

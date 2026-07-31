@@ -13,7 +13,7 @@ const CLERK_JWT_TEMPLATE = 'spacetimedb';
  * The guest path: connect tokenless and let the connection layer resume this
  * tab's anonymous identity. Also the default when Clerk is not configured.
  */
-export const guestToken: AuthTokenGetter = () => Promise.resolve(undefined);
+const guestToken: AuthTokenGetter = () => Promise.resolve(undefined);
 
 /**
  * The member path: mint a fresh Clerk session JWT. Clerk session tokens are
@@ -26,10 +26,28 @@ export const guestToken: AuthTokenGetter = () => Promise.resolve(undefined);
  * attempt and retries with backoff. It must NOT fall back to the guest path:
  * the UI would say "logged in" while the world sees the anonymous identity.
  */
-export const memberToken: AuthTokenGetter = async () => {
+const memberToken: AuthTokenGetter = async () => {
   // skipCache: a token minted seconds ago may expire before the WebSocket
   // handshake completes on a slow reconnect; always mint fresh.
   const token = await getToken({ template: CLERK_JWT_TEMPLATE, skipCache: true });
   if (!token) throw new Error('Clerk reports a signed-in user but returned no session token');
   return token;
 };
+
+/**
+ * How the mounted tree authenticates, and what that means: the token source
+ * for SpacetimeDB connections, plus whether this client is a signed-in
+ * member — which is what gates the membership-application UI (a guest has no
+ * account to hang an application on; see membershipPrompt in @maple/shared).
+ * The two travel together because they must flip together: a token source
+ * that says member with a flag that says guest (or vice versa) is exactly
+ * the race the remount-based design rules out.
+ */
+export interface AuthSession {
+  readonly getToken: AuthTokenGetter;
+  readonly signedIn: boolean;
+}
+
+/** Module constants so an unchanged session never re-triggers App's effect. */
+export const guestSession: AuthSession = { getToken: guestToken, signedIn: false };
+export const memberSession: AuthSession = { getToken: memberToken, signedIn: true };
