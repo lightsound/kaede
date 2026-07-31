@@ -45,6 +45,13 @@ export interface GameApp {
    */
   start(state: PlayerState, tick: number): void;
   /**
+   * Re-gate the simulation (the pre-start state): physics stops stepping and
+   * input is ignored until the next start(). Rendering continues from the
+   * last pose. For when the own player row stops existing — a kicked or
+   * swept player must not keep walking a ghost around under the overlay.
+   */
+  stop(): void;
+  /**
    * Reconciliation hook: snap prev=curr=state and the tick counter to `tick`.
    * Rendering jumps to the corrected state (intended).
    */
@@ -222,6 +229,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       // concurrently and creation-time installs can interleave so that the
       // doomed instance installs last and its destroy() clears the hook.
       if (e2eHook) window.__mapleE2E = e2eHook;
+    },
+    stop() {
+      tick = -1; // the ticker treats tick < 0 as "not running" (see start)
+      acc = 0;
     },
     resetLocal(state, t) {
       // Carry the visual error: where we render now (incl. the live offset) vs.

@@ -178,6 +178,20 @@ export const submitInputs = spacetimedb.reducer(
     const row = ctx.db.player.identity.find(ctx.sender);
     if (!row) return;
 
+    // Admission applies to moving, not just to joining: a player row whose
+    // owner the rules would refuse (possible only as a leftover from before
+    // the rules — e.g. a re-publish onto a database with pre-admission rows,
+    // since every status change deletes the row transactionally) must not
+    // keep driving authoritative movement. Reclaim it instead.
+    const admission = evaluateJoin({
+      membership: membershipOf(ctx, ctx.sender),
+      guestsAllowed: guestsAllowed(ctx),
+    });
+    if (!admission.ok) {
+      ctx.db.player.identity.delete(ctx.sender);
+      return;
+    }
+
     const verdict = evaluateInputBatch({
       batchLength: inputs.length,
       startTick,
