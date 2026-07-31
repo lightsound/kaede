@@ -30,7 +30,7 @@ Order matters and the backend must be running before publish:
 
 The client defaults to `ws://localhost:3000` and DB `maple-like` in dev, so no env vars are needed locally.
 
-`pnpm test:e2e` runs the Playwright smoke test (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @maple/e2e exec playwright install --with-deps chromium`.
+`pnpm test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @maple/e2e exec playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli pnpm test:e2e` (CI sets the same variable in `ci.yml`).
 
 ### Static analysis / testing gotcha
 `fallow health` (part of `pnpm analyze` and CI) **requires** `coverage/coverage-final.json`; run `pnpm test:coverage` first if invoking `fallow` directly (`pnpm analyze` already does). `packages/server` has no unit tests — it only runs inside the SpacetimeDB host, so all testable pure logic lives in `packages/shared`.
