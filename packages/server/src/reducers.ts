@@ -324,12 +324,36 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
   }
 });
 
+/** Writes the sender's application: a fresh row, or the rejected row re-filed. */
+function fileApplication(ctx: Ctx, accountName: string | undefined): Membership {
+  const existing = ctx.db.spaceMember.identity.find(ctx.sender);
+  if (existing !== null) {
+    // Re-application after a rejection: reuse the row, refresh requestedAt
+    // so the pending list sorts by the latest ask.
+    const updated = ctx.db.spaceMember.identity.update({
+      ...existing,
+      status: 'pending',
+      requestedAt: ctx.timestamp,
+      updatedAt: ctx.timestamp,
+    });
+    return asMembership(updated);
+  }
+  const inserted = ctx.db.spaceMember.insert({
+    identity: ctx.sender,
+    // The public projection of the account's persisted name.
+    displayName: accountName,
+    ...initialMembership(ctx.db.spaceMember.count() === 0n),
+    requestedAt: ctx.timestamp,
+    updatedAt: ctx.timestamp,
+  });
+  return asMembership(inserted);
+}
+
 // Files (or re-files) the sender's membership application (承認制の申請側).
 // An explicit act, never a connection side effect: a rejected applicant
 // returns to the pending list only by choosing to, so a rejection cannot
 // bounce straight back in front of the admin. The very first application
-// seeds the admin (see initialMembership); a re-application reuses the row
-// and refreshes requestedAt so the pending list sorts by the latest ask.
+// seeds the admin (see initialMembership).
 export const applyForMembership = spacetimedb.reducer((ctx) => {
   const account = ctx.db.account.identity.find(ctx.sender);
   const verdict = evaluateApplication({
@@ -339,24 +363,15 @@ export const applyForMembership = spacetimedb.reducer((ctx) => {
   if (!verdict.ok) {
     throw new SenderError(`apply_for_membership refused (${verdict.reason})`);
   }
-  const existing = ctx.db.spaceMember.identity.find(ctx.sender);
-  if (existing !== null) {
-    ctx.db.spaceMember.identity.update({
-      ...existing,
-      status: 'pending',
-      requestedAt: ctx.timestamp,
-      updatedAt: ctx.timestamp,
-    });
-    return;
+  const filed = fileApplication(ctx, account === null ? undefined : account.displayName);
+  // A member with a pending application belongs in the waiting room, not in
+  // the world: an applicant who was walking around under the guest rules
+  // leaves it here, in the same transaction — otherwise join would refuse
+  // them while their avatar lingered. (The very first application is seeded
+  // approved, so the fresh admin stays in the world.)
+  if (filed.status === 'pending') {
+    ctx.db.player.identity.delete(ctx.sender);
   }
-  ctx.db.spaceMember.insert({
-    identity: ctx.sender,
-    // The public projection of the account's persisted name.
-    displayName: account === null ? undefined : account.displayName,
-    ...initialMembership(ctx.db.spaceMember.count() === 0n),
-    requestedAt: ctx.timestamp,
-    updatedAt: ctx.timestamp,
-  });
 });
 
 /**
