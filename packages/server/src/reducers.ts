@@ -5,21 +5,24 @@ import {
   type ConnectionPolicy,
   classifyConnection,
   DEFAULT_MAP,
-  evaluateApproval,
+  evaluateApplication,
   evaluateInputBatch,
   evaluateJoin,
-  evaluateRemoval,
+  evaluateMemberAction,
   evaluateRename,
   evaluateSettingChange,
   guestsAllowedFrom,
   initialMembership,
   isExpiredRow,
+  type MemberAction,
   type Membership,
+  profileNameFrom,
   replayInputs,
   resolveJoinName,
   SPAWN_X,
   SPAWN_Y,
   stateFromRow,
+  statusAfter,
 } from '@maple/shared';
 import { type InferSchema, type ReducerCtx, SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
@@ -56,11 +59,19 @@ const CONNECTION_POLICY: ConnectionPolicy = {
 };
 
 /**
- * Guarantees a member has an account row. Only members get one: a member's
+ * Guarantees a member has an account row, carrying the display name its
+ * identity provider vouches for (the JWT `name` claim) as the initial
+ * profile name — the Discord-model account exists, with a name, before any
+ * membership application is filed. Only members get an account: a member's
  * Identity is stable across devices and reconnects (derived from the
  * provider's issuer+subject), so the row it maps to genuinely is the same
  * person; a guest Identity is per-tab and transient, and an account keyed by
  * it would be garbage the moment the tab closes.
+ *
+ * The claim only ever fills an empty name: a name the user chose is theirs,
+ * and a later Google rename must not overwrite it. A missing claim (the
+ * Clerk JWT template may not carry `name` yet — see ROADMAP) leaves the
+ * profile nameless, exactly as before.
  *
  * find-then-insert is race-free here: reducers are atomic transactions that
  * the host serializes, so two first-time connections from the same member
@@ -68,36 +79,28 @@ const CONNECTION_POLICY: ConnectionPolicy = {
  * runs after the first committed and finds its row.
  */
 function ensureAccount(ctx: Ctx): void {
-  if (ctx.db.account.identity.find(ctx.sender)) return;
-  ctx.db.account.insert({
-    id: 0n, // 0 asks autoInc to assign the real id
-    identity: ctx.sender,
-    displayName: undefined,
-    createdAt: ctx.timestamp,
-    updatedAt: ctx.timestamp,
-  });
+  const claimedName = profileNameFrom(ctx.senderAuth.jwt?.fullPayload);
+  const existing = ctx.db.account.identity.find(ctx.sender);
+  if (existing === null) {
+    ctx.db.account.insert({
+      id: 0n, // 0 asks autoInc to assign the real id
+      identity: ctx.sender,
+      displayName: claimedName,
+      createdAt: ctx.timestamp,
+      updatedAt: ctx.timestamp,
+    });
+    return;
+  }
+  backfillAccountName(ctx, existing, claimedName);
 }
 
-/**
- * Guarantees a member has a membership row in the space, alongside its
- * account. The very first member ever seen becomes the approved admin — the
- * seeding rationale lives on initialMembership in @maple/shared — and
- * everyone after starts pending, which is what the waiting room shows.
- *
- * Also the re-application path: a removed member's rows are gone, so its
- * next connection lands here and files a fresh pending membership.
- */
-function ensureSpaceMember(ctx: Ctx): void {
-  if (ctx.db.spaceMember.identity.find(ctx.sender)) return;
-  ctx.db.spaceMember.insert({
-    identity: ctx.sender,
-    // The public projection of the account's persisted name (may predate
-    // this table on databases published before it existed).
-    displayName: ctx.db.account.identity.find(ctx.sender)?.displayName,
-    ...initialMembership(ctx.db.spaceMember.count() === 0n),
-    requestedAt: ctx.timestamp,
-    updatedAt: ctx.timestamp,
-  });
+/** The generated account row type (all columns). */
+type AccountRow = NonNullable<ReturnType<Ctx['db']['account']['identity']['find']>>;
+
+/** Fills an account's empty display name from the provider's claim, if any. */
+function backfillAccountName(ctx: Ctx, account: AccountRow, claimedName: string | undefined): void {
+  if (account.displayName !== undefined || claimedName === undefined) return;
+  ctx.db.account.id.update({ ...account, displayName: claimedName, updatedAt: ctx.timestamp });
 }
 
 /** The sender-facing standing of an identity: its membership, or undefined for guests. */
@@ -125,8 +128,10 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     throw new SenderError('Unauthorized: this token was minted for another application');
   }
   if (auth.kind === 'member') {
+    // The account (global profile) is a fact of signing in; the membership
+    // is not — joining this space is an explicit application, filed by the
+    // apply_for_membership reducer when the user asks to.
     ensureAccount(ctx);
-    ensureSpaceMember(ctx);
     console.info(`member connected: sub=${auth.subject}`);
     return;
   }
@@ -319,54 +324,95 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
   }
 });
 
-// Flips a pending membership to approved (承認制の承認側). The admin check is
-// server-side and final — the client-side gating of the admin panel is
-// cosmetic. The approved member's waiting client sees its space_member row
-// update and joins on its own.
-export const approveMember = spacetimedb.reducer(
-  { identity: t.identity() },
-  (ctx, { identity }) => {
-    const target = ctx.db.spaceMember.identity.find(identity);
-    const verdict = evaluateApproval({
-      actor: membershipOf(ctx, ctx.sender),
-      target: target === null ? undefined : asMembership(target),
-    });
-    if (!verdict.ok) {
-      throw new SenderError(`approve_member refused (${verdict.reason})`);
-    }
-    if (target === null) {
-      // Unreachable — evaluateApproval refuses a missing target as
-      // no-such-member — but narrowing must not read as a silent no-op.
-      throw new SenderError('approve_member refused (no-such-member)');
-    }
-    ctx.db.spaceMember.identity.update({
-      ...target,
-      status: 'approved',
-      updatedAt: ctx.timestamp,
-    });
-  },
-);
-
-// Removes a member entirely: membership, account, and any player row go in
-// one transaction, so the avatar leaves the world the moment the admin acts.
-// Deleting the account too is deliberate — the next connection recreates it
-// pending (= a fresh application) via ensureAccount/ensureSpaceMember, at
-// the cost of the removed member's persisted profile, which is what
-// "removal" should mean. The removed client reacts to its vanished
-// membership row by reconnecting into that re-application (decideAdmission's
-// `reapply`), rather than falling through to the guest path.
-export const removeMember = spacetimedb.reducer({ identity: t.identity() }, (ctx, { identity }) => {
-  const verdict = evaluateRemoval({
-    actor: membershipOf(ctx, ctx.sender),
-    target: membershipOf(ctx, identity),
+// Files (or re-files) the sender's membership application (承認制の申請側).
+// An explicit act, never a connection side effect: a rejected applicant
+// returns to the pending list only by choosing to, so a rejection cannot
+// bounce straight back in front of the admin. The very first application
+// seeds the admin (see initialMembership); a re-application reuses the row
+// and refreshes requestedAt so the pending list sorts by the latest ask.
+export const applyForMembership = spacetimedb.reducer((ctx) => {
+  const account = ctx.db.account.identity.find(ctx.sender);
+  const verdict = evaluateApplication({
+    hasAccount: account !== null,
+    membership: membershipOf(ctx, ctx.sender),
   });
   if (!verdict.ok) {
-    throw new SenderError(`remove_member refused (${verdict.reason})`);
+    throw new SenderError(`apply_for_membership refused (${verdict.reason})`);
   }
-  ctx.db.spaceMember.identity.delete(identity);
-  ctx.db.account.identity.delete(identity);
-  ctx.db.player.identity.delete(identity);
+  const existing = ctx.db.spaceMember.identity.find(ctx.sender);
+  if (existing !== null) {
+    ctx.db.spaceMember.identity.update({
+      ...existing,
+      status: 'pending',
+      requestedAt: ctx.timestamp,
+      updatedAt: ctx.timestamp,
+    });
+    return;
+  }
+  ctx.db.spaceMember.insert({
+    identity: ctx.sender,
+    // The public projection of the account's persisted name.
+    displayName: account === null ? undefined : account.displayName,
+    ...initialMembership(ctx.db.spaceMember.count() === 0n),
+    requestedAt: ctx.timestamp,
+    updatedAt: ctx.timestamp,
+  });
 });
+
+/**
+ * The shared body of the four admin actions on one membership (approve /
+ * reject / ban / unban — 承認制の管理側). Every action is a status
+ * transition on the existing row, vetted by the pure evaluateMemberAction
+ * (unit-tested in @maple/shared); the account is never touched, so no
+ * space-level action can damage the target's global profile, and any
+ * mistake is reversible by another action. The admin check is server-side
+ * and final — the client-side gating of the admin panel is cosmetic.
+ *
+ * Anything but an approval also deletes the target's player row: expelling
+ * or banning someone in the world removes their avatar in the same
+ * transaction (their client sees its membership status flip and shows the
+ * refusal instead of auto-rejoining).
+ */
+function transitionMember(ctx: Ctx, identity: SenderIdentity, action: MemberAction): void {
+  const verdict = evaluateMemberAction({
+    actor: membershipOf(ctx, ctx.sender),
+    target: membershipOf(ctx, identity),
+    action,
+  });
+  if (!verdict.ok) {
+    throw new SenderError(`${action}_member refused (${verdict.reason})`);
+  }
+  const target = ctx.db.spaceMember.identity.find(identity);
+  if (target === null) {
+    // Unreachable — evaluateMemberAction refuses a missing target as
+    // no-such-member — but narrowing must not read as a silent no-op.
+    throw new SenderError(`${action}_member refused (no-such-member)`);
+  }
+  ctx.db.spaceMember.identity.update({
+    ...target,
+    status: statusAfter(action),
+    updatedAt: ctx.timestamp,
+  });
+  if (action !== 'approve') {
+    ctx.db.player.identity.delete(identity);
+  }
+}
+
+/** One admin action as a callable reducer; the export name names the reducer. */
+function memberActionReducer(action: MemberAction) {
+  return spacetimedb.reducer({ identity: t.identity() }, (ctx, { identity }) =>
+    transitionMember(ctx, identity, action),
+  );
+}
+
+// The four admin actions (what each does and when it is allowed:
+// MemberAction and evaluateMemberAction in @maple/shared). An approved
+// member's waiting client sees its space_member row update and joins on its
+// own; the other three also remove the target's avatar (transitionMember).
+export const approveMember = memberActionReducer('approve');
+export const rejectMember = memberActionReducer('reject');
+export const banMember = memberActionReducer('ban');
+export const unbanMember = memberActionReducer('unban');
 
 /** Writes the guest-admission flag to the settings singleton (id 0). */
 function upsertGuestsAllowed(ctx: Ctx, allowed: boolean): void {

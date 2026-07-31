@@ -34,12 +34,15 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ApplyForMembershipReducer from "./apply_for_membership_reducer";
 import ApproveMemberReducer from "./approve_member_reducer";
+import BanMemberReducer from "./ban_member_reducer";
 import JoinReducer from "./join_reducer";
-import RemoveMemberReducer from "./remove_member_reducer";
+import RejectMemberReducer from "./reject_member_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
 import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
+import UnbanMemberReducer from "./unban_member_reducer";
 
 // Import all procedure arg schemas
 
@@ -89,12 +92,15 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("apply_for_membership", ApplyForMembershipReducer),
   __reducerSchema("approve_member", ApproveMemberReducer),
+  __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("join", JoinReducer),
-  __reducerSchema("remove_member", RemoveMemberReducer),
+  __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),
   __reducerSchema("set_guests_allowed", SetGuestsAllowedReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
+  __reducerSchema("unban_member", UnbanMemberReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

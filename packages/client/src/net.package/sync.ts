@@ -30,7 +30,13 @@ export interface Net {
    */
   setDisplayName(name: string): void;
   /**
-   * Admin actions (approve_member / remove_member / set_guests_allowed).
+   * Files (or re-files, after a rejection) this client's membership
+   * application. Success arrives as the own space_member row appearing in
+   * the subscription; the server refuses guests and duplicates.
+   */
+  applyForMembership(): void;
+  /**
+   * Admin actions (approve / reject / ban / unban / set_guests_allowed).
    * Targets are the identities carried by SpaceMemberView. The server
    * re-checks that the sender is an acting admin; these methods exist for
    * the admin panel, whose gating is cosmetic. Success arrives as
@@ -38,7 +44,9 @@ export interface Net {
    * only log, and the unchanged view is the visible outcome.
    */
   approveMember(member: Identity): void;
-  removeMember(member: Identity): void;
+  rejectMember(member: Identity): void;
+  banMember(member: Identity): void;
+  unbanMember(member: Identity): void;
   setGuestsAllowed(allowed: boolean): void;
 }
 
@@ -214,10 +222,6 @@ export function startNet(
     const admission = wireAdmission(c, myIdentity, {
       onSpace,
       enterWorld,
-      reapply() {
-        console.info('SpacetimeDB: membership removed; reconnecting to re-apply');
-        c.disconnect(); // onDisconnect drops the session and schedules the reconnect
-      },
       isDisposed: () => disposed,
     });
 
@@ -346,6 +350,12 @@ export function startNet(
     });
   }
 
+  /** One identity-targeted admin action, shaped as a Net method. */
+  const memberAction =
+    (name: string, invoke: (c: DbConnection, identity: Identity) => Promise<unknown>) =>
+    (member: Identity): void =>
+      callReducer(name, (c) => invoke(c, member));
+
   return {
     dispose() {
       disposed = true;
@@ -364,12 +374,19 @@ export function startNet(
     setDisplayName(name) {
       callReducer('set_display_name', (c) => c.reducers.setDisplayName({ name }));
     },
-    approveMember(member) {
-      callReducer('approve_member', (c) => c.reducers.approveMember({ identity: member }));
+    applyForMembership() {
+      callReducer('apply_for_membership', (c) => c.reducers.applyForMembership({}));
     },
-    removeMember(member) {
-      callReducer('remove_member', (c) => c.reducers.removeMember({ identity: member }));
-    },
+    approveMember: memberAction('approve_member', (c, identity) =>
+      c.reducers.approveMember({ identity }),
+    ),
+    rejectMember: memberAction('reject_member', (c, identity) =>
+      c.reducers.rejectMember({ identity }),
+    ),
+    banMember: memberAction('ban_member', (c, identity) => c.reducers.banMember({ identity })),
+    unbanMember: memberAction('unban_member', (c, identity) =>
+      c.reducers.unbanMember({ identity }),
+    ),
     setGuestsAllowed(allowed) {
       callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
     },

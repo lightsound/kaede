@@ -1,10 +1,11 @@
 // fallow-ignore-file coverage-gaps -- a React component that mounts the canvas and renders connection status; needs a DOM, and no DOM test environment is configured
+import { membershipPrompt } from '@maple/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
-import { AuthTokenContext } from './auth.package';
+import { AuthSessionContext } from './auth.package';
 import { createGameApp, type GameApp } from './game.package';
 import { type ConnectionStatus, type Net, type SpaceView, startNet } from './net.package';
 import { RenameControl } from './profile.package';
-import { AdminSection, AdmissionOverlay } from './space.package';
+import { AdminSection, AdmissionOverlay, ApplyBanner } from './space.package';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
 
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
@@ -41,7 +42,7 @@ export function App() {
   // undefined until the first session reports. Held as one value so the
   // overlays and the admin panel can never disagree about the same instant.
   const [space, setSpace] = useState<SpaceView>();
-  const getAuthToken = useContext(AuthTokenContext);
+  const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
   // state because nothing needs to re-render when it changes.
@@ -62,7 +63,7 @@ export function App() {
         return;
       }
       game = created;
-      netRef.current = startNet(created, setStatus, getAuthToken, setOwnName, setSpace);
+      netRef.current = startNet(created, setStatus, session.getToken, setOwnName, setSpace);
     })();
 
     return () => {
@@ -71,29 +72,44 @@ export function App() {
       netRef.current = undefined;
       game?.destroy();
     };
-  }, [getAuthToken]);
+  }, [session]);
 
   // The admission notice and the admin panel gate themselves on `connected`:
   // while disconnected the subscribed rows are stale, so the connection
   // overlay speaks and the rest hides until the next session republishes.
   const connected = status === 'connected';
+  const admission = space?.admission;
+  const self = space?.self;
+  // Whether to offer this client the membership application (join is an
+  // explicit act — see membershipPrompt): as a button on the blocking
+  // notice, or as a banner while walking around under the guest rules.
+  const prompt = membershipPrompt({ signedIn: session.signedIn, membership: self });
+  const apply = () => netRef.current?.applyForMembership();
 
   return (
     <div style={{ position: 'relative' }}>
       <div ref={hostRef} />
-      <AdmissionOverlay connected={connected} admission={space?.admission} />
+      <AdmissionOverlay
+        connected={connected}
+        admission={admission}
+        prompt={prompt}
+        onApply={apply}
+      />
       {status !== 'connected' && <div style={overlayStyle}>{STATUS_MESSAGES[status]}</div>}
+      <ApplyBanner connected={connected} admission={admission} prompt={prompt} onApply={apply} />
       <RenameControl
         connected={connected}
         ownName={ownName}
-        self={space?.self}
+        self={self}
         onSubmit={(name) => netRef.current?.setDisplayName(name)}
       />
       <AdminSection
         connected={connected}
         space={space}
         onApprove={(member) => netRef.current?.approveMember(member.identity)}
-        onRemove={(member) => netRef.current?.removeMember(member.identity)}
+        onReject={(member) => netRef.current?.rejectMember(member.identity)}
+        onBan={(member) => netRef.current?.banMember(member.identity)}
+        onUnban={(member) => netRef.current?.unbanMember(member.identity)}
         onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
       />
     </div>

@@ -1,4 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a React panel over the subscribed member directory; needs a DOM, and no DOM test environment is configured. The authority for every action here is server-side (evaluateApproval / evaluateRemoval / evaluateSettingChange, unit-tested in @maple/shared)
+// fallow-ignore-file coverage-gaps -- a React panel over the subscribed member directory; needs a DOM, and no DOM test environment is configured. The authority for every action here is server-side (evaluateMemberAction / evaluateSettingChange, unit-tested in @maple/shared)
+import type { MemberStatus } from '@maple/shared';
 import type { CSSProperties } from 'react';
 import type { SpaceMemberView } from '../net.package';
 import {
@@ -14,7 +15,7 @@ const panelStyle: CSSProperties = {
   position: 'absolute',
   top: 56,
   right: 12,
-  width: 260,
+  width: 280,
   maxHeight: '70vh',
   overflowY: 'auto',
   padding: '10px 12px',
@@ -61,30 +62,90 @@ function labelOf(member: SpaceMemberView): string {
   return member.displayName ?? `未設定 (${member.idHex.slice(0, 6)})`;
 }
 
+/** One member with the actions its section offers. */
+function MemberRow({
+  member,
+  actions,
+}: {
+  member: SpaceMemberView;
+  actions: readonly (readonly [string, (member: SpaceMemberView) => void])[];
+}) {
+  return (
+    <div style={rowStyle}>
+      <span style={nameStyle}>
+        {labelOf(member)}
+        {member.role === 'admin' && <span style={{ opacity: 0.6 }}> (管理者)</span>}
+      </span>
+      <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        {actions.map(([label, onAct]) => (
+          <button key={label} type="button" style={buttonStyle} onClick={() => onAct(member)}>
+            {label}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 /**
- * The minimal admin panel (ROADMAP Phase 1: 管理者ロール): the pending list
- * with approve/remove, the member list with remove, and the guest-admission
- * toggle. Rendering this panel is gated on the viewer's own role, but that
- * gate is cosmetic — every action is re-checked server-side against the
- * sender's membership. Results arrive as row events refreshing the props;
- * there is no local success state to get out of sync.
+ * The minimal admin panel (ROADMAP Phase 1: 管理者ロール): applications to
+ * decide, members to expel, mistakes to undo (rejected/banned members can
+ * be approved or unbanned — nothing here is irreversible), and the
+ * guest-admission toggle. Rendering this panel is gated on the viewer's own
+ * role, but that gate is cosmetic — every action is re-checked server-side
+ * against the sender's membership. Results arrive as row events refreshing
+ * the props; there is no local success state to get out of sync.
  */
 export function AdminPanel({
   members,
   guestsAllowed,
   onApprove,
-  onRemove,
+  onReject,
+  onBan,
+  onUnban,
   onGuestsAllowedChange,
 }: {
-  /** The whole member directory, oldest first (see SpaceView.members). */
+  /** The whole member directory, oldest application first (see SpaceView.members). */
   members: SpaceMemberView[];
   guestsAllowed: boolean;
   onApprove: (member: SpaceMemberView) => void;
-  onRemove: (member: SpaceMemberView) => void;
+  onReject: (member: SpaceMemberView) => void;
+  onBan: (member: SpaceMemberView) => void;
+  onUnban: (member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
 }) {
-  const pending = members.filter((m) => m.status === 'pending');
-  const approved = members.filter((m) => m.status === 'approved');
+  type Action = readonly [string, (member: SpaceMemberView) => void];
+  // Which actions each section offers mirrors the server's transition table
+  // (evaluateMemberAction); admins are excluded below because they cannot be
+  // targeted, so a dead button would only mislead.
+  const sections: readonly {
+    title: string;
+    status: MemberStatus;
+    actions: readonly Action[];
+    /** Sections for exceptional states hide while empty; the core two stay. */
+    hideWhenEmpty: boolean;
+  }[] = [
+    {
+      title: '承認待ち',
+      status: 'pending',
+      actions: [
+        ['承認', onApprove],
+        ['拒否', onReject],
+      ],
+      hideWhenEmpty: false,
+    },
+    { title: 'メンバー', status: 'approved', actions: [['追放', onReject]], hideWhenEmpty: false },
+    {
+      title: '拒否済み',
+      status: 'rejected',
+      actions: [
+        ['承認', onApprove],
+        ['バン', onBan],
+      ],
+      hideWhenEmpty: true,
+    },
+    { title: 'バン中', status: 'banned', actions: [['解除', onUnban]], hideWhenEmpty: true },
+  ];
 
   return (
     <section style={panelStyle} aria-label="管理">
@@ -99,37 +160,24 @@ export function AdminPanel({
         />
       </label>
 
-      <div style={headingStyle}>承認待ち ({pending.length})</div>
-      {pending.length === 0 && <div style={{ opacity: 0.6 }}>承認待ちのメンバーはいません</div>}
-      {pending.map((member) => (
-        <div key={member.idHex} style={rowStyle}>
-          <span style={nameStyle}>{labelOf(member)}</span>
-          <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            <button type="button" style={buttonStyle} onClick={() => onApprove(member)}>
-              承認
-            </button>
-            <button type="button" style={buttonStyle} onClick={() => onRemove(member)}>
-              削除
-            </button>
-          </span>
-        </div>
-      ))}
-
-      <div style={headingStyle}>メンバー ({approved.length})</div>
-      {approved.map((member) => (
-        <div key={member.idHex} style={rowStyle}>
-          <span style={nameStyle}>
-            {labelOf(member)}
-            {member.role === 'admin' && <span style={{ opacity: 0.6 }}> (管理者)</span>}
-          </span>
-          {/* Admins are not removable (server-enforced too), so no dead button. */}
-          {member.role !== 'admin' && (
-            <button type="button" style={buttonStyle} onClick={() => onRemove(member)}>
-              削除
-            </button>
-          )}
-        </div>
-      ))}
+      {sections.map(({ title, status, actions, hideWhenEmpty }) => {
+        const list = members.filter((m) => m.status === status);
+        if (hideWhenEmpty && list.length === 0) return null;
+        return (
+          <div key={status}>
+            <div style={headingStyle}>
+              {title} ({list.length})
+            </div>
+            {list.map((member) => (
+              <MemberRow
+                key={member.idHex}
+                member={member}
+                actions={member.role === 'admin' ? [] : actions}
+              />
+            ))}
+          </div>
+        );
+      })}
     </section>
   );
 }

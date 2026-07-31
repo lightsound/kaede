@@ -13,13 +13,17 @@ export function AdminSection({
   connected,
   space,
   onApprove,
-  onRemove,
+  onReject,
+  onBan,
+  onUnban,
   onGuestsAllowedChange,
 }: {
   connected: boolean;
   space: SpaceView | undefined;
   onApprove: (member: SpaceMemberView) => void;
-  onRemove: (member: SpaceMemberView) => void;
+  onReject: (member: SpaceMemberView) => void;
+  onBan: (member: SpaceMemberView) => void;
+  onUnban: (member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
 }) {
   if (!connected || space === undefined || !isActingAdmin(space.self)) return null;
@@ -28,7 +32,9 @@ export function AdminSection({
       members={space.members}
       guestsAllowed={space.guestsAllowed}
       onApprove={onApprove}
-      onRemove={onRemove}
+      onReject={onReject}
+      onBan={onBan}
+      onUnban={onUnban}
       onGuestsAllowedChange={onGuestsAllowedChange}
     />
   );
