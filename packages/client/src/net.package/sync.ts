@@ -209,11 +209,24 @@ export function startNet(
       joinWorld(c);
     };
 
+    /**
+     * Leaves the world when admission holds us out. Halting the simulation is
+     * the point: it is gated only on `start`, so a client already in the world
+     * when it is kicked or removed would otherwise keep stepping physics and
+     * walk its avatar around behind the refusal notice, while the server —
+     * which has no row for it any more — ignores every input.
+     */
+    const leaveWorld = (): void => {
+      prediction = undefined;
+      gameApp.stop();
+    };
+
     // Admission (承認制 / ゲスト入場設定): the rules live in admission.ts;
     // this session supplies what acting on them needs.
     const admission = wireAdmission(c, myIdentity, {
       onSpace,
       enterWorld,
+      leaveWorld,
       reapply() {
         console.info('SpacetimeDB: membership removed; reconnecting to re-apply');
         c.disconnect(); // onDisconnect drops the session and schedules the reconnect

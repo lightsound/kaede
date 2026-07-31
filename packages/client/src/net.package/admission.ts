@@ -54,6 +54,12 @@ export interface AdmissionHooks {
   /** Admission allows being in the world: resume or join (idempotent). */
   enterWorld(): void;
   /**
+   * Admission holds this client out of the world — a refusal, or the removal
+   * `reapply` answers: stop being in it (idempotent). Every re-evaluation
+   * that lands on anything but `admitted` calls this.
+   */
+  leaveWorld(): void;
+  /**
    * Our membership vanished — an admin removed us. Reconnect so the fresh
    * connection files a new pending membership (= a re-application). Called
    * at most once per session.
@@ -67,10 +73,10 @@ export interface AdmissionHooks {
  * Owns admission for one session (承認制 / ゲスト入場設定): mirrors the
  * server's join rule over the subscribed space_member / space_setting rows,
  * reports every change through `onSpace`, and acts on the own decision —
- * enter when admitted, reconnect when removed. The caller runs `reevaluate`
- * once after seeding and again when its own player row is deleted, so
- * approvals, setting flips, kicks and retention sweeps all funnel through
- * one rule.
+ * enter when admitted, leave when held out, reconnect when removed. The
+ * caller runs `reevaluate` once after seeding and again when its own player
+ * row is deleted, so approvals, setting flips, kicks and retention sweeps
+ * all funnel through one rule.
  *
  * Consistency note: the SDK applies a whole transaction to the row cache
  * before dispatching any of its callbacks, so when a removal deletes our
@@ -118,6 +124,10 @@ export function wireAdmission(
       hooks.enterWorld();
       return;
     }
+    // Held out, whatever the reason: leaving covers the client that was
+    // already in the world when the rules turned against it (a kicked guest,
+    // a removed member, a session that reconnects into a refusal).
+    hooks.leaveWorld();
     if (decision === 'reapply' && !reapplied) {
       reapplied = true;
       hooks.reapply();

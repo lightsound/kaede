@@ -14,6 +14,7 @@ import {
   guestsAllowedFrom,
   initialMembership,
   isExpiredRow,
+  type JoinRefusalReason,
   type Membership,
   replayInputs,
   resolveJoinName,
@@ -144,7 +145,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
  * duplicate path, so it is not noteworthy.
  */
 function logRejection(
-  reason: BatchRejectReason,
+  reason: BatchRejectReason | JoinRefusalReason,
   sender: string,
   startTick: number,
   length: number,
@@ -165,6 +166,20 @@ export const submitInputs = spacetimedb.reducer(
   (ctx, { startTick, inputs }) => {
     const row = ctx.db.player.identity.find(ctx.sender);
     if (!row) return;
+
+    // Holding a player row is not authority to move it: a row can outlive the
+    // standing that earned it (one left behind by a module published before
+    // admission existed, whose owner is only pending now), and `join` alone
+    // gating entry would let such a row keep driving an avatar. Re-checked
+    // against the very rule join enforces, so the two cannot drift.
+    const admission = evaluateJoin({
+      membership: membershipOf(ctx, ctx.sender),
+      guestsAllowed: guestsAllowed(ctx),
+    });
+    if (!admission.ok) {
+      logRejection(admission.reason, ctx.sender.toHexString(), startTick, inputs.length, row.tick);
+      return;
+    }
 
     const verdict = evaluateInputBatch({
       batchLength: inputs.length,

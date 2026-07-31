@@ -45,6 +45,13 @@ export interface GameApp {
    */
   start(state: PlayerState, tick: number): void;
   /**
+   * Back to the pre-start() state: the ticker keeps rendering and the sprite
+   * holds where it stood, but no physics steps and no input is sampled until
+   * the next start(). For a client that lost its authoritative row, so local
+   * input cannot walk an avatar the server no longer has.
+   */
+  stop(): void;
+  /**
    * Reconciliation hook: snap prev=curr=state and the tick counter to `tick`.
    * Rendering jumps to the corrected state (intended).
    */
@@ -222,6 +229,13 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       // concurrently and creation-time installs can interleave so that the
       // doomed instance installs last and its destroy() clears the hook.
       if (e2eHook) window.__mapleE2E = e2eHook;
+    },
+    stop() {
+      // prev = curr so the held frame is the last simulated state: while
+      // stopped the ticker pins acc at 0, and interpolation at alpha 0 renders
+      // prev.
+      prev = curr;
+      tick = -1;
     },
     resetLocal(state, t) {
       // Carry the visual error: where we render now (incl. the live offset) vs.
