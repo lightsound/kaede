@@ -91,8 +91,7 @@ export function wireAdmission(
   // (membership, own player row) each re-evaluate.
   let reapplied = false;
 
-  const guestsAllowedNow = (): boolean =>
-    guestsAllowedFrom(c.db.spaceSetting.id.find(0) ?? undefined);
+  const guestsAllowedNow = (): boolean => guestsAllowedFrom(c.db.spaceSetting.id.find(0));
 
   const viewOf = (row: SpaceMemberRow): SpaceMemberView => ({
     identity: row.identity,

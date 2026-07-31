@@ -331,8 +331,12 @@ export function startNet(
 
   attempt();
 
-  /** Shared shape of the three admin actions: guard, call, log a refusal. */
-  function callAdminReducer(name: string, call: (c: DbConnection) => Promise<unknown>): void {
+  /**
+   * The shared shell of every user-triggered reducer call: drop with a
+   * warning while disconnected, log a server refusal. Success never needs
+   * handling here — it arrives as row events (see the Net method docs).
+   */
+  function callReducer(name: string, call: (c: DbConnection) => Promise<unknown>): void {
     if (!conn) {
       console.warn(`SpacetimeDB: not connected, ${name} dropped`);
       return;
@@ -358,22 +362,16 @@ export function startNet(
       publishOwnName(undefined);
     },
     setDisplayName(name) {
-      if (!conn) {
-        console.warn('SpacetimeDB: not connected, display name change dropped');
-        return;
-      }
-      conn.reducers.setDisplayName({ name }).catch((err: unknown) => {
-        console.error('SpacetimeDB: set_display_name rejected', err);
-      });
+      callReducer('set_display_name', (c) => c.reducers.setDisplayName({ name }));
     },
     approveMember(member) {
-      callAdminReducer('approve_member', (c) => c.reducers.approveMember({ identity: member }));
+      callReducer('approve_member', (c) => c.reducers.approveMember({ identity: member }));
     },
     removeMember(member) {
-      callAdminReducer('remove_member', (c) => c.reducers.removeMember({ identity: member }));
+      callReducer('remove_member', (c) => c.reducers.removeMember({ identity: member }));
     },
     setGuestsAllowed(allowed) {
-      callAdminReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
+      callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
     },
   };
 }

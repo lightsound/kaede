@@ -185,8 +185,10 @@ export function decideAdmission(request: {
 /**
  * The guest-admission flag a (possibly missing) settings singleton means:
  * an absent row reads as the default, allowed. Shared so the server's join
- * rule and the client's mirror of it cannot drift on the default.
+ * rule and the client's mirror of it cannot drift on the default. Accepts
+ * `null` so both SDKs' `find` results (server: null, client cache: null,
+ * plain optionals: undefined) pass through without a conversion.
  */
-export function guestsAllowedFrom(row: { guestsAllowed: boolean } | undefined): boolean {
+export function guestsAllowedFrom(row: { guestsAllowed: boolean } | null | undefined): boolean {
   return row?.guestsAllowed ?? true;
 }

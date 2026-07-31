@@ -108,7 +108,7 @@ function membershipOf(ctx: Ctx, identity: SenderIdentity): Membership | undefine
 
 /** The guest-admission setting, read with the shared missing-row default. */
 function guestsAllowed(ctx: Ctx): boolean {
-  return guestsAllowedFrom(ctx.db.spaceSetting.id.find(0) ?? undefined);
+  return guestsAllowedFrom(ctx.db.spaceSetting.id.find(0));
 }
 
 /**

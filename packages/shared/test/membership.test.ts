@@ -79,6 +79,7 @@ describe('evaluateJoin', () => {
   // first touches it; no row must mean the default, allowed.
   it('reads a missing settings row as the default (guests allowed)', () => {
     expect(guestsAllowedFrom(undefined)).toBe(true);
+    expect(guestsAllowedFrom(null)).toBe(true);
     expect(guestsAllowedFrom({ guestsAllowed: false })).toBe(false);
     expect(guestsAllowedFrom({ guestsAllowed: true })).toBe(true);
   });
