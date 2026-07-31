@@ -2,8 +2,10 @@
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthTokenContext } from './auth.package';
 import { createGameApp, type GameApp } from './game.package';
-import { type ConnectionStatus, type Net, startNet } from './net.package';
-import { NameEditor } from './profile.package';
+import { type ConnectionStatus, type Net, type SpaceView, startNet } from './net.package';
+import { RenameControl } from './profile.package';
+import { AdminSection, AdmissionOverlay } from './space.package';
+import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
 
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
   connecting: 'サーバーに接続中…',
@@ -17,10 +19,10 @@ const overlayStyle: CSSProperties = {
   transform: 'translateX(-50%)',
   padding: '6px 14px',
   borderRadius: 999,
-  background: 'rgba(11, 13, 18, 0.85)',
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  color: '#eceff4',
-  font: '13px sans-serif',
+  background: UI_PANEL_BG,
+  border: UI_GOLD_BORDER,
+  color: UI_TEXT_COLOR,
+  font: UI_FONT,
   whiteSpace: 'nowrap',
   pointerEvents: 'none',
 };
@@ -34,6 +36,11 @@ export function App() {
   // While undefined a rename has nowhere to land (the server would refuse it
   // as no-target), so the form stays disabled.
   const [ownName, setOwnName] = useState<string>();
+  // Everything membership-related (own admission, roster, guest setting),
+  // published by the net stack on every space_member / space_setting change;
+  // undefined until the first session reports. Held as one value so the
+  // overlays and the admin panel can never disagree about the same instant.
+  const [space, setSpace] = useState<SpaceView>();
   const getAuthToken = useContext(AuthTokenContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -55,7 +62,7 @@ export function App() {
         return;
       }
       game = created;
-      netRef.current = startNet(created, setStatus, getAuthToken, setOwnName);
+      netRef.current = startNet(created, setStatus, getAuthToken, setOwnName, setSpace);
     })();
 
     return () => {
@@ -66,14 +73,28 @@ export function App() {
     };
   }, [getAuthToken]);
 
+  // The admission notice and the admin panel gate themselves on `connected`:
+  // while disconnected the subscribed rows are stale, so the connection
+  // overlay speaks and the rest hides until the next session republishes.
+  const connected = status === 'connected';
+
   return (
     <div style={{ position: 'relative' }}>
       <div ref={hostRef} />
+      <AdmissionOverlay connected={connected} admission={space?.admission} />
       {status !== 'connected' && <div style={overlayStyle}>{STATUS_MESSAGES[status]}</div>}
-      <NameEditor
-        disabled={status !== 'connected' || ownName === undefined}
-        currentName={ownName}
+      <RenameControl
+        connected={connected}
+        ownName={ownName}
+        self={space?.self}
         onSubmit={(name) => netRef.current?.setDisplayName(name)}
+      />
+      <AdminSection
+        connected={connected}
+        space={space}
+        onApprove={(member) => netRef.current?.approveMember(member.identity)}
+        onRemove={(member) => netRef.current?.removeMember(member.identity)}
+        onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
       />
     </div>
   );

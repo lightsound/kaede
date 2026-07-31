@@ -1,7 +1,9 @@
-// fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host
+// fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
 import { stateFromRow } from '@maple/shared';
+import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
+import { type SpaceView, wireAdmission } from './admission';
 import { type AuthTokenGetter, connect, target } from './connection';
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
@@ -27,6 +29,17 @@ export interface Net {
    * and resubmit.
    */
   setDisplayName(name: string): void;
+  /**
+   * Admin actions (approve_member / remove_member / set_guests_allowed).
+   * Targets are the identities carried by SpaceMemberView. The server
+   * re-checks that the sender is an acting admin; these methods exist for
+   * the admin panel, whose gating is cosmetic. Success arrives as
+   * space_member / space_setting row events (a fresh SpaceView); failures
+   * only log, and the unchanged view is the visible outcome.
+   */
+  approveMember(member: Identity): void;
+  removeMember(member: Identity): void;
+  setGuestsAllowed(allowed: boolean): void;
 }
 
 /**
@@ -41,6 +54,12 @@ export interface Net {
  * stored anonymous token otherwise (see connection.ts) — so the server hands
  * back the same player row and the local sim snaps to that authoritative state.
  *
+ * Entering the world is gated by admission (承認制 / ゲスト入場設定): the
+ * client rules on the same subscribed rows the server's join checks
+ * (decideAdmission), sends join only when it would be admitted, and reacts
+ * to approvals and setting flips the moment the rows change. `onSpace`
+ * reports every such change; see SpaceView.
+ *
  * `onOwnName` reports the authoritative display name whenever it changes,
  * and `undefined` whenever the own row stops being known to exist (before
  * the first spawn, after a disconnect, after the row is deleted by the
@@ -52,6 +71,7 @@ export function startNet(
   onStatus: (status: ConnectionStatus) => void,
   getAuthToken: AuthTokenGetter,
   onOwnName: (name: string | undefined) => void,
+  onSpace: (view: SpaceView) => void,
 ): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
@@ -111,8 +131,8 @@ export function startNet(
 
   /** Ask the server to spawn or resume our row; the answer arrives as a row event. */
   function joinWorld(c: DbConnection): void {
-    // A rejected join leaves us connected but never spawned, which on screen is
-    // indistinguishable from a stalled connection. Say so.
+    // Admission is checked before calling this, so a refusal here means the
+    // client's view of the rules drifted from the server's — worth a log.
     c.reducers.join({}).catch((err: unknown) => {
       console.error('SpacetimeDB: join failed, this client will not spawn', err);
     });
@@ -134,7 +154,7 @@ export function startNet(
     retryDelayMs = Math.min(retryDelayMs * 2, RETRY_MAX_MS);
   }
 
-  function wireSession(c: DbConnection, myIdHex: string): void {
+  function wireSession(c: DbConnection, myIdentity: Identity, myIdHex: string): void {
     // Our row appears (or already exists, when resuming an identity) via join
     // below. Start/refresh the simulation from that authoritative state.
     const handleOwnRow = (row: PlayerRow) => {
@@ -173,12 +193,42 @@ export function startNet(
       );
     };
 
-    // Seed players already in the world (an existing own row means we resumed
-    // our identity after a reload/blip; continue from it rather than re-spawn).
+    /**
+     * Enters the world once admission says so: resume the surviving own row
+     * (a reload / blip within the retention window), or ask the server to
+     * spawn one. Sitting behind the admission decision means a stale own
+     * row can never start the simulation for a client that is not admitted.
+     */
+    const enterWorld = (): void => {
+      if (prediction) return;
+      const own = c.db.player.identity.find(myIdentity);
+      if (own) {
+        handleOwnRow(own);
+        return;
+      }
+      joinWorld(c);
+    };
+
+    // Admission (承認制 / ゲスト入場設定): the rules live in admission.ts;
+    // this session supplies what acting on them needs.
+    const admission = wireAdmission(c, myIdentity, {
+      onSpace,
+      enterWorld,
+      reapply() {
+        console.info('SpacetimeDB: membership removed; reconnecting to re-apply');
+        c.disconnect(); // onDisconnect drops the session and schedules the reconnect
+      },
+      isDisposed: () => disposed,
+    });
+
+    // Seed the remote players already in the world. Our own surviving row is
+    // deliberately not resumed here: entering goes through the admission
+    // re-evaluation below (its enterWorld picks the row up), so the
+    // simulation can never start for a client the admission rules would
+    // hold out.
     for (const row of c.db.player.iter()) {
       const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) handleOwnRow(row);
-      else recordRemote(idHex, row);
+      if (idHex !== myIdHex) recordRemote(idHex, row);
     }
 
     // Every handler below refuses to run once disposed: the socket closes
@@ -215,20 +265,27 @@ export function startNet(
       if (disposed) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
-        // The retention sweep reclaimed our row: a backgrounded tab stops
-        // ticking, so it stops refreshing the row and eventually looks
-        // abandoned. Re-join and let the replacement row restart prediction,
-        // rather than predicting forward against a row that no longer exists.
+        // Our row was reclaimed: by the retention sweep (a backgrounded tab
+        // stops ticking and eventually looks abandoned), by the guest kick
+        // that a guests-off flip performs, or by an admin removing us. Stop
+        // predicting against a row that no longer exists, then let the
+        // admission rule decide whether to re-join — the sweep case — or to
+        // stay out and say why.
         prediction = undefined;
-        // No row again until the re-join lands; disable the rename form so a
+        // No row again until a re-join lands; disable the rename form so a
         // submit cannot race into the server's no-target refusal.
         publishOwnName(undefined);
-        joinWorld(c);
+        admission.reevaluate();
         return;
       }
       remoteViews.remove(idHex);
       gameApp.removeRemotePlayer(idHex);
     });
+
+    // The first decision: enter (the pre-admission behavior), or hold and
+    // show why. The subscription was applied before wireSession, so this
+    // rules on real rows.
+    admission.reevaluate();
   }
 
   function attempt(): void {
@@ -246,7 +303,7 @@ export function startNet(
       consecutiveFailures,
       getAuthToken,
     )
-      .then(({ conn: c, myIdHex }) => {
+      .then(({ conn: c, myIdentity, myIdHex }) => {
         if (disposed) {
           c.disconnect();
           return;
@@ -256,8 +313,7 @@ export function startNet(
         consecutiveFailures = 0;
         retryDelayMs = RETRY_INITIAL_MS;
         onStatus('connected');
-        wireSession(c, myIdHex);
-        joinWorld(c);
+        wireSession(c, myIdentity, myIdHex);
       })
       // The overlay can only ever say "connecting", so without this the actual
       // cause (host not running, unknown database name, stale schema) never
@@ -275,6 +331,21 @@ export function startNet(
 
   attempt();
 
+  /**
+   * The shared shell of every user-triggered reducer call: drop with a
+   * warning while disconnected, log a server refusal. Success never needs
+   * handling here — it arrives as row events (see the Net method docs).
+   */
+  function callReducer(name: string, call: (c: DbConnection) => Promise<unknown>): void {
+    if (!conn) {
+      console.warn(`SpacetimeDB: not connected, ${name} dropped`);
+      return;
+    }
+    call(conn).catch((err: unknown) => {
+      console.error(`SpacetimeDB: ${name} rejected`, err);
+    });
+  }
+
   return {
     dispose() {
       disposed = true;
@@ -291,13 +362,16 @@ export function startNet(
       publishOwnName(undefined);
     },
     setDisplayName(name) {
-      if (!conn) {
-        console.warn('SpacetimeDB: not connected, display name change dropped');
-        return;
-      }
-      conn.reducers.setDisplayName({ name }).catch((err: unknown) => {
-        console.error('SpacetimeDB: set_display_name rejected', err);
-      });
+      callReducer('set_display_name', (c) => c.reducers.setDisplayName({ name }));
+    },
+    approveMember(member) {
+      callReducer('approve_member', (c) => c.reducers.approveMember({ identity: member }));
+    },
+    removeMember(member) {
+      callReducer('remove_member', (c) => c.reducers.removeMember({ identity: member }));
+    },
+    setGuestsAllowed(allowed) {
+      callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
     },
   };
 }

@@ -10,6 +10,7 @@ import {
   useAuth,
 } from '@clerk/react';
 import type { CSSProperties, ReactNode } from 'react';
+import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import { AuthTokenContext } from './AuthTokenContext';
 import { guestToken, memberToken } from './authToken';
 
@@ -18,25 +19,25 @@ const headerStyle: CSSProperties = {
   top: 12,
   right: 12,
   zIndex: 10,
-  font: '13px sans-serif',
+  font: UI_FONT,
 };
 
 const noticeStyle: CSSProperties = {
   ...headerStyle,
   padding: '6px 14px',
   borderRadius: 999,
-  background: 'rgba(11, 13, 18, 0.85)',
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  color: '#eceff4',
+  background: UI_PANEL_BG,
+  border: UI_GOLD_BORDER,
+  color: UI_TEXT_COLOR,
   pointerEvents: 'none',
 };
 
 const signInButtonStyle: CSSProperties = {
   padding: '6px 14px',
   borderRadius: 999,
-  background: 'rgba(11, 13, 18, 0.85)',
-  border: '1px solid rgba(216, 166, 87, 0.6)',
-  color: '#eceff4',
+  background: UI_PANEL_BG,
+  border: UI_GOLD_BORDER,
+  color: UI_TEXT_COLOR,
   cursor: 'pointer',
 };
 

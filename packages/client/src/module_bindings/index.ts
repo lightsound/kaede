@@ -34,14 +34,19 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ApproveMemberReducer from "./approve_member_reducer";
 import JoinReducer from "./join_reducer";
+import RemoveMemberReducer from "./remove_member_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
+import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
 import PlayerRow from "./player_table";
+import SpaceMemberRow from "./space_member_table";
+import SpaceSettingRow from "./space_setting_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -58,12 +63,37 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  spaceMember: __table({
+    name: 'space_member',
+    indexes: [
+      { accessor: 'identity', name: 'space_member_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'space_member_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, SpaceMemberRow),
+  spaceSetting: __table({
+    name: 'space_setting',
+    indexes: [
+      { accessor: 'id', name: 'space_setting_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'space_setting_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, SpaceSettingRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("approve_member", ApproveMemberReducer),
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("remove_member", RemoveMemberReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),
+  __reducerSchema("set_guests_allowed", SetGuestsAllowedReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
 );
 

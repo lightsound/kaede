@@ -154,6 +154,10 @@ jobs:
 
       - name: E2E smoke test
         run: pnpm test:e2e
+        env:
+          # guest-admission.spec.ts plays admin through `sql`; the pinned CLI
+          # tarball ships the binary as spacetimedb-cli, not spacetime.
+          SPACETIME_BIN: spacetimedb-cli
 
       # Traces for the retried attempts (trace: on-first-retry — the very
       # first attempt records none) are embedded in the HTML report; the

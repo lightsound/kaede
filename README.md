@@ -54,7 +54,7 @@
 | --- | --- |
 | `packages/shared` | 物理シミュレーション・マップ・定数など、クライアントとサーバーで共有するロジック |
 | `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期） |
-| `packages/server` | SpacetimeDB モジュール（`player` テーブルと `submit_inputs` リデューサー。サーバー権威で物理を再生） |
+| `packages/server` | SpacetimeDB モジュール（`player`・`account`・`space_member`・`space_setting` テーブルと `join`・`submit_inputs`・管理系リデューサー。サーバー権威で物理・入場制御を実施） |
 | `packages/e2e` | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証） |
 
 ## 同期方式
