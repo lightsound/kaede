@@ -268,9 +268,10 @@ export type MembershipPrompt = 'apply' | 'reapply';
 /**
  * Which application affordance the UI should offer this client, if any:
  * `apply` for a signed-in member who has not applied, `reapply` after a
- * rejection. Nothing for guests (they cannot apply), for pending or
- * approved members (nothing to file), or for banned members (the server
- * would refuse; the admission notice explains instead).
+ * rejection. Derived from evaluateApplication, so a button is offered
+ * exactly when the server would accept the application it files — nothing
+ * for guests (no account), for pending or approved members (nothing to
+ * file), or for banned members (the admission notice explains instead).
  */
 export function membershipPrompt(request: {
   /**
@@ -281,8 +282,9 @@ export function membershipPrompt(request: {
   membership: Membership | undefined;
 }): MembershipPrompt | undefined {
   if (!request.signedIn) return undefined;
-  if (request.membership === undefined) return 'apply';
-  return request.membership.status === 'rejected' ? 'reapply' : undefined;
+  const verdict = evaluateApplication({ hasAccount: true, membership: request.membership });
+  if (!verdict.ok) return undefined;
+  return request.membership === undefined ? 'apply' : 'reapply';
 }
 
 /**

@@ -90,20 +90,23 @@ function ensureAccount(ctx: Ctx): void {
     });
     return;
   }
-  backfillAccountName(ctx, existing, claimedName);
+  backfillAccountName(ctx, existing.displayName, claimedName);
 }
-
-/** The generated account row type (all columns). */
-type AccountRow = NonNullable<ReturnType<Ctx['db']['account']['identity']['find']>>;
 
 /**
  * Fills an account's empty display name from the provider's claim, if any —
  * through the same write path a rename takes (persistMemberName), so the
  * public space_member projection of a member who applied nameless picks the
- * name up too and cannot drift from the account.
+ * name up too and cannot drift from the account. A separate function (not
+ * inlined into ensureAccount) to keep the untestable reducer helpers under
+ * the CRAP budget fallow enforces for uncovered functions.
  */
-function backfillAccountName(ctx: Ctx, account: AccountRow, claimedName: string | undefined): void {
-  if (account.displayName !== undefined || claimedName === undefined) return;
+function backfillAccountName(
+  ctx: Ctx,
+  currentName: string | undefined,
+  claimedName: string | undefined,
+): void {
+  if (currentName !== undefined || claimedName === undefined) return;
   persistMemberName(ctx, claimedName);
 }
 

@@ -66,10 +66,10 @@ interface ActionButton {
 /**
  * What each section offers — a deliberate subset of the server's transition
  * table (evaluateMemberAction), not a mirror of it: banning straight from
- * pending is omitted because 拒否→バン covers the rare case, and admins are
- * filtered out below because they cannot be targeted, so a dead button
- * would only mislead. Everything here is reversible: 拒否済み/バン中 keep
- * their rows and offer the way back (承認 recovers in one click).
+ * pending is omitted because 拒否→バン covers the rare case, and admin rows
+ * render without buttons below because admins cannot be targeted, so a dead
+ * button would only mislead. Everything here is reversible: 拒否済み/バン中
+ * keep their rows and offer the way back (承認 recovers in one click).
  */
 const SECTIONS: readonly {
   title: string;
