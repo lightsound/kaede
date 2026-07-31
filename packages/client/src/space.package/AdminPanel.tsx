@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a React panel over the subscribed member directory; needs a DOM, and no DOM test environment is configured. The authority for every action here is server-side (evaluateMemberAction / evaluateSettingChange, unit-tested in @maple/shared)
-import type { MemberStatus } from '@maple/shared';
+import type { MemberAction, MemberStatus } from '@maple/shared';
 import type { CSSProperties } from 'react';
 import type { SpaceMemberView } from '../net.package';
 import {
@@ -57,6 +57,62 @@ const buttonStyle: CSSProperties = {
   flexShrink: 0,
 };
 
+/** One labelled member transition, as a section offers it. */
+interface ActionButton {
+  label: string;
+  action: MemberAction;
+}
+
+/**
+ * What each section offers — a deliberate subset of the server's transition
+ * table (evaluateMemberAction), not a mirror of it: banning straight from
+ * pending is omitted because 拒否→バン covers the rare case, and admins are
+ * filtered out below because they cannot be targeted, so a dead button
+ * would only mislead. Everything here is reversible: 拒否済み/バン中 keep
+ * their rows and offer the way back (承認 recovers in one click).
+ */
+const SECTIONS: readonly {
+  title: string;
+  status: MemberStatus;
+  actions: readonly ActionButton[];
+  /** Sections for exceptional states hide while empty; the core two stay. */
+  hideWhenEmpty: boolean;
+}[] = [
+  {
+    title: '承認待ち',
+    status: 'pending',
+    actions: [
+      { label: '承認', action: 'approve' },
+      { label: '拒否', action: 'reject' },
+    ],
+    hideWhenEmpty: false,
+  },
+  {
+    title: 'メンバー',
+    status: 'approved',
+    actions: [{ label: '追放', action: 'reject' }],
+    hideWhenEmpty: false,
+  },
+  {
+    title: '拒否済み',
+    status: 'rejected',
+    actions: [
+      { label: '承認', action: 'approve' },
+      { label: 'バン', action: 'ban' },
+    ],
+    hideWhenEmpty: true,
+  },
+  {
+    title: 'バン中',
+    status: 'banned',
+    actions: [
+      { label: '承認', action: 'approve' },
+      { label: '解除', action: 'unban' },
+    ],
+    hideWhenEmpty: true,
+  },
+];
+
 /** What the list shows for a member who has not set a name yet. */
 function labelOf(member: SpaceMemberView): string {
   return member.displayName ?? `未設定 (${member.idHex.slice(0, 6)})`;
@@ -66,9 +122,11 @@ function labelOf(member: SpaceMemberView): string {
 function MemberRow({
   member,
   actions,
+  onMemberAction,
 }: {
   member: SpaceMemberView;
-  actions: readonly (readonly [string, (member: SpaceMemberView) => void])[];
+  actions: readonly ActionButton[];
+  onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
 }) {
   return (
     <div style={rowStyle}>
@@ -77,8 +135,13 @@ function MemberRow({
         {member.role === 'admin' && <span style={{ opacity: 0.6 }}> (管理者)</span>}
       </span>
       <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-        {actions.map(([label, onAct]) => (
-          <button key={label} type="button" style={buttonStyle} onClick={() => onAct(member)}>
+        {actions.map(({ label, action }) => (
+          <button
+            key={action}
+            type="button"
+            style={buttonStyle}
+            onClick={() => onMemberAction(action, member)}
+          >
             {label}
           </button>
         ))}
@@ -89,64 +152,24 @@ function MemberRow({
 
 /**
  * The minimal admin panel (ROADMAP Phase 1: 管理者ロール): applications to
- * decide, members to expel, mistakes to undo (rejected/banned members can
- * be approved or unbanned — nothing here is irreversible), and the
- * guest-admission toggle. Rendering this panel is gated on the viewer's own
- * role, but that gate is cosmetic — every action is re-checked server-side
- * against the sender's membership. Results arrive as row events refreshing
- * the props; there is no local success state to get out of sync.
+ * decide, members to expel, mistakes to undo, and the guest-admission
+ * toggle. Rendering this panel is gated on the viewer's own role, but that
+ * gate is cosmetic — every action is re-checked server-side against the
+ * sender's membership. Results arrive as row events refreshing the props;
+ * there is no local success state to get out of sync.
  */
 export function AdminPanel({
   members,
   guestsAllowed,
-  onApprove,
-  onReject,
-  onBan,
-  onUnban,
+  onMemberAction,
   onGuestsAllowedChange,
 }: {
   /** The whole member directory, oldest application first (see SpaceView.members). */
   members: SpaceMemberView[];
   guestsAllowed: boolean;
-  onApprove: (member: SpaceMemberView) => void;
-  onReject: (member: SpaceMemberView) => void;
-  onBan: (member: SpaceMemberView) => void;
-  onUnban: (member: SpaceMemberView) => void;
+  onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
 }) {
-  type Action = readonly [string, (member: SpaceMemberView) => void];
-  // Which actions each section offers mirrors the server's transition table
-  // (evaluateMemberAction); admins are excluded below because they cannot be
-  // targeted, so a dead button would only mislead.
-  const sections: readonly {
-    title: string;
-    status: MemberStatus;
-    actions: readonly Action[];
-    /** Sections for exceptional states hide while empty; the core two stay. */
-    hideWhenEmpty: boolean;
-  }[] = [
-    {
-      title: '承認待ち',
-      status: 'pending',
-      actions: [
-        ['承認', onApprove],
-        ['拒否', onReject],
-      ],
-      hideWhenEmpty: false,
-    },
-    { title: 'メンバー', status: 'approved', actions: [['追放', onReject]], hideWhenEmpty: false },
-    {
-      title: '拒否済み',
-      status: 'rejected',
-      actions: [
-        ['承認', onApprove],
-        ['バン', onBan],
-      ],
-      hideWhenEmpty: true,
-    },
-    { title: 'バン中', status: 'banned', actions: [['解除', onUnban]], hideWhenEmpty: true },
-  ];
-
   return (
     <section style={panelStyle} aria-label="管理">
       <div style={{ ...headingStyle, marginTop: 0 }}>管理</div>
@@ -160,7 +183,7 @@ export function AdminPanel({
         />
       </label>
 
-      {sections.map(({ title, status, actions, hideWhenEmpty }) => {
+      {SECTIONS.map(({ title, status, actions, hideWhenEmpty }) => {
         const list = members.filter((m) => m.status === status);
         if (hideWhenEmpty && list.length === 0) return null;
         return (
@@ -173,6 +196,7 @@ export function AdminPanel({
                 key={member.idHex}
                 member={member}
                 actions={member.role === 'admin' ? [] : actions}
+                onMemberAction={onMemberAction}
               />
             ))}
           </div>

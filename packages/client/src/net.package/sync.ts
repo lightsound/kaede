@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
-import { stateFromRow } from '@maple/shared';
+import { type MemberAction, stateFromRow } from '@maple/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
@@ -36,19 +36,27 @@ export interface Net {
    */
   applyForMembership(): void;
   /**
-   * Admin actions (approve / reject / ban / unban / set_guests_allowed).
-   * Targets are the identities carried by SpaceMemberView. The server
+   * Admin actions: one member transition (MemberAction, on the identity a
+   * SpaceMemberView carries) or the guest-admission setting. The server
    * re-checks that the sender is an acting admin; these methods exist for
    * the admin panel, whose gating is cosmetic. Success arrives as
    * space_member / space_setting row events (a fresh SpaceView); failures
    * only log, and the unchanged view is the visible outcome.
    */
-  approveMember(member: Identity): void;
-  rejectMember(member: Identity): void;
-  banMember(member: Identity): void;
-  unbanMember(member: Identity): void;
+  memberAction(action: MemberAction, member: Identity): void;
   setGuestsAllowed(allowed: boolean): void;
 }
+
+/** Each member transition's generated reducer call, keyed by the shared vocabulary. */
+const MEMBER_ACTION_CALLS: Record<
+  MemberAction,
+  (c: DbConnection, identity: Identity) => Promise<unknown>
+> = {
+  approve: (c, identity) => c.reducers.approveMember({ identity }),
+  reject: (c, identity) => c.reducers.rejectMember({ identity }),
+  ban: (c, identity) => c.reducers.banMember({ identity }),
+  unban: (c, identity) => c.reducers.unbanMember({ identity }),
+};
 
 /**
  * Wires the game to SpacetimeDB. The server is authoritative: the client sends
@@ -350,12 +358,6 @@ export function startNet(
     });
   }
 
-  /** One identity-targeted admin action, shaped as a Net method. */
-  const memberAction =
-    (name: string, invoke: (c: DbConnection, identity: Identity) => Promise<unknown>) =>
-    (member: Identity): void =>
-      callReducer(name, (c) => invoke(c, member));
-
   return {
     dispose() {
       disposed = true;
@@ -377,16 +379,9 @@ export function startNet(
     applyForMembership() {
       callReducer('apply_for_membership', (c) => c.reducers.applyForMembership({}));
     },
-    approveMember: memberAction('approve_member', (c, identity) =>
-      c.reducers.approveMember({ identity }),
-    ),
-    rejectMember: memberAction('reject_member', (c, identity) =>
-      c.reducers.rejectMember({ identity }),
-    ),
-    banMember: memberAction('ban_member', (c, identity) => c.reducers.banMember({ identity })),
-    unbanMember: memberAction('unban_member', (c, identity) =>
-      c.reducers.unbanMember({ identity }),
-    ),
+    memberAction(action, member) {
+      callReducer(`${action}_member`, (c) => MEMBER_ACTION_CALLS[action](c, member));
+    },
     setGuestsAllowed(allowed) {
       callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
     },

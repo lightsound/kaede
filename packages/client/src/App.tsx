@@ -106,10 +106,7 @@ export function App() {
       <AdminSection
         connected={connected}
         space={space}
-        onApprove={(member) => netRef.current?.approveMember(member.identity)}
-        onReject={(member) => netRef.current?.rejectMember(member.identity)}
-        onBan={(member) => netRef.current?.banMember(member.identity)}
-        onUnban={(member) => netRef.current?.unbanMember(member.identity)}
+        onMemberAction={(action, member) => netRef.current?.memberAction(action, member.identity)}
         onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
       />
     </div>

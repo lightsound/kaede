@@ -165,7 +165,10 @@ export type ApplicationVerdict = { ok: true } | { ok: false; reason: Application
  * choosing to, and a ban simply makes this verdict refuse.
  */
 export function evaluateApplication(request: {
-  /** Whether the sender has an account, i.e. is a signed-in member. */
+  /**
+   * Whether the sender has an account, i.e. is a signed-in member — the
+   * server-side fact behind membershipPrompt's client-side `signedIn`.
+   */
   hasAccount: boolean;
   /** The sender's current membership, or undefined before the first application. */
   membership: Membership | undefined;
@@ -198,24 +201,15 @@ const REAPPLY_REFUSALS = {
  */
 export type MemberAction = 'approve' | 'reject' | 'ban' | 'unban';
 
-/** Which actions make sense from each current status. */
-const ALLOWED_ACTIONS: Record<MemberStatus, readonly MemberAction[]> = {
-  pending: ['approve', 'reject', 'ban'],
-  approved: ['reject', 'ban'],
-  rejected: ['approve', 'ban'],
-  banned: ['approve', 'unban'],
-};
-
-/** The status a membership lands on after an action. */
-export function statusAfter(action: MemberAction): MemberStatus {
-  return STATUS_AFTER[action];
-}
-
-const STATUS_AFTER: Record<MemberAction, MemberStatus> = {
-  approve: 'approved',
-  reject: 'rejected',
-  ban: 'banned',
-  unban: 'rejected',
+/**
+ * The whole state machine in one table: from each status, which actions
+ * apply and where they land. An absent cell is a refused transition.
+ */
+const TRANSITIONS: Record<MemberStatus, Partial<Record<MemberAction, MemberStatus>>> = {
+  pending: { approve: 'approved', reject: 'rejected', ban: 'banned' },
+  approved: { reject: 'rejected', ban: 'banned' },
+  rejected: { approve: 'approved', ban: 'banned' },
+  banned: { approve: 'approved', unban: 'rejected' },
 };
 
 /** Why an admin action (member transition / setting change) was refused. */
@@ -225,29 +219,37 @@ export type AdminActionRefusalReason =
   | 'target-is-admin'
   | 'invalid-transition';
 
+export type MemberActionVerdict =
+  | {
+      ok: true;
+      /** Where the transition lands, straight from the table. */
+      nextStatus: MemberStatus;
+    }
+  | { ok: false; reason: AdminActionRefusalReason };
+
 export type AdminActionVerdict = { ok: true } | { ok: false; reason: AdminActionRefusalReason };
 
 /**
- * Admission check for one admin action on one membership. Only an acting
- * admin may act; the target must still exist; admins cannot be targeted
- * (covers self-targeting too, so the space always keeps at least one admin —
- * there is no promotion path yet that could create a second one); and the
- * action must be a sensible transition from the target's current status, so
- * a stale admin UI hears that its list has drifted rather than seeing a
- * silent success.
+ * Admission check for one admin action on one membership, answering with
+ * the resulting status so validation and transition cannot be picked apart.
+ * Only an acting admin may act; the target must still exist; admins cannot
+ * be targeted (covers self-targeting too, so the space always keeps at
+ * least one admin — there is no promotion path yet that could create a
+ * second one); and the action must be in the transition table for the
+ * target's current status, so a stale admin UI hears that its list has
+ * drifted rather than seeing a silent success.
  */
 export function evaluateMemberAction(request: {
   actor: Membership | undefined;
   target: Membership | undefined;
   action: MemberAction;
-}): AdminActionVerdict {
+}): MemberActionVerdict {
   if (!isActingAdmin(request.actor)) return { ok: false, reason: 'not-admin' };
   if (request.target === undefined) return { ok: false, reason: 'no-such-member' };
   if (request.target.role === 'admin') return { ok: false, reason: 'target-is-admin' };
-  if (!ALLOWED_ACTIONS[request.target.status].includes(request.action)) {
-    return { ok: false, reason: 'invalid-transition' };
-  }
-  return { ok: true };
+  const nextStatus = TRANSITIONS[request.target.status][request.action];
+  if (nextStatus === undefined) return { ok: false, reason: 'invalid-transition' };
+  return { ok: true, nextStatus };
 }
 
 /** Admission check for changing a space setting: acting admins only. */
@@ -271,7 +273,10 @@ export type MembershipPrompt = 'apply' | 'reapply';
  * would refuse; the admission notice explains instead).
  */
 export function membershipPrompt(request: {
-  /** Whether this client is signed in as a member (client-side knowledge). */
+  /**
+   * Whether this client is signed in as a member — the client-side mirror
+   * of evaluateApplication's `hasAccount` (the account exists iff signed in).
+   */
   signedIn: boolean;
   membership: Membership | undefined;
 }): MembershipPrompt | undefined {

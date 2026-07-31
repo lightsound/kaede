@@ -22,7 +22,6 @@ import {
   SPAWN_X,
   SPAWN_Y,
   stateFromRow,
-  statusAfter,
 } from '@maple/shared';
 import { type InferSchema, type ReducerCtx, SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
@@ -97,10 +96,15 @@ function ensureAccount(ctx: Ctx): void {
 /** The generated account row type (all columns). */
 type AccountRow = NonNullable<ReturnType<Ctx['db']['account']['identity']['find']>>;
 
-/** Fills an account's empty display name from the provider's claim, if any. */
+/**
+ * Fills an account's empty display name from the provider's claim, if any —
+ * through the same write path a rename takes (persistMemberName), so the
+ * public space_member projection of a member who applied nameless picks the
+ * name up too and cannot drift from the account.
+ */
 function backfillAccountName(ctx: Ctx, account: AccountRow, claimedName: string | undefined): void {
   if (account.displayName !== undefined || claimedName === undefined) return;
-  ctx.db.account.id.update({ ...account, displayName: claimedName, updatedAt: ctx.timestamp });
+  persistMemberName(ctx, claimedName);
 }
 
 /** The sender-facing standing of an identity: its membership, or undefined for guests. */
@@ -364,15 +368,28 @@ export const applyForMembership = spacetimedb.reducer((ctx) => {
     throw new SenderError(`apply_for_membership refused (${verdict.reason})`);
   }
   const filed = fileApplication(ctx, account === null ? undefined : account.displayName);
-  // A member with a pending application belongs in the waiting room, not in
-  // the world: an applicant who was walking around under the guest rules
-  // leaves it here, in the same transaction — otherwise join would refuse
-  // them while their avatar lingered. (The very first application is seeded
-  // approved, so the fresh admin stays in the world.)
-  if (filed.status === 'pending') {
-    ctx.db.player.identity.delete(ctx.sender);
-  }
+  // The first application is seeded approved (the admin stays in the
+  // world); everyone else's lands pending, which moves them from the world
+  // — where they may have been walking around under the guest rules — to
+  // the waiting room.
+  syncPlayerToStatus(ctx, ctx.sender, filed.status);
 });
+
+/**
+ * Enforces "only approved memberships may be in the world" right where a
+ * status changes: whoever just became non-approved loses their player row
+ * in the same transaction, so join's refusal of their status and their
+ * presence in the world can never contradict each other.
+ */
+function syncPlayerToStatus(
+  ctx: Ctx,
+  identity: SenderIdentity,
+  status: Membership['status'],
+): void {
+  if (status !== 'approved') {
+    ctx.db.player.identity.delete(identity);
+  }
+}
 
 /**
  * The shared body of the four admin actions on one membership (approve /
@@ -383,21 +400,20 @@ export const applyForMembership = spacetimedb.reducer((ctx) => {
  * mistake is reversible by another action. The admin check is server-side
  * and final — the client-side gating of the admin panel is cosmetic.
  *
- * Anything but an approval also deletes the target's player row: expelling
- * or banning someone in the world removes their avatar in the same
- * transaction (their client sees its membership status flip and shows the
- * refusal instead of auto-rejoining).
+ * A transition landing on a non-approved status also removes the target's
+ * avatar (syncPlayerToStatus): their client sees the membership flip and
+ * shows the refusal instead of auto-rejoining.
  */
 function transitionMember(ctx: Ctx, identity: SenderIdentity, action: MemberAction): void {
+  const target = ctx.db.spaceMember.identity.find(identity);
   const verdict = evaluateMemberAction({
     actor: membershipOf(ctx, ctx.sender),
-    target: membershipOf(ctx, identity),
+    target: target === null ? undefined : asMembership(target),
     action,
   });
   if (!verdict.ok) {
     throw new SenderError(`${action}_member refused (${verdict.reason})`);
   }
-  const target = ctx.db.spaceMember.identity.find(identity);
   if (target === null) {
     // Unreachable — evaluateMemberAction refuses a missing target as
     // no-such-member — but narrowing must not read as a silent no-op.
@@ -405,12 +421,10 @@ function transitionMember(ctx: Ctx, identity: SenderIdentity, action: MemberActi
   }
   ctx.db.spaceMember.identity.update({
     ...target,
-    status: statusAfter(action),
+    status: verdict.nextStatus,
     updatedAt: ctx.timestamp,
   });
-  if (action !== 'approve') {
-    ctx.db.player.identity.delete(identity);
-  }
+  syncPlayerToStatus(ctx, identity, verdict.nextStatus);
 }
 
 /** One admin action as a callable reducer; the export name names the reducer. */

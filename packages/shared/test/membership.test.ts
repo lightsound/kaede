@@ -13,7 +13,6 @@ import {
   type Membership,
   membershipPrompt,
   profileNameFrom,
-  statusAfter,
 } from '../src';
 
 const APPROVED_MEMBER: Membership = { status: 'approved', role: 'member' };
@@ -179,35 +178,28 @@ describe('evaluateMemberAction', () => {
   });
 
   it('decides an application: approve, reject, or ban', () => {
-    expect(act('approve', PENDING_MEMBER)).toEqual({ ok: true });
-    expect(act('reject', PENDING_MEMBER)).toEqual({ ok: true });
-    expect(act('ban', PENDING_MEMBER)).toEqual({ ok: true });
+    expect(act('approve', PENDING_MEMBER)).toEqual({ ok: true, nextStatus: 'approved' });
+    expect(act('reject', PENDING_MEMBER)).toEqual({ ok: true, nextStatus: 'rejected' });
+    expect(act('ban', PENDING_MEMBER)).toEqual({ ok: true, nextStatus: 'banned' });
     expect(act('unban', PENDING_MEMBER)).toEqual({ ok: false, reason: 'invalid-transition' });
   });
 
   it('expels or bans an approved member, never re-approves one', () => {
-    expect(act('reject', APPROVED_MEMBER)).toEqual({ ok: true });
-    expect(act('ban', APPROVED_MEMBER)).toEqual({ ok: true });
+    expect(act('reject', APPROVED_MEMBER)).toEqual({ ok: true, nextStatus: 'rejected' });
+    expect(act('ban', APPROVED_MEMBER)).toEqual({ ok: true, nextStatus: 'banned' });
     expect(act('approve', APPROVED_MEMBER)).toEqual({ ok: false, reason: 'invalid-transition' });
   });
 
   // Approve doubles as the recovery from a mistaken rejection or ban, so a
   // wrong click is always one action away from being undone.
   it('recovers a rejected or banned member by approving them', () => {
-    expect(act('approve', REJECTED_MEMBER)).toEqual({ ok: true });
-    expect(act('approve', BANNED_MEMBER)).toEqual({ ok: true });
+    expect(act('approve', REJECTED_MEMBER)).toEqual({ ok: true, nextStatus: 'approved' });
+    expect(act('approve', BANNED_MEMBER)).toEqual({ ok: true, nextStatus: 'approved' });
   });
 
   it('escalates a rejection to a ban, and lifts a ban back to rejected', () => {
-    expect(act('ban', REJECTED_MEMBER)).toEqual({ ok: true });
-    expect(act('unban', BANNED_MEMBER)).toEqual({ ok: true });
-    expect(statusAfter('unban')).toBe('rejected');
-  });
-
-  it('lands each action on its status', () => {
-    expect(statusAfter('approve')).toBe('approved');
-    expect(statusAfter('reject')).toBe('rejected');
-    expect(statusAfter('ban')).toBe('banned');
+    expect(act('ban', REJECTED_MEMBER)).toEqual({ ok: true, nextStatus: 'banned' });
+    expect(act('unban', BANNED_MEMBER)).toEqual({ ok: true, nextStatus: 'rejected' });
   });
 });
 
