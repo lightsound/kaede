@@ -2,7 +2,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
-import { snapshot } from './helpers';
+import { enterWorld, snapshot } from './helpers';
 
 const exec = promisify(execFile);
 
@@ -77,6 +77,47 @@ test('ゲスト入場を不許可にすると入場できず、再許可で自�
   } finally {
     // The world and its settings are shared by every spec: leave guests
     // allowed (the default) for whatever runs next, even on failure/retry.
+    await setGuestsAllowed(true);
+  }
+});
+
+/**
+ * The other half of the setting: guests already in the world are expelled
+ * the moment guests are disallowed (the server deletes their player rows in
+ * the same transaction as the flip), their client stops the local
+ * simulation and shows the refusal, and re-allowing lets them walk right
+ * back in without a reload.
+ */
+test('入場中のゲストは不許可への切替で即キックされ、再許可で自動的に復帰する', async ({
+  browser,
+}) => {
+  // Seed the singleton while nothing is connected, so the flips below can be
+  // single atomic UPDATEs.
+  await seedGuestsAllowed(true);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await enterWorld(page);
+
+    await setGuestsAllowed(false);
+
+    // Expelled: the refusal notice covers the world, and the local
+    // simulation is re-gated (tick returns to -1, the not-in-world signal),
+    // so the kicked client cannot keep walking a ghost around.
+    await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect.poll(async () => (await snapshot(page)).tick, { timeout: 10_000 }).toBe(-1);
+
+    // Re-allowing readmits the kicked client on its own, no reload needed.
+    await setGuestsAllowed(true);
+    await page.waitForFunction(() => (window.__mapleE2E?.snapshot().tick ?? -1) >= 0, undefined, {
+      timeout: 15_000,
+    });
+    await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeHidden();
+
+    await context.close();
+  } finally {
     await setGuestsAllowed(true);
   }
 });

@@ -7,8 +7,9 @@
 export interface E2EWorldSnapshot {
   /**
    * Applied simulation tick; -1 until the authoritative spawn row has started
-   * the local simulation, so `tick >= 0` is the "entered the world" signal
-   * regardless of when the hook itself gets installed.
+   * the local simulation, and again after it stops (own row deleted — kicked
+   * or swept), so `tick >= 0` is the "in the world" signal regardless of when
+   * the hook itself gets installed.
    */
   tick: number;
   /** Rendered position and label of the local player (world pixels, y-down). */

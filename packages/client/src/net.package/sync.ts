@@ -279,11 +279,15 @@ export function startNet(
       if (idHex === myIdHex) {
         // Our row was reclaimed: by the retention sweep (a backgrounded tab
         // stops ticking and eventually looks abandoned), by the guest kick
-        // that a guests-off flip performs, or by an admin removing us. Stop
-        // predicting against a row that no longer exists, then let the
-        // admission rule decide whether to re-join — the sweep case — or to
-        // stay out and say why.
+        // that a guests-off flip performs, or by an admin expelling us. Stop
+        // predicting against a row that no longer exists — and stop the
+        // local simulation too, so a kicked player cannot keep walking a
+        // ghost around under the admission overlay (the next start() snaps
+        // to the authoritative replacement row). Then let the admission rule
+        // decide whether to re-join — the sweep case — or to stay out and
+        // say why.
         prediction = undefined;
+        gameApp.stop();
         // No row again until a re-join lands; disable the rename form so a
         // submit cannot race into the server's no-target refusal.
         publishOwnName(undefined);
