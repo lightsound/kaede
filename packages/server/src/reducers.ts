@@ -330,9 +330,9 @@ function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
  * as real: this project does operate the database through raw SQL (the
  * guest-admission spec drives its setting flips through the CLI's `sql`),
  * where `DELETE FROM player` alone is the intuitive kick. An identity may
- * appear twice (both
- * siblings orphaned); the second removePlayer is a no-op — row deletes
- * tolerate missing rows, the tolerance removePlayer already relies on.
+ * appear twice (both siblings orphaned); the second removePlayer is a
+ * no-op — row deletes tolerate missing rows, the tolerance removePlayer
+ * already relies on.
  */
 function sweepOrphanedSiblings(ctx: Ctx): void {
   for (const identity of orphanedSiblingIdentities(ctx)) removePlayer(ctx, identity);
