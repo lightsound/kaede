@@ -8,4 +8,5 @@ export * from './map';
 export * from './membership';
 export * from './physics';
 export * from './player';
+export * from './sendGate';
 export * from './types';

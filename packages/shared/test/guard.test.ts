@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateInputBatch,
+  HEARTBEAT_INTERVAL_MS,
+  HEARTBEAT_MIN_AGE_MS,
   INPUT_BATCH_MAX_TICKS,
+  INPUT_FLUSH_INTERVAL_MS,
   isExpiredRow,
   MAX_TICK_BANK,
   OFFLINE_RETENTION_MS,
+  RESEND_TIMEOUT_MS,
   TICK_ALLOWANCE_SLACK,
   TICK_RATE,
 } from '../src';
@@ -20,15 +24,58 @@ function batch(overrides: Partial<Parameters<typeof evaluateInputBatch>[0]>) {
     batchLength: 6,
     startTick: 0,
     rowTick: 0,
+    rowQuiescent: false,
+    rowAgeMs: 0,
     allowanceMicros: 0n,
     nowMicros: micros(6),
     ...overrides,
   });
 }
 
+describe('プロトコル定数の整合(アイドル抑制)', () => {
+  it('1フラッシュ分の tick は1回の呼び出しに収まる(移動中 2〜3 calls/秒の前提)', () => {
+    const ticksPerFlush = (TICK_RATE * INPUT_FLUSH_INTERVAL_MS) / 1000;
+    expect(INPUT_BATCH_MAX_TICKS).toBeGreaterThanOrEqual(ticksPerFlush);
+    // 移動中の呼び出しレートが目標帯 (2〜3 calls/秒) に入っていること。
+    expect(1000 / INPUT_FLUSH_INTERVAL_MS).toBeGreaterThanOrEqual(2);
+    expect(1000 / INPUT_FLUSH_INTERVAL_MS).toBeLessThanOrEqual(3);
+  });
+
+  it('再送ウォッチドッグはフラッシュ間隔より十分長い(通常の ack を再送と誤認しない)', () => {
+    expect(RESEND_TIMEOUT_MS).toBeGreaterThanOrEqual(INPUT_FLUSH_INTERVAL_MS * 2);
+  });
+
+  it('ハートビートは保持窓に対して2回落としても掃除されない間隔', () => {
+    expect(HEARTBEAT_INTERVAL_MS * 3).toBeLessThanOrEqual(OFFLINE_RETENTION_MS + 1);
+    expect(HEARTBEAT_MIN_AGE_MS).toBeLessThan(HEARTBEAT_INTERVAL_MS);
+  });
+});
+
 describe('evaluateInputBatch', () => {
-  it('rejects an empty batch', () => {
-    expect(batch({ batchLength: 0 })).toEqual({ ok: false, reason: 'empty-batch' });
+  it('空バッチはハートビート: 行が十分古ければ updatedAt の更新を指示する', () => {
+    expect(batch({ batchLength: 0, rowAgeMs: HEARTBEAT_MIN_AGE_MS })).toEqual({
+      ok: true,
+      kind: 'heartbeat',
+      refresh: true,
+    });
+  });
+
+  it('新しすぎる行へのハートビートは受理するが書き込まない(空バッチ乱打の egress 抑止)', () => {
+    expect(batch({ batchLength: 0, rowAgeMs: HEARTBEAT_MIN_AGE_MS - 1 })).toEqual({
+      ok: true,
+      kind: 'heartbeat',
+      refresh: false,
+    });
+  });
+
+  it('ハートビートは tick の整合を要求しない(静止中は tick が進まないのが正常)', () => {
+    const v = batch({
+      batchLength: 0,
+      startTick: 9999,
+      rowTick: 6,
+      rowAgeMs: HEARTBEAT_MIN_AGE_MS,
+    });
+    expect(v.ok).toBe(true);
   });
 
   it('rejects a batch above INPUT_BATCH_MAX_TICKS', () => {
@@ -38,9 +85,32 @@ describe('evaluateInputBatch', () => {
     });
   });
 
-  it('rejects a duplicate/out-of-order batch (startTick mismatch)', () => {
+  it('rejects a duplicate batch (startTick behind the row)', () => {
     expect(batch({ startTick: 5, rowTick: 6 })).toEqual({ ok: false, reason: 'stale-tick' });
-    expect(batch({ startTick: 7, rowTick: 6 })).toEqual({ ok: false, reason: 'stale-tick' });
+  });
+
+  it('静止していない行へのギャップ付きバッチは拒否する(飛ばした tick が no-op と証明できない)', () => {
+    expect(batch({ startTick: 7, rowTick: 6, rowQuiescent: false })).toEqual({
+      ok: false,
+      reason: 'gap-ahead-of-row',
+    });
+  });
+
+  it('静止した行へのギャップ付きバッチは受理し、支払いはバッチ長ぶんだけ', () => {
+    // 送信ゲートが 1000 tick 飛ばした後の再開バッチ。ギャップは空入力の
+    // 不動点上なので、リプレイなしで tick だけ進めてよい。
+    const now = micros(1006);
+    const v = batch({
+      startTick: 1000,
+      rowTick: 0,
+      rowQuiescent: true,
+      batchLength: 6,
+      allowanceMicros: micros(1000),
+      nowMicros: now,
+    });
+    if (!v.ok || v.kind !== 'apply') throw new Error('expected apply');
+    // マーカー前進はギャップ(1000 tick)ではなくバッチ長(6 tick)ぶん。
+    expect(v.allowanceMicros).toBe(micros(1000) + BigInt(Math.floor(6 * MICROS_PER_TICK)));
   });
 
   it('accepts the normal cadence: batch duration matches elapsed wall clock', () => {
@@ -50,7 +120,7 @@ describe('evaluateInputBatch', () => {
 
   it('advances the marker by exactly the accepted batch duration', () => {
     const v = batch({ batchLength: 6, allowanceMicros: micros(100), nowMicros: micros(107) });
-    if (!v.ok) throw new Error('expected ok');
+    if (!v.ok || v.kind !== 'apply') throw new Error('expected apply');
     expect(v.allowanceMicros).toBe(micros(100) + BigInt(Math.floor(6 * MICROS_PER_TICK)));
   });
 
@@ -88,10 +158,12 @@ describe('evaluateInputBatch', () => {
         batchLength: INPUT_BATCH_MAX_TICKS,
         startTick: accepted,
         rowTick: accepted,
+        rowQuiescent: false,
+        rowAgeMs: 0,
         allowanceMicros: marker,
         nowMicros: now,
       });
-      if (!v.ok) break;
+      if (!v.ok || v.kind !== 'apply') break;
       marker = v.allowanceMicros;
       accepted += INPUT_BATCH_MAX_TICKS;
     }
@@ -109,10 +181,13 @@ describe('evaluateInputBatch', () => {
         batchLength: 6,
         startTick: tick,
         rowTick: tick,
+        rowQuiescent: false,
+        rowAgeMs: 0,
         allowanceMicros: marker,
         nowMicros: micros(flush * 6),
       });
       if (!v.ok) throw new Error(`flush ${flush} rejected: ${v.reason}`);
+      if (v.kind !== 'apply') throw new Error(`flush ${flush} misread as ${v.kind}`);
       marker = v.allowanceMicros;
       tick += 6;
     }

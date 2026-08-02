@@ -28,16 +28,30 @@ export const ROPE_JUMP_VELOCITY = -540;
  */
 export const PLATFORM_DROP_NUDGE = 1;
 
-/** How often a client flushes its pending input batches to the server (ms). */
-export const INPUT_FLUSH_INTERVAL_MS = 100;
+/**
+ * How often a client flushes its pending input batches to the server (ms).
+ * 400ms ≒ 移動中 2.5 reducer calls/秒/人 — Phase 2 アイドル抑制の目標
+ * 「移動中 2〜3 calls/秒・静止中 0」の中央値(ROADMAP)。ローカル予測は
+ * 60fps のまま(1フラッシュに約24 tick を同梱する)ので、延ばして変わるのは
+ * ネットワーク送信の頻度とリモートから見た遅延だけ。静止中の 0 は
+ * evaluateSendWindow(sendGate.ts)が担う。
+ */
+export const INPUT_FLUSH_INTERVAL_MS = 400;
 /**
  * Remote players are rendered this far in the past (ms) so that there are
- * always two snapshots to interpolate between at the 10Hz row-update rate.
+ * always two snapshots to interpolate between: one full input-flush window
+ * (INPUT_FLUSH_INTERVAL_MS) plus headroom for delivery jitter. Raising the
+ * flush interval raises this floor with it.
  */
-export const INTERP_DELAY_MS = 120;
+export const INTERP_DELAY_MS = 550;
 
-/** Max ticks accepted per submit_inputs call; clients chunk bigger backlogs. */
-export const INPUT_BATCH_MAX_TICKS = 30;
+/**
+ * Max ticks accepted per submit_inputs call; clients chunk bigger backlogs.
+ * One nominal flush window is TICK_RATE * INPUT_FLUSH_INTERVAL_MS/1000
+ * (= 24) ticks; 60 keeps even a jittery or briefly throttled window in a
+ * single call, so the moving-rate target is met without extra calls.
+ */
+export const INPUT_BATCH_MAX_TICKS = 60;
 /**
  * Server-side speed-hack guard (token bucket): how many ticks a player may run
  * ahead of the server wall clock before batches are refused. Absorbs the flush
@@ -52,11 +66,37 @@ export const TICK_ALLOWANCE_SLACK = 30;
  */
 export const MAX_TICK_BANK = 60;
 /**
- * How long a disconnected player's row is kept (ms) so a reload or network
- * blip resumes the same character; older offline rows are swept on join.
+ * How long a player row may sit unwritten (ms) before the join-time sweep
+ * reclaims it: a reload or network blip within the window resumes the same
+ * character, and rows stranded by a host that died without
+ * client_disconnected eventually leave the world. While connected, liveness
+ * is proven by input batches when moving and by heartbeats when the send
+ * gate is closed (HEARTBEAT_INTERVAL_MS) — the window tolerates two missed
+ * heartbeats before a live player is swept.
  */
 export const OFFLINE_RETENTION_MS = 10 * 60_000;
-/** Client resend watchdog: re-send un-acked inputs after this long (ms). */
-export const RESEND_TIMEOUT_MS = 600;
+/**
+ * 静止中(送信ゲートが閉じている間)にクライアントが生存証明として送る
+ * 空の submit_inputs の間隔 (ms)。サーバーはこれで player.updatedAt を進め、
+ * オフライン掃除(isExpiredRow)から接続中の静止プレイヤーを守る。
+ * OFFLINE_RETENTION_MS の 1/3 強 — 2回連続で落としてもまだ掃除されない。
+ * スケジューリングはメインスレッドのタイマーではなく Web Worker で行う
+ * (heartbeat.ts): バックグラウンドタブのタイマー間引き(Chrome の intensive
+ * throttling は約1回/時)がメインスレッド側の予定を丸ごと止めるため。
+ */
+export const HEARTBEAT_INTERVAL_MS = 180_000;
+/**
+ * サーバーがハートビートによる行の書き換え(updatedAt 更新)を受け入れる
+ * 最短の行齢 (ms)。行更新は全購読者への egress を伴うため、空バッチを
+ * 乱打するクライアントがいても書き込みは最大 1回/分/人 に抑えられる。
+ */
+export const HEARTBEAT_MIN_AGE_MS = 60_000;
+/**
+ * Client resend watchdog: re-send un-acked inputs after this long (ms).
+ * The watchdog only runs at flush time, so the timeout is 3x the flush
+ * interval: one in-flight window plus round-trip headroom, without
+ * re-sending on every ordinarily-timed ack.
+ */
+export const RESEND_TIMEOUT_MS = 1200;
 /** Client keeps at most this many ticks of prediction history (~10s). */
 export const PREDICTION_HISTORY_MAX_TICKS = 600;

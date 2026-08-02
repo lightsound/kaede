@@ -14,6 +14,7 @@ import {
   guestsAllowedFrom,
   initialMembership,
   isExpiredRow,
+  isQuiescent,
   type MemberAction,
   type Membership,
   profileNameFrom,
@@ -189,7 +190,10 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
 
 /**
  * Records why a batch was refused. `stale-tick` is the resend watchdog's normal
- * duplicate path, so it is not noteworthy.
+ * duplicate path, so it is not noteworthy. `gap-ahead-of-row` is logged: an
+ * honest client only ever creates a gap from a fully-acked quiescent state
+ * (evaluateSendWindow), so a moving-row gap means a lost batch raced the
+ * send gate or someone is probing.
  */
 function logRejection(
   reason: BatchRejectReason,
@@ -343,8 +347,16 @@ function sweepOrphanedSiblings(ctx: Ctx): void {
 
 // Server-authoritative movement: clients send only inputs, the server replays
 // them through the same shared physics. Position cannot change any other way.
-// Admission (batch size, ordering, token-bucket rate limit) lives in the pure
-// evaluateInputBatch so it is unit-tested in @maple/shared.
+// Admission (batch size, gap/ordering, token-bucket rate limit, heartbeat
+// classification) lives in the pure evaluateInputBatch so it is unit-tested
+// in @maple/shared. Two idle-suppression cases ride on this one reducer so
+// no new reducer (= no bindings regeneration) is needed (ROADMAP Phase 2):
+// - An EMPTY batch is a heartbeat: a quiescent client sends no input ticks
+//   at all, so this is how its row's updatedAt keeps moving and the
+//   retention sweep (isExpiredRow) knows it is still alive.
+// - startTick may run PAST row.tick when the row is quiescent: the gap is
+//   the empty ticks the sender's send gate skipped, provably no-ops, so the
+//   tick counter fast-forwards to startTick without replaying them.
 export const submitInputs = spacetimedb.reducer(
   { startTick: t.u32(), inputs: t.array(t.u8()) },
   (ctx, { startTick, inputs }) => {
@@ -370,6 +382,8 @@ export const submitInputs = spacetimedb.reducer(
       batchLength: inputs.length,
       startTick,
       rowTick: row.tick,
+      rowQuiescent: isQuiescent(stateFromRow(row)),
+      rowAgeMs: ctx.timestamp.since(row.updatedAt).millis,
       allowanceMicros: guard.allowanceMicros,
       nowMicros: ctx.timestamp.microsSinceUnixEpoch,
     });
@@ -378,24 +392,58 @@ export const submitInputs = spacetimedb.reducer(
       return;
     }
 
-    const s = replayInputs(stateFromRow(row), inputs, DEFAULT_MAP);
-
-    ctx.db.playerGuard.identity.update({ ...guard, allowanceMicros: verdict.allowanceMicros });
-    ctx.db.player.identity.update({
-      ...row,
-      x: s.x,
-      y: s.y,
-      vx: s.vx,
-      vy: s.vy,
-      facing: s.facing,
-      onGround: s.onGround,
-      rope: s.rope,
-      tick: row.tick + inputs.length,
-      online: true, // a stale disconnect event may have raced us; inputs prove liveness
-      updatedAt: ctx.timestamp,
-    });
+    applyAcceptedBatch(ctx, { row, guard }, startTick, inputs, verdict);
   },
 );
+
+/** The rows submitInputs acts on, as findMovementRows returns them. */
+type MovementRows = NonNullable<ReturnType<typeof findMovementRows>>;
+
+/**
+ * Applies an accepted submit_inputs verdict — a heartbeat's liveness refresh,
+ * or a replayed input batch. Split out of the reducer to keep that uncovered
+ * arrow under the CRAP budget fallow enforces (the backfillAccountName
+ * precedent); the decisions themselves live in evaluateInputBatch,
+ * unit-tested in @maple/shared.
+ */
+function applyAcceptedBatch(
+  ctx: Ctx,
+  rows: MovementRows,
+  startTick: number,
+  inputs: ArrayLike<number> & Iterable<number>,
+  verdict: Extract<ReturnType<typeof evaluateInputBatch>, { ok: true }>,
+): void {
+  const { row, guard } = rows;
+  if (verdict.kind === 'heartbeat') {
+    // Liveness only: no replay, no guard update. `refresh` is false while
+    // the row is fresh (HEARTBEAT_MIN_AGE_MS), bounding how often spam
+    // could rewrite the row (= egress to every subscriber).
+    if (verdict.refresh) {
+      ctx.db.player.identity.update({ ...row, online: true, updatedAt: ctx.timestamp });
+    }
+    return;
+  }
+
+  const s = replayInputs(stateFromRow(row), inputs, DEFAULT_MAP);
+
+  ctx.db.playerGuard.identity.update({ ...guard, allowanceMicros: verdict.allowanceMicros });
+  ctx.db.player.identity.update({
+    ...row,
+    x: s.x,
+    y: s.y,
+    vx: s.vx,
+    vy: s.vy,
+    facing: s.facing,
+    onGround: s.onGround,
+    rope: s.rope,
+    // startTick, not row.tick: an accepted quiescent gap fast-forwards the
+    // counter over the elided empty ticks (startTick === row.tick when
+    // there is no gap).
+    tick: startTick + inputs.length,
+    online: true, // a stale disconnect event may have raced us; inputs prove liveness
+    updatedAt: ctx.timestamp,
+  });
+}
 
 /**
  * Deletes rows whose retention window has elapsed, whatever they are flagged
@@ -465,11 +513,10 @@ function persistMemberName(ctx: Ctx, name: string): void {
 // client checks against before sending.
 // Deliberately does NOT touch player.updatedAt (the pre-split rename did,
 // incidentally, by rewriting the whole row): renaming is not liveness.
-// Liveness is proven by input batches, which a connected client streams
-// even while standing still under the current protocol (see ROADMAP —
-// the planned idle suppression must revisit what refreshes updatedAt,
-// with or without this reducer), and a client idle long enough to stop
-// streaming is cut by its own idle guard, after which sweeping its row is
+// Liveness is proven by input batches while moving and by heartbeats
+// (empty submit_inputs) while the send gate keeps a quiescent client
+// silent — see submitInputs. A client that stops sending even those is
+// gone (or cut by its own idle guard), after which sweeping its row is
 // exactly right. Bumping the hot row here would also re-broadcast a
 // position update to every client for a change the player_name event
 // already carries.

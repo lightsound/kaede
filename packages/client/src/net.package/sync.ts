@@ -1,10 +1,16 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
-import { type MemberAction, stateFromRow } from '@maple/shared';
+import {
+  type E2ENetStats,
+  HEARTBEAT_INTERVAL_MS,
+  type MemberAction,
+  stateFromRow,
+} from '@maple/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
 import { type AuthTokenGetter, type Connected, connect, target } from './connection';
+import { createHeartbeat } from './heartbeat';
 import {
   createIdleMonitor,
   IDLE_CHECK_INTERVAL_MS,
@@ -52,6 +58,19 @@ function runEffect<K extends LifecycleEffect['kind']>(
 ): void {
   const runner: (e: typeof effect) => void = runners[effect.kind];
   runner(effect);
+}
+
+/**
+ * 送信カウンタ(Playwright 用の読み取り専用フック)。「静止中は送信が止まる」
+ * はレンダリングからは観測できないので、送った回数そのものを dev ビルド
+ * だけ窓に晒す(GameApp の __mapleE2E と同じ流儀)。本番ビルドはビルド時
+ * 定数でコードごと消える。
+ */
+function installNetStats(): E2ENetStats | undefined {
+  if (!import.meta.env.DEV) return undefined;
+  const stats: E2ENetStats = { inputBatchesSent: 0, heartbeatsSent: 0 };
+  window.__mapleE2ENet = stats;
+  return stats;
 }
 
 export interface Net {
@@ -137,6 +156,16 @@ export function startNet(
   // state (see lifecycle.ts); everything below reads it through `life`.
   let life = initialLifecycle();
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const netStats = installNetStats();
+  const bumpStat = (key: keyof E2ENetStats): void => {
+    if (netStats) netStats[key] += 1;
+  };
+
+  // いつ最後に submit_inputs を送ったか(バッチ・ハートビートとも)。
+  // 送信ゲートが閉じている間はこれが HEARTBEAT_INTERVAL_MS だけ古くなり、
+  // ハートビートの送りどきの判定材料になる。
+  let lastSendMs = Date.now();
 
   // 無操作ガード: タイムアウトを超えたら接続(と再試行ループ)を休止し、次の
   // 操作で再開する。開発ビルドだけ ?idleMs= で短縮できる(E2E・手動確認用)。
@@ -226,12 +255,17 @@ export function startNet(
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
       publishOwnName(nameOf(row.identity));
+      // The join/resume that produced this row refreshed its updatedAt, so
+      // the heartbeat clock starts from now.
+      lastSendMs = Date.now();
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
             // Batches lost to a dropping connection are expected and already
             // recovered by the resend watchdog, so a per-batch failure is not
             // worth reporting; logging one per flush would bury everything else.
+            lastSendMs = Date.now();
+            bumpStat('inputBatchesSent');
             conn?.reducers.submitInputs({ startTick, inputs: packed }).catch(() => {});
           },
           resetLocal(state, tick) {
@@ -239,6 +273,7 @@ export function startNet(
           },
         },
         row.tick,
+        stateFromRow(row),
       );
       gameApp.start(stateFromRow(row), row.tick);
     };
@@ -479,6 +514,23 @@ export function startNet(
     dispatch({ kind: 'idle-timeout' });
   }, IDLE_CHECK_INTERVAL_MS);
 
+  // 静止中の生存証明: 送信ゲート(prediction.ts)が入力送信を止めている間、
+  // サーバー行の updatedAt を進めるのはこの空バッチだけになる。これが絶えると
+  // OFFLINE_RETENTION_MS 経過で行が掃除され、接続したまま静止している
+  // プレイヤーが再join→スポーン地点テレポートしてしまう。Worker 駆動なのは
+  // バックグラウンドタブのタイマー間引き対策(heartbeat.ts)。送りどきは
+  // 「最後の送信から HEARTBEAT_INTERVAL_MS 以上」— 移動中は入力バッチが
+  // lastSendMs を進めるので、ハートビートは自然に黙る。prediction がない間
+  // (待合室・入場拒否・行の削除後)は行が無いので送らない。
+  const heartbeat = createHeartbeat(() => {
+    // dispose 後は heartbeat.dispose() 済みかつ conn も undefined。
+    if (!conn || !prediction) return;
+    if (Date.now() - lastSendMs < HEARTBEAT_INTERVAL_MS) return;
+    lastSendMs = Date.now();
+    bumpStat('heartbeatsSent');
+    conn.reducers.submitInputs({ startTick: 0, inputs: new Uint8Array(0) }).catch(() => {});
+  });
+
   /**
    * The shared shell of every user-triggered reducer call: drop with a
    * warning while disconnected, log a server refusal. Success never needs
@@ -498,6 +550,10 @@ export function startNet(
     dispose() {
       dispatch({ kind: 'dispose' });
       clearInterval(idleTimer);
+      heartbeat.dispose();
+      // Guarded so a torn-down instance cannot erase the counters installed
+      // by the instance that outlives it (StrictMode mounts two in parallel).
+      if (netStats && window.__mapleE2ENet === netStats) window.__mapleE2ENet = undefined;
       for (const type of ACTIVITY_EVENTS) {
         window.removeEventListener(type, onActivity, { capture: true });
       }
