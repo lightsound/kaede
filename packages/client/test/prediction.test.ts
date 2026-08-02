@@ -1,7 +1,9 @@
 import {
   DEFAULT_MAP,
+  GROUND_TOP,
   INPUT_BATCH_MAX_TICKS,
   INPUT_FLUSH_INTERVAL_MS,
+  PLAYER_HALF_H,
   type PlayerInput,
   type PlayerState,
   PREDICTION_HISTORY_MAX_TICKS,
@@ -15,9 +17,22 @@ import { createPrediction, type PredictionDeps } from '../src/net.package/predic
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
 
-/** The authoritative spawn state the prediction loop starts from. */
+/** The authoritative spawn state the prediction loop starts from (mid-air). */
 function spawn(): PlayerState {
   return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1 };
+}
+
+/** 地面の上で静止(送信ゲートが閉じられる状態)。 */
+function grounded(): PlayerState {
+  return {
+    x: SPAWN_X,
+    y: GROUND_TOP - PLAYER_HALF_H,
+    vx: 0,
+    vy: 0,
+    facing: 1,
+    onGround: true,
+    rope: -1,
+  };
 }
 
 interface SentBatch {
@@ -98,7 +113,7 @@ describe('createPrediction', () => {
 
   describe('flush cadence + chunking', () => {
     it('sends one contiguous batch per flush window', () => {
-      const loop = createPrediction(deps, 0, 0);
+      const loop = createPrediction(deps, 0, spawn(), 0);
       const drv = driver(spawn(), 0);
 
       const ticksPerWindow = 6;
@@ -119,10 +134,10 @@ describe('createPrediction', () => {
     });
 
     it('splits a large backlog into chunks of <= INPUT_BATCH_MAX_TICKS', () => {
-      const loop = createPrediction(deps, 0, 0);
+      const loop = createPrediction(deps, 0, spawn(), 0);
       const drv = driver(spawn(), 0);
 
-      const pending = 40;
+      const pending = INPUT_BATCH_MAX_TICKS + 10;
       for (let i = 1; i <= pending; i++) {
         // Keep nowMs below the threshold until the final tick so the entire
         // backlog flushes in a single flush() call.
@@ -141,7 +156,7 @@ describe('createPrediction', () => {
   });
 
   it('does not reset on an honest ack matching the predicted state', () => {
-    const loop = createPrediction(deps, 0, 0);
+    const loop = createPrediction(deps, 0, spawn(), 0);
     const drv = driver(spawn(), 0);
 
     // Feed a few ticks with varied input so prediction has real content.
@@ -163,7 +178,7 @@ describe('createPrediction', () => {
   });
 
   it('reconciles a divergent ack by replaying un-acked inputs', () => {
-    const loop = createPrediction(deps, 0, 0);
+    const loop = createPrediction(deps, 0, spawn(), 0);
     const drv = driver(spawn(), 0);
 
     const inputs: PlayerInput[] = [
@@ -197,7 +212,7 @@ describe('createPrediction', () => {
   });
 
   it('re-sends from the acked tick after the resend watchdog fires', () => {
-    const loop = createPrediction(deps, 0, 0);
+    const loop = createPrediction(deps, 0, spawn(), 0);
     const drv = driver(spawn(), 0);
 
     // Window 1: ticks 1..3 flush as one batch at t=INPUT_FLUSH_INTERVAL_MS. Never acked.
@@ -218,8 +233,99 @@ describe('createPrediction', () => {
     expect(sent[1].packed.length).toBe(drv.tick);
   });
 
+  describe('送信ゲート(アイドル抑制): 静止中は送信が止まる', () => {
+    /** 1フラッシュウィンドウぶん(6 tick)進め、最後の tick でフラッシュさせる。 */
+    function window(
+      loop: ReturnType<typeof createPrediction>,
+      drv: ReturnType<typeof driver>,
+      input: PlayerInput,
+      w: number,
+    ): void {
+      for (let i = 1; i <= 6; i++) {
+        drv.step(loop, input, i === 6 ? w * INPUT_FLUSH_INTERVAL_MS : 0);
+      }
+    }
+
+    it('静止起点・入力なし・全ackなら最初のウィンドウから何も送らない', () => {
+      const loop = createPrediction(deps, 0, grounded(), 0);
+      const drv = driver(grounded(), 0);
+      for (let w = 1; w <= 3; w++) window(loop, drv, NO_INPUT, w);
+      expect(sent).toHaveLength(0);
+    });
+
+    it('空中では入力がなくても空入力を送り続け、静止到達+ackで止まる', () => {
+      // spawn() は空中: 落下→着地(~38 tick)までは、キーを離していても
+      // サーバーに物理を進めさせるために空バッチが流れ続けなければならない。
+      const loop = createPrediction(deps, 0, spawn(), 0);
+      const drv = driver(spawn(), 0);
+      for (let w = 1; w <= 10; w++) {
+        window(loop, drv, NO_INPUT, w);
+        // サーバー役: 決定論リプレイの結果を ack(常に予測と一致)。
+        loop.onAck(drv.state(drv.tick), drv.tick, w * INPUT_FLUSH_INTERVAL_MS);
+      }
+      // 落下中のウィンドウはすべて送られた(少なくとも着地までの6本)。
+      expect(sent.length).toBeGreaterThanOrEqual(6);
+      expect(drv.state(drv.tick).onGround).toBe(true);
+
+      // 静止到達+ack後: それ以降のウィンドウは1本も送られない。
+      const settled = sent.length;
+      for (let w = 11; w <= 14; w++) window(loop, drv, NO_INPUT, w);
+      expect(sent).toHaveLength(settled);
+    });
+
+    it('抑制中に飛ばした tick は、再開バッチの startTick のギャップとして現れる', () => {
+      const loop = createPrediction(deps, 0, grounded(), 0);
+      const drv = driver(grounded(), 0);
+      // ウィンドウ2本(tick 1..12)は静止スキップ: サーバーの行 tick は 0 のまま。
+      for (let w = 1; w <= 2; w++) window(loop, drv, NO_INPUT, w);
+      expect(sent).toHaveLength(0);
+
+      // 入力再開: ウィンドウ3(tick 13..18)が入力を含むので送られる。startTick は
+      // 仮想 ack 位置(12) — サーバーの行 tick(0)よりも先で、サーバー側は
+      // 行が静止しているのでこのギャップを受理する(evaluateInputBatch)。
+      window(loop, drv, { ...NO_INPUT, right: true }, 3);
+      expect(sent).toHaveLength(1);
+      expect(sent[0].startTick).toBe(12);
+      expect(sent[0].packed).toHaveLength(6);
+    });
+
+    it('ハートビートによる行更新(tick が進まない ack)は無視する', () => {
+      const loop = createPrediction(deps, 0, grounded(), 0);
+      const drv = driver(grounded(), 0);
+      for (let w = 1; w <= 2; w++) window(loop, drv, NO_INPUT, w);
+
+      // サーバーのハートビートは updatedAt だけ進めて tick 0 のまま行を再送する。
+      // 仮想 ack(12) より古い ack として無視され、リセットも再送も起きない。
+      loop.onAck(grounded(), 0, 2 * INPUT_FLUSH_INTERVAL_MS);
+      expect(resets).toHaveLength(0);
+      window(loop, drv, NO_INPUT, 3);
+      expect(sent).toHaveLength(0);
+    });
+
+    it('未ackのバッチが残っている間は静止しても黙らない(ackが揃ってから止まる)', () => {
+      const loop = createPrediction(deps, 0, grounded(), 0);
+      const drv = driver(grounded(), 0);
+      // ウィンドウ1: 最初の tick だけ右入力 → 送信。ack はまだ返さない。
+      drv.step(loop, { ...NO_INPUT, right: true }, 0);
+      for (let i = 2; i <= 6; i++) {
+        drv.step(loop, NO_INPUT, i === 6 ? INPUT_FLUSH_INTERVAL_MS : 0);
+      }
+      expect(sent).toHaveLength(1);
+
+      // ウィンドウ2: 入力なし・すでに静止だが、未ackなので送り続ける
+      // (このバッチが落ちていた場合の再送経路を殺さないため)。
+      window(loop, drv, NO_INPUT, 2);
+      expect(sent).toHaveLength(2);
+
+      // ackが揃うと次のウィンドウから止まる。
+      loop.onAck(drv.state(drv.tick), drv.tick, 2 * INPUT_FLUSH_INTERVAL_MS);
+      window(loop, drv, NO_INPUT, 3);
+      expect(sent).toHaveLength(2);
+    });
+  });
+
   it('hard-resets to the authoritative state when the ack predates kept history', () => {
-    const loop = createPrediction(deps, 0, 0);
+    const loop = createPrediction(deps, 0, spawn(), 0);
     const drv = driver(spawn(), 0);
 
     // Feed more ticks than the history cap so the oldest entries are pruned.

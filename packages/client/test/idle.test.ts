@@ -9,8 +9,8 @@ import {
 const TIMEOUT = 1000;
 
 describe('既定値', () => {
-  it('タイムアウトは 15 分で、チェック周期より十分長い(ms 単位の取り違え防止)', () => {
-    expect(IDLE_DISCONNECT_MS).toBe(15 * 60 * 1000);
+  it('タイムアウトは 60 分で、チェック周期より十分長い(ms 単位の取り違え防止)', () => {
+    expect(IDLE_DISCONNECT_MS).toBe(60 * 60 * 1000);
     expect(IDLE_DISCONNECT_MS).toBeGreaterThan(IDLE_CHECK_INTERVAL_MS * 10);
   });
 });
@@ -19,13 +19,11 @@ describe('createIdleMonitor', () => {
   it('タイムアウト未満では休止しない', () => {
     const idle = createIdleMonitor(TIMEOUT, 0);
     expect(idle.check(TIMEOUT - 1)).toBe('none');
-    expect(idle.suspended()).toBe(false);
   });
 
   it('最後の操作からタイムアウトが経過したら一度だけ休止を指示する', () => {
     const idle = createIdleMonitor(TIMEOUT, 0);
     expect(idle.check(TIMEOUT)).toBe('suspend');
-    expect(idle.suspended()).toBe(true);
     // 休止中の周期チェックは再指示しない(切断の連打にならない)。
     expect(idle.check(TIMEOUT * 10)).toBe('none');
   });
@@ -41,7 +39,6 @@ describe('createIdleMonitor', () => {
     const idle = createIdleMonitor(TIMEOUT, 0);
     idle.check(TIMEOUT);
     expect(idle.activity(TIMEOUT + 1)).toBe('resume');
-    expect(idle.suspended()).toBe(false);
     // 再開直後にまた休止しない: 起点は再開時の操作になる。
     expect(idle.check(TIMEOUT + 2)).toBe('none');
     expect(idle.check(TIMEOUT + 1 + TIMEOUT)).toBe('suspend');

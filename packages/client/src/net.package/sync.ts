@@ -1,18 +1,33 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
-import { type MemberAction, stateFromRow } from '@maple/shared';
+import {
+  type E2ENetStats,
+  HEARTBEAT_INTERVAL_MS,
+  type MemberAction,
+  stateFromRow,
+} from '@maple/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
-import { type AuthTokenGetter, connect, target } from './connection';
+import { type AuthTokenGetter, type Connected, connect, target } from './connection';
+import { createHeartbeat } from './heartbeat';
 import {
   createIdleMonitor,
   IDLE_CHECK_INTERVAL_MS,
   IDLE_DISCONNECT_MS,
   parseIdleTimeoutOverride,
 } from './idle';
+import {
+  type ConnectionStatus,
+  initialLifecycle,
+  type LifecycleEffect,
+  type LifecycleEvent,
+  transition,
+} from './lifecycle';
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
+
+export type { ConnectionStatus } from './lifecycle';
 
 /** A generated row type, inferred because the bindings don't re-export them. */
 type RowOf<T extends keyof DbConnection['db']> =
@@ -24,20 +39,47 @@ type PlayerRow = RowOf<'player'>;
 /** The generated player_name row type (the display name split off the hot row). */
 type PlayerNameRow = RowOf<'playerName'>;
 
-/**
- * What the user should be told about the connection right now. `idle` is the
- * deliberate offline state: this client cut the connection after
- * IDLE_DISCONNECT_MS without user input (see idle.ts) and will reconnect on
- * the next input.
- */
-export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'idle';
-
 /** ユーザーの在席とみなす操作イベント。タイムスタンプを書くだけなので capture+passive で広く拾う。 */
 const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const;
 
-/** First retry delay after a failure; doubles per attempt up to the max. */
-const RETRY_INITIAL_MS = 1000;
-const RETRY_MAX_MS = 30_000;
+/**
+ * One runner per lifecycle effect kind, each receiving its narrowed payload.
+ * A handler MAP rather than the codebase's usual `switch` + `satisfies never`
+ * deliberately: this shell is uncovered (it needs a live host — see the
+ * fallow-ignore header), and a 9-branch uncovered switch busts the CRAP
+ * budget fallow enforces, while a map is branch-free and still makes a new
+ * effect kind a compile error (a missing key). The lifecycle's own event
+ * switch stays the idiomatic form because its transition is unit-tested.
+ */
+type EffectRunners = {
+  [K in LifecycleEffect['kind']]: (effect: Extract<LifecycleEffect, { kind: K }>) => void;
+};
+
+/**
+ * Calls the runner matching the effect's kind. Generic over the kind so the
+ * indexed access stays correlated — the runner receives exactly its own
+ * payload type, with no cast and no narrowing switch.
+ */
+function runEffect<K extends LifecycleEffect['kind']>(
+  runners: EffectRunners,
+  effect: Extract<LifecycleEffect, { kind: K }>,
+): void {
+  const runner: (e: typeof effect) => void = runners[effect.kind];
+  runner(effect);
+}
+
+/**
+ * 送信カウンタ(Playwright 用の読み取り専用フック)。「静止中は送信が止まる」
+ * はレンダリングからは観測できないので、送った回数そのものを dev ビルド
+ * だけ窓に晒す(GameApp の __mapleE2E と同じ流儀)。本番ビルドはビルド時
+ * 定数でコードごと消える。
+ */
+function installNetStats(): E2ENetStats | undefined {
+  if (!import.meta.env.DEV) return undefined;
+  const stats: E2ENetStats = { inputBatchesSent: 0, heartbeatsSent: 0 };
+  window.__mapleE2ENet = stats;
+  return stats;
+}
 
 export interface Net {
   dispose(): void;
@@ -85,11 +127,14 @@ const MEMBER_ACTION_CALLS: Record<
  * Remote players are rendered interpolated INTERP_DELAY_MS in the past.
  *
  * Connection failures and drops are retried forever with exponential backoff;
- * `onStatus` keeps the UI informed. The one exception is idle suspension:
- * after IDLE_DISCONNECT_MS without user input this client closes the
- * connection itself (status 'idle') and reconnects on the next input — an
- * unattended tab must not stream traffic (= Maincloud energy) forever
- * (see idle.ts). On reconnect the identity is resumed —
+ * `onStatus` keeps the UI informed. When a connect may start, when a retry
+ * arms, and which socket events are stale is decided by the pure lifecycle
+ * state machine (lifecycle.ts); this file only performs the effects it
+ * returns (timers, sockets, status callbacks). The one exception to forever
+ * retrying is idle suspension: after IDLE_DISCONNECT_MS without user input
+ * this client closes the connection itself (status 'idle') and reconnects on
+ * the next input — an unattended tab must not stream traffic (= Maincloud
+ * energy) forever (see idle.ts). On reconnect the identity is resumed —
  * via a fresh OIDC token from `getAuthToken` when signed in, or this tab's
  * stored anonymous token otherwise (see connection.ts) — so the server hands
  * back the same player row and the local sim snaps to that authoritative state.
@@ -115,13 +160,27 @@ export function startNet(
 ): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
-  let disposed = false;
-  let everConnected = false;
-  let retryDelayMs = RETRY_INITIAL_MS;
+  // The whole retry/suspension/generation bookkeeping lives in this pure
+  // state (see lifecycle.ts); everything below reads it through `life`.
+  let life = initialLifecycle();
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  // Connects that have failed in a row since the last success; connect() uses
-  // it to decide when the stored identity token has become the likely culprit.
-  let consecutiveFailures = 0;
+
+  const netStats = installNetStats();
+  const bumpStat = (key: keyof E2ENetStats): void => {
+    if (netStats) netStats[key] += 1;
+  };
+
+  // いつ最後に submit_inputs を送ったか(バッチ・ハートビートとも)。
+  // 送信ゲートが閉じている間はこれが HEARTBEAT_INTERVAL_MS だけ古くなり、
+  // ハートビートの送りどきの判定材料になる。
+  let lastSendMs = Date.now();
+
+  /** 生存証明の空バッチを1本送る(定期便と再接続時の生存宣言の共通路)。 */
+  function sendHeartbeat(c: DbConnection): void {
+    lastSendMs = Date.now();
+    bumpStat('heartbeatsSent');
+    c.reducers.submitInputs({ startTick: 0, inputs: new Uint8Array(0) }).catch(() => {});
+  }
 
   // 無操作ガード: タイムアウトを超えたら接続(と再試行ループ)を休止し、次の
   // 操作で再開する。開発ビルドだけ ?idleMs= で短縮できる(E2E・手動確認用)。
@@ -186,30 +245,6 @@ export function startNet(
     });
   }
 
-  /**
-   * True while nothing may (re)arm the retry loop: the stack is torn down,
-   * the idle guard suspended us on purpose (only a user input — the activity
-   * listener — may end that state), or a timer is already armed. The armed
-   * check matters because a failed connect both rejects and closes the
-   * socket, so scheduleRetry is called twice for the same failure; without
-   * it the backoff doubled twice per round (1s, 4s, 16s...) and each extra
-   * timer was dropped from retryTimer unreferenced.
-   */
-  function retryBlocked(): boolean {
-    return disposed || idle.suspended() || retryTimer !== undefined;
-  }
-
-  /** Arms the next attempt, at most once per failure (see retryBlocked). */
-  function scheduleRetry(): void {
-    if (retryBlocked()) return;
-    onStatus(everConnected ? 'reconnecting' : 'connecting');
-    retryTimer = setTimeout(() => {
-      retryTimer = undefined;
-      attempt();
-    }, retryDelayMs);
-    retryDelayMs = Math.min(retryDelayMs * 2, RETRY_MAX_MS);
-  }
-
   function wireSession(
     c: DbConnection,
     myIdentity: Identity,
@@ -219,7 +254,7 @@ export function startNet(
     // True once this session's events must be ignored: the stack is torn
     // down, or a newer connect has taken over (an idle resume can start one
     // while this session's socket is still closing).
-    const stale = () => disposed || generation !== attemptGeneration;
+    const stale = () => life.disposed || generation !== life.generation;
 
     // Names live on player_name, split off the hot row so movement updates
     // do not re-broadcast them (ROADMAP Phase 2 の player 行ダイエット). The
@@ -235,12 +270,26 @@ export function startNet(
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
       publishOwnName(nameOf(row.identity));
+      // Announce liveness once per session start, unconditionally. Resuming
+      // a surviving row skips join, so nothing server-side flips its offline
+      // flag back or refreshes its updatedAt — and the send gate means no
+      // input batch will arrive to do either while we stand still
+      // (pre-suppression, the first 100ms flush did both incidentally).
+      // Without this, a resumed player stays hidden from others until the
+      // first input, and a row resumed near the end of its retention window
+      // could be swept out from under a live client. For a fresh spawn the
+      // server ignores the write (the row is younger than
+      // HEARTBEAT_MIN_AGE_MS and online), so the cost is one reducer call
+      // per entry. Sending also seeds lastSendMs = the heartbeat clock.
+      sendHeartbeat(c);
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
             // Batches lost to a dropping connection are expected and already
             // recovered by the resend watchdog, so a per-batch failure is not
             // worth reporting; logging one per flush would bury everything else.
+            lastSendMs = Date.now();
+            bumpStat('inputBatchesSent');
             conn?.reducers.submitInputs({ startTick, inputs: packed }).catch(() => {});
           },
           resetLocal(state, tick) {
@@ -248,6 +297,7 @@ export function startNet(
           },
         },
         row.tick,
+        stateFromRow(row),
       );
       gameApp.start(stateFromRow(row), row.tick);
     };
@@ -339,6 +389,14 @@ export function startNet(
       if (stale()) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
+        // A live own row flipped to offline: a half-open TCP session's
+        // client_disconnected landing AFTER this connection took over (the
+        // race the reducer comment on `online: true` describes). Other
+        // clients hide offline rows immediately, and while the send gate is
+        // closed nothing else would correct the flag until the next input
+        // or scheduled heartbeat (minutes) — so re-announce liveness now.
+        // Pre-suppression, the 100ms input stream fixed this incidentally.
+        if (!row.online) sendHeartbeat(c);
         // An own-row update IS the acknowledgement (row.tick = applied count).
         prediction?.onAck(stateFromRow(row), row.tick, performance.now());
         return;
@@ -384,161 +442,130 @@ export function startNet(
     admission.reevaluate();
   }
 
-  // At most one connect may be in flight. Before idle suspension existed this
-  // was structural (a new attempt only ever started after the previous one
-  // failed); now a suspend can interleave with a pending connect and an input
-  // can resume before that connect settles, so without the guard the resume
-  // would race a second connect against the first and leave two live sessions.
-  let attemptInFlight = false;
-  // Which connect is current. A socket closes asynchronously, so the close of
-  // a connection the idle guard cut can report after a resume already started
-  // (or finished) a newer connect; callbacks stamped with an older generation
-  // are stale and must not touch the newer session. An idle suspension bumps
-  // the generation when it cuts a LIVE session, so that session turns stale
-  // the moment we decide to cut it — not only once its socket finishes
-  // closing. A merely pending connect keeps its generation (see
-  // suspendForIdle).
-  let attemptGeneration = 0;
-
   /**
-   * True while a new connect may not start: the stack is torn down, one is
-   * already in flight, or the idle guard holds the connection closed. The
-   * idle.suspended() check is redundant today — scheduleRetry never arms a
-   * timer while suspended, suspendForIdle clears any armed timer
-   * (clearTimeout cancels a queued-but-not-started callback), and
-   * onActivity lifts the suspension before calling attempt — but it makes
-   * the invariant local: no future caller can start a connect nobody asked
-   * for during a suspension.
+   * One runner per effect kind, built per dispatch so the runners close over
+   * that dispatch's context: `closing` is the conn captured BEFORE the
+   * effects run (so `disconnect` closes the connection the transition
+   * decided to cut even after `drop-session` cleared the ref), and `settled`
+   * is the connection a `connect-ok` event is about (not `conn` yet —
+   * adopting it is itself an effect). A map instead of a switch so a new
+   * effect kind is a compile error here, not a silently ignored case.
    */
-  function attemptBlocked(): boolean {
-    return disposed || attemptInFlight || idle.suspended();
+  function effectRunners(
+    closing: DbConnection | undefined,
+    settled: Connected | undefined,
+  ): EffectRunners {
+    return {
+      status: (e) => onStatus(e.status),
+      connect: (e) => startConnect(e.generation, e.consecutiveFailures),
+      'wire-session': (e) => {
+        if (!settled) {
+          // Unreachable — only a connect-ok dispatch carries a settled
+          // connection — but narrowing must not read as a silent no-op
+          // (the transitionMember precedent).
+          console.error('SpacetimeDB: wire-session effect without a settled connection');
+          return;
+        }
+        conn = settled.conn;
+        wireSession(settled.conn, settled.myIdentity, settled.myIdHex, e.generation);
+      },
+      'discard-attempt': () => settled?.conn.disconnect(),
+      'arm-retry': (e) => {
+        retryTimer = setTimeout(() => {
+          retryTimer = undefined;
+          dispatch({ kind: 'retry-due' });
+        }, e.delayMs);
+      },
+      'cancel-retry': () => {
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
+      },
+      'drop-session': () => dropSession(),
+      disconnect: () => closing?.disconnect(),
+    };
   }
 
-  function attempt(): void {
-    if (attemptBlocked()) return;
-    attemptInFlight = true;
-    attemptGeneration += 1;
-    const generation = attemptGeneration;
-    onStatus(everConnected ? 'reconnecting' : 'connecting');
+  /** Runs one lifecycle step and performs its effects in order. */
+  function dispatch(event: LifecycleEvent, settled?: Connected): LifecycleEffect[] {
+    const step = transition(life, event);
+    life = step.state;
+    const runners = effectRunners(conn, settled);
+    for (const effect of step.effects) runEffect(runners, effect);
+    return step.effects;
+  }
+
+  /** One connect attempt; every outcome is reported back as a lifecycle event. */
+  function startConnect(generation: number, consecutiveFailures: number): void {
     connect(
       {
         onDisconnect() {
-          // Closes from a superseded session — an idle suspension bumped the
-          // generation when cutting it, or a newer connect took over — are
-          // stale and already torn down.
-          if (disposed || generation !== attemptGeneration) return;
-          dropSession();
-          // A current-generation close while suspended is one we asked for:
-          // the discard of a connect that settled after the idle guard cut
-          // in mid-attempt (see the .then below). No warn, no retry — the
-          // next user input reconnects (see the activity listener).
-          if (idle.suspended()) return;
-          console.warn('SpacetimeDB: connection dropped, reconnecting');
-          scheduleRetry();
+          const effects = dispatch({ kind: 'socket-closed', generation });
+          // Only an unexpected drop of the live session is worth a log: a
+          // stale close produces no effects, and a close the idle guard
+          // asked for leaves the state suspended.
+          if (effects.some((e) => e.kind === 'drop-session') && !life.suspended) {
+            console.warn('SpacetimeDB: connection dropped, reconnecting');
+          }
         },
       },
       consecutiveFailures,
       getAuthToken,
     )
-      .then(({ conn: c, myIdentity, myIdHex }) => {
-        attemptInFlight = false;
-        // A connect that lands after dispose or while idle-suspended must
-        // not open a session nobody asked for. A suspension leaves a pending
-        // connect's generation current (see suspendForIdle), so when the
-        // user has already resumed by now, this settle simply becomes the
-        // live session — no generation check or replacement attempt needed.
-        if (disposed || idle.suspended()) {
-          c.disconnect();
-          return;
-        }
-        conn = c;
-        everConnected = true;
-        consecutiveFailures = 0;
-        retryDelayMs = RETRY_INITIAL_MS;
-        onStatus('connected');
-        wireSession(c, myIdentity, myIdHex, generation);
+      .then((settled) => {
+        dispatch({ kind: 'connect-ok' }, settled);
       })
       // The overlay can only ever say "connecting", so without this the actual
       // cause (host not running, unknown database name, stale schema) never
       // reaches anyone. Naming the target makes the common misconfigurations
       // self-evident from the first line of the log.
       .catch((err: unknown) => {
-        attemptInFlight = false;
-        consecutiveFailures += 1;
-        // While suspended, scheduleRetry below is a deliberate no-op; the
-        // log must not promise a retry that will not happen.
+        const effects = dispatch({ kind: 'connect-failed' });
+        const retry = effects.find(
+          (e): e is Extract<LifecycleEffect, { kind: 'arm-retry' }> => e.kind === 'arm-retry',
+        );
         console.error(
           `SpacetimeDB: connection to ${target} failed, ${
-            idle.suspended()
-              ? 'suspended for idle (input reconnects)'
-              : `retrying in ${retryDelayMs}ms`
+            retry ? `retrying in ${retry.delayMs}ms` : 'suspended for idle (input reconnects)'
           }`,
           err,
         );
-        scheduleRetry();
       });
   }
 
-  attempt();
-
-  /**
-   * Idle suspension: stop the retry loop and close the connection (if any).
-   * Suspending also while merely retrying is deliberate — an unattended tab
-   * should not keep hammering a host that is down. The disconnect handler and
-   * scheduleRetry both check idle.suspended(), so nothing rearms until the
-   * activity listener resumes.
-   */
-  function suspendForIdle(): void {
-    console.info(
-      `SpacetimeDB: no user input for ${idleTimeoutMs}ms, suspending the connection (input resumes it)`,
-    );
-    if (retryTimer !== undefined) {
-      clearTimeout(retryTimer);
-      retryTimer = undefined;
-    }
-    onStatus('idle');
-    // Invalidate a LIVE session's generation before cutting it: until the
-    // socket finishes closing, the old DbConnection can still deliver row
-    // and admission callbacks, and without the bump they would pass
-    // wireSession's stale() and re-enter the world (join, prediction
-    // restart) under an 'idle' status. A merely pending connect (conn not
-    // yet assigned) has no wired session to stale, and keeping its
-    // generation current lets a resume adopt it when it settles — attempt()
-    // is single-flight, so that pending connect is the resume's only way
-    // back in. One that settles while still suspended is discarded in
-    // attempt()'s .then, and its close is swallowed by onDisconnect's
-    // suspended() check.
-    if (conn !== undefined) attemptGeneration += 1;
-    // Tear the session down synchronously (mirroring dispose) instead of
-    // waiting for the socket's close to report: a resume can start a newer
-    // connect before that close lands, and the new session must never find
-    // the old one half-alive (a lingering prediction would block its
-    // handleOwnRow).
-    const closing = conn;
-    dropSession();
-    closing?.disconnect();
-  }
+  dispatch({ kind: 'start' });
 
   const onActivity = (): void => {
-    if (disposed) return;
+    if (life.disposed) return;
     if (idle.activity(Date.now()) !== 'resume') return;
     console.info('SpacetimeDB: user input detected, resuming the connection');
-    retryDelayMs = RETRY_INITIAL_MS;
-    // Report the resume even when attempt() is a no-op because a connect is
-    // still pending (we suspended mid-attempt): the banner must not keep
-    // saying "idle" after the user is back. That pending connect settles
-    // normally — its .then no longer sees a suspension, and its .catch
-    // schedules a retry — so reporting is all that is left to do here.
-    onStatus(everConnected ? 'reconnecting' : 'connecting');
-    attempt();
+    dispatch({ kind: 'resume' });
   };
   for (const type of ACTIVITY_EVENTS) {
     window.addEventListener(type, onActivity, { capture: true, passive: true });
   }
   const idleTimer = setInterval(() => {
-    if (disposed) return;
-    if (idle.check(Date.now()) === 'suspend') suspendForIdle();
+    if (life.disposed) return;
+    if (idle.check(Date.now()) !== 'suspend') return;
+    console.info(
+      `SpacetimeDB: no user input for ${idleTimeoutMs}ms, suspending the connection (input resumes it)`,
+    );
+    dispatch({ kind: 'idle-timeout' });
   }, IDLE_CHECK_INTERVAL_MS);
+
+  // 静止中の生存証明: 送信ゲート(prediction.ts)が入力送信を止めている間、
+  // サーバー行の updatedAt を進めるのはこの空バッチだけになる。これが絶えると
+  // OFFLINE_RETENTION_MS 経過で行が掃除され、接続したまま静止している
+  // プレイヤーが再join→スポーン地点テレポートしてしまう。Worker 駆動なのは
+  // バックグラウンドタブのタイマー間引き対策(heartbeat.ts)。送りどきは
+  // 「最後の送信から HEARTBEAT_INTERVAL_MS 以上」— 移動中は入力バッチが
+  // lastSendMs を進めるので、ハートビートは自然に黙る。prediction がない間
+  // (待合室・入場拒否・行の削除後)は行が無いので送らない。
+  const heartbeat = createHeartbeat(() => {
+    // dispose 後は heartbeat.dispose() 済みかつ conn も undefined。
+    if (!conn || !prediction) return;
+    if (Date.now() - lastSendMs < HEARTBEAT_INTERVAL_MS) return;
+    sendHeartbeat(conn);
+  });
 
   /**
    * The shared shell of every user-triggered reducer call: drop with a
@@ -557,13 +584,15 @@ export function startNet(
 
   return {
     dispose() {
-      disposed = true;
-      if (retryTimer !== undefined) clearTimeout(retryTimer);
+      dispatch({ kind: 'dispose' });
       clearInterval(idleTimer);
+      heartbeat.dispose();
+      // Guarded so a torn-down instance cannot erase the counters installed
+      // by the instance that outlives it (StrictMode mounts two in parallel).
+      if (netStats && window.__mapleE2ENet === netStats) window.__mapleE2ENet = undefined;
       for (const type of ACTIVITY_EVENTS) {
         window.removeEventListener(type, onActivity, { capture: true });
       }
-      conn?.disconnect();
       conn = undefined;
       // The final "no row" signal. It cannot come from the disconnect
       // handler (which skips dropSession once disposed), and without it a

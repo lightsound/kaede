@@ -22,6 +22,20 @@ export interface E2EHook {
   snapshot(): E2EWorldSnapshot;
 }
 
+/**
+ * Outbound reducer-call counters, mutated in place by the client's network
+ * layer (sync.ts). What the idle-suppression specs assert on: while a
+ * player stands still the ONLY way to see that nothing is sent is to count
+ * the sends — position snapshots cannot distinguish "still because idle"
+ * from "still because suppressed".
+ */
+export interface E2ENetStats {
+  /** submit_inputs calls carrying input ticks (movement batches). */
+  inputBatchesSent: number;
+  /** Empty submit_inputs calls (the idle-suppression liveness heartbeat). */
+  heartbeatsSent: number;
+}
+
 declare global {
   interface Window {
     /**
@@ -32,5 +46,7 @@ declare global {
      * install-timing implementation detail.
      */
     __mapleE2E?: E2EHook;
+    /** Outbound send counters; installed by the client's sync.ts, dev builds only. */
+    __mapleE2ENet?: E2ENetStats;
   }
 }

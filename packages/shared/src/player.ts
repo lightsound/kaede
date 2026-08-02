@@ -29,6 +29,25 @@ export function toFacing(f: number): Facing {
   return f < 0 ? -1 : 1;
 }
 
+/**
+ * True when the state is a fixpoint of empty input: standing on ground, not
+ * moving, not on a rope — stepPlayer(state, 無入力) returns the same state
+ * (gravity pulls, but the ground collision resolves it right back; unit
+ * tested as the invariant both sides rely on). This is what lets the
+ * protocol elide ticks: the client's send gate (evaluateSendWindow) goes
+ * silent only from a quiescent state, and the server accepts the resulting
+ * startTick gap only when its row is quiescent, because the elided empty
+ * ticks provably changed nothing.
+ *
+ * ロープ上で静止しているぶら下がりも実際には不動点だが、静止扱いに
+ * しない(仕様: 接地・速度ゼロ・ロープ非使用)— 不動点性がマップの
+ * ロープ定義に依存するため、地面より保証が弱い。ロープ上の放置は
+ * 空入力を送り続けるだけで、正しさは変わらない。
+ */
+export function isQuiescent(state: PlayerState): boolean {
+  return state.onGround && state.vx === 0 && state.vy === 0 && state.rope === -1;
+}
+
 /** Build a PlayerState from a player row's dynamic columns. */
 export function stateFromRow(r: {
   x: number;

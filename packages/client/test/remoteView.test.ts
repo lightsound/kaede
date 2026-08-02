@@ -63,13 +63,15 @@ describe('createRemoteViews', () => {
   it('renders INTERP_DELAY_MS in the past on the server timeline', () => {
     const views = createRemoteViews();
     // Constant 40ms delivery delay; player moves 10px per 100ms server tick.
-    for (let i = 0; i <= 5; i++) {
+    // Enough samples that renderTime (INTERP_DELAY_MS in the past) still
+    // falls between buffered snapshots.
+    for (let i = 0; i <= 12; i++) {
       views.record('a', 'A', row(i * 100, i * 10, 100), i * 100 + 40);
     }
-    // Local 540 maps to server 500; render time is 500 - INTERP_DELAY_MS.
-    const drawn = render(views, 540);
+    // Local 1240 maps to server 1200; render time is 1200 - INTERP_DELAY_MS.
+    const drawn = render(views, 1240);
     expect(drawn).toHaveLength(1);
-    expect(drawn[0].x).toBeCloseTo((500 - INTERP_DELAY_MS) / 10, 5);
+    expect(drawn[0].x).toBeCloseTo((1200 - INTERP_DELAY_MS) / 10, 5);
   });
 
   it('is immune to delivery jitter of individual updates', () => {
