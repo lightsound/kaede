@@ -288,13 +288,18 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(deploy): Alchemy ステートを更新 (run ${GITHUB_RUN_ID})"
           # Rebase-then-push can still lose a race against a commit that lands
-          # in between, so retry a few times before giving up.
+          # in between, so retry a few times before giving up. The rebase is
+          # inside the retried condition (not a bare statement) so a transient
+          # pull failure doesn't kill the step via errexit; a leftover
+          # conflicted rebase is aborted before the next attempt.
           for attempt in 1 2 3; do
-            git pull --rebase origin "$GITHUB_REF_NAME"
-            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+            if git pull --rebase origin "$GITHUB_REF_NAME" \
+                && git push origin "HEAD:$GITHUB_REF_NAME"; then
               exit 0
             fi
-            echo "Push rejected (attempt ${attempt}); refetching and retrying."
+            git rebase --abort 2>/dev/null || true
+            echo "Pull or push failed (attempt ${attempt}); retrying."
+            sleep 5
           done
           echo "::error::Could not push the Alchemy state commit after 3 attempts."
           exit 1
