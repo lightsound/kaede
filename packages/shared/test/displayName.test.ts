@@ -71,7 +71,7 @@ describe('evaluateRename', () => {
 
   // A rename with nowhere to land must fail loudly, not report success while
   // the name evaporates (a guest before join, or after its row was swept).
-  it('refuses a rename when neither an account nor a player row exists', () => {
+  it('refuses a rename when neither an account nor a player_name row exists', () => {
     expect(evaluateRename({ rawName: '楓', hasAccount: false, hasNameRow: false })).toEqual({
       ok: false,
       reason: 'no-target',

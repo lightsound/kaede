@@ -309,6 +309,32 @@ function findMovementRows(ctx: Ctx) {
   removePlayer(ctx, ctx.sender);
   return undefined;
 }
+
+/** Identities holding a name or guard row whose player row is gone. */
+function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
+  const orphans = [];
+  for (const row of [...ctx.db.playerName.iter(), ...ctx.db.playerGuard.iter()]) {
+    if (ctx.db.player.identity.find(row.identity) === null) orphans.push(row.identity);
+  }
+  return orphans;
+}
+
+/**
+ * Reclaims sibling rows whose player row was deleted out from under them —
+ * the mirror image of findMovementRows' broken-pair reclaim, needed because
+ * both expiry sweeps iterate only `player`: an orphaned sibling has no
+ * `updatedAt` to expire and would sit forever, with the player_name half in
+ * a public table every client downloads on its initial subscription. As
+ * unreachable through this module's write paths as the other direction, and
+ * as real: this project does operate the database through raw SQL (the
+ * guest-admission spec, the manual-reset runbook), where `DELETE FROM
+ * player` alone is the intuitive kick. An identity may appear twice (both
+ * siblings orphaned); the second removePlayer is a no-op — row deletes
+ * tolerate missing rows, the tolerance removePlayer already relies on.
+ */
+function sweepOrphanedSiblings(ctx: Ctx): void {
+  for (const identity of orphanedSiblingIdentities(ctx)) removePlayer(ctx, identity);
+}
 // ── End player lifecycle ────────────────────────────────────────────────
 
 // Server-authoritative movement: clients send only inputs, the server replays
@@ -405,6 +431,7 @@ export const join = spacetimedb.reducer((ctx) => {
     throw new SenderError(`Join refused (${admission.reason})`);
   }
   sweepExpiredRows(ctx);
+  sweepOrphanedSiblings(ctx);
   spawnOrResume(ctx);
 });
 
