@@ -41,6 +41,11 @@ jobs:
       group: ci-${{ github.ref }}
       cancel-in-progress: true
     steps:
+      # TEMP(#23): verification only — remove before merge. Forces this job to
+      # fail so we can observe that the deploy job is skipped.
+      - name: TEMP fail
+        run: exit 1
+
       - uses: actions/checkout@v4
         with:
           # fallow health's churn/hotspot analysis walks git history, and the
