@@ -51,8 +51,13 @@ const CLERK_DEVELOPMENT_ISSUER = 'https://famous-hornet-40.clerk.accounts.dev';
  * per-tab identity. Both hosts we deploy to are registered — `localhost`
  * (standalone) and Maincloud (its issuer observed in production logs,
  * 2026-08-02) — so a token from any other issuer is refused outright
- * (classifyConnection's unregistered-issuer verdict; see onConnect). A new
- * host must have its issuer added here before guests can reconnect to it.
+ * (classifyConnection's unregistered-issuer verdict; see onConnect).
+ *
+ * A new host must have its issuer added here before ANY guest can use it,
+ * not merely before reconnects: the host stamps even a first, tokenless
+ * connect with its own token before clientConnected runs (observed locally,
+ * 2026-08-02 — with the host's issuer removed, fresh tokenless connects were
+ * refused alongside replays), so a missing entry shuts every guest out.
  */
 const CONNECTION_POLICY: ConnectionPolicy = {
   memberIssuers: [CLERK_DEVELOPMENT_ISSUER],
@@ -135,9 +140,14 @@ function guestsAllowed(ctx: Ctx): boolean {
  * state being public. Both token refusals (audience-mismatch,
  * unregistered-issuer) are configuration errors no user can fix, so the UX
  * a SenderError here produces — the socket closes and sync.ts retries with
- * backoff — is acceptable: for a guest replaying a stored token, the client
- * gives the token up after RESUME_MAX_FAILURES attempts (connection.ts) and
- * recovers as a fresh tokenless guest, while the reason lands in this log.
+ * backoff — is acceptable. Two shapes of it, both observed (2026-08-02): a
+ * foreign token replayed against a correctly-configured host is given up
+ * after RESUME_MAX_FAILURES attempts (connection.ts) and the client recovers
+ * as a fresh guest in ~30s; a host whose own issuer is missing from
+ * guestIssuers refuses even fresh tokenless guests (the host stamps them
+ * with its own token first), so clients sit on the connecting overlay and
+ * retry forever — correct for a deployment that is broken for every guest,
+ * with the culprit issuer named in this log and in the client console.
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);

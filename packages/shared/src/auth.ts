@@ -16,8 +16,9 @@ export interface ConnectionPolicy {
   readonly memberAudience: string;
   /**
    * SpacetimeDB hosts whose own tokens we expect to see. A guest that connects
-   * tokenless is handed a host-issued token and replays it to resume its
-   * identity, so these are guests, not members.
+   * tokenless is stamped with a host-issued token (visible to the module from
+   * that very first connection) and replays it to resume its identity, so
+   * these are guests, not members.
    */
   readonly guestIssuers: readonly string[];
 }
