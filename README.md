@@ -226,7 +226,7 @@ SPA なので存在しないパスへのリクエストは `index.html` にフ�
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
      `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
    - Node 22.18 未満では TS の型ストリッピングにフラグが要ります。`infra` の
-     `deploy:prod` / `plan:prod` / `destroy:prod` スクリプトが
+     `deploy:prod` / `plan:prod` / `destroy:prod` と汎用の `alchemy` スクリプトが
      `NODE_OPTIONS=--experimental-strip-types` を設定済みなので、スクリプト経由で
      実行する限り気にする必要はありません。
 
