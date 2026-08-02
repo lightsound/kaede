@@ -365,8 +365,22 @@ export function startNet(
   // suspendForIdle).
   let attemptGeneration = 0;
 
+  /**
+   * True while a new connect may not start: the stack is torn down, one is
+   * already in flight, or the idle guard holds the connection closed. The
+   * idle.suspended() check is redundant today — scheduleRetry never arms a
+   * timer while suspended, suspendForIdle clears any armed timer
+   * (clearTimeout cancels a queued-but-not-started callback), and
+   * onActivity lifts the suspension before calling attempt — but it makes
+   * the invariant local: no future caller can start a connect nobody asked
+   * for during a suspension.
+   */
+  function attemptBlocked(): boolean {
+    return disposed || attemptInFlight || idle.suspended();
+  }
+
   function attempt(): void {
-    if (disposed || attemptInFlight) return;
+    if (attemptBlocked()) return;
     attemptInFlight = true;
     attemptGeneration += 1;
     const generation = attemptGeneration;
