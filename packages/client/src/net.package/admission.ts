@@ -51,8 +51,12 @@ export interface AdmissionHooks {
   onSpace(view: SpaceView): void;
   /** Admission allows being in the world: resume or join (idempotent). */
   enterWorld(): void;
-  /** The session's dispose guard; row events refuse to run once true. */
-  isDisposed(): boolean;
+  /**
+   * True once this session's events must be ignored — the stack is torn
+   * down, or a newer session has replaced this one (e.g. after an idle
+   * suspension). Row events refuse to run once true.
+   */
+  isStale(): boolean;
 }
 
 /**
@@ -106,7 +110,7 @@ export function wireAdmission(
   // Membership and settings drive admission and the admin panel; every
   // change re-runs the one admission rule and republishes the view.
   const rerun = (): void => {
-    if (hooks.isDisposed()) return;
+    if (hooks.isStale()) return;
     reevaluate();
   };
   c.db.spaceMember.onInsert(rerun);

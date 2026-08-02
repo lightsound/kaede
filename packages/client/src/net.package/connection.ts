@@ -99,7 +99,17 @@ export async function connect(
       // the identity here used to spawn a fresh character (and strand the old
       // row) on every blip. RESUME_MAX_FAILURES handles a genuinely bad token.
       .onConnectError((_ctx, err) => reject(err))
-      .onDisconnect(() => handlers.onDisconnect())
+      .onDisconnect(() => {
+        // A clean close emits no connectError, so a socket that closes after
+        // the handshake but before the subscription applies (a module
+        // republish kicking clients, a host restart) would otherwise leave
+        // this promise pending forever — and with it the caller's
+        // single-flight slot occupied, deadlocking the reconnect loop. The
+        // reject is a no-op once the promise has resolved (a drop after a
+        // successful connect).
+        reject(new Error('connection closed before the initial subscription applied'));
+        handlers.onDisconnect();
+      })
       .build();
   });
 }
