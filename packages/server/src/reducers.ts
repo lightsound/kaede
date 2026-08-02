@@ -208,8 +208,9 @@ function logRejection(
 // The three player_* tables (hot row, name label, guard — see tables.ts)
 // are kept paired by construction, and this section is all of it on one
 // screen: spawnOrResume (with upsertPlayerSiblings) is the only create
-// path, removePlayer the only delete path, and findMovementRows reclaims
-// a half-present pair instead of acting on it.
+// path, removePlayer the only delete path, and findMovementRows /
+// sweepOrphanedSiblings reclaim a broken pair from either direction
+// instead of acting on it.
 
 /**
  * Removes one player from the world: the hot row and its name/guard
@@ -327,8 +328,9 @@ function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
  * a public table every client downloads on its initial subscription. As
  * unreachable through this module's write paths as the other direction, and
  * as real: this project does operate the database through raw SQL (the
- * guest-admission spec, the manual-reset runbook), where `DELETE FROM
- * player` alone is the intuitive kick. An identity may appear twice (both
+ * guest-admission spec drives its setting flips through the CLI's `sql`),
+ * where `DELETE FROM player` alone is the intuitive kick. An identity may
+ * appear twice (both
  * siblings orphaned); the second removePlayer is a no-op — row deletes
  * tolerate missing rows, the tolerance removePlayer already relies on.
  */
