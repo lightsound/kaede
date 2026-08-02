@@ -1,0 +1,55 @@
+{
+  "status": "updated",
+  "fqn": "Client/Worker",
+  "logicalId": "Worker",
+  "instanceId": "5d2e1e7fd6ad5c9836e8eddfd0582035",
+  "resourceType": "Cloudflare.Worker",
+  "props": {
+    "name": "kaede",
+    "cwd": "..",
+    "command": "pnpm --filter @maple/client build",
+    "outdir": "packages/client/dist",
+    "assets": {
+      "directory": "../packages/client/dist",
+      "hash": {
+        "output": "2b75cfdb76f7da34c331886f931e23291043273278af320bbbe8ce29c2827911",
+        "input": "33377951b672c9dca27d49d08652c8de810458cdd15b12ab7d51c71deccfe5d1"
+      },
+      "notFoundHandling": "single-page-application"
+    },
+    "isExternal": true
+  },
+  "attr": {
+    "workerId": "kaede",
+    "workerName": "kaede",
+    "logpush": false,
+    "url": "https://kaede.kaede-751.workers.dev",
+    "urls": [
+      "https://kaede.kaede-751.workers.dev"
+    ],
+    "tags": [
+      "alchemy:stack:kaede",
+      "alchemy:stage:prod",
+      "alchemy:id:Worker"
+    ],
+    "durableObjectNamespaces": {},
+    "accountId": "751c8a59858c9c04a8e722df7330444d",
+    "routes": [],
+    "crons": [],
+    "hash": {
+      "assets": {
+        "output": "2b75cfdb76f7da34c331886f931e23291043273278af320bbbe8ce29c2827911",
+        "input": "33377951b672c9dca27d49d08652c8de810458cdd15b12ab7d51c71deccfe5d1"
+      },
+      "metadata": "a440302364f74ac71059f709fa8b70e606a869246029a4a74c21dcf1856adb85"
+    }
+  },
+  "bindings": [],
+  "providerVersion": 0,
+  "downstream": [],
+  "removalPolicy": "destroy",
+  "providerMode": "live",
+  "namespace": {
+    "Id": "Client"
+  }
+}

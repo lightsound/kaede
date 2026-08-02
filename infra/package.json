@@ -1,0 +1,20 @@
+{
+  "name": "@maple/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "deploy": "NODE_OPTIONS=--experimental-strip-types alchemy deploy --stage prod",
+    "plan": "NODE_OPTIONS=--experimental-strip-types alchemy plan --stage prod",
+    "destroy": "NODE_OPTIONS=--experimental-strip-types alchemy destroy --stage prod"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "4.0.0-beta.102",
+    "@types/node": "^22.20.1",
+    "alchemy": "2.0.0-beta.67",
+    "effect": "4.0.0-beta.102",
+    "typescript": "~7.0.2",
+    "wrangler": "4.118.0"
+  }
+}

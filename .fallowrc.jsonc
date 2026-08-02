@@ -11,8 +11,10 @@
 
   // Generated SpacetimeDB bindings: not ours to prune.
   "ignorePatterns": ["**/module_bindings/**"],
-  // Used by the generated (ignored) bindings in packages/client.
-  "ignoreDependencies": ["spacetimedb"],
+  // spacetimedb: used by the generated (ignored) bindings in packages/client.
+  // @effect/platform-node: alchemy CLI のランタイム peer 依存。infra/ のコードは
+  // import しないが、ベータ採用条件のバージョン厳密ピン留めのために明示している。
+  "ignoreDependencies": ["spacetimedb", "@effect/platform-node"],
 
   // Entry-point exports are checked like any other export, so a stray or
   // misspelled export in an index barrel is reported instead of auto-credited.

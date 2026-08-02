@@ -8,6 +8,10 @@ test-results/
 spacetime.local.json
 .fallow/
 
+# Alchemy のステート: prod ステージはコミットして共有する(README 参照)。
+# 個人の dev ステージ(既定の dev_$USER)は共有しない。
+infra/.alchemy/state/*/dev_*/
+
 .projects/cache
 .projects/vault
 .projects/state.test.json

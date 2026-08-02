@@ -1,0 +1,50 @@
+// fallow-ignore-file unused-file -- alchemy CLI が直接実行する IaC エントリポイント。アプリのモジュールグラフからは到達しない
+// kaede の Cloudflare リソース定義(Alchemy v2)。
+//
+// このディレクトリの外に Alchemy / Effect を漏らさないこと(docs/VISION.md の
+// IaC 行のベータ採用条件)。アプリコードはこのファイルの存在を知らない。
+//
+// 実行は infra/ を作業ディレクトリとして `alchemy deploy --stage prod` で行う
+// (`pnpm --filter @maple/infra deploy`)。手順の全体は README の
+// 「デプロイ(公開手順)」を参照。
+import * as Alchemy from 'alchemy';
+import * as Cloudflare from 'alchemy/Cloudflare';
+import * as Effect from 'effect/Effect';
+
+// アカウント「Kaede」の ID(シークレットではない公開識別子)。API トークンと
+// 違い環境変数で配る必要がないため、ここに固定して deploy コマンドの前提を
+// 減らす。別アカウントに向けたいときは環境変数が優先される。
+process.env.CLOUDFLARE_ACCOUNT_ID ??= '751c8a59858c9c04a8e722df7330444d';
+
+export default Alchemy.Stack(
+  'kaede',
+  {
+    providers: Cloudflare.providers(),
+    // ステートはローカルファイル(infra/.alchemy/)に置き、git にコミットして
+    // 共有する。Durable Objects ベースの Cloudflare.state() は初回ブート
+    // ストラップが Secrets Store の書き込み権限を要求するため、Workers
+    // Scripts:Edit しか持たない現行の API トークンでは使えない。選定理由の
+    // 全文は README の「Alchemy のステート管理」を参照。
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // クライアント(Vite SPA)を「アセットのみの Worker」として配信する。
+    // Worker スクリプトは存在せず、Cloudflare のアセット層が全リクエストを
+    // 処理する。SPA なので存在しないパスは index.html にフォールバックさせる。
+    const client = yield* Cloudflare.Website.StaticSite('Client', {
+      // workers.dev の URL は https://kaede.kaede-751.workers.dev になる。
+      // ステージ名は Worker 名に含めない(現状 prod 相当の 1 環境のみ。
+      // ステージを増やすときはここを stage 連動の命名に変える)。
+      name: 'kaede',
+      // ビルドはリポジトリルートで実行する(infra/ からの相対)。
+      cwd: '..',
+      command: 'pnpm --filter @maple/client build',
+      outdir: 'packages/client/dist',
+      assets: {
+        notFoundHandling: 'single-page-application',
+      },
+    });
+
+    return { url: client.url };
+  }),
+);

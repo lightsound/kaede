@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/module_bindings"]
+    "includes": ["**", "!**/module_bindings", "!infra/.alchemy"]
   },
   "formatter": {
     "enabled": true,
