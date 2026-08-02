@@ -39,13 +39,18 @@ test('ゲスト2ブラウザで入場すると互いに見え、移動が同期�
     .toBeGreaterThan(startX + MIN_WALK_DISTANCE);
   await pageA.keyboard.up('ArrowRight');
 
-  // B's interpolated view of A follows. (?? -Infinity: an offline flicker
-  // empties the remote list; keep polling instead of throwing.)
+  // B's interpolated view of A follows. It lags A's live position by about
+  // one flush window plus INTERP_DELAY_MS (~1s under the idle-suppression
+  // cadence), hence the wider budget than the walk itself. (?? -Infinity: an
+  // offline flicker empties the remote list; keep polling instead of
+  // throwing.)
   await expect
-    .poll(async () => (await remoteX(pageB)) ?? Number.NEGATIVE_INFINITY, { timeout: 10_000 })
+    .poll(async () => (await remoteX(pageB)) ?? Number.NEGATIVE_INFINITY, { timeout: 15_000 })
     .toBeGreaterThan(startX + MIN_WALK_DISTANCE);
 
-  // Once A stands still, B's view converges on A's authoritative position.
+  // Once A stands still, B's view converges on A's authoritative position:
+  // the final flush carries the stop (vx = 0), after which B's view holds
+  // exactly there — the send gate then goes silent without disturbing it.
   await expect
     .poll(
       async () => {

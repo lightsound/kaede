@@ -26,6 +26,7 @@ function batch(overrides: Partial<Parameters<typeof evaluateInputBatch>[0]>) {
     rowTick: 0,
     rowQuiescent: false,
     rowAgeMs: 0,
+    rowOnline: true,
     allowanceMicros: 0n,
     nowMicros: micros(6),
     ...overrides,
@@ -65,6 +66,16 @@ describe('evaluateInputBatch', () => {
       ok: true,
       kind: 'heartbeat',
       refresh: false,
+    });
+  });
+
+  it('オフライン行へのハートビートは行齢に関係なく書き込む(再接続の生存宣言)', () => {
+    // 休止からの復帰は join を通らないため、これがオフライン行を可視に戻す
+    // 唯一の経路(入力ゼロのままでは送信ゲートがバッチを流さない)。
+    expect(batch({ batchLength: 0, rowAgeMs: 0, rowOnline: false })).toEqual({
+      ok: true,
+      kind: 'heartbeat',
+      refresh: true,
     });
   });
 
@@ -160,6 +171,7 @@ describe('evaluateInputBatch', () => {
         rowTick: accepted,
         rowQuiescent: false,
         rowAgeMs: 0,
+        rowOnline: true,
         allowanceMicros: marker,
         nowMicros: now,
       });
@@ -183,6 +195,7 @@ describe('evaluateInputBatch', () => {
         rowTick: tick,
         rowQuiescent: false,
         rowAgeMs: 0,
+        rowOnline: true,
         allowanceMicros: marker,
         nowMicros: micros(flush * 6),
       });

@@ -167,6 +167,13 @@ export function startNet(
   // ハートビートの送りどきの判定材料になる。
   let lastSendMs = Date.now();
 
+  /** 生存証明の空バッチを1本送る(定期便と再接続時の生存宣言の共通路)。 */
+  function sendHeartbeat(c: DbConnection): void {
+    lastSendMs = Date.now();
+    bumpStat('heartbeatsSent');
+    c.reducers.submitInputs({ startTick: 0, inputs: new Uint8Array(0) }).catch(() => {});
+  }
+
   // 無操作ガード: タイムアウトを超えたら接続(と再試行ループ)を休止し、次の
   // 操作で再開する。開発ビルドだけ ?idleMs= で短縮できる(E2E・手動確認用)。
   const idleTimeoutMs =
@@ -255,9 +262,13 @@ export function startNet(
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
       publishOwnName(nameOf(row.identity));
-      // The join/resume that produced this row refreshed its updatedAt, so
-      // the heartbeat clock starts from now.
       lastSendMs = Date.now();
+      // Resuming a surviving row skips join, so nothing server-side flips
+      // its offline flag back — and the send gate means no input batch will
+      // arrive to do it while we stand still (pre-suppression, the first
+      // 100ms flush did it incidentally). Announce liveness explicitly, or
+      // other clients keep hiding us until the first input.
+      if (!row.online) sendHeartbeat(c);
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
@@ -526,9 +537,7 @@ export function startNet(
     // dispose 後は heartbeat.dispose() 済みかつ conn も undefined。
     if (!conn || !prediction) return;
     if (Date.now() - lastSendMs < HEARTBEAT_INTERVAL_MS) return;
-    lastSendMs = Date.now();
-    bumpStat('heartbeatsSent');
-    conn.reducers.submitInputs({ startTick: 0, inputs: new Uint8Array(0) }).catch(() => {});
+    sendHeartbeat(conn);
   });
 
   /**

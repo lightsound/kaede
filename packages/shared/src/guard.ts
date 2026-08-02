@@ -45,9 +45,12 @@ export type BatchVerdict =
       ok: true;
       kind: 'heartbeat';
       /**
-       * Whether to rewrite the row (updatedAt refresh). False while the row
-       * is younger than HEARTBEAT_MIN_AGE_MS, so heartbeat spam cannot
-       * multiply row updates (= egress to every subscriber).
+       * Whether to rewrite the row (online + updatedAt). True when the row
+       * is flagged offline — the reconnect liveness announcement that makes
+       * a resumed player visible again (resuming skips join, and the send
+       * gate means no input batch will do it) — or once the row is older
+       * than HEARTBEAT_MIN_AGE_MS. False otherwise, so heartbeat spam
+       * cannot multiply row updates (= egress to every subscriber).
        */
       refresh: boolean;
     }
@@ -94,6 +97,8 @@ export function evaluateInputBatch(batch: {
   rowQuiescent: boolean;
   /** Time since the row last changed (ms); gates heartbeat refreshes. */
   rowAgeMs: number;
+  /** The row's online flag; an offline row's heartbeat always refreshes. */
+  rowOnline: boolean;
   /** Token-bucket marker persisted on the player_guard row (micros since Unix epoch). */
   allowanceMicros: bigint;
   /** Server wall clock (micros since Unix epoch). */
@@ -101,7 +106,11 @@ export function evaluateInputBatch(batch: {
 }): BatchVerdict {
   const { batchLength, startTick, rowTick, nowMicros } = batch;
   if (batchLength === 0) {
-    return { ok: true, kind: 'heartbeat', refresh: batch.rowAgeMs >= HEARTBEAT_MIN_AGE_MS };
+    return {
+      ok: true,
+      kind: 'heartbeat',
+      refresh: !batch.rowOnline || batch.rowAgeMs >= HEARTBEAT_MIN_AGE_MS,
+    };
   }
   if (batchLength > INPUT_BATCH_MAX_TICKS) return { ok: false, reason: 'oversized-batch' };
   if (startTick < rowTick) return { ok: false, reason: 'stale-tick' };

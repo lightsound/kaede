@@ -384,6 +384,7 @@ export const submitInputs = spacetimedb.reducer(
       rowTick: row.tick,
       rowQuiescent: isQuiescent(stateFromRow(row)),
       rowAgeMs: ctx.timestamp.since(row.updatedAt).millis,
+      rowOnline: row.online,
       allowanceMicros: guard.allowanceMicros,
       nowMicros: ctx.timestamp.microsSinceUnixEpoch,
     });
@@ -415,9 +416,11 @@ function applyAcceptedBatch(
 ): void {
   const { row, guard } = rows;
   if (verdict.kind === 'heartbeat') {
-    // Liveness only: no replay, no guard update. `refresh` is false while
-    // the row is fresh (HEARTBEAT_MIN_AGE_MS), bounding how often spam
-    // could rewrite the row (= egress to every subscriber).
+    // Liveness only: no replay, no guard update. `refresh` covers both the
+    // periodic keep-alive (only once the row has aged past
+    // HEARTBEAT_MIN_AGE_MS, bounding how often spam could rewrite the row —
+    // = egress to every subscriber) and the reconnect announcement that
+    // flips an offline resumed row back to visible.
     if (verdict.refresh) {
       ctx.db.player.identity.update({ ...row, online: true, updatedAt: ctx.timestamp });
     }
