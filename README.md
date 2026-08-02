@@ -59,7 +59,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 | --- | --- |
 | `packages/shared` | 物理シミュレーション・マップ・定数など、クライアントとサーバーで共有するロジック |
 | `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期） |
-| `packages/server` | SpacetimeDB モジュール（`player`・`account`・`space_member`・`space_setting` テーブルと `join`・`submit_inputs`・管理系リデューサー。サーバー権威で物理・入場制御を実施） |
+| `packages/server` | SpacetimeDB モジュール（`player`・`player_name`・`player_guard`・`account`・`space_member`・`space_setting` テーブルと `join`・`submit_inputs`・管理系リデューサー。サーバー権威で物理・入場制御を実施。高頻度更新の `player` 行から低頻度の表示名（`player_name`、公開）とガード内部値（`player_guard`、非公開）を分離し、行更新1回あたりの egress を抑える） |
 | `packages/e2e` | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証） |
 | `infra` | Cloudflare リソースの IaC（Alchemy v2）。Alchemy / Effect への依存はこのディレクトリに隔離し、アプリコードには漏らさない（デプロイ手順は後述） |
 

@@ -21,7 +21,6 @@ export type Account = __Infer<typeof Account>;
 
 export const Player = __t.object("Player", {
   identity: __t.identity(),
-  name: __t.string(),
   x: __t.f64(),
   y: __t.f64(),
   vx: __t.f64(),
@@ -31,10 +30,21 @@ export const Player = __t.object("Player", {
   rope: __t.i32(),
   tick: __t.u32(),
   online: __t.bool(),
-  allowanceMicros: __t.i64(),
   updatedAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const PlayerGuard = __t.object("PlayerGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type PlayerGuard = __Infer<typeof PlayerGuard>;
+
+export const PlayerName = __t.object("PlayerName", {
+  identity: __t.identity(),
+  name: __t.string(),
+});
+export type PlayerName = __Infer<typeof PlayerName>;
 
 export const SpaceMember = __t.object("SpaceMember", {
   identity: __t.identity(),

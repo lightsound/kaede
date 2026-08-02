@@ -14,9 +14,15 @@ import {
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
 
+/** A generated row type, inferred because the bindings don't re-export them. */
+type RowOf<T extends keyof DbConnection['db']> =
+  ReturnType<DbConnection['db'][T]['iter']> extends Iterator<infer R> ? R : never;
+
 /** The generated own/remote player row type (all columns). */
-type PlayerRow =
-  ReturnType<DbConnection['db']['player']['iter']> extends Iterator<infer R> ? R : never;
+type PlayerRow = RowOf<'player'>;
+
+/** The generated player_name row type (the display name split off the hot row). */
+type PlayerNameRow = RowOf<'playerName'>;
 
 /**
  * What the user should be told about the connection right now. `idle` is the
@@ -37,10 +43,10 @@ export interface Net {
   dispose(): void;
   /**
    * Asks the server to rename this player (set_display_name). The result
-   * arrives as an own-row update, which is also the caller's success signal.
-   * Failures (a disconnect racing the submit, a server rejection) only log:
-   * the form keeps its draft, so the user can see the label didn't change
-   * and resubmit.
+   * arrives as an own player_name row event, which is also the caller's
+   * success signal. Failures (a disconnect racing the submit, a server
+   * rejection) only log: the form keeps its draft, so the user can see the
+   * label didn't change and resubmit.
    */
   setDisplayName(name: string): void;
   /**
@@ -141,9 +147,10 @@ export function startNet(
   });
 
   // The single path for own-name changes, so the label and the onOwnName
-  // consumer cannot drift apart, and so the ack firehose (every own-row
-  // update, several per second) is deduplicated here instead of leaning on
-  // React's same-value bailout. `undefined` means "no own row is known".
+  // consumer cannot drift apart, and so the double report a join produces
+  // (handleOwnRow and the player_name insert event both publish the same
+  // name) is deduplicated here instead of leaning on React's same-value
+  // bailout. `undefined` means "no own row is known".
   // Caller contract: any caller on an async event path must be
   // dispose-guarded at its entry point (see wireSession's handlers) —
   // dispose() itself is the only caller that may run after the flip, and
@@ -214,11 +221,20 @@ export function startNet(
     // while this session's socket is still closing).
     const stale = () => disposed || generation !== attemptGeneration;
 
+    // Names live on player_name, split off the hot row so movement updates
+    // do not re-broadcast them (ROADMAP Phase 2 の player 行ダイエット). The
+    // SDK applies a whole transaction to the row cache before firing any
+    // callback, and the server writes the two rows in the same transaction,
+    // so a player row's name is always in the cache by the time its row
+    // event runs; '' can only be read mid-teardown, when nothing renders.
+    const nameOf = (identity: Identity): string =>
+      c.db.playerName.identity.find(identity)?.name ?? '';
+
     // Our row appears (or already exists, when resuming an identity) via join
     // below. Start/refresh the simulation from that authoritative state.
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
-      publishOwnName(row.name);
+      publishOwnName(nameOf(row.identity));
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
@@ -246,10 +262,24 @@ export function startNet(
       }
       remoteViews.record(
         idHex,
-        row.name,
+        nameOf(row.identity),
         { ...row, updatedAtMs: Number(row.updatedAt.toMillis()) },
         performance.now(),
       );
+    };
+
+    // A player_name change without the hot row moving: a rename round trip,
+    // or a resumed row whose owner renamed on another device. Row events
+    // carry it to whoever renders the label — the own-name consumers or the
+    // remote view. No onDelete: names are deleted only alongside their
+    // player row, whose own delete handling already tears the view down.
+    const applyName = (row: PlayerNameRow): void => {
+      const idHex = row.identity.toHexString();
+      if (idHex === myIdHex) {
+        publishOwnName(row.name);
+        return;
+      }
+      remoteViews.setName(idHex, row.name);
     };
 
     /**
@@ -311,12 +341,17 @@ export function startNet(
       if (idHex === myIdHex) {
         // An own-row update IS the acknowledgement (row.tick = applied count).
         prediction?.onAck(stateFromRow(row), row.tick, performance.now());
-        // The row also carries the display name, which a set_display_name
-        // round trip may just have changed.
-        publishOwnName(row.name);
         return;
       }
       recordRemote(idHex, row);
+    });
+    c.db.playerName.onInsert((_ctx, row) => {
+      if (stale()) return;
+      applyName(row);
+    });
+    c.db.playerName.onUpdate((_ctx, _old, row) => {
+      if (stale()) return;
+      applyName(row);
     });
     c.db.player.onDelete((_ctx, row) => {
       if (stale()) return;

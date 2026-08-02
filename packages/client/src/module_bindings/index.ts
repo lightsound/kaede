@@ -48,6 +48,7 @@ import UnbanMemberReducer from "./unban_member_reducer";
 
 // Import all table schema definitions
 import PlayerRow from "./player_table";
+import PlayerNameRow from "./player_name_table";
 import SpaceMemberRow from "./space_member_table";
 import SpaceSettingRow from "./space_setting_table";
 
@@ -66,6 +67,17 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  playerName: __table({
+    name: 'player_name',
+    indexes: [
+      { accessor: 'identity', name: 'player_name_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'player_name_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, PlayerNameRow),
   spaceMember: __table({
     name: 'space_member',
     indexes: [
