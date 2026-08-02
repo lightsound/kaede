@@ -5,6 +5,12 @@ import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
 import { type AuthTokenGetter, connect, target } from './connection';
+import {
+  createIdleMonitor,
+  IDLE_CHECK_INTERVAL_MS,
+  IDLE_DISCONNECT_MS,
+  parseIdleTimeoutOverride,
+} from './idle';
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
 
@@ -12,8 +18,16 @@ import { createRemoteViews } from './remoteView';
 type PlayerRow =
   ReturnType<DbConnection['db']['player']['iter']> extends Iterator<infer R> ? R : never;
 
-/** What the user should be told about the connection right now. */
-export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting';
+/**
+ * What the user should be told about the connection right now. `idle` is the
+ * deliberate offline state: this client cut the connection after
+ * IDLE_DISCONNECT_MS without user input (see idle.ts) and will reconnect on
+ * the next input.
+ */
+export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'idle';
+
+/** ユーザーの在席とみなす操作イベント。タイムスタンプを書くだけなので capture+passive で広く拾う。 */
+const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const;
 
 /** First retry delay after a failure; doubles per attempt up to the max. */
 const RETRY_INITIAL_MS = 1000;
@@ -65,7 +79,11 @@ const MEMBER_ACTION_CALLS: Record<
  * Remote players are rendered interpolated INTERP_DELAY_MS in the past.
  *
  * Connection failures and drops are retried forever with exponential backoff;
- * `onStatus` keeps the UI informed. On reconnect the identity is resumed —
+ * `onStatus` keeps the UI informed. The one exception is idle suspension:
+ * after IDLE_DISCONNECT_MS without user input this client closes the
+ * connection itself (status 'idle') and reconnects on the next input — an
+ * unattended tab must not stream traffic (= Maincloud energy) forever
+ * (see idle.ts). On reconnect the identity is resumed —
  * via a fresh OIDC token from `getAuthToken` when signed in, or this tab's
  * stored anonymous token otherwise (see connection.ts) — so the server hands
  * back the same player row and the local sim snaps to that authoritative state.
@@ -98,6 +116,13 @@ export function startNet(
   // Connects that have failed in a row since the last success; connect() uses
   // it to decide when the stored identity token has become the likely culprit.
   let consecutiveFailures = 0;
+
+  // 無操作ガード: タイムアウトを超えたら接続(と再試行ループ)を休止し、次の
+  // 操作で再開する。開発ビルドだけ ?idleMs= で短縮できる(E2E・手動確認用)。
+  const idleTimeoutMs =
+    (import.meta.env.DEV ? parseIdleTimeoutOverride(window.location.search) : undefined) ??
+    IDLE_DISCONNECT_MS;
+  const idle = createIdleMonitor(idleTimeoutMs, Date.now());
 
   // Prediction lives per connection: it is created once the authoritative own
   // row is known, and torn down (with the remote views) when the connection
@@ -155,13 +180,21 @@ export function startNet(
   }
 
   /**
-   * Arms the next attempt, at most once per failure. A failed connect both
-   * rejects and closes the socket, so this is called twice for the same
-   * failure; without the guard the backoff doubled twice per round (1s, 4s,
-   * 16s...) and each extra timer was dropped from retryTimer unreferenced.
+   * True while nothing may (re)arm the retry loop: the stack is torn down,
+   * the idle guard suspended us on purpose (only a user input — the activity
+   * listener — may end that state), or a timer is already armed. The armed
+   * check matters because a failed connect both rejects and closes the
+   * socket, so scheduleRetry is called twice for the same failure; without
+   * it the backoff doubled twice per round (1s, 4s, 16s...) and each extra
+   * timer was dropped from retryTimer unreferenced.
    */
+  function retryBlocked(): boolean {
+    return disposed || idle.suspended() || retryTimer !== undefined;
+  }
+
+  /** Arms the next attempt, at most once per failure (see retryBlocked). */
   function scheduleRetry(): void {
-    if (disposed || retryTimer !== undefined) return;
+    if (retryBlocked()) return;
     onStatus(everConnected ? 'reconnecting' : 'connecting');
     retryTimer = setTimeout(() => {
       retryTimer = undefined;
@@ -304,15 +337,26 @@ export function startNet(
     admission.reevaluate();
   }
 
+  // At most one connect may be in flight. Before idle suspension existed this
+  // was structural (a new attempt only ever started after the previous one
+  // failed); now a suspend can interleave with a pending connect and an input
+  // can resume before that connect settles, so without the guard the resume
+  // would race a second connect against the first and leave two live sessions.
+  let attemptInFlight = false;
+
   function attempt(): void {
-    if (disposed) return;
+    if (disposed || attemptInFlight) return;
+    attemptInFlight = true;
     onStatus(everConnected ? 'reconnecting' : 'connecting');
     connect(
       {
         onDisconnect() {
           if (disposed) return;
-          console.warn('SpacetimeDB: connection dropped, reconnecting');
           dropSession();
+          // A close we asked for (idle suspension) must not warn or retry —
+          // the next user input reconnects (see the activity listener).
+          if (idle.suspended()) return;
+          console.warn('SpacetimeDB: connection dropped, reconnecting');
           scheduleRetry();
         },
       },
@@ -320,7 +364,10 @@ export function startNet(
       getAuthToken,
     )
       .then(({ conn: c, myIdentity, myIdHex }) => {
-        if (disposed) {
+        attemptInFlight = false;
+        // A connect that lands after dispose or after the idle guard already
+        // suspended us must not open a session nobody asked for.
+        if (disposed || idle.suspended()) {
           c.disconnect();
           return;
         }
@@ -336,6 +383,7 @@ export function startNet(
       // reaches anyone. Naming the target makes the common misconfigurations
       // self-evident from the first line of the log.
       .catch((err: unknown) => {
+        attemptInFlight = false;
         consecutiveFailures += 1;
         console.error(
           `SpacetimeDB: connection to ${target} failed, retrying in ${retryDelayMs}ms`,
@@ -346,6 +394,44 @@ export function startNet(
   }
 
   attempt();
+
+  /**
+   * Idle suspension: stop the retry loop and close the connection (if any).
+   * Suspending also while merely retrying is deliberate — an unattended tab
+   * should not keep hammering a host that is down. The disconnect handler and
+   * scheduleRetry both check idle.suspended(), so nothing rearms until the
+   * activity listener resumes.
+   */
+  function suspendForIdle(): void {
+    console.info(
+      `SpacetimeDB: no user input for ${idleTimeoutMs}ms, suspending the connection (input resumes it)`,
+    );
+    if (retryTimer !== undefined) {
+      clearTimeout(retryTimer);
+      retryTimer = undefined;
+    }
+    onStatus('idle');
+    if (conn) {
+      conn.disconnect(); // its onDisconnect handler performs dropSession
+    } else {
+      dropSession();
+    }
+  }
+
+  const onActivity = (): void => {
+    if (disposed) return;
+    if (idle.activity(Date.now()) !== 'resume') return;
+    console.info('SpacetimeDB: user input detected, resuming the connection');
+    retryDelayMs = RETRY_INITIAL_MS;
+    attempt();
+  };
+  for (const type of ACTIVITY_EVENTS) {
+    window.addEventListener(type, onActivity, { capture: true, passive: true });
+  }
+  const idleTimer = setInterval(() => {
+    if (disposed) return;
+    if (idle.check(Date.now()) === 'suspend') suspendForIdle();
+  }, IDLE_CHECK_INTERVAL_MS);
 
   /**
    * The shared shell of every user-triggered reducer call: drop with a
@@ -366,6 +452,10 @@ export function startNet(
     dispose() {
       disposed = true;
       if (retryTimer !== undefined) clearTimeout(retryTimer);
+      clearInterval(idleTimer);
+      for (const type of ACTIVITY_EVENTS) {
+        window.removeEventListener(type, onActivity, { capture: true });
+      }
       conn?.disconnect();
       conn = undefined;
       // The final "no row" signal. It cannot come from the disconnect

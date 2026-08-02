@@ -11,6 +11,7 @@ import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
   connecting: 'サーバーに接続中…',
   reconnecting: '接続が切れました。再接続しています…',
+  idle: '離席中のため接続を休止しています。キーボードかマウスの操作で再開します',
 };
 
 const overlayStyle: CSSProperties = {
