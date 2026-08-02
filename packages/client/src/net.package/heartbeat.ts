@@ -11,30 +11,23 @@
  * 専用 Web Worker のタイマーはこの間引きの対象外なので、tick だけ Worker で
  * 刻み、本体(送るかどうか・何を送るか)はメインスレッド側で判断する。
  */
-
-/**
- * Worker が刻む判定周期 (ms)。HEARTBEAT_INTERVAL_MS より細かく回すことで、
- * 「間隔に達したのに次の tick まで送れない」余分な遅れをこの粒度に抑える。
- */
-const HEARTBEAT_CHECK_INTERVAL_MS = 60_000;
+import { HEARTBEAT_CHECK_INTERVAL_MS } from '@maple/shared';
 
 export interface Heartbeat {
   dispose(): void;
 }
 
 /**
- * Calls `onCheck` every HEARTBEAT_CHECK_INTERVAL_MS from a dedicated worker
- * (falling back to a window timer where Workers don't exist, e.g. jsdom).
- * The callback decides whether a heartbeat is actually due.
+ * Calls `onCheck` every HEARTBEAT_CHECK_INTERVAL_MS from a dedicated worker.
+ * The callback decides whether a heartbeat is actually due (the worst-case
+ * send interval is HEARTBEAT_INTERVAL_MS plus this check granularity — the
+ * sweep-margin invariant in guard.test.ts accounts for both).
  */
 export function createHeartbeat(onCheck: () => void): Heartbeat {
-  if (typeof Worker === 'undefined') {
-    const timer = setInterval(onCheck, HEARTBEAT_CHECK_INTERVAL_MS);
-    return { dispose: () => clearInterval(timer) };
-  }
   // An inline (blob) worker: the script is one setInterval, so a separate
   // bundled file would be pure overhead. The URL can be revoked as soon as
-  // the Worker is constructed — creation dereferences it synchronously.
+  // the Worker is constructed — creation dereferences it synchronously
+  // (verified against the real browser during review).
   const src = `setInterval(() => postMessage(0), ${HEARTBEAT_CHECK_INTERVAL_MS});`;
   const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
   const worker = new Worker(url);

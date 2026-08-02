@@ -51,12 +51,13 @@ test('静止中は送信が完全に止まり、行は残り、移動再開で�
   await settleSends(pageA);
 
   // 静止中: 入力バッチは 1 本も送られない(これが「静止中 0 calls/秒」の
-  // 実測そのもの)。ハートビートは 3 分間隔なのでこの窓では 0。
+  // 実測そのもの)。ハートビートは差分で見る — 入場時の生存宣言 1 本が
+  // 絶対値に乗るのに対し、定期便は 140 秒間隔なのでこの窓では増えない。
   const idleBefore = await sends(pageA);
   await pageA.waitForTimeout(3000);
   const idleAfter = await sends(pageA);
   expect(idleAfter.inputBatchesSent).toBe(idleBefore.inputBatchesSent);
-  expect(idleAfter.heartbeatsSent).toBe(0);
+  expect(idleAfter.heartbeatsSent).toBe(idleBefore.heartbeatsSent);
 
   // 送信ゼロでも A の行は生きていて、B からは見え続ける(オフライン掃除
   // との相互作用の検証: 抑制が sweep を誘発しない)。

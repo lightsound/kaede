@@ -101,6 +101,11 @@ export function createPrediction(
     if (verdict === 'skip') {
       lastSentTick = currentTick;
       ackedTick = currentTick;
+      // The virtual advance counts as ack progress for the watchdog too:
+      // without this, the first flush after a long-suppressed stretch sees a
+      // minutes-old lastAckAdvanceAt and needlessly resends the resume batch
+      // (harmless — the server refuses duplicates — but wasted calls).
+      lastAckAdvanceAt = now;
       prunePredictionsUpTo(currentTick);
       return;
     }
@@ -118,6 +123,8 @@ export function createPrediction(
       base = end;
     }
     lastSentTick = currentTick;
+    // Always present: flush only runs from onTick, which just recorded
+    // predicted[currentTick]. The guard is only for Map.get's undefined type.
     const sentState = predicted.get(currentTick);
     if (sentState) lastSentState = sentState;
   }

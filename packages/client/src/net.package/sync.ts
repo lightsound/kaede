@@ -42,7 +42,15 @@ type PlayerNameRow = RowOf<'playerName'>;
 /** ユーザーの在席とみなす操作イベント。タイムスタンプを書くだけなので capture+passive で広く拾う。 */
 const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const;
 
-/** One runner per lifecycle effect kind, each receiving its narrowed payload. */
+/**
+ * One runner per lifecycle effect kind, each receiving its narrowed payload.
+ * A handler MAP rather than the codebase's usual `switch` + `satisfies never`
+ * deliberately: this shell is uncovered (it needs a live host — see the
+ * fallow-ignore header), and a 9-branch uncovered switch busts the CRAP
+ * budget fallow enforces, while a map is branch-free and still makes a new
+ * effect kind a compile error (a missing key). The lifecycle's own event
+ * switch stays the idiomatic form because its transition is unit-tested.
+ */
 type EffectRunners = {
   [K in LifecycleEffect['kind']]: (effect: Extract<LifecycleEffect, { kind: K }>) => void;
 };
@@ -262,13 +270,18 @@ export function startNet(
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
       publishOwnName(nameOf(row.identity));
-      lastSendMs = Date.now();
-      // Resuming a surviving row skips join, so nothing server-side flips
-      // its offline flag back — and the send gate means no input batch will
-      // arrive to do it while we stand still (pre-suppression, the first
-      // 100ms flush did it incidentally). Announce liveness explicitly, or
-      // other clients keep hiding us until the first input.
-      if (!row.online) sendHeartbeat(c);
+      // Announce liveness once per session start, unconditionally. Resuming
+      // a surviving row skips join, so nothing server-side flips its offline
+      // flag back or refreshes its updatedAt — and the send gate means no
+      // input batch will arrive to do either while we stand still
+      // (pre-suppression, the first 100ms flush did both incidentally).
+      // Without this, a resumed player stays hidden from others until the
+      // first input, and a row resumed near the end of its retention window
+      // could be swept out from under a live client. For a fresh spawn the
+      // server ignores the write (the row is younger than
+      // HEARTBEAT_MIN_AGE_MS and online), so the cost is one reducer call
+      // per entry. Sending also seeds lastSendMs = the heartbeat clock.
+      sendHeartbeat(c);
       prediction = createPrediction(
         {
           sendBatch(startTick, packed) {
@@ -376,6 +389,14 @@ export function startNet(
       if (stale()) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
+        // A live own row flipped to offline: a half-open TCP session's
+        // client_disconnected landing AFTER this connection took over (the
+        // race the reducer comment on `online: true` describes). Other
+        // clients hide offline rows immediately, and while the send gate is
+        // closed nothing else would correct the flag until the next input
+        // or scheduled heartbeat (minutes) — so re-announce liveness now.
+        // Pre-suppression, the 100ms input stream fixed this incidentally.
+        if (!row.online) sendHeartbeat(c);
         // An own-row update IS the acknowledgement (row.tick = applied count).
         prediction?.onAck(stateFromRow(row), row.tick, performance.now());
         return;
@@ -438,7 +459,13 @@ export function startNet(
       status: (e) => onStatus(e.status),
       connect: (e) => startConnect(e.generation, e.consecutiveFailures),
       'wire-session': (e) => {
-        if (!settled) return; // unreachable: only a connect-ok event emits this
+        if (!settled) {
+          // Unreachable — only a connect-ok dispatch carries a settled
+          // connection — but narrowing must not read as a silent no-op
+          // (the transitionMember precedent).
+          console.error('SpacetimeDB: wire-session effect without a settled connection');
+          return;
+        }
         conn = settled.conn;
         wireSession(settled.conn, settled.myIdentity, settled.myIdHex, e.generation);
       },

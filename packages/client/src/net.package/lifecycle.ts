@@ -233,10 +233,11 @@ function onResume(d: Draft): void {
   if (d.next.disposed || !d.next.suspended) return;
   d.next.suspended = false;
   d.next.retryDelayMs = RETRY_INITIAL_MS;
-  // Report the resume even when attempt() below is a no-op because a
-  // connect is still pending (we suspended mid-attempt): the banner must
-  // not keep saying "idle" after the user is back.
-  d.effects.push({ kind: 'status', status: progressStatus(d) });
+  // attempt() reports progress itself; the explicit report here covers the
+  // one case where it is a no-op — a connect is still pending because we
+  // suspended mid-attempt — so the banner does not keep saying "idle" after
+  // the user is back (that pending connect is the way back in).
+  if (d.next.attemptInFlight) d.effects.push({ kind: 'status', status: progressStatus(d) });
   attempt(d);
 }
 

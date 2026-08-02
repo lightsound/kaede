@@ -1,5 +1,6 @@
 // fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredRow in @maple/shared and unit-tested there
 import {
+  type AcceptedBatchVerdict,
   asMembership,
   type BatchRejectReason,
   type ConnectionPolicy,
@@ -388,7 +389,7 @@ export const submitInputs = spacetimedb.reducer(
       allowanceMicros: guard.allowanceMicros,
       nowMicros: ctx.timestamp.microsSinceUnixEpoch,
     });
-    if (!verdict.ok) {
+    if (verdict.kind === 'rejected') {
       logRejection(verdict.reason, ctx.sender.toHexString(), startTick, inputs.length, row.tick);
       return;
     }
@@ -411,8 +412,8 @@ function applyAcceptedBatch(
   ctx: Ctx,
   rows: MovementRows,
   startTick: number,
-  inputs: ArrayLike<number> & Iterable<number>,
-  verdict: Extract<ReturnType<typeof evaluateInputBatch>, { ok: true }>,
+  inputs: number[],
+  verdict: AcceptedBatchVerdict,
 ): void {
   const { row, guard } = rows;
   if (verdict.kind === 'heartbeat') {

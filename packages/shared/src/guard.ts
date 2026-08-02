@@ -36,13 +36,11 @@ export type BatchRejectReason =
 
 export type BatchVerdict =
   | {
-      ok: true;
       kind: 'apply';
       /** The advanced token-bucket marker to persist on the player_guard row. */
       allowanceMicros: bigint;
     }
   | {
-      ok: true;
       kind: 'heartbeat';
       /**
        * Whether to rewrite the row (online + updatedAt). True when the row
@@ -54,7 +52,10 @@ export type BatchVerdict =
        */
       refresh: boolean;
     }
-  | { ok: false; reason: BatchRejectReason };
+  | { kind: 'rejected'; reason: BatchRejectReason };
+
+/** A verdict the server acts on (everything but a rejection). */
+export type AcceptedBatchVerdict = Exclude<BatchVerdict, { kind: 'rejected' }>;
 
 /**
  * Pure admission check for one submit_inputs call, shared so the server
@@ -107,15 +108,14 @@ export function evaluateInputBatch(batch: {
   const { batchLength, startTick, rowTick, nowMicros } = batch;
   if (batchLength === 0) {
     return {
-      ok: true,
       kind: 'heartbeat',
       refresh: !batch.rowOnline || batch.rowAgeMs >= HEARTBEAT_MIN_AGE_MS,
     };
   }
-  if (batchLength > INPUT_BATCH_MAX_TICKS) return { ok: false, reason: 'oversized-batch' };
-  if (startTick < rowTick) return { ok: false, reason: 'stale-tick' };
+  if (batchLength > INPUT_BATCH_MAX_TICKS) return { kind: 'rejected', reason: 'oversized-batch' };
+  if (startTick < rowTick) return { kind: 'rejected', reason: 'stale-tick' };
   if (startTick > rowTick && !batch.rowQuiescent) {
-    return { ok: false, reason: 'gap-ahead-of-row' };
+    return { kind: 'rejected', reason: 'gap-ahead-of-row' };
   }
 
   // Cap the accrued bank by pulling the marker forward if it fell too far behind.
@@ -124,9 +124,10 @@ export function evaluateInputBatch(batch: {
   if (marker < bankCapMarker) marker = bankCapMarker;
 
   const bank = ticksFromMicros(nowMicros - marker);
-  if (batchLength > bank + TICK_ALLOWANCE_SLACK) return { ok: false, reason: 'rate-limited' };
+  if (batchLength > bank + TICK_ALLOWANCE_SLACK)
+    return { kind: 'rejected', reason: 'rate-limited' };
 
-  return { ok: true, kind: 'apply', allowanceMicros: marker + microsFromTicks(batchLength) };
+  return { kind: 'apply', allowanceMicros: marker + microsFromTicks(batchLength) };
 }
 
 /**

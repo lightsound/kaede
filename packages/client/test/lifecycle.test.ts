@@ -186,7 +186,6 @@ describe('アイドル休止と再開', () => {
     ]);
     expect(last).toEqual([
       { kind: 'status', status: 'reconnecting' },
-      { kind: 'status', status: 'reconnecting' },
       { kind: 'connect', generation: 3, consecutiveFailures: 0 },
     ]);
     expect(state.suspended).toBe(false);

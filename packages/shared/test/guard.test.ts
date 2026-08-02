@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateInputBatch,
+  HEARTBEAT_CHECK_INTERVAL_MS,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_MIN_AGE_MS,
   INPUT_BATCH_MAX_TICKS,
@@ -47,7 +48,12 @@ describe('プロトコル定数の整合(アイドル抑制)', () => {
   });
 
   it('ハートビートは保持窓に対して2回落としても掃除されない間隔', () => {
-    expect(HEARTBEAT_INTERVAL_MS * 3).toBeLessThanOrEqual(OFFLINE_RETENTION_MS + 1);
+    // 実効の最悪送信間隔は「間隔 + 判定粒度」。その3倍が保持窓以内なら、
+    // 2回連続で落ちても3本目が期限内に届く(isExpiredRow は境界を掃除しない
+    // 側なので等号まで安全)。
+    expect((HEARTBEAT_INTERVAL_MS + HEARTBEAT_CHECK_INTERVAL_MS) * 3).toBeLessThanOrEqual(
+      OFFLINE_RETENTION_MS,
+    );
     expect(HEARTBEAT_MIN_AGE_MS).toBeLessThan(HEARTBEAT_INTERVAL_MS);
   });
 });
@@ -55,7 +61,6 @@ describe('プロトコル定数の整合(アイドル抑制)', () => {
 describe('evaluateInputBatch', () => {
   it('空バッチはハートビート: 行が十分古ければ updatedAt の更新を指示する', () => {
     expect(batch({ batchLength: 0, rowAgeMs: HEARTBEAT_MIN_AGE_MS })).toEqual({
-      ok: true,
       kind: 'heartbeat',
       refresh: true,
     });
@@ -63,7 +68,6 @@ describe('evaluateInputBatch', () => {
 
   it('新しすぎる行へのハートビートは受理するが書き込まない(空バッチ乱打の egress 抑止)', () => {
     expect(batch({ batchLength: 0, rowAgeMs: HEARTBEAT_MIN_AGE_MS - 1 })).toEqual({
-      ok: true,
       kind: 'heartbeat',
       refresh: false,
     });
@@ -73,7 +77,6 @@ describe('evaluateInputBatch', () => {
     // 休止からの復帰は join を通らないため、これがオフライン行を可視に戻す
     // 唯一の経路(入力ゼロのままでは送信ゲートがバッチを流さない)。
     expect(batch({ batchLength: 0, rowAgeMs: 0, rowOnline: false })).toEqual({
-      ok: true,
       kind: 'heartbeat',
       refresh: true,
     });
@@ -86,23 +89,23 @@ describe('evaluateInputBatch', () => {
       rowTick: 6,
       rowAgeMs: HEARTBEAT_MIN_AGE_MS,
     });
-    expect(v.ok).toBe(true);
+    expect(v.kind).toBe('heartbeat');
   });
 
   it('rejects a batch above INPUT_BATCH_MAX_TICKS', () => {
     expect(batch({ batchLength: INPUT_BATCH_MAX_TICKS + 1 })).toEqual({
-      ok: false,
+      kind: 'rejected',
       reason: 'oversized-batch',
     });
   });
 
   it('rejects a duplicate batch (startTick behind the row)', () => {
-    expect(batch({ startTick: 5, rowTick: 6 })).toEqual({ ok: false, reason: 'stale-tick' });
+    expect(batch({ startTick: 5, rowTick: 6 })).toEqual({ kind: 'rejected', reason: 'stale-tick' });
   });
 
   it('静止していない行へのギャップ付きバッチは拒否する(飛ばした tick が no-op と証明できない)', () => {
     expect(batch({ startTick: 7, rowTick: 6, rowQuiescent: false })).toEqual({
-      ok: false,
+      kind: 'rejected',
       reason: 'gap-ahead-of-row',
     });
   });
@@ -119,19 +122,19 @@ describe('evaluateInputBatch', () => {
       allowanceMicros: micros(1000),
       nowMicros: now,
     });
-    if (!v.ok || v.kind !== 'apply') throw new Error('expected apply');
+    if (v.kind !== 'apply') throw new Error('expected apply');
     // マーカー前進はギャップ(1000 tick)ではなくバッチ長(6 tick)ぶん。
     expect(v.allowanceMicros).toBe(micros(1000) + BigInt(Math.floor(6 * MICROS_PER_TICK)));
   });
 
   it('accepts the normal cadence: batch duration matches elapsed wall clock', () => {
     const v = batch({ batchLength: 6, allowanceMicros: 0n, nowMicros: micros(6) });
-    expect(v.ok).toBe(true);
+    expect(v.kind).toBe('apply');
   });
 
   it('advances the marker by exactly the accepted batch duration', () => {
     const v = batch({ batchLength: 6, allowanceMicros: micros(100), nowMicros: micros(107) });
-    if (!v.ok || v.kind !== 'apply') throw new Error('expected apply');
+    if (v.kind !== 'apply') throw new Error('expected apply');
     expect(v.allowanceMicros).toBe(micros(100) + BigInt(Math.floor(6 * MICROS_PER_TICK)));
   });
 
@@ -143,7 +146,7 @@ describe('evaluateInputBatch', () => {
       allowanceMicros: now,
       nowMicros: now,
     });
-    expect(v.ok).toBe(true);
+    expect(v.kind).toBe('apply');
   });
 
   it('rejects once the slack is spent, until real time catches up', () => {
@@ -151,12 +154,12 @@ describe('evaluateInputBatch', () => {
     // Marker already TICK_ALLOWANCE_SLACK ticks in the future: nothing left.
     const ahead = now + BigInt(Math.ceil(TICK_ALLOWANCE_SLACK * MICROS_PER_TICK));
     expect(batch({ batchLength: 1, allowanceMicros: ahead, nowMicros: now })).toEqual({
-      ok: false,
+      kind: 'rejected',
       reason: 'rate-limited',
     });
     // One tick of wall clock later, one tick of input is allowed again.
     const later = now + BigInt(Math.ceil((TICK_ALLOWANCE_SLACK + 1) * MICROS_PER_TICK));
-    expect(batch({ batchLength: 1, allowanceMicros: ahead, nowMicros: later }).ok).toBe(true);
+    expect(batch({ batchLength: 1, allowanceMicros: ahead, nowMicros: later }).kind).toBe('apply');
   });
 
   it('caps the idle bank: a long-idle player cannot replay more than bank + slack', () => {
@@ -175,7 +178,7 @@ describe('evaluateInputBatch', () => {
         allowanceMicros: marker,
         nowMicros: now,
       });
-      if (!v.ok || v.kind !== 'apply') break;
+      if (v.kind !== 'apply') break;
       marker = v.allowanceMicros;
       accepted += INPUT_BATCH_MAX_TICKS;
     }
@@ -199,8 +202,9 @@ describe('evaluateInputBatch', () => {
         allowanceMicros: marker,
         nowMicros: micros(flush * 6),
       });
-      if (!v.ok) throw new Error(`flush ${flush} rejected: ${v.reason}`);
-      if (v.kind !== 'apply') throw new Error(`flush ${flush} misread as ${v.kind}`);
+      if (v.kind !== 'apply') {
+        throw new Error(`flush ${flush} not applied: ${v.kind === 'rejected' ? v.reason : v.kind}`);
+      }
       marker = v.allowanceMicros;
       tick += 6;
     }

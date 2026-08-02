@@ -79,12 +79,22 @@ export const OFFLINE_RETENTION_MS = 10 * 60_000;
  * 静止中(送信ゲートが閉じている間)にクライアントが生存証明として送る
  * 空の submit_inputs の間隔 (ms)。サーバーはこれで player.updatedAt を進め、
  * オフライン掃除(isExpiredRow)から接続中の静止プレイヤーを守る。
- * OFFLINE_RETENTION_MS の 1/3 強 — 2回連続で落としてもまだ掃除されない。
+ * 実効の最悪送信間隔は判定粒度を足した HEARTBEAT_INTERVAL_MS +
+ * HEARTBEAT_CHECK_INTERVAL_MS = 200s で、その3倍がちょうど
+ * OFFLINE_RETENTION_MS(600s、境界は掃除されない側) — つまり2回連続で
+ * 落としてもまだ掃除されない。この不変条件は guard.test.ts が固定する。
  * スケジューリングはメインスレッドのタイマーではなく Web Worker で行う
  * (heartbeat.ts): バックグラウンドタブのタイマー間引き(Chrome の intensive
  * throttling は約1回/時)がメインスレッド側の予定を丸ごと止めるため。
  */
-export const HEARTBEAT_INTERVAL_MS = 180_000;
+export const HEARTBEAT_INTERVAL_MS = 140_000;
+/**
+ * ハートビートの送りどきを見る判定周期 (ms)。Worker がこの間隔で刻み、
+ * メインスレッドが「最後の送信から HEARTBEAT_INTERVAL_MS 以上か」を判定する
+ * (heartbeat.ts / sync.ts)。粒度が粗いほど実効間隔が延びるため、上の
+ * 掃除余裕の式に含める。
+ */
+export const HEARTBEAT_CHECK_INTERVAL_MS = 60_000;
 /**
  * サーバーがハートビートによる行の書き換え(updatedAt 更新)を受け入れる
  * 最短の行齢 (ms)。行更新は全購読者への egress を伴うため、空バッチを
