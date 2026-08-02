@@ -290,23 +290,25 @@ function spawnOrResume(ctx: Ctx): void {
  * The sender's hot row and its guard sibling, or undefined when the sender
  * is not in the world — split out of submitInputs to keep that uncovered
  * reducer under the CRAP budget fallow enforces (the backfillAccountName
- * precedent). A row without its guard cannot happen through this module's
- * write paths (the lifecycle functions above), but if one ever appears
- * (manual sql, a future bug) it is reclaimed rather than tolerated: an
- * undefined here silences the sender's inputs, so leaving the broken pair
- * in place would drop them forever with nothing to repair it — the
- * transitionMember precedent that an "unreachable" branch must not read as
- * a silent no-op. The owner sees its row deleted and re-joins, recreating
- * all three siblings.
+ * precedent). A row missing either sibling cannot happen through this
+ * module's write paths (the lifecycle functions above), but if one ever
+ * appears (manual sql, a future bug) it is reclaimed rather than tolerated
+ * — the transitionMember precedent that an "unreachable" branch must not
+ * read as a silent no-op. A missing guard would otherwise silence the
+ * sender's inputs forever with nothing to repair it; a missing name would
+ * otherwise persist too, since only this check sees the resume path (a
+ * client resuming its surviving row never calls join, so the sibling
+ * upsert there cannot heal it) and set_display_name refuses rather than
+ * adopts a nameless player. The owner sees its row deleted and re-joins,
+ * recreating all three siblings.
  */
 function findMovementRows(ctx: Ctx) {
   const row = ctx.db.player.identity.find(ctx.sender);
   if (!row) return undefined;
   const guard = ctx.db.playerGuard.identity.find(ctx.sender);
-  if (guard) return { row, guard };
-  console.warn(
-    `player row without its guard sibling, reclaiming: sender=${ctx.sender.toHexString()}`,
-  );
+  const nameRow = ctx.db.playerName.identity.find(ctx.sender);
+  if (guard && nameRow) return { row, guard };
+  console.warn(`player row missing a sibling, reclaiming: sender=${ctx.sender.toHexString()}`);
   removePlayer(ctx, ctx.sender);
   return undefined;
 }
@@ -461,6 +463,16 @@ function persistMemberName(ctx: Ctx, name: string): void {
 // Admission (name validation, refusing a rename with nowhere to land) is the
 // pure evaluateRename, unit-tested in @maple/shared — the same rules the
 // client checks against before sending.
+// Deliberately does NOT touch player.updatedAt (the pre-split rename did,
+// incidentally, by rewriting the whole row): renaming is not liveness.
+// Liveness is proven by input batches, which a connected client streams
+// even while standing still under the current protocol (see ROADMAP —
+// the planned idle suppression must revisit what refreshes updatedAt,
+// with or without this reducer), and a client idle long enough to stop
+// streaming is cut by its own idle guard, after which sweeping its row is
+// exactly right. Bumping the hot row here would also re-broadcast a
+// position update to every client for a change the player_name event
+// already carries.
 export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
   const hasAccount = ctx.db.account.identity.find(ctx.sender) !== null;
   const row = ctx.db.playerName.identity.find(ctx.sender);
