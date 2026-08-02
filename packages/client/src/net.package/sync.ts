@@ -446,6 +446,12 @@ export function startNet(
     if (idle.activity(Date.now()) !== 'resume') return;
     console.info('SpacetimeDB: user input detected, resuming the connection');
     retryDelayMs = RETRY_INITIAL_MS;
+    // Report the resume even when attempt() is a no-op because a connect is
+    // still pending (we suspended mid-attempt): the banner must not keep
+    // saying "idle" after the user is back. That pending connect settles
+    // normally — its .then no longer sees a suspension, and its .catch
+    // schedules a retry — so reporting is all that is left to do here.
+    onStatus(everConnected ? 'reconnecting' : 'connecting');
     attempt();
   };
   for (const type of ACTIVITY_EVENTS) {
