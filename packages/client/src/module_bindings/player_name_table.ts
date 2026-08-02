@@ -12,14 +12,5 @@ import {
 
 export default __t.row({
   identity: __t.identity().primaryKey(),
-  x: __t.f64(),
-  y: __t.f64(),
-  vx: __t.f64(),
-  vy: __t.f64(),
-  facing: __t.i8(),
-  onGround: __t.bool().name("on_ground"),
-  rope: __t.i32(),
-  tick: __t.u32(),
-  online: __t.bool(),
-  updatedAt: __t.timestamp().name("updated_at"),
+  name: __t.string(),
 });

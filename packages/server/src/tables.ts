@@ -81,11 +81,24 @@ export const spacetimedb = schema({
       guestsAllowed: t.bool(),
     },
   ),
+  // The hot row: rewritten on every accepted input batch and broadcast to
+  // every subscriber, so egress/write/read costs scale with its size times
+  // the update rate (ROADMAP Phase 2 の player 行ダイエット). Only what every
+  // client needs on every movement update lives here; anything low-frequency
+  // (name → player_name) or server-internal (allowanceMicros → player_guard)
+  // is split out. `updatedAt` stays despite changing every update: clients
+  // anchor remote interpolation on it (the server-timeline timestamp fed to
+  // the clock estimator — see remoteView.ts) and the offline sweep reads it,
+  // and being in lockstep with the row it could not be split out anyway.
+  //
+  // The three player_* tables live and die together: join inserts all three
+  // in one transaction and every removal path deletes all three (see
+  // removePlayer in reducers.ts), so a player row always has its name and
+  // guard siblings.
   player: table(
     { name: 'player', public: true },
     {
       identity: t.identity().primaryKey(),
-      name: t.string(),
       x: t.number(),
       y: t.number(),
       vx: t.number(),
@@ -95,8 +108,29 @@ export const spacetimedb = schema({
       rope: t.i32(), // rope index while climbing, -1 = none
       tick: t.u32(), // ticks applied so far; state is "after tick `tick`"
       online: t.bool(), // false between disconnect and rejoin/sweep; hidden by clients
-      allowanceMicros: t.i64(), // token-bucket marker of the speed-hack guard (micros since epoch)
       updatedAt: t.timestamp(),
+    },
+  ),
+  // The display name of everyone in the world, split from `player` because it
+  // changes on join/rename only: keeping it on the hot row re-broadcast the
+  // string to every client on every movement update. Public — clients render
+  // name labels from it — and subscribed alongside `player` (connection.ts).
+  playerName: table(
+    { name: 'player_name', public: true },
+    {
+      identity: t.identity().primaryKey(),
+      name: t.string(),
+    },
+  ),
+  // The speed-hack guard's token-bucket marker (micros since epoch), split
+  // from `player` because no client has any business seeing it: private
+  // tables are never broadcast, so the marker's per-batch updates cost
+  // writes but zero egress.
+  playerGuard: table(
+    { name: 'player_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
     },
   ),
 });

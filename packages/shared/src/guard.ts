@@ -25,7 +25,7 @@ export type BatchRejectReason = 'empty-batch' | 'oversized-batch' | 'stale-tick'
 export type BatchVerdict =
   | {
       ok: true;
-      /** The advanced token-bucket marker to persist on the player row. */
+      /** The advanced token-bucket marker to persist on the player_guard row. */
       allowanceMicros: bigint;
     }
   | { ok: false; reason: BatchRejectReason };
@@ -52,7 +52,7 @@ export function evaluateInputBatch(batch: {
   startTick: number;
   /** Ticks the server has applied so far (row.tick). */
   rowTick: number;
-  /** Token-bucket marker persisted on the row (micros since Unix epoch). */
+  /** Token-bucket marker persisted on the player_guard row (micros since Unix epoch). */
   allowanceMicros: bigint;
   /** Server wall clock (micros since Unix epoch). */
   nowMicros: bigint;

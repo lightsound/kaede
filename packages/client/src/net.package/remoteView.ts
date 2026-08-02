@@ -75,6 +75,17 @@ export function createRemoteViews() {
     });
   }
 
+  /**
+   * Renames an existing view (the player_name row changed without the hot
+   * row moving). A view that does not exist yet is skipped, not created: the
+   * next record() reads the current name from the row cache anyway, and a
+   * snapshot-less view would only make renderFrame skip it.
+   */
+  function setName(idHex: string, name: string): void {
+    const view = views.get(idHex);
+    if (view) view.name = name;
+  }
+
   function remove(idHex: string): void {
     views.delete(idHex);
   }
@@ -119,7 +130,7 @@ export function createRemoteViews() {
     }
   }
 
-  return { record, remove, clear, renderFrame };
+  return { record, setName, remove, clear, renderFrame };
 }
 
 /** Euclidean distance between two points. */

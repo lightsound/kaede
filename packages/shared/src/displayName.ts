@@ -50,7 +50,8 @@ export function normalizeDisplayName(raw: string): DisplayNameVerdict {
 /**
  * Why a rename request was refused: a bad name, or `no-target` when the
  * rename would land nowhere — the sender has no account (guests never do)
- * and no player row (never joined, or the row was swept).
+ * and no player_name row (never joined, or the row was swept along with
+ * its player row).
  */
 export type RenameRejectReason = DisplayNameRejectReason | 'no-target';
 
@@ -85,7 +86,7 @@ export function evaluateRename(request: {
 export function resolveJoinName(source: {
   /** The account's display name, when the member has set one. */
   persistedName: string | undefined;
-  /** The name on the player row being resumed, when one survived. */
+  /** The name on the player_name row being resumed, when one survived. */
   resumedRowName: string | undefined;
   /** Hex form of the joining identity, seeding the default name. */
   identityHex: string;
