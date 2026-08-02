@@ -15,9 +15,10 @@ export function snapshot(page: Page): Promise<E2EWorldSnapshot> {
  * Guest entry: load the client and wait until the authoritative spawn row has
  * started the local simulation (covers connect → join → own-row round trip).
  * `tick` is -1 until that moment, so the wait stays correct no matter when
- * the hook itself gets installed.
+ * the hook itself gets installed. `path` admits dev-only query overrides
+ * (e.g. `/?idleMs=3000` for the idle-suspension spec).
  */
-export async function enterWorld(page: Page): Promise<void> {
-  await page.goto('/');
+export async function enterWorld(page: Page, path = '/'): Promise<void> {
+  await page.goto(path);
   await page.waitForFunction(() => (window.__mapleE2E?.snapshot().tick ?? -1) >= 0);
 }
