@@ -68,9 +68,9 @@ export type RenameVerdict = { ok: true; name: string } | { ok: false; reason: Re
 export function evaluateRename(request: {
   rawName: string;
   hasAccount: boolean;
-  hasPlayerRow: boolean;
+  hasNameRow: boolean;
 }): RenameVerdict {
-  if (!request.hasAccount && !request.hasPlayerRow) return { ok: false, reason: 'no-target' };
+  if (!request.hasAccount && !request.hasNameRow) return { ok: false, reason: 'no-target' };
   return normalizeDisplayName(request.rawName);
 }
 

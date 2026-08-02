@@ -59,11 +59,11 @@ describe('normalizeDisplayName', () => {
 
 describe('evaluateRename', () => {
   it('accepts a valid name when either target exists', () => {
-    expect(evaluateRename({ rawName: '楓', hasAccount: true, hasPlayerRow: false })).toEqual({
+    expect(evaluateRename({ rawName: '楓', hasAccount: true, hasNameRow: false })).toEqual({
       ok: true,
       name: '楓',
     });
-    expect(evaluateRename({ rawName: '楓', hasAccount: false, hasPlayerRow: true })).toEqual({
+    expect(evaluateRename({ rawName: '楓', hasAccount: false, hasNameRow: true })).toEqual({
       ok: true,
       name: '楓',
     });
@@ -72,14 +72,14 @@ describe('evaluateRename', () => {
   // A rename with nowhere to land must fail loudly, not report success while
   // the name evaporates (a guest before join, or after its row was swept).
   it('refuses a rename when neither an account nor a player row exists', () => {
-    expect(evaluateRename({ rawName: '楓', hasAccount: false, hasPlayerRow: false })).toEqual({
+    expect(evaluateRename({ rawName: '楓', hasAccount: false, hasNameRow: false })).toEqual({
       ok: false,
       reason: 'no-target',
     });
   });
 
   it('refuses an invalid name even with targets present', () => {
-    expect(evaluateRename({ rawName: ' ', hasAccount: true, hasPlayerRow: true })).toEqual({
+    expect(evaluateRename({ rawName: ' ', hasAccount: true, hasNameRow: true })).toEqual({
       ok: false,
       reason: 'empty',
     });

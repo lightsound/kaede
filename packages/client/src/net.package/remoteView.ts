@@ -78,8 +78,8 @@ export function createRemoteViews() {
   /**
    * Renames an existing view (the player_name row changed without the hot
    * row moving). A view that does not exist yet is skipped, not created: the
-   * next record() reads the current name from the row cache anyway, and a
-   * snapshot-less view would only make renderFrame skip it.
+   * next record() call supplies the current name anyway, and a snapshot-less
+   * view would only make renderFrame skip it.
    */
   function setName(idHex: string, name: string): void {
     const view = views.get(idHex);

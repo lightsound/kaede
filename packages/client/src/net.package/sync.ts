@@ -14,13 +14,15 @@ import {
 import { createPrediction } from './prediction';
 import { createRemoteViews } from './remoteView';
 
+/** A generated row type, inferred because the bindings don't re-export them. */
+type RowOf<T extends keyof DbConnection['db']> =
+  ReturnType<DbConnection['db'][T]['iter']> extends Iterator<infer R> ? R : never;
+
 /** The generated own/remote player row type (all columns). */
-type PlayerRow =
-  ReturnType<DbConnection['db']['player']['iter']> extends Iterator<infer R> ? R : never;
+type PlayerRow = RowOf<'player'>;
 
 /** The generated player_name row type (the display name split off the hot row). */
-type PlayerNameRow =
-  ReturnType<DbConnection['db']['playerName']['iter']> extends Iterator<infer R> ? R : never;
+type PlayerNameRow = RowOf<'playerName'>;
 
 /**
  * What the user should be told about the connection right now. `idle` is the
@@ -41,10 +43,10 @@ export interface Net {
   dispose(): void;
   /**
    * Asks the server to rename this player (set_display_name). The result
-   * arrives as an own-row update, which is also the caller's success signal.
-   * Failures (a disconnect racing the submit, a server rejection) only log:
-   * the form keeps its draft, so the user can see the label didn't change
-   * and resubmit.
+   * arrives as an own player_name row event, which is also the caller's
+   * success signal. Failures (a disconnect racing the submit, a server
+   * rejection) only log: the form keeps its draft, so the user can see the
+   * label didn't change and resubmit.
    */
   setDisplayName(name: string): void;
   /**
@@ -145,9 +147,10 @@ export function startNet(
   });
 
   // The single path for own-name changes, so the label and the onOwnName
-  // consumer cannot drift apart, and so the ack firehose (every own-row
-  // update, several per second) is deduplicated here instead of leaning on
-  // React's same-value bailout. `undefined` means "no own row is known".
+  // consumer cannot drift apart, and so the double report a join produces
+  // (handleOwnRow and the player_name insert event both publish the same
+  // name) is deduplicated here instead of leaning on React's same-value
+  // bailout. `undefined` means "no own row is known".
   // Caller contract: any caller on an async event path must be
   // dispose-guarded at its entry point (see wireSession's handlers) —
   // dispose() itself is the only caller that may run after the flip, and

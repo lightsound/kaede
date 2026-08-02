@@ -88,8 +88,8 @@ export const spacetimedb = schema({
   // (name → player_name) or server-internal (allowanceMicros → player_guard)
   // is split out. `updatedAt` stays despite changing every update: clients
   // anchor remote interpolation on it (the server-timeline timestamp fed to
-  // the clock estimator — see remoteView.ts) and the offline sweep reads it,
-  // and being in lockstep with the row it could not be split out anyway.
+  // the clock estimator — see remoteView.ts) and the offline sweep reads it;
+  // changing in lockstep with the row, splitting it out would save nothing.
   //
   // The three player_* tables live and die together: join inserts all three
   // in one transaction and every removal path deletes all three (see
@@ -112,9 +112,10 @@ export const spacetimedb = schema({
     },
   ),
   // The display name of everyone in the world, split from `player` because it
-  // changes on join/rename only: keeping it on the hot row re-broadcast the
-  // string to every client on every movement update. Public — clients render
-  // name labels from it — and subscribed alongside `player` (connection.ts).
+  // changes on join/rename only: keeping it on the hot row meant
+  // re-broadcasting the string to every client on every movement update.
+  // Public — clients render name labels from it — and subscribed alongside
+  // `player` (connection.ts).
   playerName: table(
     { name: 'player_name', public: true },
     {

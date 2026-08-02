@@ -204,12 +204,19 @@ function logRejection(
   );
 }
 
+// ── Player lifecycle ────────────────────────────────────────────────────
+// The three player_* tables (hot row, name label, guard — see tables.ts)
+// are kept paired by construction, and this section is all of it on one
+// screen: spawnOrResume (with upsertPlayerSiblings) is the only create
+// path, removePlayer the only delete path, and findMovementRows reclaims
+// a half-present pair instead of acting on it.
+
 /**
  * Removes one player from the world: the hot row and its name/guard
  * siblings, in the same transaction. The single delete path — every
- * reclaim (sweep, guest kick, status change, stale-row reclaim) goes
- * through here, which is what keeps the three player_* tables paired
- * (a player row always has its siblings; see tables.ts).
+ * reclaim (sweep, guest kick, status change, stale-row and broken-pair
+ * reclaim) goes through here, which is what keeps the three player_*
+ * tables paired (a player row always has its siblings).
  */
 function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   ctx.db.player.identity.delete(identity);
@@ -217,18 +224,92 @@ function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   ctx.db.playerGuard.identity.delete(identity);
 }
 
+/** The player_name row as this schema returns it (not re-exported by the server SDK). */
+type PlayerNameRow = NonNullable<ReturnType<Ctx['db']['playerName']['identity']['find']>>;
+
+/**
+ * Upserts the sender's player_* sibling rows for a join: the display name to
+ * spawn under, and a fresh input allowance on the guard. One function for
+ * both because they are only ever written together (spawnOrResume), which is
+ * half of what keeps the siblings paired with the player row — removePlayer
+ * is the other half. `nameRow` is the caller's own lookup (it already read
+ * the row to resolve the join name), passed in rather than re-found.
+ */
+function upsertPlayerSiblings(ctx: Ctx, nameRow: PlayerNameRow | null, name: string): void {
+  if (nameRow) ctx.db.playerName.identity.update({ ...nameRow, name });
+  else ctx.db.playerName.insert({ identity: ctx.sender, name });
+
+  const allowanceMicros = ctx.timestamp.microsSinceUnixEpoch;
+  const guard = ctx.db.playerGuard.identity.find(ctx.sender);
+  if (guard) ctx.db.playerGuard.identity.update({ ...guard, allowanceMicros });
+  else ctx.db.playerGuard.insert({ identity: ctx.sender, allowanceMicros });
+}
+
+/** Resumes the sender's surviving player row, or spawns a fresh one. */
+function spawnOrResume(ctx: Ctx): void {
+  const existing = ctx.db.player.identity.find(ctx.sender);
+  const nameRow = ctx.db.playerName.identity.find(ctx.sender);
+  // Precedence (persisted account name > resumed row's name > default) lives
+  // in resolveJoinName, unit-tested in @maple/shared.
+  const name = resolveJoinName({
+    persistedName: ctx.db.account.identity.find(ctx.sender)?.displayName,
+    resumedRowName: nameRow?.name,
+    identityHex: ctx.sender.toHexString(),
+  });
+  upsertPlayerSiblings(ctx, nameRow, name);
+
+  if (existing) {
+    // Reload / network blip within the retention window: resume the saved
+    // character where it stood (the sibling upsert above already refreshed
+    // the name and input allowance).
+    ctx.db.player.identity.update({
+      ...existing,
+      online: true,
+      updatedAt: ctx.timestamp,
+    });
+    return;
+  }
+
+  ctx.db.player.insert({
+    identity: ctx.sender,
+    x: SPAWN_X,
+    y: SPAWN_Y,
+    vx: 0,
+    vy: 0,
+    facing: 1,
+    onGround: false,
+    rope: -1,
+    tick: 0,
+    online: true,
+    updatedAt: ctx.timestamp,
+  });
+}
+
 /**
  * The sender's hot row and its guard sibling, or undefined when the sender
- * is not in the world. The two are inserted and deleted together (see
- * removePlayer), so requiring both is one existence check, not two rules —
- * split out of submitInputs to keep that uncovered reducer under the CRAP
- * budget fallow enforces (the backfillAccountName precedent).
+ * is not in the world — split out of submitInputs to keep that uncovered
+ * reducer under the CRAP budget fallow enforces (the backfillAccountName
+ * precedent). A row without its guard cannot happen through this module's
+ * write paths (the lifecycle functions above), but if one ever appears
+ * (manual sql, a future bug) it is reclaimed rather than tolerated: an
+ * undefined here silences the sender's inputs, so leaving the broken pair
+ * in place would drop them forever with nothing to repair it — the
+ * transitionMember precedent that an "unreachable" branch must not read as
+ * a silent no-op. The owner sees its row deleted and re-joins, recreating
+ * all three siblings.
  */
 function findMovementRows(ctx: Ctx) {
   const row = ctx.db.player.identity.find(ctx.sender);
+  if (!row) return undefined;
   const guard = ctx.db.playerGuard.identity.find(ctx.sender);
-  return row && guard ? { row, guard } : undefined;
+  if (guard) return { row, guard };
+  console.warn(
+    `player row without its guard sibling, reclaiming: sender=${ctx.sender.toHexString()}`,
+  );
+  removePlayer(ctx, ctx.sender);
+  return undefined;
 }
+// ── End player lifecycle ────────────────────────────────────────────────
 
 // Server-authoritative movement: clients send only inputs, the server replays
 // them through the same shared physics. Position cannot change any other way.
@@ -328,62 +409,6 @@ export const join = spacetimedb.reducer((ctx) => {
 });
 
 /**
- * Upserts the sender's player_* sibling rows for a join: the display name to
- * spawn under, and a fresh input allowance on the guard. One function for
- * both because they are only ever written together (spawnOrResume), which is
- * half of what keeps the siblings paired with the player row — removePlayer
- * is the other half.
- */
-function upsertPlayerSiblings(ctx: Ctx, name: string): void {
-  const nameRow = ctx.db.playerName.identity.find(ctx.sender);
-  if (nameRow) ctx.db.playerName.identity.update({ ...nameRow, name });
-  else ctx.db.playerName.insert({ identity: ctx.sender, name });
-
-  const allowanceMicros = ctx.timestamp.microsSinceUnixEpoch;
-  const guard = ctx.db.playerGuard.identity.find(ctx.sender);
-  if (guard) ctx.db.playerGuard.identity.update({ ...guard, allowanceMicros });
-  else ctx.db.playerGuard.insert({ identity: ctx.sender, allowanceMicros });
-}
-
-/** Resumes the sender's surviving player row, or spawns a fresh one. */
-function spawnOrResume(ctx: Ctx): void {
-  const existing = ctx.db.player.identity.find(ctx.sender);
-  // Precedence (persisted account name > resumed row's name > default) lives
-  // in resolveJoinName, unit-tested in @maple/shared.
-  const name = resolveJoinName({
-    persistedName: ctx.db.account.identity.find(ctx.sender)?.displayName,
-    resumedRowName: ctx.db.playerName.identity.find(ctx.sender)?.name,
-    identityHex: ctx.sender.toHexString(),
-  });
-  upsertPlayerSiblings(ctx, name);
-
-  if (existing) {
-    // Reload / network blip within the retention window: resume the saved
-    // character where it stood, with a fresh input allowance.
-    ctx.db.player.identity.update({
-      ...existing,
-      online: true,
-      updatedAt: ctx.timestamp,
-    });
-    return;
-  }
-
-  ctx.db.player.insert({
-    identity: ctx.sender,
-    x: SPAWN_X,
-    y: SPAWN_Y,
-    vx: 0,
-    vy: 0,
-    facing: 1,
-    onGround: false,
-    rope: -1,
-    tick: 0,
-    online: true,
-    updatedAt: ctx.timestamp,
-  });
-}
-
-/**
  * Persists a member's name on its account (the source of truth) and mirrors
  * it onto the public space_member projection, so the admin UI and the
  * waiting room show the same name the next join will spawn under.
@@ -413,7 +438,7 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
   const verdict = evaluateRename({
     rawName: name,
     hasAccount,
-    hasPlayerRow: row !== null,
+    hasNameRow: row !== null,
   });
   if (!verdict.ok) {
     throw new SenderError(`Rename refused (${verdict.reason})`);
