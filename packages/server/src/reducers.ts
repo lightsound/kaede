@@ -48,13 +48,16 @@ const CLERK_DEVELOPMENT_ISSUER = 'https://famous-hornet-40.clerk.accounts.dev';
  *
  * `guestIssuers` names the hosts whose own tokens we expect: a guest connects
  * tokenless, is handed a host-issued token, and replays it to resume its
- * per-tab identity. Only `localhost` is known today; Maincloud's issuer has to
- * be observed and added before unrecognised issuers can be refused outright.
+ * per-tab identity. Both hosts we deploy to are registered — `localhost`
+ * (standalone) and Maincloud (its issuer observed in production logs,
+ * 2026-08-02) — so a token from any other issuer is refused outright
+ * (classifyConnection's unregistered-issuer verdict; see onConnect). A new
+ * host must have its issuer added here before guests can reconnect to it.
  */
 const CONNECTION_POLICY: ConnectionPolicy = {
   memberIssuers: [CLERK_DEVELOPMENT_ISSUER],
   memberAudience: 'kaede-spacetimedb',
-  guestIssuers: ['localhost'],
+  guestIssuers: ['localhost', 'https://auth.spacetimedb.com'],
 };
 
 /**
@@ -122,17 +125,32 @@ function guestsAllowed(ctx: Ctx): boolean {
 }
 
 /**
- * Vets every connection before it can act in the world. Note this reducer
- * only classifies and records — it never refuses admittable kinds. Refusals
- * live in `join`: a SenderError thrown here would close the socket, and the
- * client's reconnect loop (exponential backoff in sync.ts) would swallow the
- * reason before any UI could show it. `join` refusals arrive as ordinary
- * reducer errors on an open connection instead.
+ * Vets every connection before it can act in the world. Which refusals
+ * belong here and which in `join` follows one line: a refusal the user can
+ * act on goes to `join` (an ordinary reducer error on an open connection,
+ * mirrored client-side by decideAdmission over the subscribed rows), while a
+ * refusal of the token itself must live here — the JWT is only readable
+ * inside clientConnected, so `join` could not re-check it without a table
+ * recording the verdict, and the client could not mirror it without that
+ * state being public. Both token refusals (audience-mismatch,
+ * unregistered-issuer) are configuration errors no user can fix, so the UX
+ * a SenderError here produces — the socket closes and sync.ts retries with
+ * backoff — is acceptable: for a guest replaying a stored token, the client
+ * gives the token up after RESUME_MAX_FAILURES attempts (connection.ts) and
+ * recovers as a fresh tokenless guest, while the reason lands in this log.
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
   if (auth.kind === 'audience-mismatch') {
     throw new SenderError('Unauthorized: this token was minted for another application');
+  }
+  if (auth.kind === 'unregistered-issuer') {
+    // The ROADMAP Phase 1 gate (closed 2026-08-02): a token nobody vouched
+    // for used to be admitted as a guest with only this log line, which let
+    // it slip past the guests-not-allowed setting. The log stays so a
+    // forgotten guestIssuers entry for a new host names itself.
+    console.warn(`connection refused, unregistered issuer: ${auth.issuer}`);
+    throw new SenderError('Unauthorized: this token comes from an unregistered issuer');
   }
   if (auth.kind === 'member') {
     // The account (global profile) is a fact of signing in; the membership
@@ -140,10 +158,6 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     // apply_for_membership reducer when the user asks to.
     ensureAccount(ctx);
     console.info(`member connected: sub=${auth.subject}`);
-    return;
-  }
-  if (auth.kind === 'unregistered-issuer') {
-    console.warn(`guest connected with an unregistered issuer: ${auth.issuer}`);
     return;
   }
   // Admission falls through to "let them in", so a verdict added later must not
