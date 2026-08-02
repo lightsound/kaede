@@ -273,7 +273,7 @@ export function startNet(
     const admission = wireAdmission(c, myIdentity, {
       onSpace,
       enterWorld,
-      isDisposed: stale,
+      isStale: stale,
     });
 
     // Seed the remote players already in the world. Our own surviving row is
@@ -359,24 +359,11 @@ export function startNet(
   // a connection the idle guard cut can report after a resume already started
   // (or finished) a newer connect; callbacks stamped with an older generation
   // are stale and must not touch the newer session. An idle suspension bumps
-  // the generation too, so the suspended session turns stale the moment we
-  // decide to cut it — not only once its socket finishes closing.
+  // the generation when it cuts a LIVE session, so that session turns stale
+  // the moment we decide to cut it — not only once its socket finishes
+  // closing. A merely pending connect keeps its generation (see
+  // suspendForIdle).
   let attemptGeneration = 0;
-
-  /**
-   * Whether the connect that just settled may become the live session. A
-   * connect that lands after dispose or while idle-suspended must not open a
-   * session nobody asked for. One whose generation a suspension invalidated
-   * while the user has already resumed leaves a connection owed (it was the
-   * only attempt in flight, so the resume's own attempt() was a no-op):
-   * discard it but start a fresh attempt with a current generation.
-   */
-  function adoptSettledConnect(generation: number): boolean {
-    if (disposed || idle.suspended()) return false;
-    if (generation === attemptGeneration) return true;
-    attempt();
-    return false;
-  }
 
   function attempt(): void {
     if (disposed || attemptInFlight) return;
@@ -387,10 +374,15 @@ export function startNet(
     connect(
       {
         onDisconnect() {
+          // Closes from a superseded session — an idle suspension bumped the
+          // generation when cutting it, or a newer connect took over — are
+          // stale and already torn down.
           if (disposed || generation !== attemptGeneration) return;
           dropSession();
-          // A close we asked for (idle suspension) must not warn or retry —
-          // the next user input reconnects (see the activity listener).
+          // A current-generation close while suspended is one we asked for:
+          // the discard of a connect that settled after the idle guard cut
+          // in mid-attempt (see the .then below). No warn, no retry — the
+          // next user input reconnects (see the activity listener).
           if (idle.suspended()) return;
           console.warn('SpacetimeDB: connection dropped, reconnecting');
           scheduleRetry();
@@ -401,7 +393,12 @@ export function startNet(
     )
       .then(({ conn: c, myIdentity, myIdHex }) => {
         attemptInFlight = false;
-        if (!adoptSettledConnect(generation)) {
+        // A connect that lands after dispose or while idle-suspended must
+        // not open a session nobody asked for. A suspension leaves a pending
+        // connect's generation current (see suspendForIdle), so when the
+        // user has already resumed by now, this settle simply becomes the
+        // live session — no generation check or replacement attempt needed.
+        if (disposed || idle.suspended()) {
           c.disconnect();
           return;
         }
@@ -419,8 +416,14 @@ export function startNet(
       .catch((err: unknown) => {
         attemptInFlight = false;
         consecutiveFailures += 1;
+        // While suspended, scheduleRetry below is a deliberate no-op; the
+        // log must not promise a retry that will not happen.
         console.error(
-          `SpacetimeDB: connection to ${target} failed, retrying in ${retryDelayMs}ms`,
+          `SpacetimeDB: connection to ${target} failed, ${
+            idle.suspended()
+              ? 'suspended for idle (input reconnects)'
+              : `retrying in ${retryDelayMs}ms`
+          }`,
           err,
         );
         scheduleRetry();
@@ -445,13 +448,18 @@ export function startNet(
       retryTimer = undefined;
     }
     onStatus('idle');
-    // Invalidate the session's generation first: until the socket finishes
-    // closing, the old DbConnection can still deliver row and admission
-    // callbacks, and without the bump they would pass wireSession's stale()
-    // and re-enter the world (join, prediction restart) under an 'idle'
-    // status. The close itself then also reports against an old generation
-    // and is ignored.
-    attemptGeneration += 1;
+    // Invalidate a LIVE session's generation before cutting it: until the
+    // socket finishes closing, the old DbConnection can still deliver row
+    // and admission callbacks, and without the bump they would pass
+    // wireSession's stale() and re-enter the world (join, prediction
+    // restart) under an 'idle' status. A merely pending connect (conn not
+    // yet assigned) has no wired session to stale, and keeping its
+    // generation current lets a resume adopt it when it settles — attempt()
+    // is single-flight, so that pending connect is the resume's only way
+    // back in. One that settles while still suspended is discarded in
+    // attempt()'s .then, and its close is swallowed by onDisconnect's
+    // suspended() check.
+    if (conn !== undefined) attemptGeneration += 1;
     // Tear the session down synchronously (mirroring dispose) instead of
     // waiting for the socket's close to report: a resume can start a newer
     // connect before that close lands, and the new session must never find

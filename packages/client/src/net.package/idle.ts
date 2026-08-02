@@ -5,8 +5,8 @@
  * 忘れられたタブが Maincloud の従量エネルギーを消費し続ける(ROADMAP Phase 2 の
  * 「プロトコルのアイドル抑制」が本命の対策)。それまでの暫定ガードとして、
  * 一定時間ユーザー操作がなければクライアント側から接続を閉じ、次の操作で
- * 自動再接続する。判定は純粋関数として切り出し、時刻は呼び出し側が注入する
- * (ユニットテストが実時間を待たずに済むように)。
+ * 自動再接続する。判定は時刻を呼び出し側が注入する決定的なロジックとして
+ * 切り出す(ユニットテストが実時間を待たずに済むように)。
  */
 
 /**
@@ -22,21 +22,18 @@ export const IDLE_DISCONNECT_MS = 15 * 60_000;
  */
 export const IDLE_CHECK_INTERVAL_MS = 1000;
 
-/** 監視が呼び出し側に指示する遷移。'none' は何もしない。 */
-export type IdleTransition = 'suspend' | 'resume' | 'none';
-
 export interface IdleMonitor {
   /**
    * ユーザー操作を記録する。休止中に呼ばれたら 'resume'(再接続せよ)を返し、
-   * 監視は稼働状態に戻る。
+   * 監視は稼働状態に戻る。'none' は何もしない。
    */
-  activity(now: number): IdleTransition;
+  activity(now: number): 'resume' | 'none';
   /**
    * 周期チェック。最後の操作からタイムアウト以上経っていれば 'suspend'
-   * (接続を休止せよ)を返し、監視は休止状態に入る。休止中は何も返さない
-   * (再開は activity だけが指示する)。
+   * (接続を休止せよ)を返し、監視は休止状態に入る。休止中は 'none' を
+   * 返し続ける(再開は activity だけが指示する)。
    */
-  check(now: number): IdleTransition;
+  check(now: number): 'suspend' | 'none';
   /** 休止中かどうか。切断ハンドラが「意図した切断か」を見分けるのに使う。 */
   suspended(): boolean;
 }
