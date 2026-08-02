@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "deploy": "NODE_OPTIONS=--experimental-strip-types alchemy deploy --stage prod",
-    "plan": "NODE_OPTIONS=--experimental-strip-types alchemy plan --stage prod",
-    "destroy": "NODE_OPTIONS=--experimental-strip-types alchemy destroy --stage prod"
+    "deploy:prod": "npm_execpath= NODE_OPTIONS=--experimental-strip-types alchemy deploy --stage prod",
+    "plan:prod": "npm_execpath= NODE_OPTIONS=--experimental-strip-types alchemy plan --stage prod",
+    "destroy:prod": "npm_execpath= NODE_OPTIONS=--experimental-strip-types alchemy destroy --stage prod"
   },
   "devDependencies": {
     "@effect/platform-node": "4.0.0-beta.102",

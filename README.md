@@ -218,19 +218,22 @@ SPA なので存在しないパスへのリクエストは `index.html` にフ�
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
      `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
    - Node 22.18 未満では TS の型ストリッピングにフラグが要ります。`infra` の
-     `deploy` / `plan` / `destroy` スクリプトが `NODE_OPTIONS=--experimental-strip-types`
-     を設定済みなので、スクリプト経由で実行する限り気にする必要はありません。
+     `deploy:prod` / `plan:prod` / `destroy:prod` スクリプトが
+     `NODE_OPTIONS=--experimental-strip-types` を設定済みなので、スクリプト経由で
+     実行する限り気にする必要はありません。
 
 2. **クライアントのデプロイ（Alchemy）**
 
    ```sh
-   pnpm --filter @maple/infra deploy          # plan を表示して確認後に適用
-   CI=true pnpm --filter @maple/infra deploy -- --yes   # CI など非対話環境（env 認証 + 自動承認）
+   pnpm --filter @maple/infra deploy:prod          # plan を表示して確認後に適用
+   CI=true pnpm --filter @maple/infra deploy:prod --yes   # CI など非対話環境（env 認証 + 自動承認）
    ```
 
    デプロイはクライアントのビルド（`pnpm --filter @maple/client build`）込みです。
-   `pnpm --filter @maple/infra plan` で差分のプレビューだけもできます。
+   `pnpm --filter @maple/infra plan:prod` で差分のプレビューだけもできます。
    ステージは `prod` に固定してあり、Worker 名（= URL）はステージに依存しません。
+   （スクリプト名が `deploy` ではなく `deploy:prod` なのは、`pnpm deploy` が
+   pnpm の組み込みサブコマンドと衝突してスクリプトが実行されないためです。）
 
 3. **手動デプロイの逃げ道（wrangler）**
 

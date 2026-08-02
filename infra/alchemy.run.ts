@@ -5,8 +5,15 @@
 // IaC 行のベータ採用条件)。アプリコードはこのファイルの存在を知らない。
 //
 // 実行は infra/ を作業ディレクトリとして `alchemy deploy --stage prod` で行う
-// (`pnpm --filter @maple/infra deploy`)。手順の全体は README の
+// (`pnpm --filter @maple/infra deploy:prod`。素の `deploy` は pnpm の
+// 組み込みサブコマンドと衝突するため使わない)。手順の全体は README の
 // 「デプロイ(公開手順)」を参照。
+//
+// スクリプトが `npm_execpath=` を空にしているのは alchemy ランチャーの
+// バグ回避: ランチャーは npm_execpath に "bun" が含まれると bun 経由の
+// 起動と判定するが、pnpm run 経由ではこの値が pnpm 本体のパスになり、
+// 例えば /home/ubuntu/... の「ubuntu」が誤マッチして存在しない bun を
+// spawn しようとする(alchemy 2.0.0-beta.67 の bin/cli.js)。
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
