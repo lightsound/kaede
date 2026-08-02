@@ -260,15 +260,19 @@ SPA なので存在しないパスへのリクエストは `index.html` にフ�
    > 現在のスタックにシークレットは含まれませんが、将来スタックにシークレットを足すときは
    > このステート戦略（git コミット）を先に見直してください。
 
-5. **Maincloud へのモジュール公開**（お手元で実行）
+5. **Maincloud へのモジュール公開**
+
+   本番 DB は Maincloud の **`maple-like`**（2026-08-02 公開済み。ダッシュボード:
+   https://spacetimedb.com/maple-like ）。クライアントの既定 DB 名と一致しているため、
+   ビルド時の環境変数は現状不要です。モジュールを更新したら再 publish します:
 
    ```sh
-   spacetime login
-   spacetime publish <DB名> --server maincloud --yes   # リポジトリルートで実行。DB名は任意のユニーク名
+   spacetime login                                        # 初回のみ（CI 等では login --token）
+   spacetime publish maple-like --server maincloud --yes  # リポジトリルートで実行
    ```
 
    TypeScript バインディングは生成済みのものがリポジトリに含まれているため、デプロイ時に再生成する必要はありません。
-   クライアントに Maincloud の DB 名を教えるには、ビルド時に `VITE_SPACETIME_DB=<DB名>` を
+   別名の DB に向けたいときは、クライアントのビルド時に `VITE_SPACETIME_DB=<DB名>` を
    設定します（`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com`
    なので、Maincloud を使う限り設定不要です）。
 
