@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Manual escape hatch: re-run the full pipeline (checks + deploy) on any
-  # ref, e.g. to re-deploy without an empty commit or to verify the deploy
-  # job from a branch before merging.
+  # Manual escape hatch: dispatching on main re-runs the full pipeline
+  # (checks + deploy), e.g. to re-deploy without an empty commit. Dispatching
+  # on any other ref runs the checks only (see the deploy job's `if`).
   workflow_dispatch:
 
 # Concurrency is declared per job, not per workflow. A workflow-level
@@ -207,10 +207,12 @@ jobs:
   # jobs listed as `needs`.
   deploy:
     needs: [ci, e2e]
-    # Deploys on push (which `on` restricts to main) and on manual dispatch.
-    # A dispatch may target a branch — it deploys that ref as-is (used e.g.
-    # for pre-merge verification of this job). PR runs never deploy.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Only the main ref ever deploys: pushes are already restricted to main by
+    # `on`, and a workflow_dispatch must be dispatched on main too. Dispatching
+    # on another branch runs the checks but skips the deploy — otherwise the
+    # dispatch escape hatch would let any ref reach prod with the deploy
+    # secrets, bypassing review on main. PR runs (refs/pull/…) never match.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # The state-commit step pushes to the ref this run deployed.
     permissions:

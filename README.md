@@ -242,8 +242,9 @@ Maincloud の **`maple-like`**（ダッシュボード: https://spacetimedb.com/
 - 必要なシークレット（GitHub Actions の Secrets）: `CLOUDFLARE_API_TOKEN` と
   `SPACETIMEDB_TOKEN`。
 - 手動で再デプロイしたいときは、GitHub Actions から **CI ワークフローの
-   `workflow_dispatch`** を実行します（空コミット不要。ブランチ指定で実行すると
-  そのブランチの内容が本番に出るので注意）。
+  `workflow_dispatch` を `main` で実行**します（空コミット不要）。`main` 以外の
+  ref で dispatch した場合はチェックだけ走り、デプロイはスキップされます
+  （main のレビューを迂回して本番へ出す経路を作らないため）。
 
 ### 手動デプロイ（逃げ道）
 
