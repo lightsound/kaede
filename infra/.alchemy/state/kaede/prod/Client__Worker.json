@@ -13,7 +13,7 @@
       "directory": "../packages/client/dist",
       "hash": {
         "output": "17f5bd76cb9cb8fac11e8c046cc77bd61df9071ca8c0cd687117c666e67606b4",
-        "input": "df558cb663dab9a69261d3347eefafa5df096de0b4c4b54aad4cae118d27eded"
+        "input": "7295fc001295633117d5b8b0949287a66fa586856cb62448e6a70fce03a80f61"
       },
       "notFoundHandling": "single-page-application"
     },
@@ -39,7 +39,7 @@
     "hash": {
       "assets": {
         "output": "17f5bd76cb9cb8fac11e8c046cc77bd61df9071ca8c0cd687117c666e67606b4",
-        "input": "df558cb663dab9a69261d3347eefafa5df096de0b4c4b54aad4cae118d27eded"
+        "input": "7295fc001295633117d5b8b0949287a66fa586856cb62448e6a70fce03a80f61"
       },
       "metadata": "a440302364f74ac71059f709fa8b70e606a869246029a4a74c21dcf1856adb85"
     }

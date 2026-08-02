@@ -36,14 +36,17 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
+    const stage = yield* Alchemy.Stage;
+
     // クライアント(Vite SPA)を「アセットのみの Worker」として配信する。
     // Worker スクリプトは存在せず、Cloudflare のアセット層が全リクエストを
     // 処理する。SPA なので存在しないパスは index.html にフォールバックさせる。
     const client = yield* Cloudflare.Website.StaticSite('Client', {
-      // workers.dev の URL は https://kaede.kaede-751.workers.dev になる。
-      // ステージ名は Worker 名に含めない(現状 prod 相当の 1 環境のみ。
-      // ステージを増やすときはここを stage 連動の命名に変える)。
-      name: 'kaede',
+      // Worker 名はステージから導出する。prod は kaede
+      // (https://kaede.kaede-751.workers.dev)、それ以外は kaede-<stage>。
+      // 固定名にするとステートが分かれていても全ステージが同じ本番 Worker を
+      // 上書き・削除できてしまう(Worker 名の文字種に合わせ _ は - に変換)。
+      name: stage === 'prod' ? 'kaede' : `kaede-${stage.toLowerCase().replace(/_/g, '-')}`,
       // ビルドはリポジトリルートで実行する(infra/ からの相対)。
       cwd: '..',
       command: 'pnpm --filter @maple/client build',
