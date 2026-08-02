@@ -358,8 +358,25 @@ export function startNet(
   // Which connect is current. A socket closes asynchronously, so the close of
   // a connection the idle guard cut can report after a resume already started
   // (or finished) a newer connect; callbacks stamped with an older generation
-  // are stale and must not touch the newer session.
+  // are stale and must not touch the newer session. An idle suspension bumps
+  // the generation too, so the suspended session turns stale the moment we
+  // decide to cut it — not only once its socket finishes closing.
   let attemptGeneration = 0;
+
+  /**
+   * Whether the connect that just settled may become the live session. A
+   * connect that lands after dispose or while idle-suspended must not open a
+   * session nobody asked for. One whose generation a suspension invalidated
+   * while the user has already resumed leaves a connection owed (it was the
+   * only attempt in flight, so the resume's own attempt() was a no-op):
+   * discard it but start a fresh attempt with a current generation.
+   */
+  function adoptSettledConnect(generation: number): boolean {
+    if (disposed || idle.suspended()) return false;
+    if (generation === attemptGeneration) return true;
+    attempt();
+    return false;
+  }
 
   function attempt(): void {
     if (disposed || attemptInFlight) return;
@@ -384,9 +401,7 @@ export function startNet(
     )
       .then(({ conn: c, myIdentity, myIdHex }) => {
         attemptInFlight = false;
-        // A connect that lands after dispose or after the idle guard already
-        // suspended us must not open a session nobody asked for.
-        if (disposed || idle.suspended()) {
+        if (!adoptSettledConnect(generation)) {
           c.disconnect();
           return;
         }
@@ -430,12 +445,18 @@ export function startNet(
       retryTimer = undefined;
     }
     onStatus('idle');
+    // Invalidate the session's generation first: until the socket finishes
+    // closing, the old DbConnection can still deliver row and admission
+    // callbacks, and without the bump they would pass wireSession's stale()
+    // and re-enter the world (join, prediction restart) under an 'idle'
+    // status. The close itself then also reports against an old generation
+    // and is ignored.
+    attemptGeneration += 1;
     // Tear the session down synchronously (mirroring dispose) instead of
     // waiting for the socket's close to report: a resume can start a newer
     // connect before that close lands, and the new session must never find
     // the old one half-alive (a lingering prediction would block its
-    // handleOwnRow). The close then reports against an older generation and
-    // is ignored.
+    // handleOwnRow).
     const closing = conn;
     dropSession();
     closing?.disconnect();
