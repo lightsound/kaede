@@ -41,6 +41,11 @@
 - **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
 - **`sealed`** — 設定が外部の `extends` を引き込めないようにします。
 
+`infra/`（Alchemy の IaC）は typecheck と Biome の対象ですが、ユニットテスト（カバレッジ）と
+ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する宣言的な単一エントリポイントで、
+アプリのモジュールグラフに参加しないため。fallow は infra も走査し、エントリポイント判定の
+偽陽性1件のみ理由付きコメントで抑制しています）。
+
 グローバルに無効化しているルールはありません。例外は個別の抑制コメント
 （`// fallow-ignore-file <rule> -- <理由>` またはその行だけに効く `// fallow-ignore-next-line ...`）
 でのみ表明し、`require-suppression-reason` により理由のない抑制は許されません
@@ -56,6 +61,7 @@
 | `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期） |
 | `packages/server` | SpacetimeDB モジュール（`player`・`account`・`space_member`・`space_setting` テーブルと `join`・`submit_inputs`・管理系リデューサー。サーバー権威で物理・入場制御を実施） |
 | `packages/e2e` | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証） |
+| `infra` | Cloudflare リソースの IaC（Alchemy v2）。Alchemy / Effect への依存はこのディレクトリに隔離し、アプリコードには漏らさない（デプロイ手順は後述） |
 
 ## 同期方式
 
@@ -207,37 +213,87 @@
 
 ## デプロイ（公開手順）
 
-ローカルでの動作確認ができたら、Maincloud（SpacetimeDB のマネージドホスト）へモジュールを公開し、
-クライアントを Vercel へデプロイすることで、スマホを含む任意の端末からアクセスできます。
+クライアントは **Cloudflare Workers の静的アセット配信**（Pages ではなく、Cloudflare の現行推奨）で
+`https://kaede.kaede-751.workers.dev` に公開します。リソース定義は `infra/` の
+**Alchemy v2**（TypeScript ネイティブの IaC。ベータのためバージョンを厳密にピン留め）にあります。
+SPA なので存在しないパスへのリクエストは `index.html` にフォールバックします
+（`not_found_handling: single-page-application`）。
 
-1. **Maincloud へのモジュール公開**（お手元で実行）
+1. **前提**
+
+   - 環境変数 `CLOUDFLARE_API_TOKEN`（必要権限: Account / Workers Scripts:Edit と
+     User / User Details:Read・Memberships:Read。ゾーン・R2 権限は不要）。
+     アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
+     `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
+   - Node 22.18 未満では TS の型ストリッピングにフラグが要ります。`infra` の
+     `deploy:prod` / `plan:prod` / `destroy:prod` と汎用の `alchemy` スクリプトが
+     `NODE_OPTIONS=--experimental-strip-types` を設定済みなので、スクリプト経由で
+     実行する限り気にする必要はありません。
+
+2. **クライアントのデプロイ（Alchemy）**
 
    ```sh
-   spacetime login
-   spacetime publish <DB名> --server maincloud --yes   # リポジトリルートで実行。DB名は任意のユニーク名
+   pnpm --filter @maple/infra deploy:prod          # plan を表示して確認後に適用
+   CI=true pnpm --filter @maple/infra deploy:prod --yes   # CI など非対話環境（env 認証 + 自動承認）
+   ```
+
+   デプロイはクライアントのビルド（`pnpm --filter @maple/client build`）込みです。
+   `pnpm --filter @maple/infra plan:prod` で差分のプレビューだけもできます。
+   （スクリプト名が `deploy` ではなく `deploy:prod` なのは、`pnpm deploy` が
+   pnpm の組み込みサブコマンドと衝突してスクリプトが実行されないためです。）
+   prod 以外のステージや他の alchemy サブコマンドは、ワークアラウンド
+   （型ストリッピングのフラグ等）込みの汎用スクリプト経由で実行します。
+   素の `pnpm exec alchemy` や `npx alchemy` は Node 22.18 未満で失敗します:
+
+   ```sh
+   pnpm --filter @maple/infra alchemy plan --stage dev_yourname
+   ```
+
+   prod 以外のステージは `kaede-<ステージ名のスラッグ>` という別の Worker に
+   デプロイされるため、本番 Worker（`kaede`）には触れません。
+
+3. **手動デプロイの逃げ道（wrangler）**
+
+   Alchemy が使えないとき（ベータ起因の不具合など）は、同じ Worker に wrangler で直接
+   デプロイできます。設定は `infra/wrangler.jsonc`（`alchemy.run.ts` と同じ構成。乖離させないこと）。
+
+   ```sh
+   pnpm --filter @maple/client build
+   cd infra && npx wrangler deploy --config wrangler.jsonc
+   ```
+
+   wrangler で上書きした後も、次の Alchemy デプロイがそのまま再収束します（検証済み）。
+
+4. **Alchemy のステート管理**
+
+   ステートは**ローカルファイル（`infra/.alchemy/state/`）に置き、git にコミットして共有**します。
+   後で CI からデプロイする際もチェックアウトにステートが含まれるため追加設定が不要です。
+   リモートストアを選ばなかった理由: R2 バックエンドは API トークンに R2 権限がなく使えず、
+   Durable Objects ベースの `Cloudflare.state()` も初回ブートストラップが Secrets Store の
+   書き込み権限を要求するため、Workers Scripts:Edit しか持たない現行トークンでは動きません。
+   個人用 dev ステージ（既定の `dev_$USER`）のステートは `.gitignore` で除外しています。
+
+   > **注意**: Alchemy のステートには `Redacted` なシークレットも**平文で**書かれます。
+   > 現在のスタックにシークレットは含まれませんが、将来スタックにシークレットを足すときは
+   > このステート戦略（git コミット）を先に見直してください。
+
+5. **Maincloud へのモジュール公開**
+
+   本番 DB は Maincloud の **`maple-like`**（2026-08-02 公開済み。ダッシュボード:
+   https://spacetimedb.com/maple-like ）。クライアントの既定 DB 名と一致しているため、
+   ビルド時の環境変数は現状不要です。モジュールを更新したら再 publish します:
+
+   ```sh
+   spacetime login                                        # 初回のみ（CI 等では login --token）
+   spacetime publish maple-like --server maincloud --yes  # リポジトリルートで実行
    ```
 
    TypeScript バインディングは生成済みのものがリポジトリに含まれているため、デプロイ時に再生成する必要はありません。
+   別名の DB に向けたいときは、クライアントのビルド時に `VITE_SPACETIME_DB=<DB名>` を
+   設定します（`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com`
+   なので、Maincloud を使う限り設定不要です）。
 
-   > **注意**: 今回の変更で `player` テーブルのスキーマが変わっています。既存のモジュールがある場合は
-   > **再 publish が必須**です。publish が既存データとの非互換を理由に失敗するときは、まだ永続的な
-   > 進行データはないので、データを削除して publish し直してください
-   > （例: `spacetime publish <DB名> --server maincloud --delete-data --yes`）。ローカル（`--server local`）でも同様です。
-
-2. **Vercel プロジェクトの作成**
-
-   [vercel.com](https://vercel.com) で **Add New → Project** からこのリポジトリを import し、次の2点だけ設定します。
-
-   - **Root Directory**: `packages/client`（`vercel.json` が framework / install / build / 出力先を定義済みなので、追加設定は不要です）
-   - **Environment Variables**: `VITE_SPACETIME_DB` = Maincloud で付けた DB名。
-     （`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com` なので、Maincloud を使う限り設定不要です）
-
-3. **デプロイ**
-
-   **Deploy** を押せば公開されます。以後、ブランチへ push するたびに Vercel が自動でビルド・デプロイします。
-   発行された URL にスマホからアクセスできます（タッチ操作に対応しています）。
-
-4. **CI**
+6. **CI**
 
    `main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
    build・fallow（dead-code / dupes / health / security）に加えて、バージョンを固定した CLI

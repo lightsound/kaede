@@ -118,10 +118,19 @@
   組織別プロフィール上書きを追加テーブルで後付けする方針は、スキーマ定義の
   設計コメントとして明文化（VISION のアカウントモデル・ガードレール参照）。
   追加のみ（additive）の変更で、既存 DB への再 publish 互換をローカルで確認済み
-- ホスティングの Vercel → Cloudflare 移行（Workers 静的アセット配信。
-  **Alchemy v2 による IaC 化**（`infra/` に隔離、バージョンをピン留め）、
-  `vercel.json` の置き換え、CI/デプロイ手順と README の更新まで含む。
-  実ユーザー投入前に済ませる）
+- **ホスティングの Vercel → Cloudflare 移行** ✅ **完了(2026-08-02)**:
+  Workers 静的アセット配信(Pages ではない)で
+  `https://kaede.kaede-751.workers.dev` に公開。**Alchemy v2
+  (2.0.0-beta.67 を厳密ピン留め)による IaC 化**は `infra/` に隔離し、
+  Alchemy / Effect をアプリコードに漏らさない(VISION の3条件を充足。
+  wrangler での手動デプロイの逃げ道も `infra/wrangler.jsonc` で維持し、
+  wrangler 上書き後に Alchemy が再収束することを検証済み)。SPA のため
+  not-found は `index.html` フォールバック。Alchemy のステートはローカル
+  ファイル(`infra/.alchemy/`)を git にコミットして共有(R2 ストアは
+  トークンに R2 権限がなく、Durable Objects ストアは Secrets Store 権限を
+  要求するため不可 — README のデプロイ節参照)。`vercel.json` は撤去済み。
+  **Vercel 側の Git 連携解除とプロジェクト削除はオーナー作業として残る**。
+  CI からの自動デプロイは下の「デプロイフロー」項で別途行う
 - **ドメインの取得**: 第一候補は **kaede.town**（2026-07-30 選定）。ただし
   **取得は実ユーザー投入直前 — ドッグフーディング開始（Phase 2）のトリガー —
   まで後置する**（2026-08-01 方針変更。費用を名前の最終確定まで払わない判断で、

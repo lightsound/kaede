@@ -1,0 +1,13 @@
+// wrangler での手動デプロイ用の設定(Alchemy が使えないときの逃げ道)。
+// Alchemy の alchemy.run.ts と同じ Worker(kaede)に同じアセット構成で
+// デプロイする。乖離させないこと。手順は README の「デプロイ(公開手順)」を参照。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kaede",
+  "account_id": "751c8a59858c9c04a8e722df7330444d",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "../packages/client/dist",
+    "not_found_handling": "single-page-application"
+  }
+}
