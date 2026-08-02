@@ -140,14 +140,22 @@ function guestsAllowed(ctx: Ctx): boolean {
  * state being public. Both token refusals (audience-mismatch,
  * unregistered-issuer) are configuration errors no user can fix, so the UX
  * a SenderError here produces — the socket closes and sync.ts retries with
- * backoff — is acceptable. Two shapes of it, both observed (2026-08-02): a
- * foreign token replayed against a correctly-configured host is given up
- * after RESUME_MAX_FAILURES attempts (connection.ts) and the client recovers
- * as a fresh guest in ~30s; a host whose own issuer is missing from
- * guestIssuers refuses even fresh tokenless guests (the host stamps them
- * with its own token first), so clients sit on the connecting overlay and
- * retry forever — correct for a deployment that is broken for every guest,
- * with the culprit issuer named in this log and in the client console.
+ * backoff — is acceptable. What each refused client does then (observed
+ * 2026-08-02): only the stored ANONYMOUS token has a fallback — a guest
+ * replaying one against a correctly-configured host gives it up after
+ * RESUME_MAX_FAILURES attempts (connection.ts) and recovers as a fresh
+ * guest in ~30s. A signed-in client re-mints its OIDC token on every
+ * attempt, so a member whose issuer the policy stops naming retries forever
+ * until they sign out by hand — the skew to avoid when ROADMAP gate ①
+ * swaps memberIssuers: deploy the client and module together. Likewise a
+ * host whose own issuer is missing from guestIssuers refuses even fresh
+ * tokenless guests (the host stamps them with its own token first), so
+ * every guest retries forever — correct fail-fast for a deployment that is
+ * broken for every guest. A refused browser sees only a generic socket
+ * close (the host sends no close reason and the SDK discards the
+ * CloseEvent — observed 2026-08-02), so diagnosis lives server-side: the
+ * warn and the thrown SenderError both name the culprit issuer in the
+ * module log (spacetimedb-cli logs / the Maincloud dashboard).
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
@@ -156,11 +164,15 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
   }
   if (auth.kind === 'unregistered-issuer') {
     // The ROADMAP Phase 1 gate (closed 2026-08-02): a token nobody vouched
-    // for used to be admitted as a guest with only this log line, which let
-    // it slip past the guests-not-allowed setting. The log stays so a
-    // forgotten guestIssuers entry for a new host names itself.
+    // for used to be admitted with only this log line. World entry was never
+    // at stake — join's evaluateJoin rules every guest either way — but the
+    // admission granted connect-and-subscribe reads under a stable identity
+    // no provider vouched for, a hole that widens with every privilege
+    // guests gain. The issuer goes into the error message as well as this
+    // warn so both module-log lines name the culprit (the refused browser
+    // sees only a generic socket close — see the doc comment above).
     console.warn(`connection refused, unregistered issuer: ${auth.issuer}`);
-    throw new SenderError('Unauthorized: this token comes from an unregistered issuer');
+    throw new SenderError(`Unauthorized: unregistered token issuer: ${auth.issuer}`);
   }
   if (auth.kind === 'member') {
     // The account (global profile) is a fact of signing in; the membership

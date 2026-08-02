@@ -31,13 +31,16 @@ describe('classifyConnection', () => {
     expect(classifyConnection(null, policy)).toEqual({ kind: 'guest' });
   });
 
-  it('admits a host-issued token as a guest, not a member, for every registered host', () => {
-    for (const issuer of policy.guestIssuers) {
+  // Literal issuers rather than a loop over policy.guestIssuers: trimming the
+  // fixture must fail these tests, not silently shrink them.
+  it.each(['localhost', 'https://auth.maincloud.example'])(
+    'admits a token issued by host %s as a guest, not a member',
+    (issuer) => {
       expect(classifyConnection(claims({ issuer, audience: [] }), policy)).toEqual({
         kind: 'guest',
       });
-    }
-  });
+    },
+  );
 
   // A token our own provider minted for another application must not become a
   // member: that is how a second Clerk-backed app's users would get in as ours.
