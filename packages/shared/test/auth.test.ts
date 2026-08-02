@@ -4,10 +4,12 @@ import { type ConnectionClaims, type ConnectionPolicy, classifyConnection } from
 const CLERK_PRODUCTION = 'https://clerk.example.town';
 const CLERK_DEVELOPMENT = 'https://dev-instance.clerk.accounts.dev';
 
+// Two guest issuers, mirroring the real deployment targets: the local
+// standalone host and Maincloud each mint their own guest-resume tokens.
 const policy: ConnectionPolicy = {
   memberIssuers: [CLERK_PRODUCTION],
   memberAudience: 'kaede-spacetimedb',
-  guestIssuers: ['localhost'],
+  guestIssuers: ['localhost', 'https://auth.maincloud.example'],
 };
 
 /** Claims from our own provider, overridable per test. */
@@ -29,10 +31,12 @@ describe('classifyConnection', () => {
     expect(classifyConnection(null, policy)).toEqual({ kind: 'guest' });
   });
 
-  it('admits a host-issued token as a guest, not a member', () => {
-    expect(classifyConnection(claims({ issuer: 'localhost', audience: [] }), policy)).toEqual({
-      kind: 'guest',
-    });
+  it('admits a host-issued token as a guest, not a member, for every registered host', () => {
+    for (const issuer of policy.guestIssuers) {
+      expect(classifyConnection(claims({ issuer, audience: [] }), policy)).toEqual({
+        kind: 'guest',
+      });
+    }
   });
 
   // A token our own provider minted for another application must not become a
@@ -49,9 +53,10 @@ describe('classifyConnection', () => {
     });
   });
 
-  // The gate that keeps the development instance out of production: its issuer
-  // is simply absent from memberIssuers, so its users are guests at most.
-  it('never makes a member of an issuer outside the policy, even with our audience', () => {
+  // The gate that keeps unknown providers out entirely: an issuer in neither
+  // list gets the refusal verdict (which onConnect turns into a rejection —
+  // ROADMAP Phase 1 gate ②), never member and never guest.
+  it('refuses an issuer outside the policy, even with our audience', () => {
     expect(classifyConnection(claims({ issuer: CLERK_DEVELOPMENT }), policy)).toEqual({
       kind: 'unregistered-issuer',
       issuer: CLERK_DEVELOPMENT,
