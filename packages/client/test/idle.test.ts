@@ -9,8 +9,8 @@ import {
 const TIMEOUT = 1000;
 
 describe('既定値', () => {
-  it('タイムアウトは 15 分で、チェック周期より十分長い(ms 単位の取り違え防止)', () => {
-    expect(IDLE_DISCONNECT_MS).toBe(15 * 60 * 1000);
+  it('タイムアウトは 60 分で、チェック周期より十分長い(ms 単位の取り違え防止)', () => {
+    expect(IDLE_DISCONNECT_MS).toBe(60 * 60 * 1000);
     expect(IDLE_DISCONNECT_MS).toBeGreaterThan(IDLE_CHECK_INTERVAL_MS * 10);
   });
 });
