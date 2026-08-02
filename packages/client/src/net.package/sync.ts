@@ -203,7 +203,17 @@ export function startNet(
     retryDelayMs = Math.min(retryDelayMs * 2, RETRY_MAX_MS);
   }
 
-  function wireSession(c: DbConnection, myIdentity: Identity, myIdHex: string): void {
+  function wireSession(
+    c: DbConnection,
+    myIdentity: Identity,
+    myIdHex: string,
+    generation: number,
+  ): void {
+    // True once this session's events must be ignored: the stack is torn
+    // down, or a newer connect has taken over (an idle resume can start one
+    // while this session's socket is still closing).
+    const stale = () => disposed || generation !== attemptGeneration;
+
     // Our row appears (or already exists, when resuming an identity) via join
     // below. Start/refresh the simulation from that authoritative state.
     const handleOwnRow = (row: PlayerRow) => {
@@ -263,7 +273,7 @@ export function startNet(
     const admission = wireAdmission(c, myIdentity, {
       onSpace,
       enterWorld,
-      isDisposed: () => disposed,
+      isDisposed: stale,
     });
 
     // Seed the remote players already in the world. Our own surviving row is
@@ -276,16 +286,18 @@ export function startNet(
       if (idHex !== myIdHex) recordRemote(idHex, row);
     }
 
-    // Every handler below refuses to run once disposed: the socket closes
+    // Every handler below refuses to run once stale: the socket closes
     // asynchronously, so this session's row events can still be delivered
-    // after dispose(), and acting on one would drive the destroyed Pixi app
-    // (gameApp.start, prediction), re-install the e2e hook from the doomed
-    // instance, or write to consumers shared with the replacement session
-    // (onOwnName feeds the App's rename form). Guarding the event entry
-    // points covers every side effect at once; the synchronous seeding above
-    // needs no guard because dispose() cannot interleave with it.
+    // after dispose() or after an idle resume replaced the session, and
+    // acting on one would drive the destroyed Pixi app (gameApp.start,
+    // prediction), re-install the e2e hook from the doomed instance, or
+    // write to consumers shared with the replacement session (onOwnName
+    // feeds the App's rename form). Guarding the event entry points covers
+    // every side effect at once; the synchronous seeding above needs no
+    // guard because neither dispose() nor a newer attempt can interleave
+    // with it.
     c.db.player.onInsert((_ctx, row) => {
-      if (disposed) return;
+      if (stale()) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
         handleOwnRow(row);
@@ -294,7 +306,7 @@ export function startNet(
       recordRemote(idHex, row);
     });
     c.db.player.onUpdate((_ctx, _old, row) => {
-      if (disposed) return;
+      if (stale()) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
         // An own-row update IS the acknowledgement (row.tick = applied count).
@@ -307,7 +319,7 @@ export function startNet(
       recordRemote(idHex, row);
     });
     c.db.player.onDelete((_ctx, row) => {
-      if (disposed) return;
+      if (stale()) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
         // Our row was reclaimed: by the retention sweep (a backgrounded tab
@@ -343,15 +355,22 @@ export function startNet(
   // can resume before that connect settles, so without the guard the resume
   // would race a second connect against the first and leave two live sessions.
   let attemptInFlight = false;
+  // Which connect is current. A socket closes asynchronously, so the close of
+  // a connection the idle guard cut can report after a resume already started
+  // (or finished) a newer connect; callbacks stamped with an older generation
+  // are stale and must not touch the newer session.
+  let attemptGeneration = 0;
 
   function attempt(): void {
     if (disposed || attemptInFlight) return;
     attemptInFlight = true;
+    attemptGeneration += 1;
+    const generation = attemptGeneration;
     onStatus(everConnected ? 'reconnecting' : 'connecting');
     connect(
       {
         onDisconnect() {
-          if (disposed) return;
+          if (disposed || generation !== attemptGeneration) return;
           dropSession();
           // A close we asked for (idle suspension) must not warn or retry —
           // the next user input reconnects (see the activity listener).
@@ -376,7 +395,7 @@ export function startNet(
         consecutiveFailures = 0;
         retryDelayMs = RETRY_INITIAL_MS;
         onStatus('connected');
-        wireSession(c, myIdentity, myIdHex);
+        wireSession(c, myIdentity, myIdHex, generation);
       })
       // The overlay can only ever say "connecting", so without this the actual
       // cause (host not running, unknown database name, stale schema) never
@@ -411,11 +430,15 @@ export function startNet(
       retryTimer = undefined;
     }
     onStatus('idle');
-    if (conn) {
-      conn.disconnect(); // its onDisconnect handler performs dropSession
-    } else {
-      dropSession();
-    }
+    // Tear the session down synchronously (mirroring dispose) instead of
+    // waiting for the socket's close to report: a resume can start a newer
+    // connect before that close lands, and the new session must never find
+    // the old one half-alive (a lingering prediction would block its
+    // handleOwnRow). The close then reports against an older generation and
+    // is ignored.
+    const closing = conn;
+    dropSession();
+    closing?.disconnect();
   }
 
   const onActivity = (): void => {
