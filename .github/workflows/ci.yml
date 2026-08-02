@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # TEMP(#23): verification only — remove before merge. Lets a push to the
+    # PR branch exercise the deploy job end to end (the agent VM's tokens
+    # cannot fire workflow_dispatch).
+    branches: [main, cursor/auto-deploy-flow-b306]
   pull_request:
   # Manual escape hatch: re-run the full pipeline (checks + deploy) on any
   # ref, e.g. to re-deploy without an empty commit or to verify the deploy
