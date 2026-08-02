@@ -9,8 +9,11 @@ spacetime.local.json
 .fallow/
 
 # Alchemy のステート: prod ステージはコミットして共有する(README 参照)。
-# 個人の dev ステージ(既定の dev_$USER)は共有しない。
+# 個人の dev ステージ(既定の dev_$USER)・ログ・バージョンチェックの
+# キャッシュは共有しない。
 infra/.alchemy/state/*/dev_*/
+infra/.alchemy/log/
+infra/.alchemy/version-check.json
 
 .projects/cache
 .projects/vault
