@@ -24,6 +24,13 @@ import * as Effect from 'effect/Effect';
 // 減らす。別アカウントに向けたいときは環境変数が優先される。
 process.env.CLOUDFLARE_ACCOUNT_ID ??= '751c8a59858c9c04a8e722df7330444d';
 
+/** ステージ名を Cloudflare Worker 名に使える形([a-z0-9-])へ正規化する。 */
+const workerNameSlug = (stage: string): string =>
+  stage
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
 export default Alchemy.Stack(
   'kaede',
   {
@@ -45,8 +52,10 @@ export default Alchemy.Stack(
       // Worker 名はステージから導出する。prod は kaede
       // (https://kaede.kaede-751.workers.dev)、それ以外は kaede-<stage>。
       // 固定名にするとステートが分かれていても全ステージが同じ本番 Worker を
-      // 上書き・削除できてしまう(Worker 名の文字種に合わせ _ は - に変換)。
-      name: stage === 'prod' ? 'kaede' : `kaede-${stage.toLowerCase().replace(/_/g, '-')}`,
+      // 上書き・削除できてしまう。Worker 名に使えるのは英小文字・数字・
+      // ハイフンのみで、既定ステージ dev_$USER は $USER 由来の任意文字
+      // (ドット等)を含み得るため、使えない文字はまとめて - に潰す。
+      name: stage === 'prod' ? 'kaede' : `kaede-${workerNameSlug(stage)}`,
       // ビルドはリポジトリルートで実行する(infra/ からの相対)。
       cwd: '..',
       command: 'pnpm --filter @maple/client build',
