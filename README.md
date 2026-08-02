@@ -211,13 +211,43 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
    するので、実行前に localhost:5173 を開いている他のタブ・ウィンドウを
    閉じてください（接続中のクライアントが残っていると人数のアサートが失敗します）。
 
-## デプロイ（公開手順）
+## デプロイ
 
 クライアントは **Cloudflare Workers の静的アセット配信**（Pages ではなく、Cloudflare の現行推奨）で
 `https://kaede.kaede-751.workers.dev` に公開します。リソース定義は `infra/` の
 **Alchemy v2**（TypeScript ネイティブの IaC。ベータのためバージョンを厳密にピン留め）にあります。
 SPA なので存在しないパスへのリクエストは `index.html` にフォールバックします
-（`not_found_handling: single-page-application`）。
+（`not_found_handling: single-page-application`）。サーバーモジュールの本番 DB は
+Maincloud の **`maple-like`**（ダッシュボード: https://spacetimedb.com/maple-like ）です。
+
+### 通常経路: main マージで自動デプロイ
+
+**`main` に push（マージ）されると CI がそのまま本番デプロイまで行います。人間の
+承認ゲートはありません**（`.github/workflows/ci.yml` の `deploy` ジョブ）。
+
+- `ci`（lint / typecheck / test / fallow / バインディングドリフト検査）と `e2e`
+  （Playwright スモーク）の**両方が成功したときだけ**デプロイが走ります。
+- デプロイ順序は **モジュール publish（Maincloud）→ クライアント（Alchemy）**。
+  スキーマ変更は互換（additive）が原則なので旧クライアントは新スキーマでも動き続け、
+  逆順で新クライアントだけが先に出る事故を避けます。非互換なスキーマ変更は
+  `publish` 自体が失敗して CI が止まるのが安全装置です。
+- 変更の有無にかかわらず毎回デプロイします（Alchemy はビルドをメモ化しており、
+  変更がなければ実質何もしない冪等な操作です）。
+- デプロイ後、Alchemy のステート差分（`infra/.alchemy/state/kaede/prod/`）を
+  CI が実行中の ref（通常は `main`）へ自動コミット・push します。この push は
+  `GITHUB_TOKEN` によるものなのでワークフローを再起動しません。
+- 同時実行: `ci` / `e2e` は従来どおり新しい push が古い実行をキャンセルしますが、
+  **`deploy` ジョブだけはキャンセルされず直列にキュー**されます（デプロイ途中の
+  キャンセルは「モジュールだけ新しい」等の中途半端な状態を残すため）。
+- 必要なシークレット（GitHub Actions の Secrets）: `CLOUDFLARE_API_TOKEN` と
+  `SPACETIMEDB_TOKEN`。
+- 手動で再デプロイしたいときは、GitHub Actions から **CI ワークフローの
+   `workflow_dispatch`** を実行します（空コミット不要。ブランチ指定で実行すると
+  そのブランチの内容が本番に出るので注意）。
+
+### 手動デプロイ（逃げ道）
+
+CI を経由できない・したくないとき（Actions 障害、緊急ロールバック等）のための手順です。
 
 1. **前提**
 
@@ -267,7 +297,9 @@ SPA なので存在しないパスへのリクエストは `index.html` にフ�
 4. **Alchemy のステート管理**
 
    ステートは**ローカルファイル（`infra/.alchemy/state/`）に置き、git にコミットして共有**します。
-   後で CI からデプロイする際もチェックアウトにステートが含まれるため追加設定が不要です。
+   CI の自動デプロイはデプロイ後にステート差分を自動でコミット・push しますが、
+   **手動で Alchemy デプロイした場合はステート差分を自分でコミット**してください
+   （放置すると次の CI デプロイのステートコミットと混ざります）。
    リモートストアを選ばなかった理由: R2 バックエンドは API トークンに R2 権限がなく使えず、
    Durable Objects ベースの `Cloudflare.state()` も初回ブートストラップが Secrets Store の
    書き込み権限を要求するため、Workers Scripts:Edit しか持たない現行トークンでは動きません。
@@ -279,9 +311,9 @@ SPA なので存在しないパスへのリクエストは `index.html` にフ�
 
 5. **Maincloud へのモジュール公開**
 
-   本番 DB は Maincloud の **`maple-like`**（2026-08-02 公開済み。ダッシュボード:
-   https://spacetimedb.com/maple-like ）。クライアントの既定 DB 名と一致しているため、
-   ビルド時の環境変数は現状不要です。モジュールを更新したら再 publish します:
+   本番 DB は Maincloud の **`maple-like`**（2026-08-02 公開済み）。クライアントの
+   既定 DB 名と一致しているため、ビルド時の環境変数は現状不要です。
+   通常は CI が publish するので手動操作は不要ですが、手動で行う場合:
 
    ```sh
    spacetime login                                        # 初回のみ（CI 等では login --token）
@@ -293,13 +325,15 @@ SPA なので存在しないパスへのリクエストは `index.html` にフ�
    設定します（`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com`
    なので、Maincloud を使う限り設定不要です）。
 
-6. **CI**
+## CI
 
-   `main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
-   build・fallow（dead-code / dupes / health / security）に加えて、バージョンを固定した CLI
-   （`spacetimedb-cli generate`）の再実行によりコミット済み
-   TypeScript バインディングがサーバースキーマとずれていないことを検証します。同一ブランチへの連続 push は
-   古い実行をキャンセルします。
+`main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
+build・fallow（dead-code / dupes / health / security）に加えて、バージョンを固定した CLI
+（`spacetimedb-cli generate`）の再実行によりコミット済み
+TypeScript バインディングがサーバースキーマとずれていないことを検証します。並行して
+`e2e` ジョブが Playwright のスモークテストを実行します。同一ブランチへの連続 push は
+古い実行（`ci` / `e2e` ジョブ）をキャンセルしますが、`main` ではその後に続く
+`deploy` ジョブだけはキャンセルされず直列にキューされます（デプロイの節を参照）。
 
 ## やらないこと（このフェーズの範囲外）
 

@@ -4,11 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual escape hatch: re-run the full pipeline (checks + deploy) on any
+  # ref, e.g. to re-deploy without an empty commit or to verify the deploy
+  # job from a branch before merging.
+  workflow_dispatch:
 
-# One run per branch: a new push cancels the outdated run.
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+# Concurrency is declared per job, not per workflow. A workflow-level
+# cancel-in-progress group would also cancel a deploy that is already
+# publishing when the next merge lands, which can leave prod half-updated
+# (e.g. module published but the old client still deployed). Instead:
+#   - ci / e2e keep the old behavior (a new push cancels the outdated run)
+#     via per-job groups keyed on the ref;
+#   - deploy has its own never-cancel group so in-flight deploys always run
+#     to completion and later ones queue behind them (see the job).
+
+permissions:
+  contents: read
 
 env:
   # Pin the CLI so the bindings drift check doesn't break when a new release
@@ -23,6 +34,9 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,11 +102,14 @@ jobs:
 
   # E2E smoke: boots the full stack (local SpacetimeDB host + Vite dev client)
   # and drives two guest browsers through the entry → movement-sync scenario
-  # (packages/e2e). Runs in parallel with `ci`; the future auto-deploy job must
-  # list BOTH jobs in `needs` so nothing ships without the smoke test passing
+  # (packages/e2e). Runs in parallel with `ci`; the deploy job lists BOTH jobs
+  # in `needs` so nothing ships without the smoke test passing
   # (docs/ROADMAP.md Phase 1, deploy flow).
   e2e:
     runs-on: ubuntu-latest
+    concurrency:
+      group: e2e-${{ github.ref }}
+      cancel-in-progress: true
     # Everything here is bounded (30s host wait, 120s per-test cap × 3
     # attempts), so a run that exceeds this is hung, not slow.
     timeout-minutes: 15
@@ -177,3 +194,105 @@ jobs:
           name: e2e-failure-artifacts
           path: packages/e2e/playwright-report/
           retention-days: 14
+
+  # Fully automated production deploy — no human gate (docs/ROADMAP.md
+  # Phase 1, deploy flow). Every push to main that passes ci AND e2e deploys
+  # both the SpacetimeDB module (Maincloud) and the client (Cloudflare
+  # Workers via Alchemy). There is no change detection: deploying unchanged
+  # code is effectively idempotent (Alchemy memoizes the build, re-publishing
+  # an identical module is a no-op), and unconditional deploys keep the
+  # pipeline simple and prod always equal to main. The safety net is
+  # automated: an incompatible schema change makes `publish` itself fail and
+  # stops the pipeline, and the bindings-drift check + E2E smoke run in the
+  # jobs listed as `needs`.
+  deploy:
+    needs: [ci, e2e]
+    # Deploys on push (which `on` restricts to main) and on manual dispatch.
+    # A dispatch may target a branch — it deploys that ref as-is (used e.g.
+    # for pre-merge verification of this job). PR runs never deploy.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # The state-commit step pushes to the ref this run deployed.
+    permissions:
+      contents: write
+    # Never cancel an in-flight deploy; serialize instead. Cancelling
+    # mid-deploy could leave prod half-updated (module published, client
+    # stale). The group is NOT keyed on the ref because every deploy targets
+    # the same prod resources regardless of which ref triggered it. GitHub
+    # keeps at most one pending run per group and cancels older pending ones,
+    # which is fine: the newest queued deploy ships the newest code.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the state-commit step can rebase onto commits
+          # that landed on this ref while the deploy was running.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install SpacetimeDB CLI (pinned)
+        uses: ./.github/actions/install-spacetimedb
+        with:
+          version: ${{ env.SPACETIME_VERSION }}
+
+      # Module first, client second: schema changes are compatible-only by
+      # policy (ROADMAP Phase 1, migration rules), so old clients keep working
+      # against the new schema, while a new client may need the new schema to
+      # work at all. An incompatible change fails this publish and the client
+      # never ships. TypeScript bindings are committed (drift-checked in `ci`)
+      # and need no regeneration here.
+      - name: Publish module to Maincloud
+        env:
+          SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
+        run: |
+          spacetimedb-cli login --token "$SPACETIMEDB_TOKEN"
+          spacetimedb-cli publish maple-like --server maincloud --yes
+
+      # Builds the client and converges the Cloudflare resources declared in
+      # infra/alchemy.run.ts (see README「デプロイ(公開手順)」).
+      - name: Deploy client (Alchemy)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: CI=true pnpm --filter @maple/infra deploy:prod --yes
+
+      # Alchemy keeps its state in files that are committed to git (README
+      # 「Alchemy のステート管理」), and a deploy rewrites them, so push the
+      # diff back to the ref that was deployed. Recursion is prevented by the
+      # documented GitHub behavior that pushes made with the workflow's own
+      # GITHUB_TOKEN do not trigger new workflow runs — this step relies on
+      # that; if the checkout ever switches to a PAT or an app token, add an
+      # explicit guard. The rebase keeps us on top of commits that landed
+      # concurrently (deploys themselves are serialized by the concurrency
+      # group, so two state commits can never race each other).
+      - name: Commit Alchemy state
+        run: |
+          git add infra/.alchemy/state/kaede/prod
+          if git diff --cached --quiet; then
+            echo "Alchemy state unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(deploy): Alchemy ステートを更新 (run ${GITHUB_RUN_ID})"
+          # Rebase-then-push can still lose a race against a commit that lands
+          # in between, so retry a few times before giving up.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "$GITHUB_REF_NAME"
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}); refetching and retrying."
+          done
+          echo "::error::Could not push the Alchemy state commit after 3 attempts."
+          exit 1
