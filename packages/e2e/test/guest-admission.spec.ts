@@ -41,24 +41,6 @@ async function setGuestsAllowed(allowed: boolean): Promise<void> {
 }
 
 /**
- * Emulates the guest sweep the real set_guests_allowed reducer performs in
- * the same transaction as the flip (sweepGuestPlayers → removePlayer): every
- * player in the E2E world is a guest, and a player row must always leave
- * with its name/guard siblings. Needed here because this spec flips the
- * setting through raw SQL (an admin member would need a Clerk sign-in),
- * which runs no reducer — and under the idle-suppression protocol a still
- * client sends nothing the server could react to, so nothing else would
- * ever delete the row (pre-suppression, the 100ms input stream tripped the
- * admission re-check in submit_inputs within a tick, which is what this
- * spec's kick actually observed).
- */
-async function sweepGuestPlayers(): Promise<void> {
-  await sql('DELETE FROM player');
-  await sql('DELETE FROM player_name');
-  await sql('DELETE FROM player_guard');
-}
-
-/**
  * The guest-admission setting end to end (ROADMAP Phase 1: ゲスト入場の
  * 許可/不許可): with guests disallowed a fresh guest is refused — the notice
  * shows and no world entry happens — and re-allowing lets the same waiting
@@ -101,10 +83,17 @@ test('ゲスト入場を不許可にすると入場できず、再許可で自�
 
 /**
  * The other half of the setting: guests already in the world are expelled
- * the moment guests are disallowed (the server deletes their player rows in
- * the same transaction as the flip — replayed here as flip + sweep, see
- * sweepGuestPlayers), their client stops the local simulation and shows the
- * refusal, and re-allowing lets them walk right back in without a reload.
+ * the moment guests are disallowed — through the admission re-check every
+ * submit_inputs performs (reducers.ts) — their client stops the local
+ * simulation and shows the refusal, and re-allowing lets them walk right
+ * back in without a reload. The real set_guests_allowed reducer sweeps
+ * guests in the same transaction as the flip, but this spec flips through
+ * raw SQL (an admin member would need a Clerk sign-in), which runs no
+ * reducer; pressing a key makes the client send one input batch, and the
+ * server's own admission re-check deletes the row. That nudge became
+ * necessary with idle suppression: a still client sends nothing the server
+ * could rule on (pre-suppression, the 100ms input stream tripped the same
+ * re-check within a tick, which is what this spec's kick used to observe).
  */
 test('入場中のゲストは不許可への切替で即キックされ、再許可で自動的に復帰する', async ({
   browser,
@@ -118,7 +107,8 @@ test('入場中のゲストは不許可への切替で即キックされ、再�
     await enterWorld(page);
 
     await setGuestsAllowed(false);
-    await sweepGuestPlayers();
+    // 送信ゲートを1回開けて、サーバーの admission 再チェックに行を消させる。
+    await page.keyboard.press('ArrowRight');
 
     // Expelled: the refusal notice covers the world, and the local
     // simulation is re-gated (tick returns to -1, the not-in-world signal),

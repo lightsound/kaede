@@ -26,8 +26,7 @@ export interface Heartbeat {
 export function createHeartbeat(onCheck: () => void): Heartbeat {
   // An inline (blob) worker: the script is one setInterval, so a separate
   // bundled file would be pure overhead. The URL can be revoked as soon as
-  // the Worker is constructed — creation dereferences it synchronously
-  // (verified against the real browser during review).
+  // the Worker is constructed — creation dereferences it synchronously.
   const src = `setInterval(() => postMessage(0), ${HEARTBEAT_CHECK_INTERVAL_MS});`;
   const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
   const worker = new Worker(url);

@@ -48,12 +48,11 @@ describe('プロトコル定数の整合(アイドル抑制)', () => {
   });
 
   it('ハートビートは保持窓に対して2回落としても掃除されない間隔', () => {
-    // 実効の最悪送信間隔は「間隔 + 判定粒度」。その3倍が保持窓以内なら、
-    // 2回連続で落ちても3本目が期限内に届く(isExpiredRow は境界を掃除しない
-    // 側なので等号まで安全)。
-    expect((HEARTBEAT_INTERVAL_MS + HEARTBEAT_CHECK_INTERVAL_MS) * 3).toBeLessThanOrEqual(
-      OFFLINE_RETENTION_MS,
-    );
+    // 実効の最悪送信間隔は「間隔 + 判定粒度」。その3倍(2回連続で落ちても
+    // 3本目が届く時刻)が保持窓より 30 秒以上手前なら、配送遅延・判定
+    // コールバックのジッタがモデル外で乗っても生きた行は掃除されない。
+    const worstSendIntervalMs = HEARTBEAT_INTERVAL_MS + HEARTBEAT_CHECK_INTERVAL_MS;
+    expect(worstSendIntervalMs * 3).toBeLessThanOrEqual(OFFLINE_RETENTION_MS - 30_000);
     expect(HEARTBEAT_MIN_AGE_MS).toBeLessThan(HEARTBEAT_INTERVAL_MS);
   });
 });
