@@ -151,8 +151,11 @@ function guestsAllowed(ctx: Ctx): boolean {
  * host whose own issuer is missing from guestIssuers refuses even fresh
  * tokenless guests (the host stamps them with its own token first), so
  * every guest retries forever — correct fail-fast for a deployment that is
- * broken for every guest. The unregistered-issuer refusal names the culprit
- * issuer both in this log and in the SenderError the client console shows.
+ * broken for every guest. A refused browser sees only a generic socket
+ * close (the host sends no close reason and the SDK discards the
+ * CloseEvent — observed 2026-08-02), so diagnosis lives server-side: the
+ * warn and the thrown SenderError both name the culprit issuer in the
+ * module log (spacetimedb-cli logs / the Maincloud dashboard).
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
@@ -165,9 +168,9 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     // at stake — join's evaluateJoin rules every guest either way — but the
     // admission granted connect-and-subscribe reads under a stable identity
     // no provider vouched for, a hole that widens with every privilege
-    // guests gain. The issuer goes into the error (it is the client's own
-    // token data) so a misconfigured host is diagnosable from the browser
-    // console alone; the log names it server-side too.
+    // guests gain. The issuer goes into the error message as well as this
+    // warn so both module-log lines name the culprit (the refused browser
+    // sees only a generic socket close — see the doc comment above).
     console.warn(`connection refused, unregistered issuer: ${auth.issuer}`);
     throw new SenderError(`Unauthorized: unregistered token issuer: ${auth.issuer}`);
   }

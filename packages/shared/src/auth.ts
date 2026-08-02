@@ -26,13 +26,13 @@ export interface ConnectionPolicy {
 /**
  * What a connecting client is, or why it is refused. `member` is the only
  * verdict that may ever carry member privileges. `unregistered-issuer` is
- * separate from `guest` so that a token from an issuer nobody vouched for can
- * be refused (the ROADMAP Phase 1 gate, closed 2026-08-02) instead of quietly
- * holding a guest's connect-and-subscribe access under a stable identity no
- * provider vouched for. Deliberately a classification (kinds), not an
- * ok/reason verdict like the evaluate* rules: the caller owns what each kind
- * means — refuse, admit, create an account — so collapsing the refusable
- * kinds into one ok:false arm would move that policy into the classifier.
+ * separate from `guest` so that a token from an issuer nobody vouched for
+ * can be refused (the ROADMAP Phase 1 gate, closed 2026-08-02 — the why
+ * lives on classifyConnection). Deliberately a classification (kinds), not
+ * an ok/reason verdict like the evaluate* rules: the caller owns what each
+ * kind means — refuse, admit, create an account — so collapsing the
+ * refusable kinds into one ok:false arm would move that policy into the
+ * classifier.
  */
 export type ConnectionAuth =
   | { kind: 'member'; subject: string }
