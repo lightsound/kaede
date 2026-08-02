@@ -239,9 +239,18 @@ SPA なので存在しないパスへのリクエストは `index.html` にフ�
 
    デプロイはクライアントのビルド（`pnpm --filter @maple/client build`）込みです。
    `pnpm --filter @maple/infra plan:prod` で差分のプレビューだけもできます。
-   ステージは `prod` に固定してあり、Worker 名（= URL）はステージに依存しません。
    （スクリプト名が `deploy` ではなく `deploy:prod` なのは、`pnpm deploy` が
    pnpm の組み込みサブコマンドと衝突してスクリプトが実行されないためです。）
+   prod 以外のステージや他の alchemy サブコマンドは、ワークアラウンド
+   （型ストリッピングのフラグ等）込みの汎用スクリプト経由で実行します。
+   素の `pnpm exec alchemy` や `npx alchemy` は Node 22.18 未満で失敗します:
+
+   ```sh
+   pnpm --filter @maple/infra alchemy plan --stage dev_yourname
+   ```
+
+   prod 以外のステージは `kaede-<ステージ名のスラッグ>` という別の Worker に
+   デプロイされるため、本番 Worker（`kaede`）には触れません。
 
 3. **手動デプロイの逃げ道（wrangler）**
 

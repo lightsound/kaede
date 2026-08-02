@@ -3,8 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "alchemy": "cross-env npm_execpath= NODE_OPTIONS=--experimental-strip-types alchemy",
     "deploy:prod": "cross-env npm_execpath= NODE_OPTIONS=--experimental-strip-types alchemy deploy --stage prod",
     "plan:prod": "cross-env npm_execpath= NODE_OPTIONS=--experimental-strip-types alchemy plan --stage prod",
     "destroy:prod": "cross-env npm_execpath= NODE_OPTIONS=--experimental-strip-types alchemy destroy --stage prod"
