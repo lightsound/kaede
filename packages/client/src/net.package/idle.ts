@@ -31,11 +31,11 @@ export interface IdleMonitor {
   /**
    * 周期チェック。最後の操作からタイムアウト以上経っていれば 'suspend'
    * (接続を休止せよ)を返し、監視は休止状態に入る。休止中は 'none' を
-   * 返し続ける(再開は activity だけが指示する)。
+   * 返し続ける(再開は activity だけが指示する)。「休止中かどうか」を
+   * 接続側の判断に使うときは、この監視ではなくライフサイクル状態機械
+   * (lifecycle.ts の suspended)を見る — 真実は一箇所に置く。
    */
   check(now: number): 'suspend' | 'none';
-  /** 休止中かどうか。切断ハンドラが「意図した切断か」を見分けるのに使う。 */
-  suspended(): boolean;
 }
 
 export function createIdleMonitor(timeoutMs: number, now: number): IdleMonitor {
@@ -53,7 +53,6 @@ export function createIdleMonitor(timeoutMs: number, now: number): IdleMonitor {
       suspended = true;
       return 'suspend';
     },
-    suspended: () => suspended,
   };
 }
 
