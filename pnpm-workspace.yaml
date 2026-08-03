@@ -1,3 +1,10 @@
 packages:
   - packages/*
   - infra
+
+# pnpm はビルドスクリプトを既定で無効化する。@posthog/cli の postinstall は
+# ソースマップ用 CLI バイナリの取得で、許可しないと @posthog/rollup-plugin の
+# アップロード(デプロイジョブ)が「バイナリなし」で落ちる。許可はこの1つ
+# だけに絞る(他の警告されたスクリプトは無効のままでも動いている実績)。
+onlyBuiltDependencies:
+  - '@posthog/cli'

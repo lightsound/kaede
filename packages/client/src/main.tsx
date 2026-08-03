@@ -3,6 +3,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ClerkGate } from './auth.package';
+import { initTelemetry } from './telemetry.package';
+
+// Before anything renders, so exceptions thrown during mount are captured
+// too. A no-op in builds without a key (dev, PR CI) — see vite.config.ts.
+initTelemetry();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root element is missing from index.html');

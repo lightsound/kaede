@@ -263,9 +263,22 @@ jobs:
 
       # Builds the client and converges the Cloudflare resources declared in
       # infra/alchemy.run.ts (see README「デプロイ(公開手順)」).
+      #
+      # The POSTHOG_* variables reach the Vite build Alchemy spawns
+      # (vite.config.ts reads them; see the initialization gate there):
+      # - POSTHOG_ANALYTICS_API_KEY (phc_): the publishable project key baked
+      #   into the production bundle. Only this deploy job provides it, so PR
+      #   builds ship with telemetry compiled out.
+      # - POSTHOG_API_KEY (phx_) + POSTHOG_PROJECT_ID: enable the sourcemap
+      #   upload plugin (ADR §8.4). Deliberately ONLY here — uploading from
+      #   PR builds would pollute the project's symbol sets.
       - name: Deploy client (Alchemy)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          POSTHOG_ANALYTICS_API_KEY: ${{ secrets.POSTHOG_ANALYTICS_API_KEY }}
+          POSTHOG_ANALYTICS_HOST: https://us.posthog.com
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: '540373'
         run: CI=true pnpm --filter @maple/infra deploy:prod --yes
 
       # Alchemy keeps its state in files that are committed to git (README

@@ -13,11 +13,13 @@
     "@clerk/react": "^6.12.9",
     "@maple/shared": "workspace:*",
     "pixi.js": "^8.19.0",
+    "posthog-js": "^1.410.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "spacetimedb": "2.7.1"
   },
   "devDependencies": {
+    "@posthog/rollup-plugin": "^1.4.7",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.4",
