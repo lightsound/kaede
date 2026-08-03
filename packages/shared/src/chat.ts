@@ -50,14 +50,12 @@ export const CHAT_SEND_COST_MICROS = 1_000_000n;
  */
 export const CHAT_BURST_MESSAGES = 5;
 
-export type ChatSendVerdict = SendAllowanceVerdict;
-
 /**
  * Pure admission check for one chat send: the shared send-rate token bucket
  * (see evaluateSendAllowance for the marker semantics) at the chat cost and
  * burst. The marker is persisted on the sender's chat_guard row.
  */
-export function evaluateChatSend(request: SendAllowanceRequest): ChatSendVerdict {
+export function evaluateChatSend(request: SendAllowanceRequest): SendAllowanceVerdict {
   return evaluateSendAllowance(request, CHAT_SEND_COST_MICROS, CHAT_BURST_MESSAGES);
 }
 

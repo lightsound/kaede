@@ -2,7 +2,6 @@
 import {
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
-  isReactionEmoji,
   type MemberAction,
   type ReactionEmoji,
   stateFromRow,
@@ -31,12 +30,9 @@ import {
 import { createPrediction } from './prediction';
 import { wireReactions } from './reactionFeed';
 import { createRemoteViews } from './remoteView';
+import type { RowOf } from './rows';
 
 export type { ConnectionStatus } from './lifecycle';
-
-/** A generated row type, inferred because the bindings don't re-export them. */
-type RowOf<T extends keyof DbConnection['db']> =
-  ReturnType<DbConnection['db'][T]['iter']> extends Iterator<infer R> ? R : never;
 
 /** The generated own/remote player row type (all columns). */
 type PlayerRow = RowOf<'player'>;
@@ -419,18 +415,12 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     });
 
     // Reactions: display-only wiring, row events only (no seed) — see
-    // reactionFeed.ts. The emoji is palette-validated server-side, but the
-    // narrowing here is client-side trust hygiene: a non-palette string in
-    // the row (impossible through send_reaction) renders nothing rather
-    // than arbitrary text on the canvas.
+    // reactionFeed.ts, which also owns the palette narrowing of the raw
+    // row string.
     wireReactions(c, myIdHex, {
       isStale: stale,
-      showLocalReaction: (emoji) => {
-        if (isReactionEmoji(emoji)) gameApp.showLocalReaction(emoji);
-      },
-      showRemoteReaction: (idHex, emoji) => {
-        if (isReactionEmoji(emoji)) gameApp.showRemoteReaction(idHex, emoji);
-      },
+      showLocalReaction: (emoji) => gameApp.showLocalReaction(emoji),
+      showRemoteReaction: (idHex, emoji) => gameApp.showRemoteReaction(idHex, emoji),
     });
 
     // Every handler below refuses to run once stale: the socket closes

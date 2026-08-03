@@ -205,6 +205,10 @@ export function ChatPanel({
     chargedFromRef.current = undefined;
   }, [sendRefused]);
 
+  // The one gate for both send controls: the reaction row and the message
+  // form need the same player row to speak from.
+  const disabled = chatDisabled(connected, ownName);
+
   const submit = (draft: string): string | undefined => {
     const verdict = normalizeChatText(draft);
     if (!verdict.ok) return REJECT_MESSAGES[verdict.reason];
@@ -230,9 +234,9 @@ export function ChatPanel({
           ))}
         </div>
       )}
-      <ReactionRow disabled={chatDisabled(connected, ownName)} onSendReaction={onSendReaction} />
+      <ReactionRow disabled={disabled} onSendReaction={onSendReaction} />
       <DraftForm
-        disabled={chatDisabled(connected, ownName)}
+        disabled={disabled}
         placeholder="メッセージを送信"
         ariaLabel="チャット入力"
         buttonLabel="送信"

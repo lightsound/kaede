@@ -52,13 +52,11 @@ export const REACTION_SEND_COST_MICROS = 1_000_000n;
 /** Burst allowance: reactions that may land back-to-back (e.g. 👍 then 🎉). */
 export const REACTION_BURST_SENDS = 5;
 
-export type ReactionSendVerdict = SendAllowanceVerdict;
-
 /**
  * Pure admission check for one reaction send: the shared send-rate token
  * bucket (see evaluateSendAllowance) at the reaction cost and burst. The
  * marker is persisted on the sender's reaction_guard row.
  */
-export function evaluateReactionSend(request: SendAllowanceRequest): ReactionSendVerdict {
+export function evaluateReactionSend(request: SendAllowanceRequest): SendAllowanceVerdict {
   return evaluateSendAllowance(request, REACTION_SEND_COST_MICROS, REACTION_BURST_SENDS);
 }

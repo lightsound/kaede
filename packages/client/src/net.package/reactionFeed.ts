@@ -1,16 +1,17 @@
 // fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the reaction badges; needs a running host. The palette validation and rate rule live in @maple/shared, unit-tested there
+import { isReactionEmoji, type ReactionEmoji } from '@maple/shared';
 import type { DbConnection } from '../module_bindings';
+import type { RowOf } from './rows';
 
-/** The generated reaction row type (the bindings don't re-export it). */
-type ReactionRow =
-  ReturnType<DbConnection['db']['reaction']['iter']> extends Iterator<infer R> ? R : never;
+/** The generated reaction row type. */
+type ReactionRow = RowOf<'reaction'>;
 
 /** What acting on reaction rows needs from the session that wires the feed. */
 export interface ReactionFeedHooks {
   /** True once this session's events must be ignored (see wireSession). */
   isStale(): boolean;
-  showLocalReaction(emoji: string): void;
-  showRemoteReaction(idHex: string, emoji: string): void;
+  showLocalReaction(emoji: ReactionEmoji): void;
+  showRemoteReaction(idHex: string, emoji: ReactionEmoji): void;
 }
 
 /**
@@ -26,6 +27,11 @@ export interface ReactionFeedHooks {
 export function wireReactions(c: DbConnection, myIdHex: string, hooks: ReactionFeedHooks): void {
   const show = (row: ReactionRow): void => {
     if (hooks.isStale()) return;
+    // The raw row string enters here and nowhere else, so this is where the
+    // palette narrowing lives — the server already refuses non-palette
+    // emojis (send_reaction), but a row this module cannot vouch for
+    // renders nothing rather than arbitrary text on the canvas.
+    if (!isReactionEmoji(row.emoji)) return;
     // The badge shows over whoever reacted: our own avatar, or the
     // sender's remote view. A reaction from a player whose view is not on
     // screen (hidden as offline, or already removed) is a no-op.

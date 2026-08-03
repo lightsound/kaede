@@ -6,10 +6,10 @@ import {
   insertChatMessage,
   removeChatMessage,
 } from './chatLog';
+import type { RowOf } from './rows';
 
-/** The generated chat_message row type (the bindings don't re-export it). */
-type ChatMessageRow =
-  ReturnType<DbConnection['db']['chatMessage']['iter']> extends Iterator<infer R> ? R : never;
+/** The generated chat_message row type. */
+type ChatMessageRow = RowOf<'chatMessage'>;
 
 /** What acting on chat rows needs from the session that wires the feed. */
 interface ChatFeedHooks {
