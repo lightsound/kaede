@@ -40,6 +40,7 @@ import BanMemberReducer from "./ban_member_reducer";
 import JoinReducer from "./join_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
+import SendDmReducer from "./send_dm_reducer";
 import SendReactionReducer from "./send_reaction_reducer";
 import SetAvailabilityReducer from "./set_availability_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
@@ -52,6 +53,7 @@ import UnbanMemberReducer from "./unban_member_reducer";
 
 // Import all table schema definitions
 import ChatMessageRow from "./chat_message_table";
+import DmMessageRow from "./dm_message_table";
 import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
 import PlayerStatusRow from "./player_status_table";
@@ -74,6 +76,23 @@ const tablesSchema = __schema({
       { name: 'chat_message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ChatMessageRow),
+  dmMessage: __table({
+    name: 'dm_message',
+    indexes: [
+      { accessor: 'id', name: 'dm_message_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'recipient', name: 'dm_message_recipient_idx_btree', algorithm: 'btree', columns: [
+        'recipient',
+      ] },
+      { accessor: 'sender', name: 'dm_message_sender_idx_btree', algorithm: 'btree', columns: [
+        'sender',
+      ] },
+    ],
+    constraints: [
+      { name: 'dm_message_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, DmMessageRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -150,6 +169,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join", JoinReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),
+  __reducerSchema("send_dm", SendDmReducer),
   __reducerSchema("send_reaction", SendReactionReducer),
   __reducerSchema("set_availability", SetAvailabilityReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),

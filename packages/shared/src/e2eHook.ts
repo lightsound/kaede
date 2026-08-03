@@ -40,17 +40,23 @@ export interface E2EHook {
 }
 
 /**
- * Outbound reducer-call counters, mutated in place by the client's network
- * layer (sync.ts). What the idle-suppression specs assert on: while a
- * player stands still the ONLY way to see that nothing is sent is to count
- * the sends — position snapshots cannot distinguish "still because idle"
- * from "still because suppressed".
+ * Network-layer counters, mutated in place by the client's network layer
+ * (sync.ts). The outbound pair is what the idle-suppression specs assert
+ * on: while a player stands still the ONLY way to see that nothing is sent
+ * is to count the sends — position snapshots cannot distinguish "still
+ * because idle" from "still because suppressed". The inbound DM counter is
+ * the same idea pointed the other way: privacy means rows NOT arriving,
+ * which no DOM or canvas assertion can prove (a display filter could hide
+ * a delivered row), so the DM spec reads how many rows actually crossed
+ * the wire.
  */
 export interface E2ENetStats {
   /** submit_inputs calls carrying input ticks (movement batches). */
   inputBatchesSent: number;
   /** Empty submit_inputs calls (the idle-suppression liveness heartbeat). */
   heartbeatsSent: number;
+  /** dm_message rows handed to this client (subscription seed + insert events). */
+  dmRowsReceived: number;
 }
 
 declare global {

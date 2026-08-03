@@ -1,15 +1,16 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, rate limits, retention) are delegated to normalizeChatText / isReactionEmoji / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @maple/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, mention resolution, rate limits, retention) are delegated to normalizeChatText / planChatDraft / isReactionEmoji / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @maple/shared and unit-tested there
 
 // The posting reducers (ROADMAP Phase 2): what someone in the world says,
-// gestures or claims about themselves — the global-scope chat, the emoji
-// reactions and the manual status. Split from reducers.ts (which keeps the
-// world lifecycle, membership and settings) because this section grows
-// with every Phase 2/3 conversation feature while depending on the
-// lifecycle only through findAdmittedWorldRows.
+// gestures or claims about themselves — the global-scope chat, the
+// @mention DMs, the emoji reactions and the manual status. Split from
+// reducers.ts (which keeps the world lifecycle, membership and settings)
+// because this section grows with every Phase 2/3 conversation feature
+// while depending on the lifecycle only through findAdmittedWorldRows.
 import {
   type Availability,
   CHAT_HISTORY_MAX,
   chatOverflowIds,
+  DM_HISTORY_MAX,
   evaluateChatSend,
   evaluateReactionSend,
   evaluateStatusSend,
@@ -111,17 +112,24 @@ function writeSendAllowance(
   guardTable.insert({ identity: ctx.sender, allowanceMicros });
 }
 
+/** A message-history table as the retention trim needs it (id = send order). */
+interface HistoryTable {
+  iter(): Iterable<{ id: bigint }>;
+  id: { delete(id: bigint): unknown };
+}
+
 /**
  * Deletes the oldest messages beyond the retention cap (保持方針 — see the
- * chat_message table comment for why row count is the budget that matters).
- * Runs after every accepted send, so the table can only ever exceed
- * CHAT_HISTORY_MAX by the one row just inserted and the enumeration stays
- * cheap.
+ * chat_message table comment for why row count is the budget that matters,
+ * and DM_HISTORY_MAX for what the dm_message cap bounds instead). Runs
+ * after every accepted send, so a table can only ever exceed its cap by
+ * the one row just inserted and the enumeration stays cheap. One function
+ * for both history tables — the same rule, deliberately not cloned.
  */
-function trimChatHistory(ctx: Ctx): void {
-  const ids = [...ctx.db.chatMessage.iter()].map((row) => row.id);
-  for (const id of chatOverflowIds(ids, CHAT_HISTORY_MAX)) {
-    ctx.db.chatMessage.id.delete(id);
+function trimHistory(table: HistoryTable, max: number): void {
+  const ids = [...table.iter()].map((row) => row.id);
+  for (const id of chatOverflowIds(ids, max)) {
+    table.id.delete(id);
   }
 }
 
@@ -171,8 +179,78 @@ export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, {
     text: verdict.text,
     sentAt: ctx.timestamp,
   });
-  trimChatHistory(ctx);
+  trimHistory(ctx.db.chatMessage, CHAT_HISTORY_MAX);
 });
+
+/**
+ * The recipient's current display name, or a loud refusal when the DM has
+ * nowhere valid to go. What "valid" means is the recipient-eligibility
+ * decision (recorded in the PR): present in the world AND online — the rule
+ * the sender's client resolved the mention against (its candidate list is
+ * the online players it renders), re-checked here because client resolution
+ * is never trusted with row creation: an invented identity must not get
+ * rows accumulated for it, and a resolution raced by the recipient leaving
+ * must fail loudly rather than write history addressed to nobody. Checking
+ * `online` (not the mere row, which lingers ~10 minutes after leaving)
+ * keeps the server's notion of "addressable" the same as the sender's
+ * screen. The name row is a sibling of the player row by construction; a
+ * missing one is the broken-pair case, refused the same way rather than
+ * snapshotting an empty name.
+ */
+function resolveDmRecipientName(ctx: Ctx, recipient: SenderIdentity): string {
+  const row = ctx.db.player.identity.find(recipient);
+  const nameRow = ctx.db.playerName.identity.find(recipient);
+  if (row === null || !row.online || nameRow === null) {
+    throw new SenderError('send_dm refused (recipient-not-in-world)');
+  }
+  return nameRow.name;
+}
+
+// Sends one @mention DM (ROADMAP Phase 2): a private message delivered only
+// to its sender and recipient by the dm_message row-level-security filter
+// (see tables.ts). The argument is the RESOLVED recipient identity, not the
+// mentioned name — the client resolves the mention against the players on
+// its screen (planChatDraft in @maple/shared, where the rules are
+// unit-tested) so the message goes to whoever the sender was looking at,
+// not to whoever holds the name by the time the call lands (rename races).
+// The server re-validates what it must never take on faith: the sender's
+// eligibility (findPostingSender — presence in the world plus the admission
+// re-check, exactly send_chat_message's; guests may DM whenever they may be
+// in the world, on both ends), the body (the shared chat text rules), and
+// the recipient (resolveDmRecipientName above).
+//
+// The rate charge goes against the sender's CHAT bucket, deliberately not a
+// dm_guard of its own: DMs are sent from the same chat input, whose
+// client-side mirror (ChatPanel's allowanceRef) charges per submit without
+// knowing which kind it was — a separate server bucket would let the mirror
+// and the authority drift apart on every DM (the reverse of the reason
+// reaction_guard is separate). One bucket also means one flood cap over
+// everything a person can type into the room.
+//
+// Which refusals are loud follows sendChatMessage's rule verbatim: every
+// throw above and inside chargeSendAllowance happens before any write; the
+// reclaim path stays silent because its row deletion must commit.
+export const sendDm = spacetimedb.reducer(
+  { recipient: t.identity(), text: t.string() },
+  (ctx, { recipient, text }) => {
+    const found = findPostingSender(ctx, 'send_dm');
+    if (!found) return;
+    const verdict = normalizeChatText(text);
+    if (!verdict.ok) throw new SenderError(`send_dm refused (${verdict.reason})`);
+    const recipientName = resolveDmRecipientName(ctx, recipient);
+    chargeSendAllowance(ctx, ctx.db.chatGuard, evaluateChatSend, 'send_dm');
+    ctx.db.dmMessage.insert({
+      id: 0n, // 0 asks autoInc to assign the real id
+      sender: ctx.sender,
+      recipient,
+      senderName: found.nameRow.name,
+      recipientName,
+      text: verdict.text,
+      sentAt: ctx.timestamp,
+    });
+    trimHistory(ctx.db.dmMessage, DM_HISTORY_MAX);
+  },
+);
 
 /** An identity-keyed table, as the upsert-row features (reaction, status) shape theirs. */
 interface IdentityKeyedTable<Row extends { identity: SenderIdentity }> {

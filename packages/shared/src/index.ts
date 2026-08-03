@@ -2,6 +2,7 @@ export * from './auth';
 export * from './chat';
 export * from './constants';
 export * from './displayName';
+export * from './dm';
 export * from './e2eHook';
 export * from './guard';
 export * from './input';

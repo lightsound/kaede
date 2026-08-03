@@ -1,15 +1,16 @@
 // fallow-ignore-file coverage-gaps -- a React chat panel; needs a DOM, and no DOM test environment is configured. The validation and rate rules it relies on are normalizeChatText / evaluateChatSend, unit-tested in @maple/shared
 import {
   CHAT_TEXT_MAX_LENGTH,
-  type ChatTextRejectReason,
+  type ChatDraftPlan,
+  type ChatDraftRejectReason,
   evaluateChatSend,
-  normalizeChatText,
   REACTION_EMOJIS,
   type ReactionEmoji,
 } from '@maple/shared';
 import { type CSSProperties, useEffect, useRef } from 'react';
-import type { ChatLog } from '../net.package';
+import { type ChatEntryView, type ChatLog, chatEntryKey } from '../net.package';
 import {
+  UI_DM_COLOR,
   UI_ERROR_COLOR,
   UI_FONT,
   UI_GOLD,
@@ -20,10 +21,16 @@ import {
 } from '../theme';
 import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
 
-const REJECT_MESSAGES: Record<ChatTextRejectReason, string> = {
+const REJECT_MESSAGES: Record<ChatDraftRejectReason, string> = {
   empty: 'メッセージを入力してください',
   'too-long': `メッセージは${CHAT_TEXT_MAX_LENGTH}文字以内にしてください`,
   'forbidden-characters': '使用できない文字が含まれています',
+  // The @-leading draft resolved to nobody. Deliberately NOT posted
+  // publicly (planChatDraft), so the message must say why nothing was sent
+  // — and that '@' is what made this a DM.
+  'dm-no-recipient': '宛先が見つかりません(@で始まる発言は在室中の相手への DM になります)',
+  'dm-ambiguous-recipient': '同じ表示名の人が複数いるため、DM を送れません',
+  'dm-empty-body': 'DM の本文を入力してください',
 };
 
 const RATE_LIMITED_MESSAGE = '送信が速すぎます。少し待ってから送ってください';
@@ -82,6 +89,29 @@ function senderStyle(own: boolean): CSSProperties {
   return { color: own ? UI_GOLD : UI_TEXT_COLOR, fontWeight: 'bold' };
 }
 
+const dmMarkStyle: CSSProperties = {
+  color: UI_DM_COLOR,
+  fontWeight: 'bold',
+};
+
+/**
+ * One log line. A DM line is marked apart from room chatter — the [DM] tag
+ * and the → 宛先 in the DM accent color — because the log holds both and a
+ * private line must never read as something the room saw. Only the sender
+ * and the recipient ever hold the row (row-level security), so no
+ * receiver-side filtering happens here.
+ */
+function LogLine({ entry }: { entry: ChatEntryView }) {
+  return (
+    <div>
+      {entry.kind === 'dm' && <span style={dmMarkStyle}>[DM] </span>}
+      <span style={senderStyle(entry.own)}>{entry.senderName}</span>
+      {entry.kind === 'dm' && <span style={dmMarkStyle}> → {entry.recipientName}</span>}{' '}
+      {entry.text}
+    </div>
+  );
+}
+
 /**
  * The reaction palette row (ROADMAP Phase 2): one button per palette emoji,
  * sitting between the log and the input row so the input stays where the
@@ -120,40 +150,50 @@ function ReactionRow({
 }
 
 /**
- * The global-scope chat panel (ROADMAP Phase 2 第一弾): the recent log over
- * the reaction palette and an input row. An INPUT element on purpose —
- * game.package/input.ts ignores key events aimed at text entry, so typing
- * here never walks the avatar.
+ * The chat panel (ROADMAP Phase 2): the recent log — public messages and
+ * this client's DMs merged — over the reaction palette and an input row.
+ * An INPUT element on purpose — game.package/input.ts ignores key events
+ * aimed at text entry, so typing here never walks the avatar.
  *
- * Sending validates and rate-limits with the exact rules the server
- * enforces (shared pure functions), so a message that leaves this form is
- * never refused for its content; the local token-bucket marker mirrors the
- * server's chat_guard purely as UX (the server's verdict is the authority).
- * The draft clears on submit — the success signal is the message coming
- * back through the subscription into the log, and the rare send lost to a
- * disconnect racing the submit is cheaper to retype than every sent
- * message is to clear by hand.
+ * One input serves both kinds: `planDraft` classifies the draft (public,
+ * @mention DM, or refused — the shared planChatDraft rules), and a refused
+ * plan shows its reason WITHOUT sending anything; in particular a mention
+ * that resolves to nobody never falls back to the public chat. Rate
+ * limiting mirrors the server's ONE chat bucket for both kinds (DMs charge
+ * chat_guard server-side precisely so this mirror stays honest); the
+ * mirror is UX — the server's verdict is the authority. The draft clears
+ * on submit — the success signal is the message coming back through the
+ * subscription into the log, and the rare send lost to a disconnect racing
+ * the submit is cheaper to retype than every sent message is to clear by
+ * hand.
  */
 export function ChatPanel({
   connected,
   ownName,
   log,
   sendRefused,
+  planDraft,
   onSend,
+  onSendDm,
   onSendReaction,
 }: {
   connected: boolean;
   /** The authoritative name from the own player row; undefined without one. */
   ownName: string | undefined;
-  /** The subscribed chat history, ascending by send order. */
+  /** The subscribed chat+DM history, ascending by send order. */
   log: ChatLog;
   /**
    * True after a send was dropped or refused server-side (e.g. the
-   * per-identity rate bucket shared with another tab): the draft was
-   * already cleared, so this notice is the only trace the sender gets.
+   * per-identity rate bucket shared with another tab, or a DM recipient
+   * who left mid-flight): the draft was already cleared, so this notice is
+   * the only trace the sender gets.
    */
   sendRefused: boolean;
+  /** Classifies one draft (public / DM / refused) — see Net.planChatSend. */
+  planDraft: (draft: string) => ChatDraftPlan;
   onSend: (text: string) => void;
+  /** Sends one DM to the recipient a plan resolved. */
+  onSendDm: (recipientKey: string, text: string) => void;
   /** Sends one palette-emoji reaction (fire-and-forget; see ReactionRow). */
   onSendReaction: (emoji: ReactionEmoji) => void;
 }) {
@@ -187,8 +227,8 @@ export function ChatPanel({
   const disabled = postingDisabled(connected, ownName);
 
   const submit = (draft: string): string | undefined => {
-    const verdict = normalizeChatText(draft);
-    if (!verdict.ok) return REJECT_MESSAGES[verdict.reason];
+    const plan = planDraft(draft);
+    if (plan.kind === 'refused') return REJECT_MESSAGES[plan.reason];
     const send = evaluateChatSend({
       allowanceMicros: allowanceRef.current,
       nowMicros: BigInt(Date.now()) * 1000n,
@@ -196,7 +236,8 @@ export function ChatPanel({
     if (!send.ok) return RATE_LIMITED_MESSAGE;
     chargedFromRef.current = allowanceRef.current;
     allowanceRef.current = send.allowanceMicros;
-    onSend(verdict.text);
+    if (plan.kind === 'dm') onSendDm(plan.recipientKey, plan.text);
+    else onSend(plan.text);
     return undefined;
   };
 
@@ -205,9 +246,7 @@ export function ChatPanel({
       {log.length > 0 && (
         <div ref={logRef} role="log" aria-label="チャットログ" style={logStyle}>
           {log.map((m) => (
-            <div key={m.id.toString()}>
-              <span style={senderStyle(m.own)}>{m.senderName}</span> {m.text}
-            </div>
+            <LogLine key={chatEntryKey(m)} entry={m} />
           ))}
         </div>
       )}

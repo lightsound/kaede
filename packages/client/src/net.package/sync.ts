@@ -1,19 +1,21 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
 import {
   type Availability,
+  type ChatDraftPlan,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
   type MemberAction,
+  planChatDraft,
   type ReactionEmoji,
   type StatusView,
   stateFromRow,
   statusLabel,
 } from '@maple/shared';
-import type { Identity } from 'spacetimedb';
+import { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
-import { createChatFeed } from './chatFeed';
+import { createChatFeed, dmCandidatesOf } from './chatFeed';
 import type { ChatLog } from './chatLog';
 import { type AuthTokenGetter, type Connected, connect, target } from './connection';
 import { createHeartbeat } from './heartbeat';
@@ -81,7 +83,7 @@ function runEffect<K extends LifecycleEffect['kind']>(
  */
 function installNetStats(): E2ENetStats | undefined {
   if (!import.meta.env.DEV) return undefined;
-  const stats: E2ENetStats = { inputBatchesSent: 0, heartbeatsSent: 0 };
+  const stats: E2ENetStats = { inputBatchesSent: 0, heartbeatsSent: 0, dmRowsReceived: 0 };
   window.__mapleE2ENet = stats;
   return stats;
 }
@@ -122,6 +124,25 @@ export interface Net {
    * dropped call has no visible "nothing changed" signal to fall back on.
    */
   sendChatMessage(text: string): void;
+  /**
+   * Classifies one chat draft: public message, DM (with the mention
+   * resolved against who is in the world and online RIGHT NOW, read from
+   * the subscribed cache), or refused. The rules are the pure planChatDraft
+   * in @maple/shared — this method only supplies the live candidate list
+   * (empty while disconnected, so an @mention refuses rather than
+   * resolving against stale rows). The caller sends the plan's text
+   * through sendChatMessage or sendDm; splitting plan from send keeps the
+   * panel's rate-limit mirror charging in between, exactly once per kind.
+   */
+  planChatSend(draft: string): ChatDraftPlan;
+  /**
+   * Sends one DM (send_dm) to the identity a plan resolved (its
+   * recipientKey). Success arrives as a dm_message row event — the log
+   * line comes from it, so the sender sees exactly what the recipient
+   * received. Failures report through NetHooks.onChatRefused like a public
+   * send: the panel cleared the draft optimistically either way.
+   */
+  sendDm(recipientKey: string, text: string): void;
   /**
    * Posts one palette-emoji reaction (send_reaction). Success arrives as a
    * reaction row event — the badge over the sender's avatar comes from it,
@@ -166,11 +187,12 @@ export interface NetHooks {
    */
   onOwnStatus(view: StatusView): void;
   /**
-   * A chat send that will never land: dropped while disconnected, or
-   * refused by the server after the client-side mirror let it through
-   * (e.g. the per-identity rate bucket shared by a member's other tab —
-   * the mirror is per-tab). The panel surfaces it; without this the
-   * cleared draft would just silently vanish.
+   * A chat or DM send that will never land: dropped while disconnected, or
+   * refused by the server after the client-side checks let it through
+   * (the per-identity rate bucket shared by a member's other tab — the
+   * mirror is per-tab — or a DM recipient who left between the mention
+   * resolving and the call landing). The panel surfaces it; without this
+   * the cleared draft would just silently vanish.
    */
   onChatRefused(): void;
 }
@@ -482,6 +504,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       isStale: stale,
       showLocalBubble: (text) => gameApp.showLocalBubble(text),
       showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
+      countDmRow: () => bumpStat('dmRowsReceived'),
     });
 
     // Reactions: display-only wiring, row events only (no seed) — see
@@ -770,6 +793,16 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       callReducer(
         'send_chat_message',
         (c) => c.reducers.sendChatMessage({ text }),
+        hooks.onChatRefused,
+      );
+    },
+    planChatSend(draft) {
+      return planChatDraft(draft, conn ? dmCandidatesOf(conn) : []);
+    },
+    sendDm(recipientKey, text) {
+      callReducer(
+        'send_dm',
+        (c) => c.reducers.sendDm({ recipient: Identity.fromString(recipientKey), text }),
         hooks.onChatRefused,
       );
     },
