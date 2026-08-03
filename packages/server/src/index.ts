@@ -9,3 +9,7 @@ export default spacetimedb;
 // lifecycle helpers both files build on live in world.ts (not re-exported).
 export * from './posting';
 export * from './reducers';
+// The dm_message row-level-security filter is a spacetime export too: the
+// host only applies a filter that reaches it through the entry module.
+// fallow-ignore-next-line unused-export -- the SpacetimeDB host registers the RLS filter from this export; no in-repo importer exists
+export { dmMessageVisibility } from './tables';

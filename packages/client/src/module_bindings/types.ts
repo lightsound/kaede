@@ -34,6 +34,17 @@ export const ChatMessage = __t.object("ChatMessage", {
 });
 export type ChatMessage = __Infer<typeof ChatMessage>;
 
+export const DmMessage = __t.object("DmMessage", {
+  id: __t.u64(),
+  sender: __t.identity(),
+  recipient: __t.identity(),
+  senderName: __t.string(),
+  recipientName: __t.string(),
+  text: __t.string(),
+  sentAt: __t.timestamp(),
+});
+export type DmMessage = __Infer<typeof DmMessage>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   x: __t.f64(),

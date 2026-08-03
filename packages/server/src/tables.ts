@@ -146,8 +146,9 @@ export const spacetimedb = schema({
   // per the scaling invariant no tenant/org column may appear here. The
   // planned extensions are all additive: Phase 3 chat scopes append a
   // scope discriminator + target column with defaults ('space'-scoped rows
-  // read as today's), DMs need private delivery so they land in a table of
-  // their own, and reactions reference `id` from their own table.
+  // read as today's), and reactions reference `id` from their own table.
+  // DMs needed private delivery, so they landed in a table of their own —
+  // `dm_message` below, additively, exactly as planned here.
   //
   // `senderName` snapshots the display name at send time because the
   // history outlives every other name source: player rows are swept ~10
@@ -167,9 +168,12 @@ export const spacetimedb = schema({
   // guest default is "no space_member row AND guests_allowed (missing row
   // = true)", which needs NOT EXISTS and default-on-missing semantics
   // outside the filter SQL subset — and a members-only filter would cut
-  // guests off entirely. Revisit with the Phase 3 chat scopes: closed
-  // conversation groups need filtered reads anyway, so the mechanism (and
-  // this table's read gate) lands with that design.
+  // guests off entirely. What the filter SQL CAN express is a per-row
+  // sender/recipient rule, which is exactly how `dm_message` gets its
+  // private delivery (verified locally and on Maincloud with non-owner
+  // connections, 2026-08-03). Revisit this table's read gate with the
+  // Phase 3 chat scopes: closed conversation groups need filtered reads
+  // anyway, so the mechanism is now proven and the design lands there.
   chatMessage: table(
     { name: 'chat_message', public: true },
     {
@@ -284,6 +288,47 @@ export const spacetimedb = schema({
       text: t.string(), // free-text status line, '' while unset
     },
   ),
+  // The @mention DM history (ROADMAP Phase 2) — chat_message's shape with a
+  // recipient, in a table of its own because delivery is PRIVATE: the
+  // row-level-security filter below (dmMessageVisibility) hands each row
+  // only to its sender and its recipient, which no column on the public
+  // chat table could do. The table itself is still `public: true` — RLS
+  // filters what a public table's subscription yields per connection; a
+  // non-public table would yield nothing to anyone.
+  //
+  // - `sender` and `recipient` carry btree indexes because the RLS filter
+  //   selects on them and subscription queries are re-evaluated per
+  //   transaction — without indexes every commit would table-scan on every
+  //   subscriber's behalf (the ROADMAP AoI rule, applied here).
+  // - BOTH names are snapshotted at send time, for the same reason
+  //   chat_message snapshots senderName: the history outlives every name
+  //   source (player rows sweep ~10 minutes after leaving, a guest identity
+  //   is per-tab), and a render-time recipient lookup would leave the other
+  //   side of an old conversation nameless the moment they left.
+  // - Retention is one global cap, DM_HISTORY_MAX in @maple/shared (see its
+  //   comment for why a per-pair cap would grow storage without bound), and
+  //   rows deliberately do NOT ride removePlayer: the reaction /
+  //   player_status "rows die with the player" rule is for ephemeral state,
+  //   while history outlives the player rows (the chat_message precedent) —
+  //   a member leaving must not erase the other member's copy of their
+  //   conversation. Rows whose both identities are gone (two closed guest
+  //   tabs) are displaced by the cap like any other row.
+  // - Like every conversation table: the single space's data, no tenant/org
+  //   column (the scaling invariant). Message-attached reactions, read
+  //   state and notification bookkeeping, if ever wanted, land additively
+  //   in tables referencing `id`.
+  dmMessage: table(
+    { name: 'dm_message', public: true },
+    {
+      id: t.u64().primaryKey().autoInc(),
+      sender: t.identity().index(),
+      recipient: t.identity().index(),
+      senderName: t.string(),
+      recipientName: t.string(),
+      text: t.string(),
+      sentAt: t.timestamp(),
+    },
+  ),
   // The status rate limit's token-bucket marker — chat_guard's shape, for
   // set_availability / set_status_text. Honest writes are a few per day,
   // but a status write is a public-row broadcast to every subscriber and a
@@ -301,3 +346,14 @@ export const spacetimedb = schema({
     },
   ),
 });
+
+// Row-level security for dm_message: a connection is handed only the rows it
+// sent or received (:sender is the subscriber's identity). One filter with
+// OR — verified to work as a single filter (2026-08-03 spike, non-owner
+// connections; the fallback of two filters unioned was not needed). The
+// module owner bypasses RLS (`spacetimedb-cli sql` reads everything), which
+// is why the spike had to prove privacy with ordinary client connections.
+// Registered by being a module export (index.ts re-exports it).
+export const dmMessageVisibility = spacetimedb.clientVisibilityFilter.sql(
+  'SELECT * FROM dm_message WHERE sender = :sender OR recipient = :sender',
+);

@@ -8,6 +8,7 @@ import {
   type ChatLog,
   type ConnectionStatus,
   type Net,
+  planChatDraftOffline,
   type SpaceView,
   startNet,
 } from './net.package';
@@ -148,9 +149,13 @@ export function App() {
         ownName={ownName}
         log={chatLog}
         sendRefused={chatSendRefused}
-        onSend={(text) => {
+        // The netRef-less fallback (mount not finished — the panel is
+        // disabled then anyway) delegates to the same no-session rule
+        // Net.planChatSend applies, so the rule has one home.
+        planDraft={(draft) => netRef.current?.planChatSend(draft) ?? planChatDraftOffline(draft)}
+        onSendPlan={(plan) => {
           setChatSendRefused(false);
-          netRef.current?.sendChatMessage(text);
+          netRef.current?.sendPlanned(plan);
         }}
         onSendReaction={(emoji) => netRef.current?.sendReaction(emoji)}
       />
