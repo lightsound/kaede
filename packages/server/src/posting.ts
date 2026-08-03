@@ -9,7 +9,6 @@
 import {
   type Availability,
   CHAT_HISTORY_MAX,
-  chatOverflowIds,
   DM_HISTORY_MAX,
   evaluateChatSend,
   evaluateReactionSend,
@@ -24,7 +23,13 @@ import {
 } from '@maple/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, findAdmittedWorldRows, type SenderIdentity, type WorldRows } from './world';
+import {
+  type Ctx,
+  findAdmittedWorldRows,
+  type SenderIdentity,
+  trimHistory,
+  type WorldRows,
+} from './world';
 
 /**
  * The shared preamble of every posting reducer (send_chat_message /
@@ -110,27 +115,6 @@ function writeSendAllowance(
     return;
   }
   guardTable.insert({ identity: ctx.sender, allowanceMicros });
-}
-
-/** A message-history table as the retention trim needs it (id = send order). */
-interface HistoryTable {
-  iter(): Iterable<{ id: bigint }>;
-  id: { delete(id: bigint): unknown };
-}
-
-/**
- * Deletes the oldest messages beyond the retention cap (保持方針 — see the
- * chat_message table comment for why row count is the budget that matters,
- * and DM_HISTORY_MAX for what the dm_message cap bounds instead). Runs
- * after every accepted send, so a table can only ever exceed its cap by
- * the one row just inserted and the enumeration stays cheap. One function
- * for both history tables — the same rule, deliberately not cloned.
- */
-function trimHistory(table: HistoryTable, max: number): void {
-  const ids = [...table.iter()].map((row) => row.id);
-  for (const id of chatOverflowIds(ids, max)) {
-    table.id.delete(id);
-  }
 }
 
 // Posts one message to the global-scope chat (ROADMAP Phase 2 第一弾).

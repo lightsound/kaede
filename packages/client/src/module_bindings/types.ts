@@ -34,6 +34,22 @@ export const ChatMessage = __t.object("ChatMessage", {
 });
 export type ChatMessage = __Infer<typeof ChatMessage>;
 
+export const ConnectionEvent = __t.object("ConnectionEvent", {
+  id: __t.u64(),
+  identity: __t.identity(),
+  connectionId: __t.connectionId(),
+  kind: __t.string(),
+  detail: __t.string(),
+  at: __t.timestamp(),
+});
+export type ConnectionEvent = __Infer<typeof ConnectionEvent>;
+
+export const DisconnectIntent = __t.object("DisconnectIntent", {
+  connectionId: __t.connectionId(),
+  announcedAt: __t.timestamp(),
+});
+export type DisconnectIntent = __Infer<typeof DisconnectIntent>;
+
 export const DmMessage = __t.object("DmMessage", {
   id: __t.u64(),
   sender: __t.identity(),

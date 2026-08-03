@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AnnounceIdleSuspendReducer from "./announce_idle_suspend_reducer";
 import ApplyForMembershipReducer from "./apply_for_membership_reducer";
 import ApproveMemberReducer from "./approve_member_reducer";
 import BanMemberReducer from "./ban_member_reducer";
@@ -163,6 +164,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("announce_idle_suspend", AnnounceIdleSuspendReducer),
   __reducerSchema("apply_for_membership", ApplyForMembershipReducer),
   __reducerSchema("approve_member", ApproveMemberReducer),
   __reducerSchema("ban_member", BanMemberReducer),
