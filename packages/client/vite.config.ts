@@ -1,9 +1,14 @@
+import { fileURLToPath } from 'node:url';
 import posthogRollupPlugin from '@posthog/rollup-plugin';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type PluginOption } from 'vite';
 
-/** リポジトリルート(Stripe Projects 管理の .env が置かれている場所)。 */
-const REPO_ROOT = new URL('../..', import.meta.url).pathname;
+/**
+ * リポジトリルート(Stripe Projects 管理の .env が置かれている場所)。
+ * URL.pathname は Windows で `/C:/...` になり Node の fs が拒むため
+ * fileURLToPath で変換する。
+ */
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 /**
  * PostHog の認証情報の読み口 — .env の手編集・リネームはしない(Stripe

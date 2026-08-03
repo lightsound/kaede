@@ -27,6 +27,26 @@ describe('exceptionFingerprint', () => {
     expect(a).toContain('tick');
   });
 
+  it('フレームはエラー発生地点(末尾)を見る — 先頭はエントリポイント', () => {
+    // posthog-js のフレームは oldest-first: 先頭が main、末尾が throw した場所。
+    const fp = exceptionFingerprint({
+      $exception_list: [
+        {
+          type: 'TypeError',
+          value: 'boom',
+          stacktrace: {
+            frames: [
+              { filename: 'index.js', function: 'main', lineno: 1 },
+              { filename: 'ticker.js', function: 'update', lineno: 99 },
+            ],
+          },
+        },
+      ],
+    });
+    expect(fp).toContain('update');
+    expect(fp).not.toContain('main');
+  });
+
   it('場所が違えば別の指紋になる', () => {
     const other = exceptionFingerprint({
       $exception_list: [

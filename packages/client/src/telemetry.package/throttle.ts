@@ -31,7 +31,9 @@ const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /**
  * $exception イベントのプロパティから同一性のキーを作る。型＋メッセージ＋
- * 先頭フレーム(ファイル・関数・行)で「同じ場所の同じエラー」をまとめる。
+ * エラー発生地点のフレーム(ファイル・関数・行)で「同じ場所の同じエラー」を
+ * まとめる。posthog-js のフレームは Sentry 流の oldest-first(先頭が
+ * エントリポイント、末尾が throw した場所)なので、見るのは**末尾**。
  * PostHog サーバー側のグルーピングを置き換えるものではなく、クライアントを
  * 出る前の水門としての近似で十分 — 形が読めなければ固定キーに落ちて、
  * 未知の形の例外も1つの束としてレートに服する(素通りさせない)。
@@ -41,7 +43,7 @@ export function exceptionFingerprint(properties: Record<string, unknown> | undef
   if (!Array.isArray(list) || list.length === 0) return 'unknown';
   const first = (list[0] ?? {}) as ExceptionItem;
   const frames = first.stacktrace?.frames;
-  const top = (Array.isArray(frames) ? (frames[0] ?? {}) : {}) as ExceptionFrame;
+  const top = (Array.isArray(frames) ? (frames[frames.length - 1] ?? {}) : {}) as ExceptionFrame;
   const lineno = typeof top.lineno === 'number' ? String(top.lineno) : '';
   return [
     asString(first.type),
