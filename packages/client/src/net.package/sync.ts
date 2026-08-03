@@ -189,6 +189,9 @@ const MEMBER_ACTION_CALLS: Record<
  */
 export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks: NetHooks): Net {
   const remoteViews = createRemoteViews();
+  // The chat log and bubbles, wired per session (wireSession); the feed
+  // owns the log across sessions (see chatFeed.ts).
+  const chatFeed = createChatFeed(hooks.onChat);
   let conn: DbConnection | undefined;
   // The whole retry/suspension/generation bookkeeping lives in this pure
   // state (see lifecycle.ts); everything below reads it through `life`.
@@ -244,10 +247,6 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // dispose-guarded at its entry point (see wireSession's handlers) —
   // dispose() itself is the only caller that may run after the flip, and
   // only with `undefined`.
-  // The chat log and bubbles, wired per session below; the feed owns the
-  // log across sessions (see chatFeed.ts).
-  const chatFeed = createChatFeed(hooks.onChat);
-
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
     if (name === lastOwnName) return;
