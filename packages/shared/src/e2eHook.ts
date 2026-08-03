@@ -40,8 +40,14 @@ export interface E2EHook {
 }
 
 /**
- * Network-layer counters, mutated in place by the client's network layer
- * (sync.ts). The outbound pair is what the idle-suppression specs assert
+ * Network-layer counters, mutated in place by two writers: the client's
+ * network layer (sync.ts — the installer and owner of the object, which
+ * bumps the send and row counters) and the notification glue
+ * (notify.package's notifier, which bumps dmNotifyDecisions). The second
+ * writer holds no reference across calls — it re-reads the window field
+ * per decision — and DM rows only flow while a net stack is live, so the
+ * object it writes is always the live stack's (never a disposed one's).
+ * The outbound pair is what the idle-suppression specs assert
  * on: while a player stands still the ONLY way to see that nothing is sent
  * is to count the sends — position snapshots cannot distinguish "still
  * because idle" from "still because suppressed". The inbound DM counter is
@@ -57,6 +63,15 @@ export interface E2ENetStats {
   heartbeatsSent: number;
   /** dm_message rows handed to this client (subscription seed + insert events). */
   dmRowsReceived: number;
+  /**
+   * DM rows this client DECIDED to notify for (shouldNotifyDm returned
+   * true), counted before the Notification is constructed and regardless
+   * of whether construction succeeds — an OS notification itself is
+   * unobservable from a test, so the decision count is what the
+   * notification spec asserts on (the dmRowsReceived idea pointed at the
+   * outbound side of notifications).
+   */
+  dmNotifyDecisions: number;
 }
 
 declare global {
@@ -69,7 +84,11 @@ declare global {
      * install-timing implementation detail.
      */
     __mapleE2E?: E2EHook;
-    /** Outbound send counters; installed by the client's sync.ts, dev builds only. */
+    /**
+     * Net-layer counters; installed and torn down by the client's sync.ts,
+     * dev builds only. dmNotifyDecisions is written by notify.package's
+     * notifier (see the E2ENetStats doc for the lifecycle invariant).
+     */
     __mapleE2ENet?: E2ENetStats;
   }
 }

@@ -12,6 +12,7 @@ import {
   type SpaceView,
   startNet,
 } from './net.package';
+import { dmNotifier } from './notify.package';
 import { RenameControl } from './profile.package';
 import { AdminSection, AdmissionOverlay, ApplyBanner } from './space.package';
 import { StatusControl } from './status.package';
@@ -91,6 +92,10 @@ export function App() {
         onChat: setChatLog,
         onChatRefused: () => setChatSendRefused(true),
         onOwnStatus: setOwnStatus,
+        // The DM → browser-notification pipeline: the notifier decides
+        // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
+        // so no state rides this hook.
+        onDmRow: (event) => dmNotifier().onDmRow(event),
       });
     })();
 

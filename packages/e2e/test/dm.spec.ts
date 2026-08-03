@@ -1,12 +1,6 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
 import { expect, type Page, test } from '@playwright/test';
-import { enterWorld, snapshot } from './helpers';
-
-/** Fills the chat input and submits (Enter — the chat.spec way). */
-async function sendChat(page: Page, text: string): Promise<void> {
-  await page.getByLabel('チャット入力').fill(text);
-  await page.getByLabel('チャット入力').press('Enter');
-}
+import { enterWorld, netStats, sendChat, snapshot } from './helpers';
 
 /**
  * How many dm_message rows this client's subscription has been handed
@@ -15,12 +9,8 @@ async function sendChat(page: Page, text: string): Promise<void> {
  * a display-layer filter over leaked rows, so the spec asserts on what
  * actually crossed the wire.
  */
-function dmRowsReceived(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const stats = window.__mapleE2ENet;
-    if (!stats) throw new Error('__mapleE2ENet hook is not installed');
-    return stats.dmRowsReceived;
-  });
+async function dmRowsReceived(page: Page): Promise<number> {
+  return (await netStats(page)).dmRowsReceived;
 }
 
 /**

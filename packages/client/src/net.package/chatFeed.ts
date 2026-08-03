@@ -1,4 +1,5 @@
 // fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the chat log and bubbles; needs a running host. The log operations it applies are pure and unit-tested (chatLog.ts)
+import type { DmRowEvent, DmRowSource } from '@maple/shared';
 import type { DbConnection } from '../module_bindings';
 import { type ChatEntryView, type ChatLog, insertChatEntry, removeChatEntry } from './chatLog';
 import type { RowOf } from './rows';
@@ -17,12 +18,16 @@ interface ChatFeedHooks {
   showRemoteBubble(idHex: string, text: string): void;
   /**
    * Called once per dm_message row this session is handed — the seed and
-   * every insert event alike. The E2E privacy probe: on a third party's
-   * client this must never fire, and only counting what actually crossed
-   * the wire can prove that (a display-layer filter could hide a leaked
-   * row from the DOM without this count moving).
+   * every insert event alike, source-tagged. Two consumers ride it (see
+   * sync.ts): the E2E privacy counter (on a third party's client this
+   * must never fire, and only counting what actually crossed the wire can
+   * prove that — a display-layer filter could hide a leaked row from the
+   * DOM without the count moving) and the browser-notification pipeline.
+   * The seed passes through on purpose: the notification rule
+   * (shouldNotifyDm) refuses seed rows, and feeding it the seed keeps that
+   * refusal an executed, E2E-probeable rule instead of a wiring accident.
    */
-  countDmRow(): void;
+  onDmRow(event: DmRowEvent): void;
 }
 
 /**
@@ -75,13 +80,23 @@ export function createChatFeed(onChat: (log: ChatLog) => void) {
         text: row.text,
         own: row.sender.toHexString() === myIdHex,
       });
+      const dmEvent = (row: DmMessageRow, source: DmRowSource): DmRowEvent => {
+        const senderKey = row.sender.toHexString();
+        return {
+          source,
+          own: senderKey === myIdHex,
+          senderName: row.senderName,
+          senderKey,
+          text: row.text,
+        };
+      };
 
       let seeded: ChatLog = [];
       for (const row of c.db.chatMessage.iter()) {
         seeded = insertChatEntry(seeded, chatView(row));
       }
       for (const row of c.db.dmMessage.iter()) {
-        hooks.countDmRow();
+        hooks.onDmRow(dmEvent(row, 'seed'));
         seeded = insertChatEntry(seeded, dmView(row));
       }
       publish(seeded);
@@ -98,7 +113,7 @@ export function createChatFeed(onChat: (log: ChatLog) => void) {
       });
       c.db.dmMessage.onInsert((_ctx, row) => {
         if (hooks.isStale()) return;
-        hooks.countDmRow();
+        hooks.onDmRow(dmEvent(row, 'event'));
         publish(insertChatEntry(log, dmView(row)));
       });
       // Retention trims (each history table keeps only its newest cap of

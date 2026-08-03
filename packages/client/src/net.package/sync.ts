@@ -1,20 +1,13 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
 import {
-  type Availability,
-  type ChatDraftPlan,
-  collectDmCandidates,
-  type DmCandidate,
+  type DmRowEvent,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
-  type MemberAction,
-  type PlannedSend,
-  planChatDraft,
-  type ReactionEmoji,
   type StatusView,
   stateFromRow,
   statusLabel,
 } from '@maple/shared';
-import { Identity } from 'spacetimedb';
+import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
@@ -35,6 +28,7 @@ import {
   type LifecycleEvent,
   transition,
 } from './lifecycle';
+import { createNetApi, type NetApi } from './netApi';
 import { createPrediction } from './prediction';
 import { wireReactions } from './reactionFeed';
 import { createRemoteViews } from './remoteView';
@@ -79,37 +73,6 @@ function runEffect<K extends LifecycleEffect['kind']>(
 }
 
 /**
- * The draft plan while no session exists: no candidates, so public drafts
- * still classify and mentions refuse. The ONE home of the
- * "disconnected means nobody to resolve against" rule — Net.planChatSend
- * delegates here, and the App-side fallback for the pre-mount instant
- * (when no Net exists to ask) is this same function through the package
- * index.
- */
-export function planChatDraftOffline(draft: string): ChatDraftPlan {
-  return planChatDraft(draft, []);
-}
-
-/**
- * Everyone a DM mention can resolve to right now, read at submit time from
- * the subscribed cache — so no state has to stream to the UI as people
- * come and go. This is only the cache projection; the eligibility rule
- * (in the world, online, named) is the pure collectDmCandidates,
- * unit-tested in @maple/shared — deliberately not the player_name table
- * alone, whose rows linger for the retention window (~10 minutes) after
- * their owner leaves.
- */
-function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
-  return collectDmCandidates(
-    [...c.db.player.iter()].map((row) => ({
-      online: row.online,
-      name: c.db.playerName.identity.find(row.identity)?.name,
-      key: row.identity.toHexString(),
-    })),
-  );
-}
-
-/**
  * 送信カウンタ(Playwright 用の読み取り専用フック)。「静止中は送信が止まる」
  * はレンダリングからは観測できないので、送った回数そのものを dev ビルド
  * だけ窓に晒す(GameApp の __mapleE2E と同じ流儀)。本番ビルドはビルド時
@@ -117,80 +80,23 @@ function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
  */
 function installNetStats(): E2ENetStats | undefined {
   if (!import.meta.env.DEV) return undefined;
-  const stats: E2ENetStats = { inputBatchesSent: 0, heartbeatsSent: 0, dmRowsReceived: 0 };
+  const stats: E2ENetStats = {
+    inputBatchesSent: 0,
+    heartbeatsSent: 0,
+    dmRowsReceived: 0,
+    dmNotifyDecisions: 0,
+  };
   window.__mapleE2ENet = stats;
   return stats;
 }
 
-export interface Net {
+/**
+ * The whole net facade: the user-action surface (NetApi — the methods every
+ * UI control calls, built in netApi.ts) plus the one lifecycle-owning
+ * method that must live with the connection state machine here.
+ */
+export interface Net extends NetApi {
   dispose(): void;
-  /**
-   * Asks the server to rename this player (set_display_name). The result
-   * arrives as an own player_name row event, which is also the caller's
-   * success signal. Failures (a disconnect racing the submit, a server
-   * rejection) only log: the form keeps its draft, so the user can see the
-   * label didn't change and resubmit.
-   */
-  setDisplayName(name: string): void;
-  /**
-   * Files (or re-files, after a rejection) this client's membership
-   * application. Success arrives as the own space_member row appearing in
-   * the subscription; the server refuses guests and duplicates.
-   */
-  applyForMembership(): void;
-  /**
-   * Admin actions: one member transition (MemberAction, on the identity a
-   * SpaceMemberView carries) or the guest-admission setting. The server
-   * re-checks that the sender is an acting admin; these methods exist for
-   * the admin panel, whose gating is cosmetic. Success arrives as
-   * space_member / space_setting row events (a fresh SpaceView); failures
-   * only log, and the unchanged view is the visible outcome.
-   */
-  memberAction(action: MemberAction, member: Identity): void;
-  setGuestsAllowed(allowed: boolean): void;
-  /**
-   * Classifies one chat draft: public message, DM (with the mention
-   * resolved against who is in the world and online RIGHT NOW, read from
-   * the subscribed cache), or refused. The rules are the pure planChatDraft
-   * in @maple/shared — this method only supplies the live candidate list
-   * (planChatDraftOffline while disconnected, so an @mention refuses
-   * rather than resolving against stale rows). The caller dispatches an
-   * accepted plan through sendPlanned; splitting plan from send keeps the
-   * panel's rate-limit mirror charging in between, exactly once per
-   * accepted plan.
-   */
-  planChatSend(draft: string): ChatDraftPlan;
-  /**
-   * Sends one accepted plan: send_chat_message for the public kind, send_dm
-   * (to the identity the plan resolved) for the DM kind — the one place
-   * that dispatches on the plan's kind. Success arrives as a chat_message /
-   * dm_message row event; the log line (and, for public messages, the
-   * speech bubble) comes from it, so the sender sees exactly what the
-   * receivers received. Failures (a disconnect racing the submit, a server
-   * refusal) log AND report through NetHooks.onChatRefused: the panel
-   * clears the draft optimistically, so unlike the other reducers a
-   * dropped call has no visible "nothing changed" signal to fall back on.
-   */
-  sendPlanned(plan: PlannedSend): void;
-  /**
-   * Posts one palette-emoji reaction (send_reaction). Success arrives as a
-   * reaction row event — the badge over the sender's avatar comes from it,
-   * so the sender sees exactly what everyone else received. Failures only
-   * log (no onChatRefused counterpart): a reaction is a transient gesture,
-   * so a refused send simply not appearing is feedback enough.
-   */
-  sendReaction(emoji: ReactionEmoji): void;
-  /**
-   * Sets the sender's availability (set_availability) or free-text status
-   * line (set_status_text; '' clears). Success arrives as a player_status
-   * row event — the line under the avatar and the control's highlight both
-   * come from it, so the sender sees exactly what everyone else received.
-   * Failures only log: the authoritative view simply not changing is the
-   * feedback (the setDisplayName rule), and the control keeps offering the
-   * retry.
-   */
-  setAvailability(availability: Availability): void;
-  setStatusText(text: string): void;
 }
 
 /**
@@ -224,18 +130,17 @@ export interface NetHooks {
    * the cleared draft would just silently vanish.
    */
   onChatRefused(): void;
+  /**
+   * Every dm_message row handed to this client (subscription seed and
+   * insert events alike, source-tagged) — the browser-notification feed.
+   * Whether a row becomes a notification, and every environment read that
+   * takes (visibility, permission, the mute), lives behind this hook
+   * (notify.package), so the net stack stays notification-agnostic.
+   * Already isStale-guarded: it fires inside the chat feed's session
+   * handlers, never for a torn-down or superseded session.
+   */
+  onDmRow(event: DmRowEvent): void;
 }
-
-/** Each member transition's generated reducer call, keyed by the shared vocabulary. */
-const MEMBER_ACTION_CALLS: Record<
-  MemberAction,
-  (c: DbConnection, identity: Identity) => Promise<unknown>
-> = {
-  approve: (c, identity) => c.reducers.approveMember({ identity }),
-  reject: (c, identity) => c.reducers.rejectMember({ identity }),
-  ban: (c, identity) => c.reducers.banMember({ identity }),
-  unban: (c, identity) => c.reducers.unbanMember({ identity }),
-};
 
 /**
  * Wires the game to SpacetimeDB. The server is authoritative: the client sends
@@ -533,7 +438,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       isStale: stale,
       showLocalBubble: (text) => gameApp.showLocalBubble(text),
       showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
-      countDmRow: () => bumpStat('dmRowsReceived'),
+      onDmRow: (event) => {
+        bumpStat('dmRowsReceived');
+        hooks.onDmRow(event);
+      },
     });
 
     // Reactions: display-only wiring, row events only (no seed) — see
@@ -746,46 +654,15 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     sendHeartbeat(conn);
   });
 
-  /**
-   * The shared shell of every user-triggered reducer call: drop with a
-   * warning while disconnected, log a server refusal. Success never needs
-   * handling here — it arrives as row events (see the Net method docs).
-   * `onRefused` is for the one caller (chat) whose UI otherwise has no
-   * "nothing changed" signal to fall back on; it runs on both the
-   * disconnected drop and a server rejection.
-   */
-  function callReducer(
-    name: string,
-    call: (c: DbConnection) => Promise<unknown>,
-    onRefused?: () => void,
-  ): void {
-    if (!conn) {
-      console.warn(`SpacetimeDB: not connected, ${name} dropped`);
-      onRefused?.();
-      return;
-    }
-    call(conn).catch((err: unknown) => {
-      console.error(`SpacetimeDB: ${name} rejected`, err);
-      onRefused?.();
-    });
-  }
-
-  /**
-   * Builds the common Net method shape: one argument forwarded to one
-   * reducer through callReducer. A factory rather than five hand-written
-   * one-line wrappers because those wrappers are token-identical and only
-   * grow with every posting feature (chat, reaction, status…) — the exact
-   * repetition the semantic clone gate exists to stop. Methods that differ
-   * (no argument, two arguments, a refusal hook) stay written out.
-   */
-  function forward<A>(
-    name: string,
-    call: (c: DbConnection, arg: A) => Promise<unknown>,
-  ): (arg: A) => void {
-    return (arg) => callReducer(name, (c) => call(c, arg));
-  }
+  // The user-action surface (netApi.ts), reading the live connection
+  // through the closure so a reconnect swaps it under every method at once.
+  const api = createNetApi({
+    conn: () => conn,
+    onChatRefused: () => hooks.onChatRefused(),
+  });
 
   return {
+    ...api,
     dispose() {
       dispatch({ kind: 'dispose' });
       clearInterval(idleTimer);
@@ -806,48 +683,5 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       // disposed.
       publishOwnName(undefined);
     },
-    setDisplayName: forward('set_display_name', (c, name: string) =>
-      c.reducers.setDisplayName({ name }),
-    ),
-    applyForMembership() {
-      callReducer('apply_for_membership', (c) => c.reducers.applyForMembership({}));
-    },
-    memberAction(action, member) {
-      callReducer(`${action}_member`, (c) => MEMBER_ACTION_CALLS[action](c, member));
-    },
-    setGuestsAllowed: forward('set_guests_allowed', (c, allowed: boolean) =>
-      c.reducers.setGuestsAllowed({ allowed }),
-    ),
-    planChatSend(draft) {
-      return conn ? planChatDraft(draft, dmCandidatesOf(conn)) : planChatDraftOffline(draft);
-    },
-    sendPlanned(plan) {
-      if (plan.kind === 'dm') {
-        callReducer(
-          'send_dm',
-          (c) =>
-            c.reducers.sendDm({
-              recipient: Identity.fromString(plan.recipientKey),
-              text: plan.text,
-            }),
-          hooks.onChatRefused,
-        );
-        return;
-      }
-      callReducer(
-        'send_chat_message',
-        (c) => c.reducers.sendChatMessage({ text: plan.text }),
-        hooks.onChatRefused,
-      );
-    },
-    sendReaction: forward('send_reaction', (c, emoji: ReactionEmoji) =>
-      c.reducers.sendReaction({ emoji }),
-    ),
-    setAvailability: forward('set_availability', (c, availability: Availability) =>
-      c.reducers.setAvailability({ availability }),
-    ),
-    setStatusText: forward('set_status_text', (c, text: string) =>
-      c.reducers.setStatusText({ text }),
-    ),
   };
 }
