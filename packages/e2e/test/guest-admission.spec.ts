@@ -89,11 +89,17 @@ test('ゲスト入場を不許可にすると入場できず、再許可で自�
  * back in without a reload. The real set_guests_allowed reducer sweeps
  * guests in the same transaction as the flip, but this spec flips through
  * raw SQL (an admin member would need a Clerk sign-in), which runs no
- * reducer; pressing a key makes the client send one input batch, and the
+ * reducer; holding a key makes the client send input batches, and the
  * server's own admission re-check deletes the row. That nudge became
  * necessary with idle suppression: a still client sends nothing the server
  * could rule on (pre-suppression, the 100ms input stream tripped the same
  * re-check within a tick, which is what this spec's kick used to observe).
+ * The key is HELD until the kick is observed, not tapped: the client
+ * samples held keys per simulation tick (input.ts), and on a loaded CI
+ * runner software rendering can starve frames long enough that an instant
+ * down+up falls entirely between ticks — no input is ever sampled, no
+ * batch is sent, and the kick this spec waits for never happens (observed
+ * as a 3-of-3 retry failure on one runner, 2026-08-03).
  */
 test('入場中のゲストは不許可への切替で即キックされ、再許可で自動的に復帰する', async ({
   browser,
@@ -107,16 +113,21 @@ test('入場中のゲストは不許可への切替で即キックされ、再�
     await enterWorld(page);
 
     await setGuestsAllowed(false);
-    // 送信ゲートを1回開けて、サーバーの admission 再チェックに行を消させる。
-    await page.keyboard.press('ArrowRight');
-
-    // Expelled: the refusal notice covers the world, and the local
-    // simulation is re-gated (tick returns to -1, the not-in-world signal),
-    // so the kicked client cannot keep walking a ghost around.
-    await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect.poll(async () => (await snapshot(page)).tick, { timeout: 10_000 }).toBe(-1);
+    // 送信ゲートを開けて、サーバーの admission 再チェックに行を消させる。
+    // キックを観測するまで押しっぱなしにする(瞬間タップが CI で取りこぼされる
+    // 理由はこのテストの doc コメント参照)。
+    await page.keyboard.down('ArrowRight');
+    try {
+      // Expelled: the refusal notice covers the world, and the local
+      // simulation is re-gated (tick returns to -1, the not-in-world
+      // signal), so the kicked client cannot keep walking a ghost around.
+      await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect.poll(async () => (await snapshot(page)).tick, { timeout: 10_000 }).toBe(-1);
+    } finally {
+      await page.keyboard.up('ArrowRight');
+    }
 
     // Re-allowing readmits the kicked client on its own, no reload needed.
     await setGuestsAllowed(true);
