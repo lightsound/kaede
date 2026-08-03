@@ -61,6 +61,19 @@ export const PlayerName = __t.object("PlayerName", {
 });
 export type PlayerName = __Infer<typeof PlayerName>;
 
+export const Reaction = __t.object("Reaction", {
+  identity: __t.identity(),
+  emoji: __t.string(),
+  sentAt: __t.timestamp(),
+});
+export type Reaction = __Infer<typeof Reaction>;
+
+export const ReactionGuard = __t.object("ReactionGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type ReactionGuard = __Infer<typeof ReactionGuard>;
+
 export const SpaceMember = __t.object("SpaceMember", {
   identity: __t.identity(),
   displayName: __t.option(__t.string()),

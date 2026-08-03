@@ -13,18 +13,21 @@ import {
   evaluateInputBatch,
   evaluateJoin,
   evaluateMemberAction,
+  evaluateReactionSend,
   evaluateRename,
   evaluateSettingChange,
   guestsAllowedFrom,
   initialMembership,
   isExpiredRow,
   isQuiescent,
+  isReactionEmoji,
   type MemberAction,
   type Membership,
   normalizeChatText,
   profileNameFrom,
   replayInputs,
   resolveJoinName,
+  type SendAllowanceVerdict,
   SPAWN_X,
   SPAWN_Y,
   stateFromRow,
@@ -226,18 +229,22 @@ function logRejection(
  * siblings, in the same transaction. The single delete path — every
  * reclaim (sweep, guest kick, status change, stale-row and broken-pair
  * reclaim) goes through here, which is what keeps the three player_*
- * tables paired (a player row always has its siblings). The chat_guard
- * row rides along even though it is not a sibling (created lazily by
- * send_chat_message, so a player row need not have one): its owner may
- * chat only while in the world, so leaving the world is when the marker
- * stops meaning anything — and deleting it here is what keeps per-tab
- * guest identities from piling up marker rows forever.
+ * tables paired (a player row always has its siblings). The chat_guard,
+ * reaction and reaction_guard rows ride along even though they are not
+ * siblings (created lazily by send_chat_message / send_reaction, so a
+ * player row need not have them): their owner may chat and react only
+ * while in the world, so leaving the world is when they stop meaning
+ * anything — and deleting them here is what keeps per-tab guest
+ * identities from piling up rows forever (for the public `reaction`
+ * table, rows that would ride every entering client's egress).
  */
 function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   ctx.db.player.identity.delete(identity);
   ctx.db.playerName.identity.delete(identity);
   ctx.db.playerGuard.identity.delete(identity);
   ctx.db.chatGuard.identity.delete(identity);
+  ctx.db.reaction.identity.delete(identity);
+  ctx.db.reactionGuard.identity.delete(identity);
 }
 
 /** The player_name row as this schema returns it (not re-exported by the server SDK). */
@@ -356,10 +363,20 @@ function findAdmittedWorldRows(ctx: Ctx) {
   return undefined;
 }
 
-/** Identities holding a name or guard row whose player row is gone. */
+/**
+ * Identities holding a name, guard or reaction row whose player row is gone.
+ * `reaction` is enumerated alongside the join siblings because it is public:
+ * an orphaned reaction row would ride every entering client's egress, where
+ * the private lazy guards (chat_guard, reaction_guard) merely sit as junk —
+ * removePlayer deletes those too once an orphan is found by any table here.
+ */
 function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
   const orphans = [];
-  for (const row of [...ctx.db.playerName.iter(), ...ctx.db.playerGuard.iter()]) {
+  for (const row of [
+    ...ctx.db.playerName.iter(),
+    ...ctx.db.playerGuard.iter(),
+    ...ctx.db.reaction.iter(),
+  ]) {
     if (ctx.db.player.identity.find(row.identity) === null) orphans.push(row.identity);
   }
   return orphans;
@@ -570,30 +587,68 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
 // ── Chat ────────────────────────────────────────────────────────────────
 
 /**
- * Charges one send against the sender's chat token bucket, or refuses the
- * send (乱用対策 — the Phase 0 input guard's thinking applied to chat). The
- * rule itself is the pure evaluateChatSend, unit-tested in @maple/shared;
- * a missing guard row reads as the epoch marker, which the bucket's bank
- * cap turns into exactly one full burst.
+ * The shared preamble of every posting reducer (send_chat_message /
+ * send_reaction): the sender's world rows, or undefined after a refusal.
+ * Splits the two refusal cases along the loud/silent rule documented on
+ * sendChatMessage — no player row at all is loud (thrown before anything
+ * can write), while findAdmittedWorldRows returning undefined DESPITE the
+ * row existing means a reclaim just happened and must commit, so that
+ * refusal stays a logged return.
  */
-function chargeChatAllowance(ctx: Ctx): void {
-  const guard = ctx.db.chatGuard.identity.find(ctx.sender);
-  const verdict = evaluateChatSend({
+function findPostingSender(ctx: Ctx, reducerName: string): WorldRows | undefined {
+  if (ctx.db.player.identity.find(ctx.sender) === null) {
+    throw new SenderError(`${reducerName} refused (not-in-world)`);
+  }
+  const found = findAdmittedWorldRows(ctx);
+  if (!found) {
+    console.warn(`${reducerName} dropped (reclaimed): sender=${ctx.sender.toHexString()}`);
+  }
+  return found;
+}
+
+/** A send-rate token-bucket marker table (identity → allowanceMicros). */
+type SendGuardTable = Ctx['db']['chatGuard'] | Ctx['db']['reactionGuard'];
+
+/** A send-rate guard row, as either marker table returns it. */
+type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
+
+/**
+ * Charges one send against the sender's token bucket on `guardTable`, or
+ * refuses the send (乱用対策 — the Phase 0 input guard's thinking applied
+ * to chat and reactions). The rule itself is the pure `evaluate`
+ * (evaluateChatSend / evaluateReactionSend, unit-tested in @maple/shared);
+ * a missing guard row reads as the epoch marker, which the bucket's bank
+ * cap turns into exactly one full burst. The marker write-back is split
+ * into writeSendAllowance to keep these uncovered arrows under the CRAP
+ * budget fallow enforces (the backfillAccountName precedent).
+ */
+function chargeSendAllowance(
+  ctx: Ctx,
+  guardTable: SendGuardTable,
+  evaluate: (request: { allowanceMicros: bigint; nowMicros: bigint }) => SendAllowanceVerdict,
+  reducerName: string,
+): void {
+  const guard = guardTable.identity.find(ctx.sender);
+  const verdict = evaluate({
     allowanceMicros: guard?.allowanceMicros ?? 0n,
     nowMicros: ctx.timestamp.microsSinceUnixEpoch,
   });
-  if (!verdict.ok) throw new SenderError('send_chat_message refused (rate-limited)');
-  upsertChatGuard(ctx, verdict.allowanceMicros);
+  if (!verdict.ok) throw new SenderError(`${reducerName} refused (rate-limited)`);
+  writeSendAllowance(ctx, guardTable, guard, verdict.allowanceMicros);
 }
 
 /** Writes the advanced marker back: the sender's row, or its lazy first one. */
-function upsertChatGuard(ctx: Ctx, allowanceMicros: bigint): void {
-  const existing = ctx.db.chatGuard.identity.find(ctx.sender);
+function writeSendAllowance(
+  ctx: Ctx,
+  guardTable: SendGuardTable,
+  existing: SendGuardRow | null,
+  allowanceMicros: bigint,
+): void {
   if (existing) {
-    ctx.db.chatGuard.identity.update({ ...existing, allowanceMicros });
+    guardTable.identity.update({ ...existing, allowanceMicros });
     return;
   }
-  ctx.db.chatGuard.insert({ identity: ctx.sender, allowanceMicros });
+  guardTable.insert({ identity: ctx.sender, allowanceMicros });
 }
 
 /**
@@ -644,17 +699,11 @@ function trimChatHistory(ctx: Ctx): void {
 // per-capability setting (chat / DM / reactions) can land later as
 // additive space_setting columns with defaults.
 export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
-  if (ctx.db.player.identity.find(ctx.sender) === null) {
-    throw new SenderError('send_chat_message refused (not-in-world)');
-  }
-  const found = findAdmittedWorldRows(ctx);
-  if (!found) {
-    console.warn(`send_chat_message dropped (reclaimed): sender=${ctx.sender.toHexString()}`);
-    return;
-  }
+  const found = findPostingSender(ctx, 'send_chat_message');
+  if (!found) return;
   const verdict = normalizeChatText(text);
   if (!verdict.ok) throw new SenderError(`send_chat_message refused (${verdict.reason})`);
-  chargeChatAllowance(ctx);
+  chargeSendAllowance(ctx, ctx.db.chatGuard, evaluateChatSend, 'send_chat_message');
   ctx.db.chatMessage.insert({
     id: 0n, // 0 asks autoInc to assign the real id
     sender: ctx.sender,
@@ -663,6 +712,40 @@ export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, {
     sentAt: ctx.timestamp,
   });
   trimChatHistory(ctx);
+});
+
+/** Writes the sender's reaction: the upsert row (see the `reaction` table). */
+function upsertReaction(ctx: Ctx, emoji: string): void {
+  const row = { identity: ctx.sender, emoji, sentAt: ctx.timestamp };
+  if (ctx.db.reaction.identity.find(ctx.sender)) ctx.db.reaction.identity.update(row);
+  else ctx.db.reaction.insert(row);
+}
+
+// Posts one emoji reaction, shown transiently above the sender's avatar
+// (ROADMAP Phase 2). Eligibility is exactly send_chat_message's: presence
+// in the world (only join creates a player row) plus the admission
+// re-check, so guests may react whenever they may be in the world — the
+// same deliberate non-setting as chat (see sendChatMessage's closing
+// comment), and the guests_allowed flip silences reactions with the same
+// transaction that kicks the guests. Which refusals are loud follows
+// sendChatMessage's rule verbatim: no player row, a non-palette emoji and
+// the rate limit all throw before any write; the reclaim path stays
+// silent because its row deletion must commit.
+//
+// The emoji is validated by exact match against the shared palette
+// (isReactionEmoji) — free-form strings never reach the public table, so
+// no text normalization questions apply. Unlike chat there is no
+// client-side bucket mirror and no refusal notice: a reaction is a
+// transient gesture, so a burst-exceeding click simply not appearing is
+// feedback enough (an accepted simplification; the server refusal above
+// stays loud for the reducer log).
+export const sendReaction = spacetimedb.reducer({ emoji: t.string() }, (ctx, { emoji }) => {
+  if (!findPostingSender(ctx, 'send_reaction')) return;
+  if (!isReactionEmoji(emoji)) {
+    throw new SenderError('send_reaction refused (unknown-emoji)');
+  }
+  chargeSendAllowance(ctx, ctx.db.reactionGuard, evaluateReactionSend, 'send_reaction');
+  upsertReaction(ctx, emoji);
 });
 // ── End chat ────────────────────────────────────────────────────────────
 

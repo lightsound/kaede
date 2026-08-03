@@ -88,11 +88,13 @@ export async function connect(
         if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
         // The world (player and the name labels split off it), everything
         // admission is decided from (the member directory and the space
-        // settings), and the chat history. All must be applied before we
-        // resolve, so the first admission decision rules on real rows rather
-        // than an empty cache, and the chat log seeds from the full retained
-        // history (bounded server-side to CHAT_HISTORY_MAX rows — see the
-        // chat_message table).
+        // settings), and the conversation tables (the chat history and the
+        // current reactions). All must be applied before we resolve, so the
+        // first admission decision rules on real rows rather than an empty
+        // cache, and the chat log seeds from the full retained history
+        // (bounded server-side to CHAT_HISTORY_MAX rows — see the
+        // chat_message table). Reactions are subscribed for their row
+        // EVENTS only; the seed never displays (see reactionFeed.ts).
         conn
           .subscriptionBuilder()
           .onApplied(() => resolve({ conn, myIdentity: identity, myIdHex: identity.toHexString() }))
@@ -102,6 +104,7 @@ export async function connect(
             tables.spaceMember,
             tables.spaceSetting,
             tables.chatMessage,
+            tables.reaction,
           ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping

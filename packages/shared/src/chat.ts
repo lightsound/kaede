@@ -6,6 +6,11 @@
  * normalizeDisplayName / evaluateInputBatch precedent.
  */
 
+import {
+  evaluateSendAllowance,
+  type SendAllowanceRequest,
+  type SendAllowanceVerdict,
+} from './sendAllowance';
 import { type NormalizedTextVerdict, normalizeSingleLineText, type TextRejectReason } from './text';
 
 /**
@@ -45,35 +50,15 @@ export const CHAT_SEND_COST_MICROS = 1_000_000n;
  */
 export const CHAT_BURST_MESSAGES = 5;
 
-export type ChatSendVerdict =
-  | {
-      ok: true;
-      /** The advanced token-bucket marker to persist on the chat_guard row. */
-      allowanceMicros: bigint;
-    }
-  | { ok: false; reason: 'rate-limited' };
+export type ChatSendVerdict = SendAllowanceVerdict;
 
 /**
- * Pure admission check for one chat send — the input guard's token bucket
- * (evaluateInputBatch) reshaped for messages. `allowanceMicros` is the point
- * in time up to which the sender's messages are "paid for": each accepted
- * send advances it by CHAT_SEND_COST_MICROS, and a marker in the future
- * means the sender is ahead of the sustained rate and is refused until real
- * time catches up. The marker is floored at CHAT_BURST_MESSAGES-1 costs
- * behind `nowMicros`, so an idle sender banks at most one burst — never an
- * unbounded backlog. A sender with no guard row yet passes 0n (the epoch)
- * and gets exactly the full burst.
+ * Pure admission check for one chat send: the shared send-rate token bucket
+ * (see evaluateSendAllowance for the marker semantics) at the chat cost and
+ * burst. The marker is persisted on the sender's chat_guard row.
  */
-export function evaluateChatSend(request: {
-  /** Token-bucket marker persisted on the chat_guard row (micros since Unix epoch). */
-  allowanceMicros: bigint;
-  /** Server wall clock (micros since Unix epoch). */
-  nowMicros: bigint;
-}): ChatSendVerdict {
-  const bankFloor = request.nowMicros - CHAT_SEND_COST_MICROS * BigInt(CHAT_BURST_MESSAGES - 1);
-  const marker = request.allowanceMicros < bankFloor ? bankFloor : request.allowanceMicros;
-  if (marker > request.nowMicros) return { ok: false, reason: 'rate-limited' };
-  return { ok: true, allowanceMicros: marker + CHAT_SEND_COST_MICROS };
+export function evaluateChatSend(request: SendAllowanceRequest): ChatSendVerdict {
+  return evaluateSendAllowance(request, CHAT_SEND_COST_MICROS, CHAT_BURST_MESSAGES);
 }
 
 /**

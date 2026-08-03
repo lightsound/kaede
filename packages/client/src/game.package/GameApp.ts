@@ -10,6 +10,7 @@ import {
   PLAYER_HALF_W,
   type PlayerState,
   packInput,
+  type ReactionEmoji,
   SPAWN_X,
   SPAWN_Y,
   stepPlayer,
@@ -18,7 +19,18 @@ import {
 } from '@maple/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
-import { type Bubble, createBubble, expireBubble, showBubble, visibleBubbleText } from './bubble';
+import {
+  type Bubble,
+  createBubble,
+  createReactionBadge,
+  expireOverhead,
+  layoutReaction,
+  type ReactionBadge,
+  showBubble,
+  showReaction,
+  visibleBubbleText,
+  visibleReactionEmoji,
+} from './bubble';
 import { cameraOffset } from './camera';
 import { createInput, mergeInputs } from './input';
 import { createTouchControls } from './touchControls';
@@ -72,6 +84,14 @@ export interface GameApp {
   showLocalBubble(text: string): void;
   /** Same, above the remote player `id`; a no-op while that player has no sprite. */
   showRemoteBubble(id: string, text: string): void;
+  /**
+   * Shows `emoji` above the local avatar for REACTION_DURATION_MS; a newer
+   * reaction replaces it and restarts the clock. Stacks above the speech
+   * bubble when one is visible (see layoutReaction).
+   */
+  showLocalReaction(emoji: ReactionEmoji): void;
+  /** Same, above the remote player `id`; a no-op while that player has no sprite. */
+  showRemoteReaction(id: string, emoji: ReactionEmoji): void;
 }
 
 interface PlayerView {
@@ -80,6 +100,8 @@ interface PlayerView {
   label: Text;
   /** The speech bubble, hidden until this player chats (showBubble). */
   bubble: Bubble;
+  /** The emoji reaction, hidden until this player reacts (showReaction). */
+  reaction: ReactionBadge;
 }
 
 /** A labelled rectangle sprite parented under the world container. */
@@ -92,19 +114,22 @@ function createPlayerView(world: Container, name: string, color: number): Player
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
   const bubble = createBubble();
-  root.addChild(body, label, bubble.root);
+  const reaction = createReactionBadge();
+  root.addChild(body, label, bubble.root, reaction.root);
   world.addChild(root);
-  return { root, body, label, bubble };
+  return { root, body, label, bubble, reaction };
 }
 
-/** One player as the e2e hook reports it: rendered pose plus any live bubble. */
+/** One player as the e2e hook reports it: rendered pose plus any live overheads. */
 function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
   const bubble = visibleBubbleText(view.bubble);
+  const reaction = visibleReactionEmoji(view.reaction);
   return {
     x: view.root.x,
     y: view.root.y,
     name: view.label.text,
     ...(bubble === undefined ? {} : { bubble }),
+    ...(reaction === undefined ? {} : { reaction }),
   };
 }
 
@@ -217,10 +242,20 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     world.position.set(cam.x, cam.y);
   }
 
-  /** Hides every speech bubble whose time is up (see expireBubble). */
-  function expireBubbles(nowMs: number): void {
-    expireBubble(local.bubble, nowMs);
-    for (const view of remotes.values()) expireBubble(view.bubble, nowMs);
+  /**
+   * Hides every overhead display whose time is up (see expireOverhead) and
+   * keeps each reaction stacked clear of its bubble — re-laid out every
+   * frame because either can appear, resize or expire mid-display.
+   */
+  function expireOverheads(nowMs: number): void {
+    expireOverhead(local.bubble, nowMs);
+    expireOverhead(local.reaction, nowMs);
+    layoutReaction(local.reaction, local.bubble);
+    for (const view of remotes.values()) {
+      expireOverhead(view.bubble, nowMs);
+      expireOverhead(view.reaction, nowMs);
+      layoutReaction(view.reaction, view.bubble);
+    }
   }
 
   app.ticker.add((ticker) => {
@@ -230,10 +265,16 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
     while (acc >= DT) simulateTick();
     renderLocal(ticker.deltaMS);
-    expireBubbles(now);
+    expireOverheads(now);
   });
 
   const e2eHook = createE2EHook(local, remotes, () => tick);
+
+  /** Runs `act` on the remote player's view; a no-op while it has no sprite. */
+  function withRemoteView(id: string, act: (view: PlayerView) => void): void {
+    const view = remotes.get(id);
+    if (view) act(view);
+  }
 
   return {
     destroy() {
@@ -301,12 +342,11 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       for (const view of remotes.values()) view.root.destroy({ children: true });
       remotes.clear();
     },
-    showLocalBubble(text) {
-      showBubble(local.bubble, text, performance.now());
-    },
-    showRemoteBubble(id, text) {
-      const view = remotes.get(id);
-      if (view) showBubble(view.bubble, text, performance.now());
-    },
+    showLocalBubble: (text) => showBubble(local.bubble, text, performance.now()),
+    showRemoteBubble: (id, text) =>
+      withRemoteView(id, (view) => showBubble(view.bubble, text, performance.now())),
+    showLocalReaction: (emoji) => showReaction(local.reaction, emoji, performance.now()),
+    showRemoteReaction: (id, emoji) =>
+      withRemoteView(id, (view) => showReaction(view.reaction, emoji, performance.now())),
   };
 }

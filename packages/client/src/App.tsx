@@ -139,6 +139,7 @@ export function App() {
           setChatSendRefused(false);
           netRef.current?.sendChatMessage(text);
         }}
+        onSendReaction={(emoji) => netRef.current?.sendReaction(emoji)}
       />
     </div>
   );

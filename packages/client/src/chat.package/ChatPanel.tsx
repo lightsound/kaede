@@ -4,6 +4,8 @@ import {
   type ChatTextRejectReason,
   evaluateChatSend,
   normalizeChatText,
+  REACTION_EMOJIS,
+  type ReactionEmoji,
 } from '@maple/shared';
 import { type CSSProperties, useEffect, useRef } from 'react';
 import type { ChatLog } from '../net.package';
@@ -12,6 +14,7 @@ import {
   UI_FONT,
   UI_GOLD,
   UI_GOLD_BORDER,
+  UI_GOLD_BORDER_SOFT,
   UI_PANEL_BG,
   UI_TEXT_COLOR,
 } from '../theme';
@@ -70,15 +73,80 @@ const formStyle: CSSProperties = {
   gap: 6,
 };
 
+const reactionRowStyle: CSSProperties = {
+  display: 'flex',
+  gap: 4,
+};
+
+const reactionButtonStyle: CSSProperties = {
+  flex: '1 1 0',
+  padding: '2px 0',
+  borderRadius: 6,
+  border: UI_GOLD_BORDER_SOFT,
+  background: 'transparent',
+  fontSize: 15,
+  cursor: 'pointer',
+};
+
 /** The sender name lead-in; the local player's own lines get the gold accent. */
 function senderStyle(own: boolean): CSSProperties {
   return { color: own ? UI_GOLD : UI_TEXT_COLOR, fontWeight: 'bold' };
 }
 
 /**
+ * The reaction palette row (ROADMAP Phase 2): one button per palette emoji,
+ * sitting between the log and the input row so the input stays where the
+ * chat habit expects it (the bottom line). Gated exactly like the chat
+ * input — sending needs a player row to react from.
+ *
+ * Each click BLURS its button. Leaving the focus would make the browser's
+ * default activation re-fire the reaction on a later Enter, and — because
+ * isTextEntry exempts only text fields, not buttons — feed held keys to
+ * the world input at the same time, with Space additionally caught by the
+ * MOVE_KEYS preventDefault (a keydown default the button's keyup click
+ * synthesis then trips over, browser-dependently). Blurring makes every
+ * key after a click mean exactly one thing: walking the avatar. Verified
+ * by hand (2026-08-03): without the blur, Enter after a click re-sent the
+ * reaction; with it, arrows/Space/Enter all go to the world.
+ *
+ * No client-side bucket mirror and no refusal notice, unlike the message
+ * form: a reaction is a fire-and-forget gesture with no draft to lose, so
+ * a burst-exceeding click simply not appearing is feedback enough (the
+ * server refusal stays loud in the reducer log).
+ */
+function ReactionRow({
+  disabled,
+  onSendReaction,
+}: {
+  disabled: boolean;
+  onSendReaction: (emoji: ReactionEmoji) => void;
+}) {
+  return (
+    <div style={reactionRowStyle}>
+      {REACTION_EMOJIS.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          style={reactionButtonStyle}
+          aria-label={`リアクション ${emoji}`}
+          disabled={disabled}
+          onClick={(e) => {
+            onSendReaction(emoji);
+            e.currentTarget.blur();
+          }}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The global-scope chat panel (ROADMAP Phase 2 第一弾): the recent log over
- * an input row. An INPUT element on purpose — game.package/input.ts ignores
- * key events aimed at text entry, so typing here never walks the avatar.
+ * the reaction palette and an input row. An INPUT element on purpose —
+ * game.package/input.ts ignores key events aimed at text entry, so typing
+ * here never walks the avatar.
  *
  * Sending validates and rate-limits with the exact rules the server
  * enforces (shared pure functions), so a message that leaves this form is
@@ -95,6 +163,7 @@ export function ChatPanel({
   log,
   sendRefused,
   onSend,
+  onSendReaction,
 }: {
   connected: boolean;
   /** The authoritative name from the own player row; undefined without one. */
@@ -108,6 +177,8 @@ export function ChatPanel({
    */
   sendRefused: boolean;
   onSend: (text: string) => void;
+  /** Sends one palette-emoji reaction (fire-and-forget; see ReactionRow). */
+  onSendReaction: (emoji: ReactionEmoji) => void;
 }) {
   // The client-side mirror of the server's chat_guard token bucket.
   const allowanceRef = useRef(0n);
@@ -159,6 +230,7 @@ export function ChatPanel({
           ))}
         </div>
       )}
+      <ReactionRow disabled={chatDisabled(connected, ownName)} onSendReaction={onSendReaction} />
       <DraftForm
         disabled={chatDisabled(connected, ownName)}
         placeholder="メッセージを送信"
