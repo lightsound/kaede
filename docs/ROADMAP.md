@@ -153,6 +153,9 @@
 - **Stripe Projects のセットアップ（採用検証）** ✅ **完了・正式採用（2026-07-30）**:
   プロジェクト「kaede」を初期化し、Clerk（hobby＋auth）・Sentry（developer＋
   project）・Cloudflare（workers:free＋workers）を無料枠でプロビジョニング済み。
+  （注: Sentry は 2026-08-03 のエラー監視方針変更で削除し、PostHog（free＋analytics・
+  US リージョン）に置換 —
+  [ADR](./adr-observability-posthog-over-sentry.md) 参照）
   検証結果: ①Cloudflare は**既存アカウントへの OAuth リンクに成功**（懸念だった
   新規開設強制はなし）。Clerk・Sentry は Projects 管理の新規アカウント作成方式
   （いずれも未セットアップだったため問題なし）②`.env` 自動同期と名前付き環境
@@ -314,8 +317,13 @@
   回数 — OS 通知そのものはテストから観測不能）と `?visibility=hidden`
   オーバーライド（ヘッドレスでは実バックグラウンド化が再現できない実測
   による）で固定
-- エラー監視の導入（**Sentry で確定**。無料枠で開始し、SaaS 期の利用分析
-  （PostHog 等）導入時に再評価）
+- エラー監視の導入（**PostHog で確定** — 2026-08-03 に Sentry から変更。判断の全記録は
+  [ADR](./adr-observability-posthog-over-sentry.md)）。無料枠で開始し、SaaS 期の利用分析も
+  同じ PostHog に載せる（生涯 2 系統: Cloudflare ＋ PostHog）。導入順序は ADR §8.1 のとおり:
+  ①SpacetimeDB SDK の再接続自動回復の有無を確認（観測可能にするより起きなくする方が安い）
+  ②接続イベント（`client_connected` / `client_disconnected`）をサーバー側テーブルに記録
+  ③`posthog-js` を最小構成で導入（リプレイなし。ゲームループのレート制限・課金上限・
+  匿名 `identify()` 抑制は ADR §8.2 の必須実装） ④リプレイは必要になってから追加
 - チャットの乱用対策: 送信レート制限（Phase 0 の入力ガードと同様の考え方を
   チャットにも適用）。あわせて**ゲストに許可する行動範囲**（チャット可否・
   DM 可否・リアクション可否）をここで設計する

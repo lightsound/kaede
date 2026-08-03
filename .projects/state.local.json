@@ -28,6 +28,19 @@
       "requestedAt": "2026-07-30T07:13:41.353Z",
       "status": "complete"
     },
+    "posthog": {
+      "accountRequestId": "facctrq_61V9jfVJ295GHlAJe16V8BP0QNHNxDDN3Hbmac0oaEzg",
+      "configuration": {
+        "region": "US",
+        "organization_name": "kaede"
+      },
+      "linkedAt": "2026-08-03T13:15:23.298Z",
+      "providerId": "prvdr_61UGMHNyOleb3A55m5Pg8",
+      "providerName": "PostHog",
+      "redirectUrl": null,
+      "requestedAt": "2026-08-03T13:15:23.298Z",
+      "status": "complete"
+    },
     "sentry": {
       "accountRequestId": "facctrq_61V8BXWmqb2JVjxKY16V8BP0QNHNxDDN3Hbmac0oa756",
       "configuration": {},
@@ -86,29 +99,27 @@
       "resourceId": "fres_61V8C8399mnSruzHQ16V8BP0QNHNxDDN3Hbmac0oaUJc",
       "serviceId": "workers"
     },
-    "sentry-plan": {
+    "posthog-analytics": {
       "configuration": {},
-      "createdAt": "2026-07-30T06:37:53.043Z",
-      "lastRevealedAt": "2026-07-30T06:37:53.275Z",
+      "createdAt": "2026-08-03T13:15:37.841Z",
+      "lastRevealedAt": "2026-08-03T13:15:38.104Z",
       "lastStatus": "complete",
-      "name": "sentry-plan",
-      "providerId": "prvdr_61UWhMpOMGYc7qQhs53su",
-      "providerName": "Sentry",
-      "resourceId": "fres_61V8BYe1L0tG2ywX316V8BP0QNHNxDDN3Hbmac0oa2iW",
-      "serviceId": "developer"
+      "name": "posthog-analytics",
+      "providerId": "prvdr_61UGMHNyOleb3A55m5Pg8",
+      "providerName": "PostHog",
+      "resourceId": "fres_61V9jflsmhchtGvaM16V8BP0QNHNxDDN3Hbmac0oaDVQ",
+      "serviceId": "analytics"
     },
-    "sentry-project": {
-      "configuration": {
-        "project_name": "kaede"
-      },
-      "createdAt": "2026-07-30T06:37:56.816Z",
-      "lastRevealedAt": "2026-07-30T06:37:57.075Z",
+    "posthog-plan": {
+      "configuration": {},
+      "createdAt": "2026-08-03T13:15:26.190Z",
+      "lastRevealedAt": "2026-08-03T13:15:26.478Z",
       "lastStatus": "complete",
-      "name": "sentry-project",
-      "providerId": "prvdr_61UWhMpOMGYc7qQhs53su",
-      "providerName": "Sentry",
-      "resourceId": "fres_61V8BYh2rUhzigaH616V8BP0QNHNxDDN3Hbmac0oaB4S",
-      "serviceId": "project"
+      "name": "posthog-plan",
+      "providerId": "prvdr_61UGMHNyOleb3A55m5Pg8",
+      "providerName": "PostHog",
+      "resourceId": "fres_61V9jfYrRs5C3vl4r16V8BP0QNHNxDDN3Hbmac0oaPea",
+      "serviceId": "free"
     }
   }
 }
