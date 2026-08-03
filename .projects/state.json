@@ -7,6 +7,9 @@
     "cloudflare": {
       "name": "Cloudflare"
     },
+    "posthog": {
+      "name": "PostHog"
+    },
     "sentry": {
       "name": "Sentry"
     }
@@ -32,15 +35,15 @@
       "providerName": "Cloudflare",
       "serviceId": "workers"
     },
-    "sentry-plan": {
-      "name": "sentry-plan",
-      "providerName": "Sentry",
-      "serviceId": "developer"
+    "posthog-analytics": {
+      "name": "posthog-analytics",
+      "providerName": "PostHog",
+      "serviceId": "analytics"
     },
-    "sentry-project": {
-      "name": "sentry-project",
-      "providerName": "Sentry",
-      "serviceId": "project"
+    "posthog-plan": {
+      "name": "posthog-plan",
+      "providerName": "PostHog",
+      "serviceId": "free"
     }
   }
 }
