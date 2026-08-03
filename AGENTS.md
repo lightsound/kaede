@@ -42,6 +42,14 @@ locally and are easy to miss because they arrive asynchronously after a push.
 ### Static analysis / testing gotcha
 `fallow health` (part of `pnpm analyze` and CI) **requires** `coverage/coverage-final.json`; run `pnpm test:coverage` first if invoking `fallow` directly (`pnpm analyze` already does). `packages/server` has no unit tests — it only runs inside the SpacetimeDB host, so all testable pure logic lives in `packages/shared`.
 
+Before pushing, also run `pnpm exec fallow health` **standalone**: CI runs it as
+its own step, and a passing `pnpm analyze` does not guarantee that step passes —
+PR #30 hit exactly this (a new file missing its `fallow-ignore-file
+coverage-gaps` header failed only the CI `fallow health` step). Every new file
+that cannot be unit-tested (reducers, live-connection wiring, DOM components,
+Playwright specs) needs that header with a reason naming where the testable
+logic lives.
+
 ### Internal package boundaries
 ImportLint enforces directory-level encapsulation inside each workspace; fallow continues to
 enforce the workspace-level `client` / `server` / `shared` dependency graph.
