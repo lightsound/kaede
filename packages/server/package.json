@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@maple/shared": "workspace:*",
-    "spacetimedb": "2.7.*"
+    "spacetimedb": "2.7.1"
   },
   "devDependencies": {
     "typescript": "~7.0.2"

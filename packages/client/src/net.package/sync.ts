@@ -569,6 +569,18 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       },
       'drop-session': () => dropSession(),
       disconnect: () => closing?.disconnect(),
+      'probe-session': (e) => {
+        // Read the socket state the pure machine cannot: isSocketClosed
+        // (SDK 2.7.1) is true even when the browser never delivered the
+        // close event — the zombie a frozen tab leaves behind. Dispatching
+        // from inside a runner is safe here because probe-session is always
+        // its transition's only effect, so no sibling effect runs against
+        // the superseded `life`.
+        const c = conn;
+        if (!c || c.isDisconnectRequested || !c.isSocketClosed) return;
+        console.warn('SpacetimeDB: socket died while the page was hidden, reconnecting');
+        dispatch({ kind: 'session-dead', generation: e.generation });
+      },
     };
   }
 
@@ -630,6 +642,24 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   for (const type of ACTIVITY_EVENTS) {
     window.addEventListener(type, onActivity, { capture: true, passive: true });
   }
+
+  // ページ復帰の自動回復(lifecycle.ts の page-resume 節を参照): 背景タブで
+  // 停滞した再試行の前倒しと、凍結中に onclose が届かないまま死んだソケット
+  // (ゾンビ)の検出・再構築。SDK 2.7.1 の ConnectionManager と同じイベント
+  // 群を購読する — visibilitychange は非表示→表示、focus は同一表示状態での
+  // ウィンドウ切替、online はネットワーク復旧、pageshow は bfcache 復元
+  // (visibilitychange が発火しないことがある)をそれぞれ拾う。
+  const onPageResume = (): void => {
+    if (life.disposed) return;
+    dispatch({ kind: 'page-resume' });
+  };
+  const onVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible') onPageResume();
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('focus', onPageResume);
+  window.addEventListener('online', onPageResume);
+  window.addEventListener('pageshow', onPageResume);
   const idleTimer = setInterval(() => {
     if (life.disposed) return;
     if (idle.check(Date.now()) !== 'suspend') return;
@@ -673,6 +703,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       for (const type of ACTIVITY_EVENTS) {
         window.removeEventListener(type, onActivity, { capture: true });
       }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onPageResume);
+      window.removeEventListener('online', onPageResume);
+      window.removeEventListener('pageshow', onPageResume);
       conn = undefined;
       // The final "no row" signal. It cannot come from the disconnect
       // handler (which skips dropSession once disposed), and without it a

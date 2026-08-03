@@ -26,10 +26,10 @@ env:
   # changes codegen — module_bindings/index.ts records the CLI version, so any
   # bump must land together with a bindings regeneration commit.
   #
-  # Kept on the same 2.7 line as the `spacetimedb` npm dependency. Note the tag
-  # is not a plain vX.Y.Z: the newest 2.7 release is a hotfix tag, which is what
-  # `releases/latest` resolves to.
-  SPACETIME_VERSION: v2.7.0-hotfix3
+  # Kept on the same version as the `spacetimedb` npm dependency (2.7.1), whose
+  # update motivated this pin bump: the SDK's page-resume reconnect recovery
+  # rides the same release line.
+  SPACETIME_VERSION: v2.7.1
 
 jobs:
   ci:

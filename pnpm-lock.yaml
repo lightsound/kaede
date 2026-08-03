@@ -66,8 +66,8 @@ importers:
         specifier: ^19.2.8
         version: 19.2.8(react@19.2.8)
       spacetimedb:
-        specifier: 2.7.*
-        version: 2.7.0(react@19.2.8)
+        specifier: 2.7.1
+        version: 2.7.1(react@19.2.8)
     devDependencies:
       '@types/react':
         specifier: ^19.2.0
@@ -106,8 +106,8 @@ importers:
         specifier: workspace:*
         version: link:../shared
       spacetimedb:
-        specifier: 2.7.*
-        version: 2.7.0(react@19.2.8)
+        specifier: 2.7.1
+        version: 2.7.1(react@19.2.8)
     devDependencies:
       typescript:
         specifier: ~7.0.2
@@ -2395,8 +2395,8 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
-  prettier@3.8.4:
-    resolution: {integrity: sha512-N2MylSdi48+5N/6S5j+maeHbUSIzzZ5uOcX5Hm4QpV8Dkb1HFjfAKTKX6yNPJQD9AhcT3ifHNB66tWTTJDi11Q==}
+  prettier@3.9.6:
+    resolution: {integrity: sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -2532,8 +2532,8 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
-  spacetimedb@2.7.0:
-    resolution: {integrity: sha512-WY1bp8RfzdPilo4XbwHvjAMWZS4WeGT+QGEQyyEJSgylEurUOerYx1rxr0M6LWpuwA0dcM/FRL7sGpx8TV7nOA==}
+  spacetimedb@2.7.1:
+    resolution: {integrity: sha512-BuND5Q056fGe4YDzxOhTSdTnxb8lXJKTW0F5gscMR/GXRf+AoSIGfb9K811AhH0zklDBXCMfAwdgeL599Z8Ozg==}
     peerDependencies:
       '@angular/core': '>=17.0.0'
       '@tanstack/react-query': ^5.0.0
@@ -4981,7 +4981,7 @@ snapshots:
     dependencies:
       xtend: 4.0.2
 
-  prettier@3.8.4: {}
+  prettier@3.9.6: {}
 
   process-nextick-args@2.0.1: {}
 
@@ -5134,12 +5134,12 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
-  spacetimedb@2.7.0(react@19.2.8):
+  spacetimedb@2.7.1(react@19.2.8):
     dependencies:
       base64-js: 1.5.1
       headers-polyfill: 4.0.3
       object-inspect: 1.13.4
-      prettier: 3.8.4
+      prettier: 3.9.6
       pure-rand: 7.0.1
       safe-stable-stringify: 2.5.0
       statuses: 2.0.2
