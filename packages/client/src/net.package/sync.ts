@@ -10,6 +10,7 @@ import {
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
+import { captureEvent } from '../telemetry.package';
 import { type SpaceView, wireAdmission } from './admission';
 import { createChatFeed } from './chatFeed';
 import type { ChatLog } from './chatLog';
@@ -586,6 +587,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
         const c = conn;
         if (!c || c.isDisconnectRequested || !c.isSocketClosed) return;
         console.warn('SpacetimeDB: socket died while the page was hidden, reconnecting');
+        captureEvent('spacetimedb_session_dead');
         dispatch({ kind: 'session-dead', generation: e.generation });
       },
     };
@@ -605,12 +607,22 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     connect(
       {
         onDisconnect() {
+          // Read BEFORE the dispatch: a failed handshake reports both a
+          // rejection and this socket close, and the close's transition
+          // still performs a (vacuous) drop-session — so the effect alone
+          // cannot tell "an established session dropped" from "the connect
+          // attempt never got one". Only the former is a disconnect; the
+          // latter is already reported as spacetimedb_connect_failed.
+          const wasLive = life.sessionLive;
           const effects = dispatch({ kind: 'socket-closed', generation });
           // Only an unexpected drop of the live session is worth a log: a
           // stale close produces no effects, and a close the idle guard
-          // asked for leaves the state suspended.
-          if (effects.some((e) => e.kind === 'drop-session') && !life.suspended) {
+          // asked for leaves the state suspended. The same rule picks what
+          // is worth a telemetry event (ADR §8.2-A: WebSocket は自動計装
+          // されないため、送らなければ何も記録されない).
+          if (wasLive && effects.some((e) => e.kind === 'drop-session') && !life.suspended) {
             console.warn('SpacetimeDB: connection dropped, reconnecting');
+            captureEvent('spacetimedb_disconnected');
           }
         },
       },
@@ -618,7 +630,17 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       getAuthToken,
     )
       .then((settled) => {
-        dispatch({ kind: 'connect-ok' }, settled);
+        // Recovery after a failure streak. The count is read before the
+        // dispatch resets it, but the event is sent only if the success was
+        // ADOPTED (wire-session): a connect settling into an idle-suspended
+        // or disposed stack is discarded and leaves the user offline, which
+        // must not read as a recovery. Successful first connects and clean
+        // reconnects stay silent — the metric is "how long did retries fail".
+        const failuresBeforeSuccess = life.consecutiveFailures;
+        const effects = dispatch({ kind: 'connect-ok' }, settled);
+        if (failuresBeforeSuccess > 0 && effects.some((e) => e.kind === 'wire-session')) {
+          captureEvent('spacetimedb_reconnected', { failedAttempts: failuresBeforeSuccess });
+        }
       })
       // The overlay can only ever say "connecting", so without this the actual
       // cause (host not running, unknown database name, stale schema) never
@@ -629,6 +651,13 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
         const retry = effects.find(
           (e): e is Extract<LifecycleEffect, { kind: 'arm-retry' }> => e.kind === 'arm-retry',
         );
+        // 再接続の連続失敗は例外として投げられない(ADR §8.2-A)ので、
+        // 明示的に送る。失敗のたび1イベント(最短でも backoff 間隔)。
+        captureEvent('spacetimedb_connect_failed', {
+          consecutiveFailures: life.consecutiveFailures,
+          everConnected: life.everConnected,
+          willRetry: retry !== undefined,
+        });
         console.error(
           `SpacetimeDB: connection to ${target} failed, ${
             retry ? `retrying in ${retry.delayMs}ms` : 'suspended for idle (input reconnects)'

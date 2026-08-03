@@ -9,7 +9,8 @@ import {
   UserButton,
   useAuth,
 } from '@clerk/react';
-import type { CSSProperties, ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect } from 'react';
+import { identifyMember, resetIdentity } from '../telemetry.package';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import { AuthSessionContext } from './AuthSessionContext';
 import { guestSession, memberSession } from './authToken';
@@ -57,7 +58,18 @@ const signInButtonStyle: CSSProperties = {
  * loaded, and would silently read as "guest" here.
  */
 function AuthBoundary({ children }: { children: ReactNode }) {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, userId } = useAuth();
+
+  // エラー監視の distinct_id を Clerk user ID に揃える(ADR §8.2-D)。
+  // identify はサインイン済みツリーだけが呼び、匿名(ゲスト・サインアウト)
+  // では決して呼ばない — identified events は匿名の最大4倍単価。reset は
+  // identify 済みのときだけ効く(telemetry 側でガード)ので、ゲストの匿名
+  // distinct_id をマウントのたびに回転させることはない。
+  useEffect(() => {
+    if (isSignedIn && userId) identifyMember(userId);
+    else resetIdentity();
+  }, [isSignedIn, userId]);
+
   return (
     <AuthSessionContext.Provider value={isSignedIn ? memberSession : guestSession}>
       <header style={headerStyle}>
