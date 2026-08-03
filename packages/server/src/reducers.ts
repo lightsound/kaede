@@ -616,17 +616,25 @@ function trimChatHistory(ctx: Ctx): void {
 // admission) creates a player row, so a waiting-room member, a connection
 // that never entered, or a kicked guest has no row and is refused — and a
 // guests-off flip silences the guests it kicks in the same transaction
-// that removes them. Admission is re-checked on top and a refused leftover
-// row is reclaimed (findAdmittedWorldRows); that refusal is silent — a
-// SenderError would roll the reclaim back, and an honest client's input is
-// gated on the own row existing anyway. The user-deniable refusals (a bad
-// message, the rate limit) stay loud (SenderError, the set_display_name
-// precedent) — they throw before anything is written, so there is nothing
-// to roll back. Validation and the rate rule are pure functions in
-// @maple/shared, shared with the client so its input-side feedback can
-// never disagree with the authority here. The sender's display name is
-// snapshotted onto the row — see the chat_message table comment for why
-// identity lookups cannot outlive the player rows.
+// that removes them.
+//
+// Which refusals are loud follows one line — a SenderError is safe exactly
+// while nothing has been written (reducers are atomic, so a throw rolls
+// every prior write back):
+// - No player row at all (the common refusal; checked before anything can
+//   write): loud, so the sender's client hears it (NetHooks.onChatRefused)
+//   instead of the message silently evaporating.
+// - findAdmittedWorldRows returned undefined DESPITE the row existing: a
+//   reclaim just happened (lost admission, or a broken sibling pair) and
+//   must commit, so this refusal stays silent — the sender still gets
+//   feedback, because deleting its player row reaches it as a row event
+//   and flips its UI to the admission notice.
+// - A bad message or the rate limit: loud; they throw before any write.
+// Validation and the rate rule are pure functions in @maple/shared, shared
+// with the client so its input-side feedback can never disagree with the
+// authority here. The sender's display name is snapshotted onto the row —
+// see the chat_message table comment for why identity lookups cannot
+// outlive the player rows.
 //
 // Guests may chat whenever they may be in the world — deliberately not a
 // separate setting (ゲストに許可する行動範囲): a guest someone let into the
@@ -636,9 +644,12 @@ function trimChatHistory(ctx: Ctx): void {
 // per-capability setting (chat / DM / reactions) can land later as
 // additive space_setting columns with defaults.
 export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+  if (ctx.db.player.identity.find(ctx.sender) === null) {
+    throw new SenderError('send_chat_message refused (not-in-world)');
+  }
   const found = findAdmittedWorldRows(ctx);
   if (!found) {
-    console.warn(`send_chat_message dropped (not-in-world): sender=${ctx.sender.toHexString()}`);
+    console.warn(`send_chat_message dropped (reclaimed): sender=${ctx.sender.toHexString()}`);
     return;
   }
   const verdict = normalizeChatText(text);

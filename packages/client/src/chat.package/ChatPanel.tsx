@@ -111,6 +111,13 @@ export function ChatPanel({
 }) {
   // The client-side mirror of the server's chat_guard token bucket.
   const allowanceRef = useRef(0n);
+  // The marker as it stood before the most recent charge, so a refusal can
+  // hand that token back — the authority never charged the refused send, and
+  // without the rollback the mirror would rate-limit retries the server
+  // would accept. One level of undo only: refusals cannot say WHICH send
+  // failed, so with several in flight the mirror may still run one token
+  // ahead — it is a UX aid, and the server verdict stays the authority.
+  const chargedFromRef = useRef<bigint>(undefined);
   const logRef = useRef<HTMLDivElement>(null);
 
   // Keep the newest line in view. Scrolling on every log change also covers
@@ -120,6 +127,13 @@ export function ChatPanel({
     if (el && log.length > 0) el.scrollTop = el.scrollHeight;
   }, [log]);
 
+  // Refund the mirrored token when a send comes back refused.
+  useEffect(() => {
+    if (!sendRefused || chargedFromRef.current === undefined) return;
+    allowanceRef.current = chargedFromRef.current;
+    chargedFromRef.current = undefined;
+  }, [sendRefused]);
+
   const submit = (draft: string): string | undefined => {
     const verdict = normalizeChatText(draft);
     if (!verdict.ok) return REJECT_MESSAGES[verdict.reason];
@@ -128,6 +142,7 @@ export function ChatPanel({
       nowMicros: BigInt(Date.now()) * 1000n,
     });
     if (!send.ok) return RATE_LIMITED_MESSAGE;
+    chargedFromRef.current = allowanceRef.current;
     allowanceRef.current = send.allowanceMicros;
     onSend(verdict.text);
     return undefined;
