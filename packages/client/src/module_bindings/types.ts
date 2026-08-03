@@ -19,6 +19,21 @@ export const Account = __t.object("Account", {
 });
 export type Account = __Infer<typeof Account>;
 
+export const ChatGuard = __t.object("ChatGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type ChatGuard = __Infer<typeof ChatGuard>;
+
+export const ChatMessage = __t.object("ChatMessage", {
+  id: __t.u64(),
+  sender: __t.identity(),
+  senderName: __t.string(),
+  text: __t.string(),
+  sentAt: __t.timestamp(),
+});
+export type ChatMessage = __Infer<typeof ChatMessage>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   x: __t.f64(),

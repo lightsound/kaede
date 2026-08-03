@@ -134,4 +134,47 @@ export const spacetimedb = schema({
       allowanceMicros: t.i64(),
     },
   ),
+  // The global-scope chat history (ROADMAP Phase 2 第一弾). One row per
+  // message, kept to the newest CHAT_HISTORY_MAX rows by the send reducer
+  // (保持方針): the initial subscription enumerates this whole public table,
+  // so its row count IS every entering client's egress and the space's
+  // storage bill.
+  //
+  // Scope: this table is the single space's conversation, which is what
+  // keeps the VISION guardrail (conversation data stays inside the
+  // organization it happened in) — the whole database is one org scope, and
+  // per the scaling invariant no tenant/org column may appear here. The
+  // planned extensions are all additive: Phase 3 chat scopes append a
+  // scope discriminator + target column with defaults ('space'-scoped rows
+  // read as today's), DMs need private delivery so they land in a table of
+  // their own, and reactions reference `id` from their own table.
+  //
+  // `senderName` snapshots the display name at send time because the
+  // history outlives every other name source: player rows are swept ~10
+  // minutes after leaving and a guest identity is per-tab, so resolving
+  // `sender` at render time would leave old messages nameless. The cost is
+  // that a rename does not rewrite history — the IRC reading, accepted.
+  // `sender` stays alongside for own-message styling and future moderation.
+  chatMessage: table(
+    { name: 'chat_message', public: true },
+    {
+      id: t.u64().primaryKey().autoInc(),
+      sender: t.identity(),
+      senderName: t.string(),
+      text: t.string(),
+      sentAt: t.timestamp(),
+    },
+  ),
+  // The chat rate limit's token-bucket marker — player_guard's shape, for
+  // send_chat_message. Its own table because existing tables must not change
+  // (re-publish compatibility) and because its lifecycle differs: created
+  // lazily on the first send, deleted with the player rows (removePlayer),
+  // so transient guest identities cannot pile up marker rows forever.
+  chatGuard: table(
+    { name: 'chat_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
+    },
+  ),
 });
