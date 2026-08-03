@@ -155,6 +155,21 @@ export const spacetimedb = schema({
   // `sender` at render time would leave old messages nameless. The cost is
   // that a rename does not rewrite history — the IRC reading, accepted.
   // `sender` stays alongside for own-message styling and future moderation.
+  //
+  // Visibility (an explicit decision, 2026-08-03 review): READING is gated
+  // only by holding a connection, like every public table (player
+  // positions, the member directory) — admission (guests_allowed, member
+  // status) gates writing, via send_chat_message. So a guest connected
+  // while guests are disabled, or a rejected/banned member, still receives
+  // the retained history and live messages. Accepted for the
+  // single-community MVP: the SDK's row-level security
+  // (clientVisibilityFilter.sql) cannot express the admission rule — the
+  // guest default is "no space_member row AND guests_allowed (missing row
+  // = true)", which needs NOT EXISTS and default-on-missing semantics
+  // outside the filter SQL subset — and a members-only filter would cut
+  // guests off entirely. Revisit with the Phase 3 chat scopes: closed
+  // conversation groups need filtered reads anyway, so the mechanism (and
+  // this table's read gate) lands with that design.
   chatMessage: table(
     { name: 'chat_message', public: true },
     {

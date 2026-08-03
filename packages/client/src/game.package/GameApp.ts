@@ -1,6 +1,5 @@
 // fallow-ignore-file coverage-gaps -- drives PixiJS against a live WebGL canvas; the logic worth testing is extracted into camera.ts, input.ts, and smoothing.ts, which are unit-tested
 import {
-  CHAT_BUBBLE_DURATION_MS,
   type CollisionMap,
   DEFAULT_MAP,
   DT,
@@ -19,6 +18,7 @@ import {
 } from '@maple/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
+import { type Bubble, createBubble, expireBubble, showBubble, visibleBubbleText } from './bubble';
 import { cameraOffset } from './camera';
 import { createInput, mergeInputs } from './input';
 import { createTouchControls } from './touchControls';
@@ -36,26 +36,6 @@ const LOCAL_COLOR = 0x88c0d0;
 const REMOTE_COLOR = 0xd08770;
 
 const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
-
-// Speech bubbles (chat — ROADMAP Phase 2): dark text on a light rounded
-// rect, wrapped narrow so a max-length message stays a bubble rather than a
-// banner. breakWords because Japanese has no spaces to wrap on.
-const BUBBLE_TEXT_STYLE = new TextStyle({
-  fill: 0x10131b,
-  fontSize: 12,
-  fontFamily: 'sans-serif',
-  wordWrap: true,
-  wordWrapWidth: 180,
-  breakWords: true,
-});
-/** The bubble box: fill, padding around the text, and where its bottom edge
- * sits (clear of the name label above the avatar). */
-const BUBBLE_BOX = {
-  color: 0xf4f6fa,
-  padX: 6,
-  padY: 4,
-  bottomY: -PLAYER_HALF_H - 24,
-} as const;
 
 export interface GameApp {
   destroy(): void;
@@ -98,11 +78,8 @@ interface PlayerView {
   root: Container;
   body: Graphics;
   label: Text;
-  bubble: Container;
-  bubbleBg: Graphics;
-  bubbleText: Text;
-  /** When the visible bubble hides (performance.now() ms); see expireBubble. */
-  bubbleExpiresAt: number;
+  /** The speech bubble, hidden until this player chats (showBubble). */
+  bubble: Bubble;
 }
 
 /** A labelled rectangle sprite parented under the world container. */
@@ -114,48 +91,20 @@ function createPlayerView(world: Container, name: string, color: number): Player
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
-  // The speech bubble, hidden until this player chats (showBubble).
-  const bubbleBg = new Graphics();
-  const bubbleText = new Text({ text: '', style: BUBBLE_TEXT_STYLE });
-  bubbleText.anchor.set(0.5, 1);
-  bubbleText.y = BUBBLE_BOX.bottomY - BUBBLE_BOX.padY;
-  const bubble = new Container();
-  bubble.visible = false;
-  bubble.addChild(bubbleBg, bubbleText);
-  root.addChild(body, label, bubble);
+  const bubble = createBubble();
+  root.addChild(body, label, bubble.root);
   world.addChild(root);
-  return { root, body, label, bubble, bubbleBg, bubbleText, bubbleExpiresAt: 0 };
-}
-
-/** Fills the bubble with `text`, sized to fit, and arms its hide time. */
-function showBubble(view: PlayerView, text: string, nowMs: number): void {
-  view.bubbleText.text = text;
-  const w = view.bubbleText.width + BUBBLE_BOX.padX * 2;
-  const h = view.bubbleText.height + BUBBLE_BOX.padY * 2;
-  view.bubbleBg
-    .clear()
-    .roundRect(-w / 2, BUBBLE_BOX.bottomY - h, w, h, 6)
-    .fill(BUBBLE_BOX.color);
-  view.bubble.visible = true;
-  view.bubbleExpiresAt = nowMs + CHAT_BUBBLE_DURATION_MS;
-}
-
-/**
- * Hides the bubble once its time is up. Checked from the frame loop rather
- * than armed as a setTimeout so there is no timer to cancel on the many
- * paths that destroy a view (remove, clear, app teardown).
- */
-function expireBubble(view: PlayerView, nowMs: number): void {
-  if (view.bubble.visible && nowMs >= view.bubbleExpiresAt) view.bubble.visible = false;
+  return { root, body, label, bubble };
 }
 
 /** One player as the e2e hook reports it: rendered pose plus any live bubble. */
 function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
+  const bubble = visibleBubbleText(view.bubble);
   return {
     x: view.root.x,
     y: view.root.y,
     name: view.label.text,
-    ...(view.bubble.visible ? { bubble: view.bubbleText.text } : {}),
+    ...(bubble === undefined ? {} : { bubble }),
   };
 }
 
@@ -270,8 +219,8 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
   /** Hides every speech bubble whose time is up (see expireBubble). */
   function expireBubbles(nowMs: number): void {
-    expireBubble(local, nowMs);
-    for (const view of remotes.values()) expireBubble(view, nowMs);
+    expireBubble(local.bubble, nowMs);
+    for (const view of remotes.values()) expireBubble(view.bubble, nowMs);
   }
 
   app.ticker.add((ticker) => {
@@ -353,11 +302,11 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       remotes.clear();
     },
     showLocalBubble(text) {
-      showBubble(local, text, performance.now());
+      showBubble(local.bubble, text, performance.now());
     },
     showRemoteBubble(id, text) {
       const view = remotes.get(id);
-      if (view) showBubble(view, text, performance.now());
+      if (view) showBubble(view.bubble, text, performance.now());
     },
   };
 }

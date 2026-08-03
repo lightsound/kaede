@@ -9,12 +9,8 @@ import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
-import {
-  type ChatLog,
-  type ChatMessageView,
-  insertChatMessage,
-  removeChatMessage,
-} from './chatLog';
+import { createChatFeed } from './chatFeed';
+import type { ChatLog } from './chatLog';
 import { type AuthTokenGetter, type Connected, connect, target } from './connection';
 import { createHeartbeat } from './heartbeat';
 import {
@@ -44,9 +40,6 @@ type PlayerRow = RowOf<'player'>;
 
 /** The generated player_name row type (the display name split off the hot row). */
 type PlayerNameRow = RowOf<'playerName'>;
-
-/** The generated chat_message row type (the global-scope chat history). */
-type ChatMessageRow = RowOf<'chatMessage'>;
 
 /** ユーザーの在席とみなす操作イベント。タイムスタンプを書くだけなので capture+passive で広く拾う。 */
 const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const;
@@ -121,10 +114,35 @@ export interface Net {
    * arrives as a chat_message row event — the log line and the speech
    * bubble both come from it, so the sender sees exactly what everyone
    * else received. Failures (a disconnect racing the submit, a server
-   * refusal) only log; the client-side mirror of the shared validation and
-   * rate rules (ChatPanel) makes them rare.
+   * refusal) log AND report through NetHooks.onChatRefused: the panel
+   * clears the draft optimistically, so unlike the other reducers a
+   * dropped call has no visible "nothing changed" signal to fall back on.
    */
   sendChatMessage(text: string): void;
+}
+
+/**
+ * Everything the net stack reports back to the UI. One object rather than
+ * a parameter per callback: the four `(x) => void` consumers had grown
+ * positional (swapping onOwnName/onSpace would have compiled), and the
+ * admission package already set the object-of-hooks precedent.
+ */
+export interface NetHooks {
+  onStatus(status: ConnectionStatus): void;
+  /** See startNet's own-name contract in the doc comment below. */
+  onOwnName(name: string | undefined): void;
+  /** Every space_member / space_setting change, as one SpaceView. */
+  onSpace(view: SpaceView): void;
+  /** Every chat_message change (seed and row events), as one whole log. */
+  onChat(log: ChatLog): void;
+  /**
+   * A chat send that will never land: dropped while disconnected, or
+   * refused by the server after the client-side mirror let it through
+   * (e.g. the per-identity rate bucket shared by a member's other tab —
+   * the mirror is per-tab). The panel surfaces it; without this the
+   * cleared draft would just silently vanish.
+   */
+  onChatRefused(): void;
 }
 
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
@@ -169,14 +187,7 @@ const MEMBER_ACTION_CALLS: Record<
  * retention sweep). "Defined" therefore means "a row exists for
  * set_display_name to land on", which is what gates the name form.
  */
-export function startNet(
-  gameApp: GameApp,
-  onStatus: (status: ConnectionStatus) => void,
-  getAuthToken: AuthTokenGetter,
-  onOwnName: (name: string | undefined) => void,
-  onSpace: (view: SpaceView) => void,
-  onChat: (log: ChatLog) => void,
-): Net {
+export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks: NetHooks): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
   // The whole retry/suspension/generation bookkeeping lives in this pure
@@ -233,16 +244,9 @@ export function startNet(
   // dispose-guarded at its entry point (see wireSession's handlers) —
   // dispose() itself is the only caller that may run after the flip, and
   // only with `undefined`.
-  // The chat log, published whole on every change (the SpaceView precedent:
-  // one value, so the panel can never render a half-applied update). It
-  // survives a disconnect deliberately — stale history beats a blanked
-  // panel — and the next session's seed replaces it with the authoritative
-  // retained rows.
-  let chatLog: ChatLog = [];
-  function publishChat(next: ChatLog): void {
-    chatLog = next;
-    onChat(chatLog);
-  }
+  // The chat log and bubbles, wired per session below; the feed owns the
+  // log across sessions (see chatFeed.ts).
+  const chatFeed = createChatFeed(hooks.onChat);
 
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
@@ -252,7 +256,7 @@ export function startNet(
     // stays visible while offline (the sim keeps running), so blanking the
     // label would flash; the replacement row brings the authoritative name.
     if (name !== undefined) gameApp.setLocalPlayerName(name);
-    onOwnName(name);
+    hooks.onOwnName(name);
   }
 
   function dropSession(): void {
@@ -381,7 +385,7 @@ export function startNet(
     // Admission (承認制 / ゲスト入場設定): the rules live in admission.ts;
     // this session supplies what acting on them needs.
     const admission = wireAdmission(c, myIdentity, {
-      onSpace,
+      onSpace: hooks.onSpace,
       enterWorld,
       isStale: stale,
     });
@@ -396,31 +400,13 @@ export function startNet(
       if (idHex !== myIdHex) recordRemote(idHex, row);
     }
 
-    // Chat: the panel gets one view value per change (seeded from the
-    // cache here, row events below), and each newly arriving message also
-    // shows as a speech bubble. Bubbles come only from the insert EVENTS,
-    // never from this seed: the seed is history (a reload must not replay
-    // a burst of bubbles), an event is someone speaking now.
-    const toChatView = (row: ChatMessageRow): ChatMessageView => ({
-      id: row.id,
-      senderName: row.senderName,
-      text: row.text,
-      own: row.sender.toHexString() === myIdHex,
+    // Chat: the feed seeds its log from the cache and keeps it (and the
+    // speech bubbles) fed by row events — see chatFeed.ts.
+    chatFeed.wire(c, myIdHex, {
+      isStale: stale,
+      showLocalBubble: (text) => gameApp.showLocalBubble(text),
+      showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
     });
-    let seededChat: ChatLog = [];
-    for (const row of c.db.chatMessage.iter()) {
-      seededChat = insertChatMessage(seededChat, toChatView(row));
-    }
-    publishChat(seededChat);
-
-    // The bubble shows over whoever spoke: our own avatar, or the sender's
-    // remote view. A message from a player whose view is not on screen
-    // (hidden as offline, or already removed) is a no-op in gameApp.
-    const showChatBubble = (row: ChatMessageRow): void => {
-      const idHex = row.sender.toHexString();
-      if (idHex === myIdHex) gameApp.showLocalBubble(row.text);
-      else gameApp.showRemoteBubble(idHex, row.text);
-    };
 
     // Every handler below refuses to run once stale: the socket closes
     // asynchronously, so this session's row events can still be delivered
@@ -467,18 +453,6 @@ export function startNet(
       if (stale()) return;
       applyName(row);
     });
-    c.db.chatMessage.onInsert((_ctx, row) => {
-      if (stale()) return;
-      publishChat(insertChatMessage(chatLog, toChatView(row)));
-      showChatBubble(row);
-    });
-    // Retention trims (the server keeps only the newest CHAT_HISTORY_MAX
-    // rows) arrive as deletes; the panel drops the line the moment the
-    // authority does.
-    c.db.chatMessage.onDelete((_ctx, row) => {
-      if (stale()) return;
-      publishChat(removeChatMessage(chatLog, row.id));
-    });
     c.db.player.onDelete((_ctx, row) => {
       if (stale()) return;
       const idHex = row.identity.toHexString();
@@ -524,7 +498,7 @@ export function startNet(
     settled: Connected | undefined,
   ): EffectRunners {
     return {
-      status: (e) => onStatus(e.status),
+      status: (e) => hooks.onStatus(e.status),
       connect: (e) => startConnect(e.generation, e.consecutiveFailures),
       'wire-session': (e) => {
         if (!settled) {
@@ -639,14 +613,23 @@ export function startNet(
    * The shared shell of every user-triggered reducer call: drop with a
    * warning while disconnected, log a server refusal. Success never needs
    * handling here — it arrives as row events (see the Net method docs).
+   * `onRefused` is for the one caller (chat) whose UI otherwise has no
+   * "nothing changed" signal to fall back on; it runs on both the
+   * disconnected drop and a server rejection.
    */
-  function callReducer(name: string, call: (c: DbConnection) => Promise<unknown>): void {
+  function callReducer(
+    name: string,
+    call: (c: DbConnection) => Promise<unknown>,
+    onRefused?: () => void,
+  ): void {
     if (!conn) {
       console.warn(`SpacetimeDB: not connected, ${name} dropped`);
+      onRefused?.();
       return;
     }
     call(conn).catch((err: unknown) => {
       console.error(`SpacetimeDB: ${name} rejected`, err);
+      onRefused?.();
     });
   }
 
@@ -684,7 +667,11 @@ export function startNet(
       callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
     },
     sendChatMessage(text) {
-      callReducer('send_chat_message', (c) => c.reducers.sendChatMessage({ text }));
+      callReducer(
+        'send_chat_message',
+        (c) => c.reducers.sendChatMessage({ text }),
+        hooks.onChatRefused,
+      );
     },
   };
 }

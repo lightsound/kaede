@@ -21,17 +21,6 @@ const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = 
   idle: '離席中のため接続を休止しています。キーボードかマウスの操作で再開します',
 };
 
-/**
- * When the chat input is unusable: sending needs a player row to speak from
- * (the server refuses otherwise), and ownName is defined exactly while one
- * exists — the same gate the rename form uses. A separate function (not
- * inlined) to keep the untestable component under the CRAP budget fallow
- * enforces for uncovered functions (the currentNameOf precedent).
- */
-function chatDisabled(connected: boolean, ownName: string | undefined): boolean {
-  return !connected || ownName === undefined;
-}
-
 const overlayStyle: CSSProperties = {
   position: 'absolute',
   top: 12,
@@ -64,6 +53,10 @@ export function App() {
   // The global-scope chat history, published whole by the net stack on
   // every chat_message change (seed and row events alike).
   const [chatLog, setChatLog] = useState<ChatLog>([]);
+  // True after a send was dropped or refused server-side (onChatRefused) —
+  // the panel clears its draft optimistically, so this is the only trace
+  // the sender gets. Cleared by the next send attempt.
+  const [chatSendRefused, setChatSendRefused] = useState(false);
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -85,14 +78,13 @@ export function App() {
         return;
       }
       game = created;
-      netRef.current = startNet(
-        created,
-        setStatus,
-        session.getToken,
-        setOwnName,
-        setSpace,
-        setChatLog,
-      );
+      netRef.current = startNet(created, session.getToken, {
+        onStatus: setStatus,
+        onOwnName: setOwnName,
+        onSpace: setSpace,
+        onChat: setChatLog,
+        onChatRefused: () => setChatSendRefused(true),
+      });
     })();
 
     return () => {
@@ -139,9 +131,14 @@ export function App() {
         onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
       />
       <ChatPanel
-        disabled={chatDisabled(connected, ownName)}
+        connected={connected}
+        ownName={ownName}
         log={chatLog}
-        onSend={(text) => netRef.current?.sendChatMessage(text)}
+        sendRefused={chatSendRefused}
+        onSend={(text) => {
+          setChatSendRefused(false);
+          netRef.current?.sendChatMessage(text);
+        }}
       />
     </div>
   );

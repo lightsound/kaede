@@ -329,6 +329,33 @@ function findWorldRows(ctx: Ctx) {
   return undefined;
 }
 
+/**
+ * The sender's world rows if the admission rules would still admit it, or
+ * undefined — the shared preamble of every reducer that acts as "someone in
+ * the world" (submitInputs, sendChatMessage). Admission applies to acting,
+ * not just to joining: a player row whose owner the rules would now refuse
+ * (possible only as a leftover from before the rules — e.g. a re-publish
+ * onto a database with pre-admission rows, since every status change
+ * deletes the row transactionally) must not keep driving movement or
+ * speaking, so it is reclaimed rather than obeyed.
+ *
+ * Callers must treat undefined as "refused, and any reclaim is already
+ * done" and RETURN, never throw: reducers are atomic, so a thrown
+ * SenderError would roll back the very reclaim this function performed
+ * (both the admission reclaim here and findWorldRows' broken-pair one).
+ */
+function findAdmittedWorldRows(ctx: Ctx) {
+  const found = findWorldRows(ctx);
+  if (!found) return undefined;
+  const admission = evaluateJoin({
+    membership: membershipOf(ctx, ctx.sender),
+    guestsAllowed: guestsAllowed(ctx),
+  });
+  if (admission.ok) return found;
+  removePlayer(ctx, ctx.sender);
+  return undefined;
+}
+
 /** Identities holding a name or guard row whose player row is gone. */
 function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
   const orphans = [];
@@ -372,23 +399,11 @@ function sweepOrphanedSiblings(ctx: Ctx): void {
 export const submitInputs = spacetimedb.reducer(
   { startTick: t.u32(), inputs: t.array(t.u8()) },
   (ctx, { startTick, inputs }) => {
-    const found = findWorldRows(ctx);
+    // Not in the world, or no longer admitted (findAdmittedWorldRows
+    // reclaims the row in that case): silently drop the batch.
+    const found = findAdmittedWorldRows(ctx);
     if (!found) return;
     const { row, guard } = found;
-
-    // Admission applies to moving, not just to joining: a player row whose
-    // owner the rules would refuse (possible only as a leftover from before
-    // the rules — e.g. a re-publish onto a database with pre-admission rows,
-    // since every status change deletes the row transactionally) must not
-    // keep driving authoritative movement. Reclaim it instead.
-    const admission = evaluateJoin({
-      membership: membershipOf(ctx, ctx.sender),
-      guestsAllowed: guestsAllowed(ctx),
-    });
-    if (!admission.ok) {
-      removePlayer(ctx, ctx.sender);
-      return;
-    }
 
     const verdict = evaluateInputBatch({
       batchLength: inputs.length,
@@ -555,38 +570,6 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
 // ── Chat ────────────────────────────────────────────────────────────────
 
 /**
- * The sender's in-world rows, or a SenderError naming why chat is refused.
- * Chat eligibility IS presence in the world: only join (which enforces
- * admission) creates a player row, so a waiting-room member, a connection
- * that never entered, or a kicked guest has no row and is refused here —
- * and a guests-off flip silences the guests it kicks in the same
- * transaction that removes them. Admission is still re-checked on top (the
- * submit_inputs precedent): a leftover row whose owner the rules would now
- * refuse must not keep speaking, so it is reclaimed rather than obeyed.
- *
- * Guests may chat whenever they may be in the world — deliberately not a
- * separate setting (ゲストに許可する行動範囲): a guest someone let into the
- * room and then cannot talk to defeats the oVice-style ease guest entry
- * exists for, and the guests_allowed toggle already gives admins the
- * "no guests right now" lever, which cuts chat with the same flip. A
- * per-capability setting (chat / DM / reactions) can land later as
- * additive space_setting columns with defaults.
- */
-function requireChatSender(ctx: Ctx): WorldRows {
-  const found = findWorldRows(ctx);
-  if (!found) throw new SenderError('send_chat_message refused (not-in-world)');
-  const admission = evaluateJoin({
-    membership: membershipOf(ctx, ctx.sender),
-    guestsAllowed: guestsAllowed(ctx),
-  });
-  if (!admission.ok) {
-    removePlayer(ctx, ctx.sender);
-    throw new SenderError(`send_chat_message refused (${admission.reason})`);
-  }
-  return found;
-}
-
-/**
  * Charges one send against the sender's chat token bucket, or refuses the
  * send (乱用対策 — the Phase 0 input guard's thinking applied to chat). The
  * rule itself is the pure evaluateChatSend, unit-tested in @maple/shared;
@@ -628,23 +611,43 @@ function trimChatHistory(ctx: Ctx): void {
 }
 
 // Posts one message to the global-scope chat (ROADMAP Phase 2 第一弾).
-// Everything user-deniable is refused loudly (SenderError, the
-// set_display_name precedent — chat sends are deliberate acts, unlike the
-// submit_inputs stream where rejections are routine): not being in the
-// world, a bad message, or the rate limit. Validation and the rate rule are
-// pure functions in @maple/shared, shared with the client so its input-side
-// feedback can never disagree with the authority here. The sender's display
-// name is snapshotted onto the row — see the chat_message table comment for
-// why identity lookups cannot outlive the player rows.
+//
+// Chat eligibility IS presence in the world: only join (which enforces
+// admission) creates a player row, so a waiting-room member, a connection
+// that never entered, or a kicked guest has no row and is refused — and a
+// guests-off flip silences the guests it kicks in the same transaction
+// that removes them. Admission is re-checked on top and a refused leftover
+// row is reclaimed (findAdmittedWorldRows); that refusal is silent — a
+// SenderError would roll the reclaim back, and an honest client's input is
+// gated on the own row existing anyway. The user-deniable refusals (a bad
+// message, the rate limit) stay loud (SenderError, the set_display_name
+// precedent) — they throw before anything is written, so there is nothing
+// to roll back. Validation and the rate rule are pure functions in
+// @maple/shared, shared with the client so its input-side feedback can
+// never disagree with the authority here. The sender's display name is
+// snapshotted onto the row — see the chat_message table comment for why
+// identity lookups cannot outlive the player rows.
+//
+// Guests may chat whenever they may be in the world — deliberately not a
+// separate setting (ゲストに許可する行動範囲): a guest someone let into the
+// room and then cannot talk to defeats the oVice-style ease guest entry
+// exists for, and the guests_allowed toggle already gives admins the
+// "no guests right now" lever, which cuts chat with the same flip. A
+// per-capability setting (chat / DM / reactions) can land later as
+// additive space_setting columns with defaults.
 export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
-  const { nameRow } = requireChatSender(ctx);
+  const found = findAdmittedWorldRows(ctx);
+  if (!found) {
+    console.warn(`send_chat_message dropped (not-in-world): sender=${ctx.sender.toHexString()}`);
+    return;
+  }
   const verdict = normalizeChatText(text);
   if (!verdict.ok) throw new SenderError(`send_chat_message refused (${verdict.reason})`);
   chargeChatAllowance(ctx);
   ctx.db.chatMessage.insert({
     id: 0n, // 0 asks autoInc to assign the real id
     sender: ctx.sender,
-    senderName: nameRow.name,
+    senderName: found.nameRow.name,
     text: verdict.text,
     sentAt: ctx.timestamp,
   });

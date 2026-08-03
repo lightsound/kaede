@@ -58,6 +58,21 @@ describe('normalizeChatText', () => {
     // RIGHT-TO-LEFT OVERRIDE: would reverse surrounding text on other screens.
     expect(normalizeChatText('a\u202Eb')).toEqual({ ok: false, reason: 'forbidden-characters' });
   });
+
+  // DoS hardening: a rejected send is never charged against the rate
+  // bucket, so grossly oversized raw input must be refused BEFORE the
+  // NFC/regex work — even when its whitespace would have collapsed within
+  // the cap (the accepted trade-off; see RAW_LENGTH_FACTOR in text.ts).
+  it('refuses grossly oversized raw input without normalizing it', () => {
+    const padded = `${' '.repeat(CHAT_TEXT_MAX_LENGTH * 4)}あ`;
+    expect(normalizeChatText(padded)).toEqual({ ok: false, reason: 'too-long' });
+  });
+
+  it('accepts raw input at the pre-normalization bound', () => {
+    const text = 'あ'.repeat(CHAT_TEXT_MAX_LENGTH);
+    const padded = text.padStart(CHAT_TEXT_MAX_LENGTH * 4, ' ');
+    expect(normalizeChatText(padded)).toEqual({ ok: true, text });
+  });
 });
 
 describe('evaluateChatSend', () => {

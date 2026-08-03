@@ -9,6 +9,20 @@ export type NormalizedTextVerdict =
     }
   | { ok: false; reason: TextRejectReason };
 
+/**
+ * How much longer than the code-point cap a RAW input may be (in UTF-16
+ * units) before it is refused without any normalization work. A maximal
+ * honest input is 2 units per code point (astral characters); 4x leaves
+ * generous headroom for surrounding whitespace that trimming would remove.
+ * The point is DoS hardening: reducers accept arbitrary strings and a
+ * REJECTED send is never charged against the sender's rate bucket, so
+ * without this bound an in-world client could burn server CPU by looping
+ * megabyte payloads through NFC + Unicode-property-regex work. The
+ * trade-off — pathological inputs whose whitespace would have collapsed
+ * within the cap now read as too-long — costs no input a person types.
+ */
+const RAW_LENGTH_FACTOR = 4;
+
 /** Whitespace runs (including tabs/newlines pasted in) collapse to one space. */
 const WHITESPACE_RUN = /\s+/gu;
 
@@ -35,6 +49,7 @@ const FORBIDDEN = /\p{C}/u;
  * units, so Japanese text is not penalised by surrogate pairs.
  */
 export function normalizeSingleLineText(raw: string, maxCodePoints: number): NormalizedTextVerdict {
+  if (raw.length > maxCodePoints * RAW_LENGTH_FACTOR) return { ok: false, reason: 'too-long' };
   const text = raw.normalize('NFC').replace(WHITESPACE_RUN, ' ').trim();
   if (text.length === 0) return { ok: false, reason: 'empty' };
   if (FORBIDDEN.test(text)) return { ok: false, reason: 'forbidden-characters' };

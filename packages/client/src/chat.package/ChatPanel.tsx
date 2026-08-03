@@ -7,7 +7,14 @@ import {
 } from '@maple/shared';
 import { type CSSProperties, useEffect, useRef } from 'react';
 import type { ChatLog } from '../net.package';
-import { UI_FONT, UI_GOLD, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
+import {
+  UI_ERROR_COLOR,
+  UI_FONT,
+  UI_GOLD,
+  UI_GOLD_BORDER,
+  UI_PANEL_BG,
+  UI_TEXT_COLOR,
+} from '../theme';
 import { DraftForm } from '../ui.package';
 
 const REJECT_MESSAGES: Record<ChatTextRejectReason, string> = {
@@ -17,6 +24,19 @@ const REJECT_MESSAGES: Record<ChatTextRejectReason, string> = {
 };
 
 const RATE_LIMITED_MESSAGE = '送信が速すぎます。少し待ってから送ってください';
+
+const SEND_REFUSED_MESSAGE = '送信できませんでした。少し待ってからもう一度お試しください';
+
+/**
+ * When the chat input is unusable: sending needs a player row to speak from
+ * (the server refuses otherwise), and ownName is defined exactly while one
+ * exists — the same gate the rename form uses. A separate function (not
+ * inlined) to keep the untestable component under the CRAP budget fallow
+ * enforces for uncovered functions (the currentNameOf precedent).
+ */
+function chatDisabled(connected: boolean, ownName: string | undefined): boolean {
+  return !connected || ownName === undefined;
+}
 
 const panelStyle: CSSProperties = {
   position: 'absolute',
@@ -70,14 +90,23 @@ function senderStyle(own: boolean): CSSProperties {
  * message is to clear by hand.
  */
 export function ChatPanel({
-  disabled,
+  connected,
+  ownName,
   log,
+  sendRefused,
   onSend,
 }: {
-  /** True while there is no player row to speak from (not entered, or disconnected). */
-  disabled: boolean;
+  connected: boolean;
+  /** The authoritative name from the own player row; undefined without one. */
+  ownName: string | undefined;
   /** The subscribed chat history, ascending by send order. */
   log: ChatLog;
+  /**
+   * True after a send was dropped or refused server-side (e.g. the
+   * per-identity rate bucket shared with another tab): the draft was
+   * already cleared, so this notice is the only trace the sender gets.
+   */
+  sendRefused: boolean;
   onSend: (text: string) => void;
 }) {
   // The client-side mirror of the server's chat_guard token bucket.
@@ -116,7 +145,7 @@ export function ChatPanel({
         </div>
       )}
       <DraftForm
-        disabled={disabled}
+        disabled={chatDisabled(connected, ownName)}
         placeholder="メッセージを送信"
         ariaLabel="チャット入力"
         buttonLabel="送信"
@@ -124,6 +153,7 @@ export function ChatPanel({
         formStyle={formStyle}
         submit={submit}
       />
+      {sendRefused && <span style={{ color: UI_ERROR_COLOR }}>{SEND_REFUSED_MESSAGE}</span>}
     </div>
   );
 }
