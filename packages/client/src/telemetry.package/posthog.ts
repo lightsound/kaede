@@ -43,6 +43,7 @@ export function initTelemetry(): void {
     autocapture: false,
     capture_performance: false,
     disable_session_recording: true,
+    disable_surveys: true,
     capture_exceptions: true,
     before_send: (event) => {
       if (!event || event.event !== '$exception') return event;
@@ -50,6 +51,21 @@ export function initTelemetry(): void {
     },
   });
   active = true;
+  fireVerificationProbe();
+}
+
+/**
+ * 一時コード(検証後に削除する — ROADMAP Phase 2 エラー監視の完了条件):
+ * `?telemetryProbe=1` を明示的に付けたときだけ、未捕捉例外を1件投げる。
+ * 本番でソースマップ解決済みのスタックトレースが PostHog の issue になり、
+ * メール通知が届くことの実測用。誰かが偶然踏む URL ではなく、通常の
+ * ナビゲーションには一切影響しない(throw はタスクキュー上で起きる)。
+ */
+function fireVerificationProbe(): void {
+  if (!new URLSearchParams(window.location.search).has('telemetryProbe')) return;
+  setTimeout(() => {
+    throw new Error('kaede telemetry probe: delete after production verification');
+  }, 1000);
 }
 
 /**
