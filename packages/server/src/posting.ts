@@ -1,23 +1,29 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, rate limits, retention) are delegated to normalizeChatText / isReactionEmoji / evaluateChatSend / evaluateReactionSend / chatOverflowIds in @maple/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, rate limits, retention) are delegated to normalizeChatText / isReactionEmoji / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @maple/shared and unit-tested there
 
-// The posting reducers (ROADMAP Phase 2): what someone in the world says or
-// gestures — the global-scope chat and the emoji reactions. Split from
-// reducers.ts (which keeps the world lifecycle, membership and settings)
-// because this section grows with every Phase 2/3 conversation feature
-// while depending on the lifecycle only through findAdmittedWorldRows.
+// The posting reducers (ROADMAP Phase 2): what someone in the world says,
+// gestures or claims about themselves — the global-scope chat, the emoji
+// reactions and the manual status. Split from reducers.ts (which keeps the
+// world lifecycle, membership and settings) because this section grows
+// with every Phase 2/3 conversation feature while depending on the
+// lifecycle only through findAdmittedWorldRows.
 import {
+  type Availability,
   CHAT_HISTORY_MAX,
   chatOverflowIds,
   evaluateChatSend,
   evaluateReactionSend,
+  evaluateStatusSend,
+  isAvailability,
   isReactionEmoji,
   normalizeChatText,
+  normalizeStatusText,
   type SendAllowanceRequest,
   type SendAllowanceVerdict,
+  statusViewOf,
 } from '@maple/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, findAdmittedWorldRows, type WorldRows } from './world';
+import { type Ctx, findAdmittedWorldRows, type SenderIdentity, type WorldRows } from './world';
 
 /**
  * The shared preamble of every posting reducer (send_chat_message /
@@ -39,7 +45,10 @@ function findPostingSender(ctx: Ctx, reducerName: string): WorldRows | undefined
 }
 
 /** A send-rate token-bucket marker table (identity → allowanceMicros). */
-type SendGuardTable = Ctx['db']['chatGuard'] | Ctx['db']['reactionGuard'];
+type SendGuardTable =
+  | Ctx['db']['chatGuard']
+  | Ctx['db']['reactionGuard']
+  | Ctx['db']['statusGuard'];
 
 /** A send-rate guard row, as either marker table returns it. */
 type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
@@ -67,6 +76,25 @@ function chargeSendAllowance(
   });
   if (!verdict.ok) throw new SenderError(`${reducerName} refused (rate-limited)`);
   writeSendAllowance(ctx, guardTable, guard, verdict.allowanceMicros);
+}
+
+/**
+ * The shared preamble of the row-writing sends that need no sender rows
+ * (reactions and the status columns): eligibility plus the rate charge.
+ * False when the silent reclaim path refused — the caller must RETURN
+ * without writing (WorldRowsVerdict); every loud refusal throws inside.
+ * send_chat_message keeps calling the pieces itself: it needs the sender's
+ * rows (the name snapshot on the message), not just admission.
+ */
+function admitGuardedSend(
+  ctx: Ctx,
+  reducerName: string,
+  guardTable: SendGuardTable,
+  evaluate: (request: SendAllowanceRequest) => SendAllowanceVerdict,
+): boolean {
+  if (!findPostingSender(ctx, reducerName)) return false;
+  chargeSendAllowance(ctx, guardTable, evaluate, reducerName);
+  return true;
 }
 
 /** Writes the advanced marker back: the sender's row, or its lazy first one. */
@@ -146,11 +174,31 @@ export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, {
   trimChatHistory(ctx);
 });
 
-/** Writes the sender's reaction: the upsert row (see the `reaction` table). */
-function upsertReaction(ctx: Ctx, emoji: string): void {
-  const row = { identity: ctx.sender, emoji, sentAt: ctx.timestamp };
-  if (ctx.db.reaction.identity.find(ctx.sender)) ctx.db.reaction.identity.update(row);
-  else ctx.db.reaction.insert(row);
+/** An identity-keyed table, as the upsert-row features (reaction, status) shape theirs. */
+interface IdentityKeyedTable<Row extends { identity: SenderIdentity }> {
+  insert(row: Row): unknown;
+  identity: {
+    find(identity: SenderIdentity): Row | null;
+    update(row: Row): unknown;
+  };
+}
+
+/**
+ * Writes one identity-keyed upsert row: the row-write half every
+ * upsert-row feature shares (the reaction, and both status columns
+ * through writeStatus), so the find/update/insert dance exists once.
+ * `build` receives the existing row so a caller merging against it
+ * (writeStatus) shares this one lookup instead of finding twice.
+ */
+function upsertByIdentity<Row extends { identity: SenderIdentity }>(
+  table: IdentityKeyedTable<Row>,
+  identity: SenderIdentity,
+  build: (existing: Row | null) => Row,
+): void {
+  const existing = table.identity.find(identity);
+  const row = build(existing);
+  if (existing) table.identity.update(row);
+  else table.insert(row);
 }
 
 // Posts one emoji reaction, shown transiently above the sender's avatar
@@ -166,16 +214,81 @@ function upsertReaction(ctx: Ctx, emoji: string): void {
 //
 // The emoji is validated by exact match against the shared palette
 // (isReactionEmoji) — free-form strings never reach the public table, so
-// no text normalization questions apply. Unlike chat there is no
+// no text normalization questions apply; the check runs before the
+// admission preamble, which is safe because both are loud pre-write
+// refusals (nothing to roll back either way). Unlike chat there is no
 // client-side bucket mirror and no refusal notice: a reaction is a
 // transient gesture, so a burst-exceeding click simply not appearing is
 // feedback enough (an accepted simplification; the server refusal above
 // stays loud for the reducer log).
 export const sendReaction = spacetimedb.reducer({ emoji: t.string() }, (ctx, { emoji }) => {
-  if (!findPostingSender(ctx, 'send_reaction')) return;
   if (!isReactionEmoji(emoji)) {
     throw new SenderError('send_reaction refused (unknown-emoji)');
   }
-  chargeSendAllowance(ctx, ctx.db.reactionGuard, evaluateReactionSend, 'send_reaction');
-  upsertReaction(ctx, emoji);
+  if (!admitGuardedSend(ctx, 'send_reaction', ctx.db.reactionGuard, evaluateReactionSend)) return;
+  upsertByIdentity(ctx.db.reaction, ctx.sender, () => ({
+    identity: ctx.sender,
+    emoji,
+    sentAt: ctx.timestamp,
+  }));
+});
+
+/** One VALIDATED column of the status row, as either reducer writes it. */
+type StatusPatch = { availability: Availability } | { text: string };
+
+/**
+ * The shared body of both status reducers, everything after their (loud,
+ * pre-write) validation: eligibility, the rate charge, and the
+ * single-column write onto the sender's status row. The other column
+ * defaults through statusViewOf — the same "missing row means
+ * DEFAULT_STATUS" rule clients read with, unit-tested in @maple/shared.
+ * The server-side read-modify-write is the point of having two reducers
+ * over one: each control sends only its own validated value, so a stale
+ * client-side view of the OTHER column can never be written back.
+ */
+function writeStatus(ctx: Ctx, reducerName: string, patch: StatusPatch): void {
+  if (!admitGuardedSend(ctx, reducerName, ctx.db.statusGuard, evaluateStatusSend)) return;
+  upsertByIdentity(ctx.db.playerStatus, ctx.sender, (existing) => ({
+    identity: ctx.sender,
+    ...statusViewOf(existing),
+    ...patch,
+  }));
+}
+
+// Sets the sender's availability (ステータス手動切替 — ROADMAP Phase 2):
+// online / away / busy, shown persistently beside the name until changed.
+// Deliberately unrelated to the connection-liveness machinery: the manual
+// 離席 is the player's own claim, while player.online and the idle guard
+// (net.package/idle.ts) answer "is the socket alive" — neither reads nor
+// writes the other. Eligibility is exactly send_chat_message's (presence
+// in the world plus the admission re-check, so guests may set a status
+// whenever they may be in the world, and the guests_allowed kick deletes
+// their row in the same transaction). Which refusals are loud follows
+// sendChatMessage's rule verbatim: no player row, an unknown availability
+// and the rate limit all throw before any write; the reclaim path stays
+// silent because its row deletion must commit. The availability is
+// validated by exact match against the shared vocabulary (isAvailability
+// — the reaction-palette precedent), so free-form strings never reach the
+// public table through this column.
+export const setAvailability = spacetimedb.reducer(
+  { availability: t.string() },
+  (ctx, { availability }) => {
+    if (!isAvailability(availability)) {
+      throw new SenderError('set_availability refused (unknown-availability)');
+    }
+    writeStatus(ctx, 'set_availability', { availability });
+  },
+);
+
+// Sets (or, with an empty text, clears) the sender's free-text status line
+// (自由文ステータス — ROADMAP Phase 2). Everything about set_availability
+// — eligibility, guests, the loud/silent rule, the shared guard bucket —
+// applies verbatim (both delegate to writeStatus); the validation is
+// normalizeStatusText (the normalizeSingleLineText rules at the status
+// cap, with '' accepted as the clear operation), shared with the client's
+// form so a text that leaves the UI is never refused for its content.
+export const setStatusText = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+  const verdict = normalizeStatusText(text);
+  if (!verdict.ok) throw new SenderError(`set_status_text refused (${verdict.reason})`);
+  writeStatus(ctx, 'set_status_text', { text: verdict.text });
 });

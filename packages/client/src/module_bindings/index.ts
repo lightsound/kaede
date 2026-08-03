@@ -41,8 +41,10 @@ import JoinReducer from "./join_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
 import SendReactionReducer from "./send_reaction_reducer";
+import SetAvailabilityReducer from "./set_availability_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
 import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
+import SetStatusTextReducer from "./set_status_text_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
 import UnbanMemberReducer from "./unban_member_reducer";
 
@@ -52,6 +54,7 @@ import UnbanMemberReducer from "./unban_member_reducer";
 import ChatMessageRow from "./chat_message_table";
 import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
+import PlayerStatusRow from "./player_status_table";
 import ReactionRow from "./reaction_table";
 import SpaceMemberRow from "./space_member_table";
 import SpaceSettingRow from "./space_setting_table";
@@ -93,6 +96,17 @@ const tablesSchema = __schema({
       { name: 'player_name_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerNameRow),
+  playerStatus: __table({
+    name: 'player_status',
+    indexes: [
+      { accessor: 'identity', name: 'player_status_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'player_status_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, PlayerStatusRow),
   reaction: __table({
     name: 'reaction',
     indexes: [
@@ -137,8 +151,10 @@ const reducersSchema = __reducers(
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),
   __reducerSchema("send_reaction", SendReactionReducer),
+  __reducerSchema("set_availability", SetAvailabilityReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),
   __reducerSchema("set_guests_allowed", SetGuestsAllowedReducer),
+  __reducerSchema("set_status_text", SetStatusTextReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
   __reducerSchema("unban_member", UnbanMemberReducer),
 );

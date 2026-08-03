@@ -86,15 +86,17 @@ export async function connect(
         // be re-minted per connect, and overwriting the anonymous token with
         // it would strand the guest identity after sign-out.
         if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
-        // The world (player and the name labels split off it), everything
-        // admission is decided from (the member directory and the space
-        // settings), and the conversation tables (the chat history and the
-        // current reactions). All must be applied before we resolve, so the
-        // first admission decision rules on real rows rather than an empty
-        // cache, and the chat log seeds from the full retained history
-        // (bounded server-side to CHAT_HISTORY_MAX rows — see the
-        // chat_message table). Reactions are subscribed for their row
-        // EVENTS only; the seed never displays (see reactionFeed.ts).
+        // The world (player, plus the name labels and statuses split off /
+        // beside it), everything admission is decided from (the member
+        // directory and the space settings), and the conversation tables
+        // (the chat history and the current reactions). All must be applied
+        // before we resolve, so the first admission decision rules on real
+        // rows rather than an empty cache, and the chat log seeds from the
+        // full retained history (bounded server-side to CHAT_HISTORY_MAX
+        // rows — see the chat_message table). Reactions are subscribed for
+        // their row EVENTS only; the seed never displays (see
+        // reactionFeed.ts). Statuses are the opposite: the seed IS the
+        // display (a status is state, restored on entry — see sync.ts).
         conn
           .subscriptionBuilder()
           .onApplied(() => resolve({ conn, myIdentity: identity, myIdHex: identity.toHexString() }))
@@ -105,6 +107,7 @@ export async function connect(
             tables.spaceSetting,
             tables.chatMessage,
             tables.reaction,
+            tables.playerStatus,
           ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping

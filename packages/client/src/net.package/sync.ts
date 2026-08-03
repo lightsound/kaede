@@ -1,10 +1,13 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
 import {
+  type Availability,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
   type MemberAction,
   type ReactionEmoji,
+  type StatusView,
   stateFromRow,
+  statusLabel,
 } from '@maple/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
@@ -31,6 +34,7 @@ import { createPrediction } from './prediction';
 import { wireReactions } from './reactionFeed';
 import { createRemoteViews } from './remoteView';
 import type { RowOf } from './rows';
+import { cachedStatusView, wireStatuses } from './statusFeed';
 
 export type { ConnectionStatus } from './lifecycle';
 
@@ -126,6 +130,17 @@ export interface Net {
    * so a refused send simply not appearing is feedback enough.
    */
   sendReaction(emoji: ReactionEmoji): void;
+  /**
+   * Sets the sender's availability (set_availability) or free-text status
+   * line (set_status_text; '' clears). Success arrives as a player_status
+   * row event — the line under the avatar and the control's highlight both
+   * come from it, so the sender sees exactly what everyone else received.
+   * Failures only log: the authoritative view simply not changing is the
+   * feedback (the setDisplayName rule), and the control keeps offering the
+   * retry.
+   */
+  setAvailability(availability: Availability): void;
+  setStatusText(text: string): void;
 }
 
 /**
@@ -142,6 +157,14 @@ export interface NetHooks {
   onSpace(view: SpaceView): void;
   /** Every chat_message change (seed and row events), as one whole log. */
   onChat(log: ChatLog): void;
+  /**
+   * The own manual status whenever the authority's view of it changes —
+   * session entry (seeded from the cache), every own player_status row
+   * event, and the row's deletion (back to DEFAULT_STATUS). What keeps the
+   * status control's highlight honest: it renders this, never what was
+   * clicked.
+   */
+  onOwnStatus(view: StatusView): void;
   /**
    * A chat send that will never land: dropped while disconnected, or
    * refused by the server after the client-side mirror let it through
@@ -265,6 +288,31 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     hooks.onOwnName(name);
   }
 
+  // The single path for own-status changes (the publishOwnName shape): the
+  // canvas line and the onOwnStatus consumer cannot drift apart, and the
+  // double report a session entry produces (handleOwnRow seeds from the
+  // cache, then a row event may repeat the same value) is deduplicated by
+  // value here. Unlike the name there is no "row unknown" state to report:
+  // a missing row IS a status (the default), so the value never goes
+  // undefined — the control disables through the onOwnName gate instead.
+  // For the same reason dispose() has no reset counterpart to its
+  // publishOwnName(undefined): a consumer surviving this stack holds a
+  // stale-but-disabled value at worst, and the replacement stack's own
+  // handleOwnRow seed (its dedupe starts empty) republishes the truth.
+  let lastOwnStatus: StatusView | undefined;
+  function publishOwnStatus(view: StatusView): void {
+    if (
+      lastOwnStatus !== undefined &&
+      lastOwnStatus.availability === view.availability &&
+      lastOwnStatus.text === view.text
+    ) {
+      return;
+    }
+    lastOwnStatus = view;
+    gameApp.setLocalStatus(statusLabel(view));
+    hooks.onOwnStatus(view);
+  }
+
   function dropSession(): void {
     prediction = undefined;
     conn = undefined;
@@ -305,11 +353,24 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     const nameOf = (identity: Identity): string =>
       c.db.playerName.identity.find(identity)?.name ?? '';
 
+    // The display attributes record() carries per row change, read from the
+    // cache like nameOf. The status seed rides here: a freshly (re)created
+    // view — session seed, or a player coming back from the offline-hidden
+    // state — starts with the cached status (see cachedStatusView).
+    const labelOf = (identity: Identity) => ({
+      name: nameOf(identity),
+      status: statusLabel(cachedStatusView(c, identity)),
+    });
+
     // Our row appears (or already exists, when resuming an identity) via join
     // below. Start/refresh the simulation from that authoritative state.
     const handleOwnRow = (row: PlayerRow) => {
       if (prediction) return;
       publishOwnName(nameOf(row.identity));
+      // The seed half of the status display (a status is state, so unlike
+      // reactions the subscribed cache restores it on entry/reload); row
+      // events keep it fresh from here (wireStatuses).
+      publishOwnStatus(cachedStatusView(c, row.identity));
       // Announce liveness once per session start, unconditionally. Resuming
       // a surviving row skips join, so nothing server-side flips its offline
       // flag back or refreshes its updatedAt — and the send gate means no
@@ -352,7 +413,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       }
       remoteViews.record(
         idHex,
-        nameOf(row.identity),
+        labelOf(row.identity),
         { ...row, updatedAtMs: Number(row.updatedAt.toMillis()) },
         performance.now(),
       );
@@ -371,6 +432,15 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       }
       remoteViews.setName(idHex, row.name);
     };
+
+    // Statuses: state wiring, seed + row events (the opposite of the
+    // reaction seed rule) — see statusFeed.ts. The seed half rides labelOf
+    // and handleOwnRow; the events land here.
+    wireStatuses(c, myIdHex, {
+      isStale: stale,
+      applyOwn: publishOwnStatus,
+      applyRemote: (idHex, view) => remoteViews.setStatus(idHex, statusLabel(view)),
+    });
 
     /**
      * Enters the world once admission says so: resume the surviving own row
@@ -648,6 +718,21 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     });
   }
 
+  /**
+   * Builds the common Net method shape: one argument forwarded to one
+   * reducer through callReducer. A factory rather than five hand-written
+   * one-line wrappers because those wrappers are token-identical and only
+   * grow with every posting feature (chat, reaction, status…) — the exact
+   * repetition the semantic clone gate exists to stop. Methods that differ
+   * (no argument, two arguments, a refusal hook) stay written out.
+   */
+  function forward<A>(
+    name: string,
+    call: (c: DbConnection, arg: A) => Promise<unknown>,
+  ): (arg: A) => void {
+    return (arg) => callReducer(name, (c) => call(c, arg));
+  }
+
   return {
     dispose() {
       dispatch({ kind: 'dispose' });
@@ -669,18 +754,18 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       // disposed.
       publishOwnName(undefined);
     },
-    setDisplayName(name) {
-      callReducer('set_display_name', (c) => c.reducers.setDisplayName({ name }));
-    },
+    setDisplayName: forward('set_display_name', (c, name: string) =>
+      c.reducers.setDisplayName({ name }),
+    ),
     applyForMembership() {
       callReducer('apply_for_membership', (c) => c.reducers.applyForMembership({}));
     },
     memberAction(action, member) {
       callReducer(`${action}_member`, (c) => MEMBER_ACTION_CALLS[action](c, member));
     },
-    setGuestsAllowed(allowed) {
-      callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
-    },
+    setGuestsAllowed: forward('set_guests_allowed', (c, allowed: boolean) =>
+      c.reducers.setGuestsAllowed({ allowed }),
+    ),
     sendChatMessage(text) {
       callReducer(
         'send_chat_message',
@@ -688,8 +773,14 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
         hooks.onChatRefused,
       );
     },
-    sendReaction(emoji) {
-      callReducer('send_reaction', (c) => c.reducers.sendReaction({ emoji }));
-    },
+    sendReaction: forward('send_reaction', (c, emoji: ReactionEmoji) =>
+      c.reducers.sendReaction({ emoji }),
+    ),
+    setAvailability: forward('set_availability', (c, availability: Availability) =>
+      c.reducers.setAvailability({ availability }),
+    ),
+    setStatusText: forward('set_status_text', (c, text: string) =>
+      c.reducers.setStatusText({ text }),
+    ),
   };
 }

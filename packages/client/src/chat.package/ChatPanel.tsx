@@ -18,7 +18,7 @@ import {
   UI_PANEL_BG,
   UI_TEXT_COLOR,
 } from '../theme';
-import { DraftForm } from '../ui.package';
+import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
 
 const REJECT_MESSAGES: Record<ChatTextRejectReason, string> = {
   empty: 'メッセージを入力してください',
@@ -29,17 +29,6 @@ const REJECT_MESSAGES: Record<ChatTextRejectReason, string> = {
 const RATE_LIMITED_MESSAGE = '送信が速すぎます。少し待ってから送ってください';
 
 const SEND_REFUSED_MESSAGE = '送信できませんでした。少し待ってからもう一度お試しください';
-
-/**
- * When the chat input is unusable: sending needs a player row to speak from
- * (the server refuses otherwise), and ownName is defined exactly while one
- * exists — the same gate the rename form uses. A separate function (not
- * inlined) to keep the untestable component under the CRAP budget fallow
- * enforces for uncovered functions (the currentNameOf precedent).
- */
-function chatDisabled(connected: boolean, ownName: string | undefined): boolean {
-  return !connected || ownName === undefined;
-}
 
 const panelStyle: CSSProperties = {
   position: 'absolute',
@@ -97,17 +86,8 @@ function senderStyle(own: boolean): CSSProperties {
  * The reaction palette row (ROADMAP Phase 2): one button per palette emoji,
  * sitting between the log and the input row so the input stays where the
  * chat habit expects it (the bottom line). Gated exactly like the chat
- * input — sending needs a player row to react from.
- *
- * Each click BLURS its button. Leaving the focus would make the browser's
- * default activation re-fire the reaction on a later Enter, and — because
- * isTextEntry exempts only text fields, not buttons — feed held keys to
- * the world input at the same time, with Space additionally caught by the
- * MOVE_KEYS preventDefault (a keydown default the button's keyup click
- * synthesis then trips over, browser-dependently). Blurring makes every
- * key after a click mean exactly one thing: walking the avatar. Verified
- * by hand (2026-08-03): without the blur, Enter after a click re-sent the
- * reaction; with it, arrows/Space/Enter all go to the world.
+ * input — sending needs a player row to react from. Each click blurs its
+ * button (blurringClick — see its comment for the keyboard reasons).
  *
  * No client-side bucket mirror and no refusal notice, unlike the message
  * form: a reaction is a fire-and-forget gesture with no draft to lose, so
@@ -130,10 +110,7 @@ function ReactionRow({
           style={reactionButtonStyle}
           aria-label={`リアクション ${emoji}`}
           disabled={disabled}
-          onClick={(e) => {
-            onSendReaction(emoji);
-            e.currentTarget.blur();
-          }}
+          onClick={blurringClick(() => onSendReaction(emoji))}
         >
           {emoji}
         </button>
@@ -207,7 +184,7 @@ export function ChatPanel({
 
   // The one gate for both send controls: the reaction row and the message
   // form need the same player row to speak from.
-  const disabled = chatDisabled(connected, ownName);
+  const disabled = postingDisabled(connected, ownName);
 
   const submit = (draft: string): string | undefined => {
     const verdict = normalizeChatText(draft);

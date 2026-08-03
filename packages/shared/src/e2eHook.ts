@@ -20,9 +20,11 @@ export interface E2EWorldSnapshot {
 
 /**
  * One rendered player as the hook reports it. `bubble` is the speech-bubble
- * text currently shown above the avatar and `reaction` the emoji reaction,
- * each absent while none is — both are canvas-drawn (like positions), so
- * the chat and reaction specs can only assert on them through this hook.
+ * text currently shown above the avatar, `reaction` the emoji reaction, and
+ * `status` the composed status line under the avatar (statusLabel in
+ * status.ts), each absent while none is — all are canvas-drawn (like
+ * positions), so the chat, reaction and status specs can only assert on
+ * them through this hook.
  */
 export interface E2EPlayerSnapshot {
   x: number;
@@ -30,6 +32,7 @@ export interface E2EPlayerSnapshot {
   name: string;
   bubble?: string;
   reaction?: string;
+  status?: string;
 }
 
 export interface E2EHook {

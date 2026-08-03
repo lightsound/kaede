@@ -49,9 +49,27 @@ const REMOTE_COLOR = 0xd08770;
 
 const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
 
+/**
+ * The per-player display attributes rendered alongside the pose: the name
+ * label and the status line under the avatar (`undefined` while default).
+ * One object rather than adjacent positional strings so a swapped call
+ * site cannot compile (the NetHooks precedent), and so the Phase 5 avatar
+ * attributes (pose, gear) land as fields instead of a seventh parameter.
+ */
+export interface PlayerLabel {
+  name: string;
+  status: string | undefined;
+}
+
 export interface GameApp {
   destroy(): void;
   setLocalPlayerName(name: string): void;
+  /**
+   * Shows `status` (the composed line from statusLabel) under the local
+   * avatar, or hides the line when undefined (the default status). Persistent
+   * state, not a timed overhead — it stays until the next call.
+   */
+  setLocalStatus(status: string | undefined): void;
   /**
    * Begin stepping the local simulation from `state` at `tick`. Until this is
    * called the ticker renders the scene but never steps physics or fires
@@ -72,7 +90,7 @@ export interface GameApp {
   resetLocal(state: PlayerState, tick: number): void;
   onLocalTick(cb: (state: PlayerState, tick: number, packedInput: number) => void): void;
   onFrame(cb: (nowMs: number) => void): void;
-  upsertRemotePlayer(id: string, name: string, x: number, y: number, facing: Facing): void;
+  upsertRemotePlayer(id: string, label: PlayerLabel, x: number, y: number, facing: Facing): void;
   removeRemotePlayer(id: string): void;
   /** Drop every remote player sprite (e.g. when the connection is lost). */
   clearRemotePlayers(): void;
@@ -98,10 +116,27 @@ interface PlayerView {
   root: Container;
   body: Graphics;
   label: Text;
+  /** The status line under the avatar, hidden while the status is default (setViewStatus). */
+  status: Text;
   /** The speech bubble, hidden until this player chats (showBubble). */
   bubble: Bubble;
   /** The emoji reaction, hidden until this player reacts (showReaction). */
   reaction: ReactionBadge;
+}
+
+// The status line (ROADMAP Phase 2): dimmer and smaller than the name so
+// the name stays the anchor. It sits UNDER the avatar — the slot above the
+// name belongs to the transient overheads (bubble, reaction stack), and a
+// persistent line there would collide with both.
+const STATUS_STYLE = new TextStyle({ fill: 0xb8c2d9, fontSize: 11, fontFamily: 'sans-serif' });
+
+/** The status line's Text, parked under the avatar and hidden until a status arrives. */
+function createStatusText(): Text {
+  const status = new Text({ text: '', style: STATUS_STYLE });
+  status.anchor.set(0.5, 0);
+  status.y = PLAYER_HALF_H + 4;
+  status.visible = false;
+  return status;
 }
 
 /** A labelled rectangle sprite parented under the world container. */
@@ -113,24 +148,39 @@ function createPlayerView(world: Container, name: string, color: number): Player
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
+  const status = createStatusText();
   const bubble = createBubble();
   const reaction = createReactionBadge();
-  root.addChild(body, label, bubble.root, reaction.root);
+  root.addChild(body, label, status, bubble.root, reaction.root);
   world.addChild(root);
-  return { root, body, label, bubble, reaction };
+  return { root, body, label, status, bubble, reaction };
 }
 
-/** One player as the e2e hook reports it: rendered pose plus any live overheads. */
+/**
+ * Applies a composed status line (statusLabel in @maple/shared, undefined
+ * while default) to one view. Unlike the transient overheads there is no
+ * timer: a status is state, visible until the next row event replaces it.
+ */
+function setViewStatus(view: PlayerView, status: string | undefined): void {
+  view.status.visible = status !== undefined;
+  view.status.text = status ?? '';
+}
+
+/**
+ * One player as the e2e hook reports it: rendered pose plus any live
+ * overheads and the status line. The optional fields are guarded
+ * assignments (one uniform shape) rather than conditional spreads — three
+ * spread ternaries put this uncovered function over the CRAP budget
+ * fallow enforces.
+ */
 function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
+  const snap: E2EPlayerSnapshot = { x: view.root.x, y: view.root.y, name: view.label.text };
   const bubble = visibleBubbleText(view.bubble);
+  if (bubble !== undefined) snap.bubble = bubble;
   const reaction = visibleReactionEmoji(view.reaction);
-  return {
-    x: view.root.x,
-    y: view.root.y,
-    name: view.label.text,
-    ...(bubble === undefined ? {} : { bubble }),
-    ...(reaction === undefined ? {} : { reaction }),
-  };
+  if (reaction !== undefined) snap.reaction = reaction;
+  if (view.status.visible) snap.status = view.status.text;
+  return snap;
 }
 
 /**
@@ -289,6 +339,9 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     setLocalPlayerName(name) {
       local.label.text = name;
     },
+    setLocalStatus(status) {
+      setViewStatus(local, status);
+    },
     start(state, t) {
       prev = curr = state;
       tick = t;
@@ -322,13 +375,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     onFrame(cb) {
       frameCbs.push(cb);
     },
-    upsertRemotePlayer(id, name, x, y, facing) {
+    upsertRemotePlayer(id, label, x, y, facing) {
       let view = remotes.get(id);
       if (!view) {
-        view = createPlayerView(world, name, REMOTE_COLOR);
+        view = createPlayerView(world, label.name, REMOTE_COLOR);
         remotes.set(id, view);
       }
-      view.label.text = name;
+      view.label.text = label.name;
+      setViewStatus(view, label.status);
       view.root.position.set(x, y);
       // Flip only the body; flipping the root would mirror the name label.
       view.body.scale.x = facing;

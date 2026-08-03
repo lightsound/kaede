@@ -241,4 +241,63 @@ export const spacetimedb = schema({
       allowanceMicros: t.i64(),
     },
   ),
+  // The sender's manual status (ROADMAP Phase 2): the availability switch
+  // (オンライン/離席/取り込み中) and the free-text line, shown persistently
+  // beside the name label. The reaction table's shape — one UPSERT row per
+  // identity — but the OPPOSITE display convention, because a status is
+  // state where a reaction is a gesture:
+  // - Clients display it from the initial-subscription SEED as well as from
+  //   insert/update row events: a status must survive a reload and greet
+  //   every entering client, exactly what replaying seeded reaction rows
+  //   must never do. There is no display window and no timestamp column —
+  //   re-asserting the same status changes nothing anyone could see, so
+  //   nothing needs to force an update event (the reason reaction carries
+  //   sentAt does not apply).
+  // - A missing row reads as the default (online, no text — DEFAULT_STATUS
+  //   in @maple/shared, the space_setting missing-row precedent), so no
+  //   join hook seeds rows and only players who changed their status ever
+  //   occupy entry egress.
+  // - Both values live on one row: they are one concept (the status beside
+  //   the name), always rendered together, and a second table would double
+  //   the subscription, the cleanup and the guard for no isolation gain.
+  //   Each reducer (set_availability / set_status_text) rewrites only its
+  //   own column server-side, so the two controls can never clobber each
+  //   other with a stale client-side merge.
+  // - Rows die with the player: removePlayer deletes them, so the table is
+  //   bounded by the world population and a member's status does NOT
+  //   persist across sessions (an explicit decision — yesterday's
+  //   取り込み中 greeting the morning room is worse than the default, and a
+  //   row outliving its public player rows would ride every entering
+  //   client's egress forever). It does survive a reload or a network blip:
+  //   the row lives exactly as long as the player row, whose retention
+  //   window (~10 min) covers both. Cross-session persistence, if ever
+  //   wanted, lands additively as an account-keyed table without touching
+  //   this one.
+  // AFK auto-detection (deferred by ROADMAP) would write this same row from
+  // a future reducer; avatar poses (Phase 5) render from it — both additive.
+  // Like every realtime table, no tenant/org column (the scaling invariant).
+  playerStatus: table(
+    { name: 'player_status', public: true },
+    {
+      identity: t.identity().primaryKey(),
+      availability: t.string(), // Availability in @maple/shared: 'online' | 'away' | 'busy'
+      text: t.string(), // free-text status line, '' while unset
+    },
+  ),
+  // The status rate limit's token-bucket marker — chat_guard's shape, for
+  // set_availability / set_status_text. Honest writes are a few per day,
+  // but a status write is a public-row broadcast to every subscriber and a
+  // refused send is never charged, so the bucket bounds what a hostile
+  // in-world client can turn into egress. Its own table for the same
+  // reason reaction_guard is not the chat bucket: ChatPanel mirrors
+  // chat_guard client-side, and any shared bucket would advance without
+  // the mirror knowing. Same lifecycle as the other lazy guards: created
+  // on first send, deleted with the player rows (removePlayer).
+  statusGuard: table(
+    { name: 'status_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
+    },
+  ),
 });
