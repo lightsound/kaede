@@ -1,3 +1,4 @@
+// fallow-ignore-file coverage-gaps -- a type-only alias over the generated bindings; nothing executes, so no test dependency path can exist
 import type { DbConnection } from '../module_bindings';
 
 /**
