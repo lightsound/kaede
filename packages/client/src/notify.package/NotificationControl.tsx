@@ -88,9 +88,14 @@ function MuteToggle({
  */
 export function NotificationControl() {
   const notifier = dmNotifier();
-  // The only mutations flow through this control's own children (the
-  // notifier has no other writer), so re-reading after each action stays
-  // consistent without a subscription.
+  // The MUTE only mutates through this control's own children (the
+  // notifier has no other writer of it), so re-reading after each action
+  // stays consistent without a subscription. The PERMISSION has an outside
+  // writer — the user flipping site settings mid-session — which this
+  // control will not see until a remount; accepted, because notifications
+  // themselves stay correct (the notifier re-reads permission per row) and
+  // a live permissions.query subscription is not worth the machinery for
+  // a label that heals on reload.
   const [ui, setUi] = useState<NotifyUiState>(notifier.uiState());
   const refresh = () => setUi(notifier.uiState());
 

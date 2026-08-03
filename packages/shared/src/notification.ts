@@ -109,11 +109,9 @@ export interface DmNotificationContent {
  * (Hiding message previews is a future per-user setting, out of scope with
  * the rest of notification persistence.)
  */
-export function dmNotificationContent(event: {
-  senderName: string;
-  senderKey: string;
-  text: string;
-}): DmNotificationContent {
+export function dmNotificationContent(
+  event: Pick<DmRowEvent, 'senderName' | 'senderKey' | 'text'>,
+): DmNotificationContent {
   return {
     title: `${event.senderName} からのDM`,
     body: event.text,
