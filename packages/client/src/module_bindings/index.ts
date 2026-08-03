@@ -40,6 +40,7 @@ import BanMemberReducer from "./ban_member_reducer";
 import JoinReducer from "./join_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
+import SendReactionReducer from "./send_reaction_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
 import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
@@ -51,6 +52,7 @@ import UnbanMemberReducer from "./unban_member_reducer";
 import ChatMessageRow from "./chat_message_table";
 import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
+import ReactionRow from "./reaction_table";
 import SpaceMemberRow from "./space_member_table";
 import SpaceSettingRow from "./space_setting_table";
 
@@ -91,6 +93,17 @@ const tablesSchema = __schema({
       { name: 'player_name_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerNameRow),
+  reaction: __table({
+    name: 'reaction',
+    indexes: [
+      { accessor: 'identity', name: 'reaction_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'reaction_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, ReactionRow),
   spaceMember: __table({
     name: 'space_member',
     indexes: [
@@ -123,6 +136,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join", JoinReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),
+  __reducerSchema("send_reaction", SendReactionReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),
   __reducerSchema("set_guests_allowed", SetGuestsAllowedReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),

@@ -3,6 +3,7 @@ import {
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
   type MemberAction,
+  type ReactionEmoji,
   stateFromRow,
 } from '@maple/shared';
 import type { Identity } from 'spacetimedb';
@@ -27,13 +28,11 @@ import {
   transition,
 } from './lifecycle';
 import { createPrediction } from './prediction';
+import { wireReactions } from './reactionFeed';
 import { createRemoteViews } from './remoteView';
+import type { RowOf } from './rows';
 
 export type { ConnectionStatus } from './lifecycle';
-
-/** A generated row type, inferred because the bindings don't re-export them. */
-type RowOf<T extends keyof DbConnection['db']> =
-  ReturnType<DbConnection['db'][T]['iter']> extends Iterator<infer R> ? R : never;
 
 /** The generated own/remote player row type (all columns). */
 type PlayerRow = RowOf<'player'>;
@@ -119,6 +118,14 @@ export interface Net {
    * dropped call has no visible "nothing changed" signal to fall back on.
    */
   sendChatMessage(text: string): void;
+  /**
+   * Posts one palette-emoji reaction (send_reaction). Success arrives as a
+   * reaction row event — the badge over the sender's avatar comes from it,
+   * so the sender sees exactly what everyone else received. Failures only
+   * log (no onChatRefused counterpart): a reaction is a transient gesture,
+   * so a refused send simply not appearing is feedback enough.
+   */
+  sendReaction(emoji: ReactionEmoji): void;
 }
 
 /**
@@ -407,6 +414,15 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
     });
 
+    // Reactions: display-only wiring, row events only (no seed) — see
+    // reactionFeed.ts, which also owns the palette narrowing of the raw
+    // row string.
+    wireReactions(c, myIdHex, {
+      isStale: stale,
+      showLocalReaction: (emoji) => gameApp.showLocalReaction(emoji),
+      showRemoteReaction: (idHex, emoji) => gameApp.showRemoteReaction(idHex, emoji),
+    });
+
     // Every handler below refuses to run once stale: the socket closes
     // asynchronously, so this session's row events can still be delivered
     // after dispose() or after an idle resume replaced the session, and
@@ -671,6 +687,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
         (c) => c.reducers.sendChatMessage({ text }),
         hooks.onChatRefused,
       );
+    },
+    sendReaction(emoji) {
+      callReducer('send_reaction', (c) => c.reducers.sendReaction({ emoji }));
     },
   };
 }

@@ -192,4 +192,53 @@ export const spacetimedb = schema({
       allowanceMicros: t.i64(),
     },
   ),
+  // The sender's current emoji reaction (ROADMAP Phase 2), shown transiently
+  // above their avatar. One UPSERT row per identity rather than a
+  // chat_message-style append log — a deliberate schema decision:
+  // - The reaction is an ephemeral gesture with no history value, so rows
+  //   for it are pure entry egress. Keying by identity bounds the table at
+  //   "everyone currently in the world" with no trimming rule, where an
+  //   append log would grow per send and need its own retention sweep.
+  // - The visible consequence — one reaction per person at a time, a new
+  //   send replacing the previous one mid-display — is the natural reading
+  //   of an overhead emote, not a loss.
+  // - Clients therefore display on BOTH insert (first reaction) and update
+  //   (every later one) row events, never from the initial-subscription
+  //   seed: the row outlives its display window, so seeded rows are
+  //   history and must not replay on reload (the chat bubble seed/event
+  //   rule). `sentAt` exists so a repeat of the SAME emoji still changes
+  //   the row (= still fires an update event); clients never compare it
+  //   against their own clock — the display timer arms client-side on
+  //   event receipt.
+  // - Rows die with the player: removePlayer deletes them, because a
+  //   departed guest identity's row left behind in a public table would
+  //   ride every future entering client's egress forever.
+  // Message-attached (Slack-style) reactions are a different feature and
+  // arrive later as their own additive table referencing chat_message.id;
+  // this table stays the overhead gesture. Like every conversation table,
+  // it is the single space's data — no tenant/org column (the scaling
+  // invariant).
+  reaction: table(
+    { name: 'reaction', public: true },
+    {
+      identity: t.identity().primaryKey(),
+      emoji: t.string(),
+      sentAt: t.timestamp(),
+    },
+  ),
+  // The reaction rate limit's token-bucket marker — chat_guard's shape, for
+  // send_reaction. Deliberately NOT the chat bucket: ChatPanel mirrors
+  // chat_guard client-side (allowanceRef) for instant feedback, and a
+  // shared bucket would advance server-side on every reaction without the
+  // mirror knowing, turning honest chat sends into surprise server
+  // refusals. A table of its own costs one more delete in removePlayer
+  // (same lifecycle as chat_guard: lazy on first send, deleted with the
+  // player rows) and keeps the two rates independently tunable.
+  reactionGuard: table(
+    { name: 'reaction_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
+    },
+  ),
 });

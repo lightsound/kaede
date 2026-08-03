@@ -9,10 +9,10 @@ import {
 } from '@maple/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
+import type { RowOf } from './rows';
 
 /** The generated space_member row type (all columns). */
-type SpaceMemberRow =
-  ReturnType<DbConnection['db']['spaceMember']['iter']> extends Iterator<infer R> ? R : never;
+type SpaceMemberRow = RowOf<'spaceMember'>;
 
 /** One space_member row, shaped for the admin UI. */
 export interface SpaceMemberView {

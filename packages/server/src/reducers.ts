@@ -3,40 +3,37 @@ import {
   type AcceptedBatchVerdict,
   asMembership,
   type BatchRejectReason,
-  CHAT_HISTORY_MAX,
   type ConnectionPolicy,
-  chatOverflowIds,
   classifyConnection,
   DEFAULT_MAP,
   evaluateApplication,
-  evaluateChatSend,
   evaluateInputBatch,
   evaluateJoin,
   evaluateMemberAction,
   evaluateRename,
   evaluateSettingChange,
-  guestsAllowedFrom,
   initialMembership,
-  isExpiredRow,
   isQuiescent,
   type MemberAction,
   type Membership,
-  normalizeChatText,
   profileNameFrom,
   replayInputs,
-  resolveJoinName,
-  SPAWN_X,
-  SPAWN_Y,
   stateFromRow,
 } from '@maple/shared';
-import { type InferSchema, type ReducerCtx, SenderError, t } from 'spacetimedb/server';
+import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-
-/** The reducer context for this module's schema, for helpers that touch the db. */
-type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
-
-/** The Identity type as this schema's rows carry it (not re-exported by the server SDK). */
-type SenderIdentity = Ctx['sender'];
+import {
+  type Ctx,
+  findAdmittedWorldRows,
+  guestsAllowed,
+  membershipOf,
+  removePlayer,
+  type SenderIdentity,
+  spawnOrResume,
+  sweepExpiredRows,
+  sweepOrphanedSiblings,
+  type WorldRows,
+} from './world';
 
 /**
  * The Clerk **development** instance. Its sign-up flow is open, so it must be
@@ -124,17 +121,6 @@ function backfillAccountName(
   persistMemberName(ctx, claimedName);
 }
 
-/** The sender-facing standing of an identity: its membership, or undefined for guests. */
-function membershipOf(ctx: Ctx, identity: SenderIdentity): Membership | undefined {
-  const row = ctx.db.spaceMember.identity.find(identity);
-  return row === null ? undefined : asMembership(row);
-}
-
-/** The guest-admission setting, read with the shared missing-row default. */
-function guestsAllowed(ctx: Ctx): boolean {
-  return guestsAllowedFrom(ctx.db.spaceSetting.id.find(0));
-}
-
 /**
  * Vets every connection before it can act in the world. Which refusals
  * belong here and which in `join` follows one line: a refusal the user can
@@ -213,177 +199,6 @@ function logRejection(
   );
 }
 
-// ── Player lifecycle ────────────────────────────────────────────────────
-// The three player_* tables (hot row, name label, guard — see tables.ts)
-// are kept paired by construction, and this section is all of it on one
-// screen: spawnOrResume (with upsertPlayerSiblings) is the only create
-// path, removePlayer the only delete path, and findWorldRows /
-// sweepOrphanedSiblings reclaim a broken pair from either direction
-// instead of acting on it.
-
-/**
- * Removes one player from the world: the hot row and its name/guard
- * siblings, in the same transaction. The single delete path — every
- * reclaim (sweep, guest kick, status change, stale-row and broken-pair
- * reclaim) goes through here, which is what keeps the three player_*
- * tables paired (a player row always has its siblings). The chat_guard
- * row rides along even though it is not a sibling (created lazily by
- * send_chat_message, so a player row need not have one): its owner may
- * chat only while in the world, so leaving the world is when the marker
- * stops meaning anything — and deleting it here is what keeps per-tab
- * guest identities from piling up marker rows forever.
- */
-function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
-  ctx.db.player.identity.delete(identity);
-  ctx.db.playerName.identity.delete(identity);
-  ctx.db.playerGuard.identity.delete(identity);
-  ctx.db.chatGuard.identity.delete(identity);
-}
-
-/** The player_name row as this schema returns it (not re-exported by the server SDK). */
-type PlayerNameRow = NonNullable<ReturnType<Ctx['db']['playerName']['identity']['find']>>;
-
-/**
- * Upserts the sender's player_* sibling rows for a join: the display name to
- * spawn under, and a fresh input allowance on the guard. One function for
- * both because they are only ever written together (spawnOrResume), which is
- * half of what keeps the siblings paired with the player row — removePlayer
- * is the other half. `nameRow` is the caller's own lookup (it already read
- * the row to resolve the join name), passed in rather than re-found.
- */
-function upsertPlayerSiblings(ctx: Ctx, nameRow: PlayerNameRow | null, name: string): void {
-  if (nameRow) ctx.db.playerName.identity.update({ ...nameRow, name });
-  else ctx.db.playerName.insert({ identity: ctx.sender, name });
-
-  const allowanceMicros = ctx.timestamp.microsSinceUnixEpoch;
-  const guard = ctx.db.playerGuard.identity.find(ctx.sender);
-  if (guard) ctx.db.playerGuard.identity.update({ ...guard, allowanceMicros });
-  else ctx.db.playerGuard.insert({ identity: ctx.sender, allowanceMicros });
-}
-
-/** Resumes the sender's surviving player row, or spawns a fresh one. */
-function spawnOrResume(ctx: Ctx): void {
-  const existing = ctx.db.player.identity.find(ctx.sender);
-  const nameRow = ctx.db.playerName.identity.find(ctx.sender);
-  // Precedence (persisted account name > resumed row's name > default) lives
-  // in resolveJoinName, unit-tested in @maple/shared.
-  const name = resolveJoinName({
-    persistedName: ctx.db.account.identity.find(ctx.sender)?.displayName,
-    resumedRowName: nameRow?.name,
-    identityHex: ctx.sender.toHexString(),
-  });
-  upsertPlayerSiblings(ctx, nameRow, name);
-
-  if (existing) {
-    // Reload / network blip within the retention window: resume the saved
-    // character where it stood (the sibling upsert above already refreshed
-    // the name and input allowance).
-    ctx.db.player.identity.update({
-      ...existing,
-      online: true,
-      updatedAt: ctx.timestamp,
-    });
-    return;
-  }
-
-  ctx.db.player.insert({
-    identity: ctx.sender,
-    x: SPAWN_X,
-    y: SPAWN_Y,
-    vx: 0,
-    vy: 0,
-    facing: 1,
-    onGround: false,
-    rope: -1,
-    tick: 0,
-    online: true,
-    updatedAt: ctx.timestamp,
-  });
-}
-
-/**
- * The sender's hot row and its name/guard siblings, or undefined when the
- * sender is not in the world — split out of the reducers that act on the
- * in-world sender (submitInputs, sendChatMessage) to keep those uncovered
- * arrows under the CRAP budget fallow enforces (the backfillAccountName
- * precedent). A row missing either sibling cannot happen through this
- * module's write paths (the lifecycle functions above), but if one ever
- * appears (manual sql, a future bug) it is reclaimed rather than tolerated
- * — the transitionMember precedent that an "unreachable" branch must not
- * read as a silent no-op. A missing guard would otherwise silence the
- * sender's inputs forever with nothing to repair it; a missing name would
- * otherwise persist too, since only this check sees the resume path (a
- * client resuming its surviving row never calls join, so the sibling
- * upsert there cannot heal it) and set_display_name refuses rather than
- * adopts a nameless player. The owner sees its row deleted and re-joins,
- * recreating all three siblings.
- */
-function findWorldRows(ctx: Ctx) {
-  const row = ctx.db.player.identity.find(ctx.sender);
-  if (!row) return undefined;
-  const guard = ctx.db.playerGuard.identity.find(ctx.sender);
-  const nameRow = ctx.db.playerName.identity.find(ctx.sender);
-  if (guard && nameRow) return { row, guard, nameRow };
-  console.warn(`player row missing a sibling, reclaiming: sender=${ctx.sender.toHexString()}`);
-  removePlayer(ctx, ctx.sender);
-  return undefined;
-}
-
-/**
- * The sender's world rows if the admission rules would still admit it, or
- * undefined — the shared preamble of every reducer that acts as "someone in
- * the world" (submitInputs, sendChatMessage). Admission applies to acting,
- * not just to joining: a player row whose owner the rules would now refuse
- * (possible only as a leftover from before the rules — e.g. a re-publish
- * onto a database with pre-admission rows, since every status change
- * deletes the row transactionally) must not keep driving movement or
- * speaking, so it is reclaimed rather than obeyed.
- *
- * Callers must treat undefined as "refused, and any reclaim is already
- * done" and RETURN, never throw: reducers are atomic, so a thrown
- * SenderError would roll back the very reclaim this function performed
- * (both the admission reclaim here and findWorldRows' broken-pair one).
- */
-function findAdmittedWorldRows(ctx: Ctx) {
-  const found = findWorldRows(ctx);
-  if (!found) return undefined;
-  const admission = evaluateJoin({
-    membership: membershipOf(ctx, ctx.sender),
-    guestsAllowed: guestsAllowed(ctx),
-  });
-  if (admission.ok) return found;
-  removePlayer(ctx, ctx.sender);
-  return undefined;
-}
-
-/** Identities holding a name or guard row whose player row is gone. */
-function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
-  const orphans = [];
-  for (const row of [...ctx.db.playerName.iter(), ...ctx.db.playerGuard.iter()]) {
-    if (ctx.db.player.identity.find(row.identity) === null) orphans.push(row.identity);
-  }
-  return orphans;
-}
-
-/**
- * Reclaims sibling rows whose player row was deleted out from under them —
- * the mirror image of findWorldRows' broken-pair reclaim, needed because
- * both expiry sweeps iterate only `player`: an orphaned sibling has no
- * `updatedAt` to expire and would sit forever, with the player_name half in
- * a public table every client downloads on its initial subscription. As
- * unreachable through this module's write paths as the other direction, and
- * as real: this project does operate the database through raw SQL (the
- * guest-admission spec drives its setting flips through the CLI's `sql`),
- * where `DELETE FROM player` alone is the intuitive kick. An identity may
- * appear twice (both siblings orphaned); the second removePlayer is a
- * no-op — row deletes tolerate missing rows, the tolerance removePlayer
- * already relies on.
- */
-function sweepOrphanedSiblings(ctx: Ctx): void {
-  for (const identity of orphanedSiblingIdentities(ctx)) removePlayer(ctx, identity);
-}
-// ── End player lifecycle ────────────────────────────────────────────────
-
 // Server-authoritative movement: clients send only inputs, the server replays
 // them through the same shared physics. Position cannot change any other way.
 // Admission (batch size, gap/ordering, token-bucket rate limit, heartbeat
@@ -400,10 +215,11 @@ export const submitInputs = spacetimedb.reducer(
   { startTick: t.u32(), inputs: t.array(t.u8()) },
   (ctx, { startTick, inputs }) => {
     // Not in the world, or no longer admitted (findAdmittedWorldRows
-    // reclaims the row in that case): silently drop the batch.
+    // reclaims the row in that case): silently drop the batch — movement
+    // needs no loud refusal, so both verdict reasons read the same here.
     const found = findAdmittedWorldRows(ctx);
-    if (!found) return;
-    const { row, guard } = found;
+    if (!found.ok) return;
+    const { row, guard } = found.rows;
 
     const verdict = evaluateInputBatch({
       batchLength: inputs.length,
@@ -420,12 +236,9 @@ export const submitInputs = spacetimedb.reducer(
       return;
     }
 
-    applyAcceptedBatch(ctx, found, startTick, inputs, verdict);
+    applyAcceptedBatch(ctx, found.rows, startTick, inputs, verdict);
   },
 );
-
-/** The rows the in-world reducers act on, as findWorldRows returns them. */
-type WorldRows = NonNullable<ReturnType<typeof findWorldRows>>;
 
 /**
  * Applies an accepted submit_inputs verdict — a heartbeat's liveness refresh,
@@ -473,24 +286,6 @@ function applyAcceptedBatch(
     online: true, // a stale disconnect event may have raced us; inputs prove liveness
     updatedAt: ctx.timestamp,
   });
-}
-
-/**
- * Deletes rows whose retention window has elapsed, whatever they are flagged
- * as: see isExpiredRow for why age rather than `online` decides. Identities are
- * collected first so nothing is removed out from under the iterator.
- *
- * A client throttled long enough to be swept while still connected notices the
- * delete of its own row and re-joins, so reclaiming a row is recoverable.
- */
-function sweepExpiredRows(ctx: Ctx): void {
-  const stale = [];
-  for (const row of ctx.db.player.iter()) {
-    if (isExpiredRow(ctx.timestamp.since(row.updatedAt).millis)) {
-      stale.push(row.identity);
-    }
-  }
-  for (const identity of stale) removePlayer(ctx, identity);
 }
 
 // Spawning is an explicit opt-in, not a connection side effect: observer
@@ -566,105 +361,6 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
     ctx.db.playerName.identity.update({ ...row, name: verdict.name });
   }
 });
-
-// ── Chat ────────────────────────────────────────────────────────────────
-
-/**
- * Charges one send against the sender's chat token bucket, or refuses the
- * send (乱用対策 — the Phase 0 input guard's thinking applied to chat). The
- * rule itself is the pure evaluateChatSend, unit-tested in @maple/shared;
- * a missing guard row reads as the epoch marker, which the bucket's bank
- * cap turns into exactly one full burst.
- */
-function chargeChatAllowance(ctx: Ctx): void {
-  const guard = ctx.db.chatGuard.identity.find(ctx.sender);
-  const verdict = evaluateChatSend({
-    allowanceMicros: guard?.allowanceMicros ?? 0n,
-    nowMicros: ctx.timestamp.microsSinceUnixEpoch,
-  });
-  if (!verdict.ok) throw new SenderError('send_chat_message refused (rate-limited)');
-  upsertChatGuard(ctx, verdict.allowanceMicros);
-}
-
-/** Writes the advanced marker back: the sender's row, or its lazy first one. */
-function upsertChatGuard(ctx: Ctx, allowanceMicros: bigint): void {
-  const existing = ctx.db.chatGuard.identity.find(ctx.sender);
-  if (existing) {
-    ctx.db.chatGuard.identity.update({ ...existing, allowanceMicros });
-    return;
-  }
-  ctx.db.chatGuard.insert({ identity: ctx.sender, allowanceMicros });
-}
-
-/**
- * Deletes the oldest messages beyond the retention cap (保持方針 — see the
- * chat_message table comment for why row count is the budget that matters).
- * Runs after every accepted send, so the table can only ever exceed
- * CHAT_HISTORY_MAX by the one row just inserted and the enumeration stays
- * cheap.
- */
-function trimChatHistory(ctx: Ctx): void {
-  const ids = [...ctx.db.chatMessage.iter()].map((row) => row.id);
-  for (const id of chatOverflowIds(ids, CHAT_HISTORY_MAX)) {
-    ctx.db.chatMessage.id.delete(id);
-  }
-}
-
-// Posts one message to the global-scope chat (ROADMAP Phase 2 第一弾).
-//
-// Chat eligibility IS presence in the world: only join (which enforces
-// admission) creates a player row, so a waiting-room member, a connection
-// that never entered, or a kicked guest has no row and is refused — and a
-// guests-off flip silences the guests it kicks in the same transaction
-// that removes them.
-//
-// Which refusals are loud follows one line — a SenderError is safe exactly
-// while nothing has been written (reducers are atomic, so a throw rolls
-// every prior write back):
-// - No player row at all (the common refusal; checked before anything can
-//   write): loud, so the sender's client hears it (NetHooks.onChatRefused)
-//   instead of the message silently evaporating.
-// - findAdmittedWorldRows returned undefined DESPITE the row existing: a
-//   reclaim just happened (lost admission, or a broken sibling pair) and
-//   must commit, so this refusal stays silent — the sender still gets
-//   feedback, because deleting its player row reaches it as a row event
-//   and flips its UI to the admission notice.
-// - A bad message or the rate limit: loud; they throw before any write.
-// Validation and the rate rule are pure functions in @maple/shared, shared
-// with the client so its input-side feedback can never disagree with the
-// authority here. The sender's display name is snapshotted onto the row —
-// see the chat_message table comment for why identity lookups cannot
-// outlive the player rows.
-//
-// Guests may chat whenever they may be in the world — deliberately not a
-// separate setting (ゲストに許可する行動範囲): a guest someone let into the
-// room and then cannot talk to defeats the oVice-style ease guest entry
-// exists for, and the guests_allowed toggle already gives admins the
-// "no guests right now" lever, which cuts chat with the same flip. A
-// per-capability setting (chat / DM / reactions) can land later as
-// additive space_setting columns with defaults.
-export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
-  if (ctx.db.player.identity.find(ctx.sender) === null) {
-    throw new SenderError('send_chat_message refused (not-in-world)');
-  }
-  const found = findAdmittedWorldRows(ctx);
-  if (!found) {
-    console.warn(`send_chat_message dropped (reclaimed): sender=${ctx.sender.toHexString()}`);
-    return;
-  }
-  const verdict = normalizeChatText(text);
-  if (!verdict.ok) throw new SenderError(`send_chat_message refused (${verdict.reason})`);
-  chargeChatAllowance(ctx);
-  ctx.db.chatMessage.insert({
-    id: 0n, // 0 asks autoInc to assign the real id
-    sender: ctx.sender,
-    senderName: found.nameRow.name,
-    text: verdict.text,
-    sentAt: ctx.timestamp,
-  });
-  trimChatHistory(ctx);
-});
-// ── End chat ────────────────────────────────────────────────────────────
 
 /** Writes the sender's application: a fresh row, or the rejected row re-filed. */
 function fileApplication(ctx: Ctx, accountName: string | undefined): Membership {
