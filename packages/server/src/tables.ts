@@ -329,6 +329,59 @@ export const spacetimedb = schema({
       sentAt: t.timestamp(),
     },
   ),
+  // The connection-event log (ROADMAP Phase 2 エラー監視 ②): one row per
+  // clientConnected / clientDisconnected, the server-side primary source for
+  // the reconnect-failure metric. It must live HERE and not in the browser's
+  // telemetry: when the network is down, the client's beacon cannot leave
+  // the machine either, so the only party that reliably observes a client
+  // failing to come back is the server (ADR §8.1-2).
+  //
+  // Deliberately NOT public: an append-only log broadcast to every
+  // subscriber would ride each entering client's initial subscription and
+  // re-broadcast every insert to the whole room — pure egress for rows no
+  // client renders. Private tables are never broadcast, so these rows cost
+  // writes and storage only. The reader is the operator, over
+  // `spacetime sql` (e.g. failure rate = unannounced disconnects without a
+  // matching reconnect, grouped by hour).
+  //
+  // `connectionId` correlates the pair: one connection produces exactly one
+  // 'connected' and one 'disconnected' row, while `identity` alone cannot
+  // tell a member's two tabs apart. `detail` carries the classification —
+  // 'member' | 'guest' on connect (the classifyConnection verdict),
+  // DisconnectReason ('idle' | 'unannounced', @maple/shared) on disconnect —
+  // because an idle cut (the idle guard's deliberate suspension after
+  // IDLE_DISCONNECT_MS without input — idle.ts) is the majority disconnect
+  // in an always-open office and counting it as a failure would drown the
+  // metric the log exists for.
+  //
+  // Kept to CONNECTION_EVENT_MAX rows by the writers (the chat_message
+  // trimHistory pattern), so the log cannot grow without bound.
+  connectionEvent: table(
+    { name: 'connection_event' },
+    {
+      id: t.u64().primaryKey().autoInc(),
+      identity: t.identity(),
+      connectionId: t.connectionId(),
+      kind: t.string(), // 'connected' | 'disconnected'
+      detail: t.string(), // connect: 'member' | 'guest'; disconnect: DisconnectReason
+      at: t.timestamp(),
+    },
+  ),
+  // The announced-disconnect marker: announce_idle_suspend files one row for
+  // the sender CONNECTION (not identity — a member's second tab must not
+  // relabel the first tab's drop), and clientDisconnected consumes it to
+  // classify the drop (disconnectReasonFrom in @maple/shared). Private and
+  // transient — a row normally lives for the milliseconds between the
+  // announce and the socket close; rows orphaned past their freshness window
+  // (an announce whose disconnect never fired) are swept by the disconnect
+  // handler so they can neither mislabel a later drop nor pile up.
+  disconnectIntent: table(
+    { name: 'disconnect_intent' },
+    {
+      connectionId: t.connectionId().primaryKey(),
+      announcedAt: t.timestamp(),
+    },
+  ),
   // The status rate limit's token-bucket marker — chat_guard's shape, for
   // set_availability / set_status_text. Honest writes are a few per day,
   // but a status write is a public-row broadcast to every subscriber and a

@@ -3,9 +3,12 @@ import {
   type AcceptedBatchVerdict,
   asMembership,
   type BatchRejectReason,
+  CONNECTION_EVENT_MAX,
   type ConnectionPolicy,
   classifyConnection,
   DEFAULT_MAP,
+  DISCONNECT_INTENT_FRESH_MS,
+  disconnectReasonFrom,
   evaluateApplication,
   evaluateInputBatch,
   evaluateJoin,
@@ -32,6 +35,7 @@ import {
   spawnOrResume,
   sweepExpiredRows,
   sweepOrphanedSiblings,
+  trimHistory,
   type WorldRows,
 } from './world';
 
@@ -172,11 +176,61 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     // apply_for_membership reducer when the user asks to.
     ensureAccount(ctx);
     console.info(`member connected: sub=${auth.subject}`);
+    recordConnectionEvent(ctx, 'connected', 'member');
     return;
   }
   // Admission falls through to "let them in", so a verdict added later must not
   // land here silently. This costs no branch, unlike a fourth runtime case.
   auth satisfies { kind: 'guest' };
+  recordConnectionEvent(ctx, 'connected', 'guest');
+});
+
+/**
+ * Appends one row to the private connection-event log and trims it to its
+ * cap (see the connection_event table comment for why the log lives
+ * server-side and stays private). Refused connections never reach this:
+ * both token refusals in onConnect throw, and a reducer throw rolls every
+ * write back — the module log already names those. A missing connectionId
+ * cannot happen on the connect/disconnect lifecycle handlers, but the field
+ * is nullable on the reducer context type; an uncorrelatable event row
+ * would poison the pairing SQL, so it is skipped with a log rather than
+ * invented.
+ */
+function recordConnectionEvent(ctx: Ctx, kind: 'connected' | 'disconnected', detail: string): void {
+  if (ctx.connectionId === null) {
+    console.warn(`connection event without a connectionId, skipped: ${kind} (${detail})`);
+    return;
+  }
+  ctx.db.connectionEvent.insert({
+    id: 0n, // 0 asks autoInc to assign the real id
+    identity: ctx.sender,
+    connectionId: ctx.connectionId,
+    kind,
+    detail,
+    at: ctx.timestamp,
+  });
+  trimHistory(ctx.db.connectionEvent, CONNECTION_EVENT_MAX);
+}
+
+// Announces that this CONNECTION is about to cut itself deliberately — the
+// idle guard's suspension after IDLE_DISCONNECT_MS without input (the
+// client's net.package/idle.ts), sent right before it closes the socket so
+// clientDisconnected can label the drop 'idle' instead of 'unannounced'
+// (disconnectReasonFrom in @maple/shared; see the disconnect_intent table
+// comment). Delivery rides the WebSocket close contract: data queued before
+// close() is flushed first, so no ack round-trip is needed. Keyed by
+// connectionId, so a member's second tab cannot relabel the first tab's
+// drop. No rate guard: the write is a single private upsert row per
+// connection (nothing to broadcast), which is cheaper than the already
+// unguarded refusal paths, and lying here only mislabels the liar's own row.
+export const announceIdleSuspend = spacetimedb.reducer((ctx) => {
+  if (ctx.connectionId === null) return;
+  const existing = ctx.db.disconnectIntent.connectionId.find(ctx.connectionId);
+  if (existing) {
+    ctx.db.disconnectIntent.connectionId.update({ ...existing, announcedAt: ctx.timestamp });
+    return;
+  }
+  ctx.db.disconnectIntent.insert({ connectionId: ctx.connectionId, announcedAt: ctx.timestamp });
 });
 
 /**
@@ -519,9 +573,45 @@ export const setGuestsAllowed = spacetimedb.reducer({ allowed: t.bool() }, (ctx,
   if (!allowed) sweepGuestPlayers(ctx);
 });
 
+/**
+ * Consumes the sender connection's announce (if any) and logs the disconnect
+ * with its classification. The intent row is deleted whether or not it was
+ * fresh — its connection is gone either way — and the sweep below clears
+ * intents whose disconnect never fired (a crashed host mid-close, a bug),
+ * so a stale row can neither linger forever nor mislabel anything: by the
+ * time it could, disconnectReasonFrom has already aged it out.
+ */
+function recordDisconnect(ctx: Ctx): void {
+  const intent =
+    ctx.connectionId === null ? null : ctx.db.disconnectIntent.connectionId.find(ctx.connectionId);
+  const reason = disconnectReasonFrom(
+    intent === null ? undefined : ctx.timestamp.since(intent.announcedAt).millis,
+  );
+  if (intent !== null) ctx.db.disconnectIntent.connectionId.delete(intent.connectionId);
+  recordConnectionEvent(ctx, 'disconnected', reason);
+  sweepStaleIntents(ctx);
+}
+
+/**
+ * Deletes intent rows past their freshness window (identities collected
+ * first — the sweepExpiredRows precedent). Piggybacked on every disconnect
+ * rather than scheduled: the table normally holds zero-to-few rows, and a
+ * space with no disconnects accumulates no intents to sweep.
+ */
+function sweepStaleIntents(ctx: Ctx): void {
+  const stale = [];
+  for (const row of ctx.db.disconnectIntent.iter()) {
+    if (ctx.timestamp.since(row.announcedAt).millis > DISCONNECT_INTENT_FRESH_MS) {
+      stale.push(row.connectionId);
+    }
+  }
+  for (const connectionId of stale) ctx.db.disconnectIntent.connectionId.delete(connectionId);
+}
+
 // Keep the row on disconnect (marked offline) so a quick reconnect under the
 // same identity resumes the character; join sweeps rows past their retention.
 export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
+  recordDisconnect(ctx);
   const row = ctx.db.player.identity.find(ctx.sender);
   if (!row) return;
   ctx.db.player.identity.update({ ...row, online: false, updatedAt: ctx.timestamp });

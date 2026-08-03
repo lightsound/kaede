@@ -6,6 +6,7 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AnnounceIdleSuspendReducer from "../announce_idle_suspend_reducer";
 import ApplyForMembershipReducer from "../apply_for_membership_reducer";
 import ApproveMemberReducer from "../approve_member_reducer";
 import BanMemberReducer from "../ban_member_reducer";
@@ -21,6 +22,7 @@ import SetStatusTextReducer from "../set_status_text_reducer";
 import SubmitInputsReducer from "../submit_inputs_reducer";
 import UnbanMemberReducer from "../unban_member_reducer";
 
+export type AnnounceIdleSuspendParams = __Infer<typeof AnnounceIdleSuspendReducer>;
 export type ApplyForMembershipParams = __Infer<typeof ApplyForMembershipReducer>;
 export type ApproveMemberParams = __Infer<typeof ApproveMemberReducer>;
 export type BanMemberParams = __Infer<typeof BanMemberReducer>;

@@ -109,6 +109,12 @@ export type LifecycleEffect =
   /** Close the current live connection (a ref captured before drop-session). */
   | { kind: 'disconnect' }
   /**
+   * Tell the server the upcoming disconnect is the idle guard's deliberate
+   * cut (announce_idle_suspend), so its connection-event log labels the drop
+   * 'idle' rather than 'unannounced' — see onIdleTimeout.
+   */
+  | { kind: 'announce-suspend' }
+  /**
    * Check the live session's socket for a silent death; the shell answers
    * with `session-dead` when it finds one (see onPageResume).
    */
@@ -240,7 +246,16 @@ function onIdleTimeout(d: Draft): void {
   // connect keeps its generation, so a resume can adopt it when it settles
   // — attempt() is single-flight, so that pending connect is the resume's
   // only way back in.
-  if (d.next.sessionLive) d.next.generation += 1;
+  //
+  // A LIVE session also announces the cut before it happens (the effect
+  // precedes disconnect; the WebSocket flushes queued sends before its
+  // close handshake), so the server's connection-event log can tell this
+  // deliberate suspension from a real drop. A pending connect has no
+  // session to speak through, and its discard needs no label.
+  if (d.next.sessionLive) {
+    d.effects.push({ kind: 'announce-suspend' });
+    d.next.generation += 1;
+  }
   d.next.sessionLive = false;
   // Tear the session down synchronously instead of waiting for the
   // socket's close to report: a resume can start a newer connect before
@@ -317,6 +332,42 @@ function onDispose(d: Draft): void {
 }
 
 /**
+ * One handler per event kind, each receiving its narrowed payload — the
+ * sync.ts EffectRunners shape. A map rather than the original `switch`: at
+ * ten uniform `case` arms the switch became two structurally identical
+ * halves that fallow's clone detector rightly flags, while the map stays
+ * duplication-free and keeps the same compile-time exhaustiveness (a new
+ * event kind is a missing key here, not a silently ignored case).
+ */
+const eventHandlers: {
+  [K in LifecycleEvent['kind']]: (d: Draft, event: Extract<LifecycleEvent, { kind: K }>) => void;
+} = {
+  start: attempt,
+  'connect-ok': onConnectOk,
+  'connect-failed': onConnectFailed,
+  'socket-closed': (d, e) => onSocketClosed(d, e.generation),
+  'retry-due': onRetryDue,
+  'idle-timeout': onIdleTimeout,
+  resume: onResume,
+  'page-resume': onPageResume,
+  'session-dead': (d, e) => onSessionDead(d, e.generation),
+  dispose: onDispose,
+};
+
+/**
+ * Calls the handler matching the event's kind. Generic over the kind so the
+ * indexed access stays correlated — the handler receives exactly its own
+ * payload type, with no cast (the sync.ts runEffect precedent).
+ */
+function runEventHandler<K extends LifecycleEvent['kind']>(
+  d: Draft,
+  event: Extract<LifecycleEvent, { kind: K }>,
+): void {
+  const handler: (dd: Draft, e: typeof event) => void = eventHandlers[event.kind];
+  handler(d, event);
+}
+
+/**
  * One step of the connection state machine. Pure: returns the next state and
  * the side effects the shell must perform, in order. The rules mirror the
  * pre-refactor sync.ts exactly; see the file doc comment for why each guard
@@ -324,41 +375,6 @@ function onDispose(d: Draft): void {
  */
 export function transition(state: LifecycleState, event: LifecycleEvent): Transition {
   const d: Draft = { next: { ...state }, effects: [] };
-  switch (event.kind) {
-    case 'start':
-      attempt(d);
-      break;
-    case 'connect-ok':
-      onConnectOk(d);
-      break;
-    case 'connect-failed':
-      onConnectFailed(d);
-      break;
-    case 'socket-closed':
-      onSocketClosed(d, event.generation);
-      break;
-    case 'retry-due':
-      onRetryDue(d);
-      break;
-    case 'idle-timeout':
-      onIdleTimeout(d);
-      break;
-    case 'resume':
-      onResume(d);
-      break;
-    case 'page-resume':
-      onPageResume(d);
-      break;
-    case 'session-dead':
-      onSessionDead(d, event.generation);
-      break;
-    case 'dispose':
-      onDispose(d);
-      break;
-    default:
-      // A new event kind must not land here silently (the reducers.ts precedent).
-      event satisfies never;
-      break;
-  }
+  runEventHandler(d, event);
   return { state: d.next, effects: d.effects };
 }

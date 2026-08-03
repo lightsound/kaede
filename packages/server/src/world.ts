@@ -8,6 +8,7 @@
 // index.ts (the host refuses non-reducer entry exports).
 import {
   asMembership,
+  chatOverflowIds,
   evaluateJoin,
   guestsAllowedFrom,
   isExpiredRow,
@@ -34,6 +35,30 @@ export function membershipOf(ctx: Ctx, identity: SenderIdentity): Membership | u
 /** The guest-admission setting, read with the shared missing-row default. */
 export function guestsAllowed(ctx: Ctx): boolean {
   return guestsAllowedFrom(ctx.db.spaceSetting.id.find(0));
+}
+
+/** An append-log table as the retention trim needs it (id = insert order). */
+export interface HistoryTable {
+  iter(): Iterable<{ id: bigint }>;
+  id: { delete(id: bigint): unknown };
+}
+
+/**
+ * Deletes the oldest rows beyond the retention cap (保持方針 — see the
+ * chat_message table comment for why row count is the budget that matters,
+ * and DM_HISTORY_MAX for what the dm_message cap bounds instead). Runs
+ * after every insert, so a table can only ever exceed its cap by the one
+ * row just inserted and the enumeration stays cheap. One function for every
+ * append log — chat, DMs (posting.ts) and the connection-event log
+ * (reducers.ts): the same rule, deliberately not cloned. Lives here rather
+ * than posting.ts because index.ts `export *`s the reducer files and the
+ * host refuses non-spacetime entry exports (this file's header rule).
+ */
+export function trimHistory(table: HistoryTable, max: number): void {
+  const ids = [...table.iter()].map((row) => row.id);
+  for (const id of chatOverflowIds(ids, max)) {
+    table.id.delete(id);
+  }
 }
 
 // ── Player lifecycle ────────────────────────────────────────────────────

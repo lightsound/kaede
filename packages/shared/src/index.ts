@@ -1,5 +1,6 @@
 export * from './auth';
 export * from './chat';
+export * from './connectionEvent';
 export * from './constants';
 export * from './displayName';
 export * from './dm';

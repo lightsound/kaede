@@ -52,8 +52,9 @@ const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as co
  * deliberately: this shell is uncovered (it needs a live host — see the
  * fallow-ignore header), and a 9-branch uncovered switch busts the CRAP
  * budget fallow enforces, while a map is branch-free and still makes a new
- * effect kind a compile error (a missing key). The lifecycle's own event
- * switch stays the idiomatic form because its transition is unit-tested.
+ * effect kind a compile error (a missing key). The lifecycle's event
+ * dispatch adopted the same shape once its switch grew big enough to trip
+ * the clone detector (see eventHandlers in lifecycle.ts).
  */
 type EffectRunners = {
   [K in LifecycleEffect['kind']]: (effect: Extract<LifecycleEffect, { kind: K }>) => void;
@@ -569,6 +570,12 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       },
       'drop-session': () => dropSession(),
       disconnect: () => closing?.disconnect(),
+      // Failure is fine: an announce that never lands just means the server
+      // logs this cut as 'unannounced', which is the label it would have
+      // gotten anyway without this effect.
+      'announce-suspend': () => {
+        closing?.reducers.announceIdleSuspend({}).catch(() => {});
+      },
       'probe-session': (e) => {
         // Read the socket state the pure machine cannot: isSocketClosed
         // (SDK 2.7.1) is true even when the browser never delivered the

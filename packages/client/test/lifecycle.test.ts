@@ -138,6 +138,11 @@ describe('アイドル休止と再開', () => {
     expect(armed.state.retryArmed).toBe(false);
   });
 
+  it('LIVE セッションの休止は切断の前に announce-suspend を出す(接続イベントの idle ラベル)', () => {
+    const { last } = run([{ kind: 'start' }, { kind: 'connect-ok' }, { kind: 'idle-timeout' }]);
+    expect(kinds(last)).toEqual(['status', 'announce-suspend', 'drop-session', 'disconnect']);
+  });
+
   it('LIVE セッションを切る休止は世代を進める(pending な connect は進めない)', () => {
     const live = run([{ kind: 'start' }, { kind: 'connect-ok' }, { kind: 'idle-timeout' }]);
     expect(live.state.generation).toBe(2);
