@@ -85,9 +85,21 @@ export type ChatDraftPlan =
 export type PlannedSend = Exclude<ChatDraftPlan, { kind: 'refused' }>;
 
 /**
+ * The characters that open a mention. Both the ASCII '@' and the fullwidth
+ * '＠' (U+FF20), because Japanese IMEs produce the fullwidth form by
+ * default and NFC does not fold it to ASCII (that would be NFKC) — a
+ * fullwidth-@ draft read as public would broadcast text its author
+ * addressed to one person, the exact accident the leading-@ rule exists
+ * to prevent. Both are one UTF-16 unit, but the slice below still uses
+ * the sigil's own length rather than assuming that.
+ */
+const MENTION_SIGILS = ['@', '＠'] as const;
+
+/**
  * Classifies one chat draft: a message whose NORMALIZED text starts with
- * '@' is a DM attempt, everything else is public. The whole draft goes
- * through normalizeChatText first, so a DM body inherits the exact rules a
+ * a mention sigil ('@' or '＠' — MENTION_SIGILS) is a DM attempt,
+ * everything else is public. The whole draft goes through
+ * normalizeChatText first, so a DM body inherits the exact rules a
  * public message obeys (NFC, whitespace collapsing, category-C rejection,
  * the 200-code-point cap counted over mention plus body).
  *
@@ -98,17 +110,18 @@ export type PlannedSend = Exclude<ChatDraftPlan, { kind: 'refused' }>;
  * terminated by a space (or the end of the draft) wins. Longest-match
  * makes the parse deterministic when one name prefixes another ("楓" /
  * "楓さん"); the cost — you cannot DM 楓 a body that begins with さん —
- * is taken over any escaping syntax. A draft starting with '@' that
+ * is taken over any escaping syntax. A draft starting with a sigil that
  * matches nobody is REFUSED, never posted publicly: silently publishing
  * text its author addressed to one person is the accident this rule
  * exists to prevent, and it also means there is no way to publicly post a
- * message starting with '@' (accepted; the error message says so).
+ * message starting with '@' or '＠' (accepted; the error message says so).
  */
 export function planChatDraft(raw: string, candidates: readonly DmCandidate[]): ChatDraftPlan {
   const verdict = normalizeChatText(raw);
   if (!verdict.ok) return { kind: 'refused', reason: verdict.reason };
-  if (!verdict.text.startsWith('@')) return { kind: 'public', text: verdict.text };
-  return planDm(verdict.text.slice(1), candidates);
+  const sigil = MENTION_SIGILS.find((s) => verdict.text.startsWith(s));
+  if (sigil === undefined) return { kind: 'public', text: verdict.text };
+  return planDm(verdict.text.slice(sigil.length), candidates);
 }
 
 /** Resolves the mention half of a '@'-leading draft (see planChatDraft). */

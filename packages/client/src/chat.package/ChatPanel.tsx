@@ -28,8 +28,8 @@ const REJECT_MESSAGES: Record<ChatDraftRejectReason, string> = {
   'forbidden-characters': '使用できない文字が含まれています',
   // The @-leading draft resolved to nobody. Deliberately NOT posted
   // publicly (planChatDraft), so the message must say why nothing was sent
-  // — and that '@' is what made this a DM.
-  'dm-no-recipient': '宛先が見つかりません(@で始まる発言は在室中の相手への DM になります)',
+  // — and that '@' (fullwidth included) is what made this a DM.
+  'dm-no-recipient': '宛先が見つかりません(@/＠で始まる発言は在室中の相手への DM になります)',
   'dm-ambiguous-recipient': '同じ表示名の人が複数いるため、DM を送れません',
   'dm-empty-body': 'DM の本文を入力してください',
 };

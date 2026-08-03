@@ -81,6 +81,25 @@ describe('planChatDraft', () => {
     });
   });
 
+  // Japanese IMEs produce the fullwidth ＠ by default and NFC does not
+  // fold it to ASCII; reading it as public would broadcast a private
+  // draft.
+  it('treats a fullwidth ＠ as a mention sigil, resolving like @', () => {
+    expect(planChatDraft('＠楓 全角でもDM', ROOM)).toEqual({
+      kind: 'dm',
+      recipientKey: 'aa11',
+      recipientName: '楓',
+      text: '全角でもDM',
+    });
+  });
+
+  it('refuses a fullwidth ＠ mention matching nobody — never public', () => {
+    expect(planChatDraft('＠いない人 ひみつの話', ROOM)).toEqual({
+      kind: 'refused',
+      reason: 'dm-no-recipient',
+    });
+  });
+
   it('refuses an @-only draft as no-recipient', () => {
     expect(planChatDraft('@', ROOM)).toEqual({ kind: 'refused', reason: 'dm-no-recipient' });
   });
