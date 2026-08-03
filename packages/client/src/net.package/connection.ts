@@ -86,20 +86,49 @@ export async function connect(
         // be re-minted per connect, and overwriting the anonymous token with
         // it would strand the guest identity after sign-out.
         if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
-        // The world (player) plus everything admission is decided from:
-        // the member directory and the space settings. All three must be
-        // applied before we resolve, so the first admission decision rules
-        // on real rows rather than an empty cache.
+        // The world (player, plus the name labels and statuses split off /
+        // beside it), everything admission is decided from (the member
+        // directory and the space settings), and the conversation tables
+        // (the chat history, the DM history and the current reactions). All
+        // must be applied before we resolve, so the first admission decision
+        // rules on real rows rather than an empty cache, and the chat log
+        // seeds from the full retained history (bounded server-side to
+        // CHAT_HISTORY_MAX rows — see the chat_message table). dm_message is
+        // subscribed whole like every table here, but its row-level-security
+        // filter means the seed and events carry only THIS identity's own
+        // conversations (see tables.ts in the server). Reactions are
+        // subscribed for their row EVENTS only; the seed never displays
+        // (see reactionFeed.ts). Statuses are the opposite: the seed IS the
+        // display (a status is state, restored on entry — see sync.ts).
         conn
           .subscriptionBuilder()
           .onApplied(() => resolve({ conn, myIdentity: identity, myIdHex: identity.toHexString() }))
-          .subscribe([tables.player, tables.spaceMember, tables.spaceSetting]);
+          .subscribe([
+            tables.player,
+            tables.playerName,
+            tables.spaceMember,
+            tables.spaceSetting,
+            tables.chatMessage,
+            tables.dmMessage,
+            tables.reaction,
+            tables.playerStatus,
+          ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping
       // the identity here used to spawn a fresh character (and strand the old
       // row) on every blip. RESUME_MAX_FAILURES handles a genuinely bad token.
       .onConnectError((_ctx, err) => reject(err))
-      .onDisconnect(() => handlers.onDisconnect())
+      .onDisconnect(() => {
+        // A clean close emits no connectError, so a socket that closes after
+        // the handshake but before the subscription applies (a module
+        // republish kicking clients, a host restart) would otherwise leave
+        // this promise pending forever — and with it the caller's
+        // single-flight slot occupied, deadlocking the reconnect loop. The
+        // reject is a no-op once the promise has resolved (a drop after a
+        // successful connect).
+        reject(new Error('connection closed before the initial subscription applied'));
+        handlers.onDisconnect();
+      })
       .build();
   });
 }

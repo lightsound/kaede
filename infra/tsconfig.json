@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // alchemy.run.ts はアカウント ID の既定値を process.env 経由で与える。
+    "types": ["node"]
+  },
+  "include": ["alchemy.run.ts"]
+}

@@ -8,6 +8,8 @@ export const UI_FONT = '13px sans-serif';
 export const UI_TEXT_COLOR = '#eceff4';
 export const UI_ERROR_COLOR = '#e8a2a2';
 export const UI_GOLD = '#d8a657';
+/** DM lines in the chat log: private traffic reads apart from room chatter. */
+export const UI_DM_COLOR = '#c6a0e8';
 export const UI_PANEL_BG = 'rgba(11, 13, 18, 0.85)';
 /** Denser than UI_PANEL_BG: full-canvas covers that must hide the world. */
 export const UI_OVERLAY_BG = 'rgba(11, 13, 18, 0.92)';

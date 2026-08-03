@@ -14,7 +14,8 @@ export default defineConfig({
   // Generous for a smoke test: CI runners render WebGL in software and pay
   // Vite's cold transform on first load, both well outside the default 30s.
   // Must exceed the sum of a spec's expect.poll budgets (movement-sync
-  // allocates 65s across five polls) plus entry waits, or a slow-but-healthy
+  // allocates 70s across five polls; idle-suppression ~75s across its polls
+  // and fixed observation windows) plus entry waits, or a slow-but-healthy
   // run gets cut off mid-poll.
   timeout: 120_000,
   // Every spec shares the one published world, and the sync scenario asserts

@@ -16,8 +16,9 @@ export interface ConnectionPolicy {
   readonly memberAudience: string;
   /**
    * SpacetimeDB hosts whose own tokens we expect to see. A guest that connects
-   * tokenless is handed a host-issued token and replays it to resume its
-   * identity, so these are guests, not members.
+   * tokenless is stamped with a host-issued token (visible to the module from
+   * that very first connection) and replays it to resume its identity, so
+   * these are guests, not members.
    */
   readonly guestIssuers: readonly string[];
 }
@@ -25,9 +26,13 @@ export interface ConnectionPolicy {
 /**
  * What a connecting client is, or why it is refused. `member` is the only
  * verdict that may ever carry member privileges. `unregistered-issuer` is
- * separate from `guest` because it is a state we intend to stop admitting: the
- * ROADMAP Phase 1 gate that refuses it turns handling this verdict into a
- * rejection, and nothing else.
+ * separate from `guest` so that a token from an issuer nobody vouched for
+ * can be refused (the ROADMAP Phase 1 gate, closed 2026-08-02 — the why
+ * lives on classifyConnection). Deliberately a classification (kinds), not
+ * an ok/reason verdict like the evaluate* rules: the caller owns what each
+ * kind means — refuse, admit, create an account — so collapsing the
+ * refusable kinds into one ok:false arm would move that policy into the
+ * classifier.
  */
 export type ConnectionAuth =
   | { kind: 'member'; subject: string }
@@ -44,9 +49,13 @@ export type ConnectionAuth =
  * to guest, since accepting it would let another Clerk-backed app's users in as
  * ours.
  *
- * A token from an issuer in neither list is `unregistered-issuer`, which callers
- * still admit today — a guest holds no privileges to escalate to, and refusing
- * it means naming every host issuer we deploy to first.
+ * A token from an issuer in neither list is `unregistered-issuer`, which
+ * callers refuse: nobody vouched for that issuer, and every privilege guests
+ * gain would widen what its stable identity quietly reaches (world entry
+ * itself was always ruled by join, not by this admission). The cost is that
+ * every host we deploy to must have its issuer named in `guestIssuers` first
+ * (localhost and Maincloud are both registered — see the server's
+ * CONNECTION_POLICY).
  */
 export function classifyConnection(
   claims: ConnectionClaims | null,

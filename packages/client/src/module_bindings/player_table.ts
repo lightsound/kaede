@@ -12,7 +12,6 @@ import {
 
 export default __t.row({
   identity: __t.identity().primaryKey(),
-  name: __t.string(),
   x: __t.f64(),
   y: __t.f64(),
   vx: __t.f64(),
@@ -22,6 +21,5 @@ export default __t.row({
   rope: __t.i32(),
   tick: __t.u32(),
   online: __t.bool(),
-  allowanceMicros: __t.i64().name("allowance_micros"),
   updatedAt: __t.timestamp().name("updated_at"),
 });

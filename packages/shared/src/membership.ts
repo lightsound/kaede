@@ -1,23 +1,38 @@
 /**
- * Admission and role rules for the single MVP space (ROADMAP Phase 1: 承認制・
- * 管理者ロール・ゲスト入場設定). Pure and shared so the server reducers stay
- * thin untestable wrappers while every rule here is unit-tested — the
- * classifyConnection / evaluateRename precedent.
+ * Membership and admission rules for the single MVP space (ROADMAP Phase 1:
+ * 承認制・管理者ロール・ゲスト入場設定). Pure and shared so the server
+ * reducers stay thin untestable wrappers while every rule here is
+ * unit-tested — the classifyConnection / evaluateRename precedent.
+ *
+ * The Discord-model separation this module encodes:
+ * - The **account** (global profile: display name, future belongings) is
+ *   never touched by space-level actions. Rejecting or banning someone in
+ *   this space must not damage what they carry across spaces.
+ * - The **membership** (space_member row) is the only thing space actions
+ *   move, and they only ever change its `status` — rows are never deleted,
+ *   so every admin action is reversible and a mistaken rejection can always
+ *   be undone from the admin panel.
  *
  * The space is implicit today (one community, one world). Multi-tenancy
  * (Phase 6) turns these rows into org-scoped rows via additive tables; the
  * verdicts below are already per-space, so only their inputs move.
  */
 
-/**
- * Where a member stands in the waiting-room flow: `pending` from first
- * connection until an admin approves, `approved` afterwards. There is no
- * `removed` status — removal deletes the membership, and the next connection
- * re-applies from scratch (a deliberate re-application, not a ban).
- */
-export type MemberStatus = 'pending' | 'approved';
+import { normalizeDisplayName } from './displayName';
 
-/** What a member may do: `admin` approves/removes members and edits settings. */
+/**
+ * Where a member stands in the application flow:
+ *
+ * - `pending`: applied (明示的な参加申請), waiting for an admin.
+ * - `approved`: admitted to the world.
+ * - `rejected`: an admin turned the application down, or expelled an
+ *   approved member. May re-apply (an explicit act — never automatic, so a
+ *   rejection cannot bounce straight back into the pending list).
+ * - `banned`: may not re-apply until an admin lifts it.
+ */
+export type MemberStatus = 'pending' | 'approved' | 'rejected' | 'banned';
+
+/** What a member may do: `admin` decides applications and edits settings. */
 export type MemberRole = 'member' | 'admin';
 
 /** A member's standing in the space, as the public space_member row carries it. */
@@ -34,14 +49,15 @@ export interface Membership {
  * or admin powers by accident.
  */
 export function asMembership(row: { status: string; role: string }): Membership {
-  return {
-    status: row.status === 'approved' ? 'approved' : 'pending',
-    role: row.role === 'admin' ? 'admin' : 'member',
-  };
+  const status =
+    row.status === 'approved' || row.status === 'rejected' || row.status === 'banned'
+      ? row.status
+      : 'pending';
+  return { status, role: row.role === 'admin' ? 'admin' : 'member' };
 }
 
 /**
- * What a newly created membership starts as. The very first member becomes
+ * What a newly filed application starts as. The very first member becomes
  * the approved admin; everyone after waits in the pending state.
  *
  * Why first-member seeding (and not a subject/issuer constant or a dev-only
@@ -51,8 +67,9 @@ export function asMembership(row: { status: string; role: string }): Membership 
  * works identically on every fresh database, and the exposure window is
  * operational, not architectural: the owner publishes the production module
  * and signs in before announcing the URL, and the public space_member table
- * makes the claimed admin verifiable at a glance. Admins cannot be removed
- * (see evaluateRemoval), so the space can never end up admin-less.
+ * makes the claimed admin verifiable at a glance. Admins cannot be targeted
+ * by member actions (see evaluateMemberAction), so the space can never end
+ * up admin-less.
  */
 export function initialMembership(isFirstMember: boolean): Membership {
   return isFirstMember
@@ -67,12 +84,16 @@ export function isActingAdmin(membership: Membership | undefined): boolean {
 
 /**
  * The one vocabulary for "may this client be in the world": `admitted`, or
- * one of the two refusals (a member not approved yet / a guest while guests
- * are not admitted). The same three words name the server's join verdict,
- * the client's decision, and what the UI shows, so a state never gets
- * re-spelled on its way through the stack.
+ * why not. The same words name the server's join verdict, the client's
+ * decision, and what the UI shows, so a state never gets re-spelled on its
+ * way through the stack.
  */
-export type Admission = 'admitted' | 'pending-approval' | 'guests-not-allowed';
+export type Admission =
+  | 'admitted'
+  | 'pending-approval'
+  | 'rejected'
+  | 'banned'
+  | 'guests-not-allowed';
 
 /** Why a join was refused: every admission except being admitted. */
 export type JoinRefusalReason = Exclude<Admission, 'admitted'>;
@@ -80,10 +101,12 @@ export type JoinRefusalReason = Exclude<Admission, 'admitted'>;
 export type JoinVerdict = { ok: true } | { ok: false; reason: JoinRefusalReason };
 
 /**
- * Admission check for one join request. A connection with a membership is a
- * member (approval decides), one without is a guest (the space setting
- * decides). The guest toggle deliberately does not apply to members: turning
- * guests away must never lock members out.
+ * Admission check for one join request. A connection with a membership is
+ * ruled by its status; one without follows the guest rules — including a
+ * signed-in member who has not applied yet, who may look around under the
+ * same conditions as any guest until they apply. The guest toggle
+ * deliberately does not apply to approved members: turning guests away must
+ * never lock members out.
  */
 export function evaluateJoin(request: {
   /** The sender's membership, or undefined for a guest connection. */
@@ -91,93 +114,26 @@ export function evaluateJoin(request: {
   /** The space's guest-admission setting (missing row reads as true). */
   guestsAllowed: boolean;
 }): JoinVerdict {
-  if (request.membership !== undefined) {
-    return request.membership.status === 'approved'
-      ? { ok: true }
-      : { ok: false, reason: 'pending-approval' };
+  if (request.membership === undefined) {
+    return request.guestsAllowed ? { ok: true } : { ok: false, reason: 'guests-not-allowed' };
   }
-  return request.guestsAllowed ? { ok: true } : { ok: false, reason: 'guests-not-allowed' };
-}
-
-/** Why an admin action (approve / remove / setting change) was refused. */
-export type AdminActionRefusalReason =
-  | 'not-admin'
-  | 'no-such-member'
-  | 'already-approved'
-  | 'target-is-admin';
-
-export type AdminActionVerdict = { ok: true } | { ok: false; reason: AdminActionRefusalReason };
-
-/**
- * The shared shell of every admin action aimed at one member: the actor must
- * be an acting admin and the target must still exist; then `targetRule` adds
- * the action's own refusal, if any. Refusals are loud (never silent success)
- * so a stale admin UI hears that its list has drifted.
- */
-function evaluateTargetedAdminAction(
-  request: { actor: Membership | undefined; target: Membership | undefined },
-  targetRule: (target: Membership) => AdminActionRefusalReason | undefined,
-): AdminActionVerdict {
-  if (!isActingAdmin(request.actor)) return { ok: false, reason: 'not-admin' };
-  if (request.target === undefined) return { ok: false, reason: 'no-such-member' };
-  const reason = targetRule(request.target);
-  return reason === undefined ? { ok: true } : { ok: false, reason };
-}
-
-/** Admission check for approving a member: pending targets only, and only once. */
-export function evaluateApproval(request: {
-  actor: Membership | undefined;
-  target: Membership | undefined;
-}): AdminActionVerdict {
-  return evaluateTargetedAdminAction(request, (target) =>
-    target.status === 'approved' ? 'already-approved' : undefined,
-  );
-}
-
-/**
- * Admission check for removing a member. Admins cannot be removed — this
- * covers self-removal too, so the space always keeps at least one admin
- * (there is no promotion path yet that could create a second one).
- */
-export function evaluateRemoval(request: {
-  actor: Membership | undefined;
-  target: Membership | undefined;
-}): AdminActionVerdict {
-  return evaluateTargetedAdminAction(request, (target) =>
-    target.role === 'admin' ? 'target-is-admin' : undefined,
-  );
-}
-
-/** Admission check for changing a space setting: acting admins only. */
-export function evaluateSettingChange(request: {
-  actor: Membership | undefined;
-}): AdminActionVerdict {
-  return isActingAdmin(request.actor) ? { ok: true } : { ok: false, reason: 'not-admin' };
+  if (request.membership.status === 'approved') return { ok: true };
+  const reason =
+    request.membership.status === 'pending' ? 'pending-approval' : request.membership.status;
+  return { ok: false, reason };
 }
 
 /**
  * What the client should do about entering the world, decided from the same
- * subscribed state the server rules on (space_member / space_setting), so the
- * client never sends a join it can predict will be refused, and reacts the
- * moment an approval or a setting flip arrives.
- *
- * The decision is the admission itself (`admitted` = enter the world, a
- * refusal = show it), plus one client-only case: `reapply` — this session
- * had a membership and it vanished, i.e. an admin removed us. Reconnect:
- * the fresh connection recreates the account and a pending membership (= a
- * re-application). Deciding this here also stops the own-row-deleted
- * auto-rejoin from slipping the removed member back in as a guest in the
- * same session.
+ * subscribed state the server rules on (space_member / space_setting), so
+ * the client never sends a join it can predict will be refused, and reacts
+ * the moment an approval or a setting flip arrives. `admitted` means enter;
+ * anything else is shown to the user.
  */
-export type AdmissionDecision = Admission | 'reapply';
-
 export function decideAdmission(request: {
   membership: Membership | undefined;
-  /** Whether this session has ever seen its own membership row. */
-  wasMember: boolean;
   guestsAllowed: boolean;
-}): AdmissionDecision {
-  if (request.membership === undefined && request.wasMember) return 'reapply';
+}): Admission {
   const verdict = evaluateJoin(request);
   return verdict.ok ? 'admitted' : verdict.reason;
 }
@@ -191,4 +147,158 @@ export function decideAdmission(request: {
  */
 export function guestsAllowedFrom(row: { guestsAllowed: boolean } | null | undefined): boolean {
   return row?.guestsAllowed ?? true;
+}
+
+/** Why an application (apply_for_membership) was refused. */
+export type ApplicationRefusalReason =
+  | 'no-account'
+  | 'already-applied'
+  | 'already-member'
+  | 'banned';
+
+export type ApplicationVerdict = { ok: true } | { ok: false; reason: ApplicationRefusalReason };
+
+/**
+ * Admission check for filing (or re-filing) a membership application.
+ * Applying is an explicit act of the signed-in user — never a connection
+ * side effect — so a rejected applicant returns to the pending list only by
+ * choosing to, and a ban simply makes this verdict refuse.
+ */
+export function evaluateApplication(request: {
+  /**
+   * Whether the sender has an account, i.e. is a signed-in member — the
+   * server-side fact behind membershipPrompt's client-side `signedIn`.
+   */
+  hasAccount: boolean;
+  /** The sender's current membership, or undefined before the first application. */
+  membership: Membership | undefined;
+}): ApplicationVerdict {
+  if (!request.hasAccount) return { ok: false, reason: 'no-account' };
+  if (request.membership === undefined || request.membership.status === 'rejected') {
+    return { ok: true };
+  }
+  const reason = REAPPLY_REFUSALS[request.membership.status];
+  return { ok: false, reason };
+}
+
+/** Why each non-reapplicable status refuses a fresh application. */
+const REAPPLY_REFUSALS = {
+  pending: 'already-applied',
+  approved: 'already-member',
+  banned: 'banned',
+} as const satisfies Record<Exclude<MemberStatus, 'rejected'>, ApplicationRefusalReason>;
+
+/**
+ * The four things an admin can do to one membership. All of them are status
+ * transitions on the existing row — nothing is ever deleted — so every one
+ * of them can be undone by another action:
+ *
+ * - `approve`: let them in. Also the recovery from a mistaken rejection or
+ *   ban, which is why it is allowed from any non-approved status.
+ * - `reject`: turn a pending application down, or expel an approved member.
+ * - `ban`: like reject, but re-application is refused until lifted.
+ * - `unban`: lift a ban back to `rejected` (may re-apply again).
+ */
+export type MemberAction = 'approve' | 'reject' | 'ban' | 'unban';
+
+/**
+ * The whole state machine in one table: from each status, which actions
+ * apply and where they land. An absent cell is a refused transition.
+ */
+const TRANSITIONS: Record<MemberStatus, Partial<Record<MemberAction, MemberStatus>>> = {
+  pending: { approve: 'approved', reject: 'rejected', ban: 'banned' },
+  approved: { reject: 'rejected', ban: 'banned' },
+  rejected: { approve: 'approved', ban: 'banned' },
+  banned: { approve: 'approved', unban: 'rejected' },
+};
+
+/** Why an admin action (member transition / setting change) was refused. */
+export type AdminActionRefusalReason =
+  | 'not-admin'
+  | 'no-such-member'
+  | 'target-is-admin'
+  | 'invalid-transition';
+
+export type MemberActionVerdict =
+  | {
+      ok: true;
+      /** Where the transition lands, straight from the table. */
+      nextStatus: MemberStatus;
+    }
+  | { ok: false; reason: AdminActionRefusalReason };
+
+export type AdminActionVerdict = { ok: true } | { ok: false; reason: AdminActionRefusalReason };
+
+/**
+ * Admission check for one admin action on one membership, answering with
+ * the resulting status so validation and transition cannot be picked apart.
+ * Only an acting admin may act; the target must still exist; admins cannot
+ * be targeted (covers self-targeting too, so the space always keeps at
+ * least one admin — there is no promotion path yet that could create a
+ * second one); and the action must be in the transition table for the
+ * target's current status, so a stale admin UI hears that its list has
+ * drifted rather than seeing a silent success.
+ */
+export function evaluateMemberAction(request: {
+  actor: Membership | undefined;
+  target: Membership | undefined;
+  action: MemberAction;
+}): MemberActionVerdict {
+  if (!isActingAdmin(request.actor)) return { ok: false, reason: 'not-admin' };
+  if (request.target === undefined) return { ok: false, reason: 'no-such-member' };
+  if (request.target.role === 'admin') return { ok: false, reason: 'target-is-admin' };
+  const nextStatus = TRANSITIONS[request.target.status][request.action];
+  if (nextStatus === undefined) return { ok: false, reason: 'invalid-transition' };
+  return { ok: true, nextStatus };
+}
+
+/** Admission check for changing a space setting: acting admins only. */
+export function evaluateSettingChange(request: {
+  actor: Membership | undefined;
+}): AdminActionVerdict {
+  return isActingAdmin(request.actor) ? { ok: true } : { ok: false, reason: 'not-admin' };
+}
+
+/**
+ * The application affordance the UI can offer: a first application, or a
+ * re-application after a rejection.
+ */
+export type MembershipPrompt = 'apply' | 'reapply';
+
+/**
+ * Which application affordance the UI should offer this client, if any:
+ * `apply` for a signed-in member who has not applied, `reapply` after a
+ * rejection. Derived from evaluateApplication, so a button is offered
+ * exactly when the server would accept the application it files — nothing
+ * for guests (no account), for pending or approved members (nothing to
+ * file), or for banned members (the admission notice explains instead).
+ */
+export function membershipPrompt(request: {
+  /**
+   * Whether this client is signed in as a member — the client-side mirror
+   * of evaluateApplication's `hasAccount` (the account exists iff signed in).
+   */
+  signedIn: boolean;
+  membership: Membership | undefined;
+}): MembershipPrompt | undefined {
+  if (!request.signedIn) return undefined;
+  const verdict = evaluateApplication({ hasAccount: true, membership: request.membership });
+  if (!verdict.ok) return undefined;
+  return request.membership === undefined ? 'apply' : 'reapply';
+}
+
+/**
+ * The display name a member's identity provider vouches for, extracted from
+ * a JWT payload (the OIDC `name` claim), normalized by the same rules every
+ * other name goes through. Undefined when the claim is missing (the Clerk
+ * JWT template may not carry it yet — see ROADMAP), not a string, or not a
+ * usable name — the caller then simply leaves the profile nameless, exactly
+ * as before.
+ */
+export function profileNameFrom(payload: unknown): string | undefined {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const name = (payload as Record<string, unknown>).name;
+  if (typeof name !== 'string') return undefined;
+  const verdict = normalizeDisplayName(name);
+  return verdict.ok ? verdict.name : undefined;
 }

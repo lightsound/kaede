@@ -1,7 +1,7 @@
-// fallow-ignore-file coverage-gaps -- a static React overlay; needs a DOM, and no DOM test environment is configured. The admission it renders is decideAdmission, unit-tested in @maple/shared
-import type { Admission } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- a React overlay; needs a DOM, and no DOM test environment is configured. The admission and prompt it renders are decideAdmission / membershipPrompt, unit-tested in @maple/shared
+import type { Admission, MembershipPrompt } from '@maple/shared';
 import type { CSSProperties } from 'react';
-import { UI_GOLD, UI_OVERLAY_BG, UI_TEXT_COLOR } from '../theme';
+import { UI_BUTTON_BG, UI_GOLD, UI_GOLD_BORDER, UI_OVERLAY_BG, UI_TEXT_COLOR } from '../theme';
 
 const overlayStyle: CSSProperties = {
   position: 'absolute',
@@ -23,47 +23,110 @@ const titleStyle: CSSProperties = {
   color: UI_GOLD,
 };
 
-const MESSAGES = {
+const applyButtonStyle: CSSProperties = {
+  marginTop: 6,
+  padding: '8px 20px',
+  borderRadius: 8,
+  border: UI_GOLD_BORDER,
+  background: UI_BUTTON_BG,
+  color: UI_TEXT_COLOR,
+  font: 'inherit',
+  cursor: 'pointer',
+};
+
+const MESSAGES: Record<
+  Exclude<Admission, 'admitted'>,
+  { title: string; body: string; hint?: string }
+> = {
   'pending-approval': {
-    title: '入場申請を受け付けました',
+    title: '参加申請を受け付けました',
     body: '管理者の承認をお待ちください。承認されると自動的に入場します。',
     hint: '左下のフォームで表示名を設定すると、管理者があなたを見分けやすくなります。',
+  },
+  rejected: {
+    title: '参加は承認されませんでした',
+    body: '管理者が申請を承認しませんでした。もう一度申請できます。',
+  },
+  banned: {
+    title: '参加が制限されています',
+    body: '管理者により参加が制限されています。',
   },
   'guests-not-allowed': {
     title: 'ゲスト入場は現在許可されていません',
     body: 'メンバーの方は右上からログインしてください。',
-    hint: undefined,
   },
-} as const;
+};
+
+/** The prompt's button labels; no prompt, no button (e.g. banned, guests). */
+const PROMPT_LABELS: Record<MembershipPrompt, string> = {
+  apply: '参加を申請する',
+  reapply: 'もう一度申請する',
+};
+
+/**
+ * What a held signed-in member reads instead of the guest sign-in hint:
+ * they are past signing in, and applying is their next move.
+ */
+const MEMBER_GUESTS_OFF_BODY = 'メンバーとして参加を申請すると、承認後に入場できます。';
+
+function bodyFor(
+  admission: Exclude<Admission, 'admitted'>,
+  prompt: MembershipPrompt | undefined,
+): string {
+  if (admission === 'guests-not-allowed' && prompt === 'apply') return MEMBER_GUESTS_OFF_BODY;
+  return MESSAGES[admission].body;
+}
 
 function Hint({ text }: { text: string | undefined }) {
   if (text === undefined) return null;
   return <div style={{ opacity: 0.7 }}>{text}</div>;
 }
 
+function ApplyButton({
+  prompt,
+  onApply,
+}: {
+  prompt: MembershipPrompt | undefined;
+  onApply: () => void;
+}) {
+  if (prompt === undefined) return null;
+  return (
+    <button type="button" style={applyButtonStyle} onClick={onApply}>
+      {PROMPT_LABELS[prompt]}
+    </button>
+  );
+}
+
 /**
  * The full-canvas notice shown while this client may not be in the world
- * (承認待ち / ゲスト入場不許可). It covers the canvas because the game
- * renders the local sprite at the spawn point even before a join — without
- * the cover, being refused would look identical to having entered. Nothing
- * shows while admitted, before the first report, or while disconnected —
- * offline the rows are stale, and the connection overlay speaks instead.
+ * (承認待ち / 不承認 / 参加制限 / ゲスト入場不許可), carrying the
+ * application button when applying is the way forward (membershipPrompt).
+ * It covers the canvas because the game renders the local sprite at the
+ * spawn point even before a join — without the cover, being refused would
+ * look identical to having entered. Nothing shows while admitted, before
+ * the first report, or while disconnected — offline the rows are stale, and
+ * the connection overlay speaks instead.
  */
 export function AdmissionOverlay({
   connected,
   admission,
+  prompt,
+  onApply,
 }: {
   connected: boolean;
   /** The current admission, or undefined before the net stack's first report. */
   admission: Admission | undefined;
+  /** The application affordance to offer, if any (see membershipPrompt). */
+  prompt: MembershipPrompt | undefined;
+  onApply: () => void;
 }) {
   if (!connected || admission === undefined || admission === 'admitted') return null;
-  const message = MESSAGES[admission];
   return (
     <div style={overlayStyle}>
-      <div style={titleStyle}>{message.title}</div>
-      <div>{message.body}</div>
-      <Hint text={message.hint} />
+      <div style={titleStyle}>{MESSAGES[admission].title}</div>
+      <div>{bodyFor(admission, prompt)}</div>
+      <Hint text={MESSAGES[admission].hint} />
+      <ApplyButton prompt={prompt} onApply={onApply} />
     </div>
   );
 }

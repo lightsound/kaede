@@ -8,6 +8,14 @@ test-results/
 spacetime.local.json
 .fallow/
 
+# Alchemy のステート: 共有するのは prod ステージだけ(README 参照)。
+# それ以外のステージ(既定の dev_$USER を含む)・ログ・バージョンチェックの
+# キャッシュは個人環境の産物なので共有しない。
+infra/.alchemy/state/*/*/
+!infra/.alchemy/state/*/prod/
+infra/.alchemy/log/
+infra/.alchemy/version-check.json
+
 .projects/cache
 .projects/vault
 .projects/state.test.json

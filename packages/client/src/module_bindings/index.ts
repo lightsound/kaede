@@ -34,17 +34,30 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ApplyForMembershipReducer from "./apply_for_membership_reducer";
 import ApproveMemberReducer from "./approve_member_reducer";
+import BanMemberReducer from "./ban_member_reducer";
 import JoinReducer from "./join_reducer";
-import RemoveMemberReducer from "./remove_member_reducer";
+import RejectMemberReducer from "./reject_member_reducer";
+import SendChatMessageReducer from "./send_chat_message_reducer";
+import SendDmReducer from "./send_dm_reducer";
+import SendReactionReducer from "./send_reaction_reducer";
+import SetAvailabilityReducer from "./set_availability_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
 import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
+import SetStatusTextReducer from "./set_status_text_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
+import UnbanMemberReducer from "./unban_member_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import ChatMessageRow from "./chat_message_table";
+import DmMessageRow from "./dm_message_table";
 import PlayerRow from "./player_table";
+import PlayerNameRow from "./player_name_table";
+import PlayerStatusRow from "./player_status_table";
+import ReactionRow from "./reaction_table";
 import SpaceMemberRow from "./space_member_table";
 import SpaceSettingRow from "./space_setting_table";
 
@@ -52,6 +65,34 @@ import SpaceSettingRow from "./space_setting_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  chatMessage: __table({
+    name: 'chat_message',
+    indexes: [
+      { accessor: 'id', name: 'chat_message_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'chat_message_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ChatMessageRow),
+  dmMessage: __table({
+    name: 'dm_message',
+    indexes: [
+      { accessor: 'id', name: 'dm_message_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'recipient', name: 'dm_message_recipient_idx_btree', algorithm: 'btree', columns: [
+        'recipient',
+      ] },
+      { accessor: 'sender', name: 'dm_message_sender_idx_btree', algorithm: 'btree', columns: [
+        'sender',
+      ] },
+    ],
+    constraints: [
+      { name: 'dm_message_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, DmMessageRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -63,6 +104,39 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  playerName: __table({
+    name: 'player_name',
+    indexes: [
+      { accessor: 'identity', name: 'player_name_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'player_name_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, PlayerNameRow),
+  playerStatus: __table({
+    name: 'player_status',
+    indexes: [
+      { accessor: 'identity', name: 'player_status_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'player_status_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, PlayerStatusRow),
+  reaction: __table({
+    name: 'reaction',
+    indexes: [
+      { accessor: 'identity', name: 'reaction_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'reaction_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, ReactionRow),
   spaceMember: __table({
     name: 'space_member',
     indexes: [
@@ -89,12 +163,20 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("apply_for_membership", ApplyForMembershipReducer),
   __reducerSchema("approve_member", ApproveMemberReducer),
+  __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("join", JoinReducer),
-  __reducerSchema("remove_member", RemoveMemberReducer),
+  __reducerSchema("reject_member", RejectMemberReducer),
+  __reducerSchema("send_chat_message", SendChatMessageReducer),
+  __reducerSchema("send_dm", SendDmReducer),
+  __reducerSchema("send_reaction", SendReactionReducer),
+  __reducerSchema("set_availability", SetAvailabilityReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),
   __reducerSchema("set_guests_allowed", SetGuestsAllowedReducer),
+  __reducerSchema("set_status_text", SetStatusTextReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
+  __reducerSchema("unban_member", UnbanMemberReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

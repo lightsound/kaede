@@ -1,0 +1,29 @@
+{
+  "status": "updated",
+  "fqn": "Client/Build",
+  "logicalId": "Build",
+  "instanceId": "e1ee1052ddaf3ef99dd5b56a1bac1891",
+  "resourceType": "Command.Build",
+  "props": {
+    "command": "pnpm --filter @maple/client build",
+    "cwd": "..",
+    "outdir": "packages/client/dist",
+    "env": {}
+  },
+  "attr": {
+    "outdir": "../packages/client/dist",
+    "hash": {
+      "output": "518bc500ad7b6daa8e12b11e9376b862b15d339e0b281ba31d2d17c2e4e305b5",
+      "input": "0c35a53128638796517421eed04b6c80ca765a6faca93719ce296ad9d774e41f"
+    }
+  },
+  "bindings": [],
+  "providerVersion": 0,
+  "downstream": [
+    "Client/Worker"
+  ],
+  "removalPolicy": "destroy",
+  "namespace": {
+    "Id": "Client"
+  }
+}

@@ -19,9 +19,34 @@ export const Account = __t.object("Account", {
 });
 export type Account = __Infer<typeof Account>;
 
+export const ChatGuard = __t.object("ChatGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type ChatGuard = __Infer<typeof ChatGuard>;
+
+export const ChatMessage = __t.object("ChatMessage", {
+  id: __t.u64(),
+  sender: __t.identity(),
+  senderName: __t.string(),
+  text: __t.string(),
+  sentAt: __t.timestamp(),
+});
+export type ChatMessage = __Infer<typeof ChatMessage>;
+
+export const DmMessage = __t.object("DmMessage", {
+  id: __t.u64(),
+  sender: __t.identity(),
+  recipient: __t.identity(),
+  senderName: __t.string(),
+  recipientName: __t.string(),
+  text: __t.string(),
+  sentAt: __t.timestamp(),
+});
+export type DmMessage = __Infer<typeof DmMessage>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
-  name: __t.string(),
   x: __t.f64(),
   y: __t.f64(),
   vx: __t.f64(),
@@ -31,10 +56,41 @@ export const Player = __t.object("Player", {
   rope: __t.i32(),
   tick: __t.u32(),
   online: __t.bool(),
-  allowanceMicros: __t.i64(),
   updatedAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const PlayerGuard = __t.object("PlayerGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type PlayerGuard = __Infer<typeof PlayerGuard>;
+
+export const PlayerName = __t.object("PlayerName", {
+  identity: __t.identity(),
+  name: __t.string(),
+});
+export type PlayerName = __Infer<typeof PlayerName>;
+
+export const PlayerStatus = __t.object("PlayerStatus", {
+  identity: __t.identity(),
+  availability: __t.string(),
+  text: __t.string(),
+});
+export type PlayerStatus = __Infer<typeof PlayerStatus>;
+
+export const Reaction = __t.object("Reaction", {
+  identity: __t.identity(),
+  emoji: __t.string(),
+  sentAt: __t.timestamp(),
+});
+export type Reaction = __Infer<typeof Reaction>;
+
+export const ReactionGuard = __t.object("ReactionGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type ReactionGuard = __Infer<typeof ReactionGuard>;
 
 export const SpaceMember = __t.object("SpaceMember", {
   identity: __t.identity(),
@@ -51,4 +107,10 @@ export const SpaceSetting = __t.object("SpaceSetting", {
   guestsAllowed: __t.bool(),
 });
 export type SpaceSetting = __Infer<typeof SpaceSetting>;
+
+export const StatusGuard = __t.object("StatusGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type StatusGuard = __Infer<typeof StatusGuard>;
 
