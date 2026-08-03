@@ -295,6 +295,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // value here. Unlike the name there is no "row unknown" state to report:
   // a missing row IS a status (the default), so the value never goes
   // undefined — the control disables through the onOwnName gate instead.
+  // For the same reason dispose() has no reset counterpart to its
+  // publishOwnName(undefined): a consumer surviving this stack holds a
+  // stale-but-disabled value at worst, and the replacement stack's own
+  // handleOwnRow seed (its dedupe starts empty) republishes the truth.
   let lastOwnStatus: StatusView | undefined;
   function publishOwnStatus(view: StatusView): void {
     if (

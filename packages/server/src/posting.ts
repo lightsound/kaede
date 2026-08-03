@@ -187,12 +187,17 @@ interface IdentityKeyedTable<Row extends { identity: SenderIdentity }> {
  * Writes one identity-keyed upsert row: the row-write half every
  * upsert-row feature shares (the reaction, and both status columns
  * through writeStatus), so the find/update/insert dance exists once.
+ * `build` receives the existing row so a caller merging against it
+ * (writeStatus) shares this one lookup instead of finding twice.
  */
 function upsertByIdentity<Row extends { identity: SenderIdentity }>(
   table: IdentityKeyedTable<Row>,
-  row: Row,
+  identity: SenderIdentity,
+  build: (existing: Row | null) => Row,
 ): void {
-  if (table.identity.find(row.identity)) table.identity.update(row);
+  const existing = table.identity.find(identity);
+  const row = build(existing);
+  if (existing) table.identity.update(row);
   else table.insert(row);
 }
 
@@ -221,7 +226,11 @@ export const sendReaction = spacetimedb.reducer({ emoji: t.string() }, (ctx, { e
     throw new SenderError('send_reaction refused (unknown-emoji)');
   }
   if (!admitGuardedSend(ctx, 'send_reaction', ctx.db.reactionGuard, evaluateReactionSend)) return;
-  upsertByIdentity(ctx.db.reaction, { identity: ctx.sender, emoji, sentAt: ctx.timestamp });
+  upsertByIdentity(ctx.db.reaction, ctx.sender, () => ({
+    identity: ctx.sender,
+    emoji,
+    sentAt: ctx.timestamp,
+  }));
 });
 
 /** One VALIDATED column of the status row, as either reducer writes it. */
@@ -239,12 +248,11 @@ type StatusPatch = { availability: Availability } | { text: string };
  */
 function writeStatus(ctx: Ctx, reducerName: string, patch: StatusPatch): void {
   if (!admitGuardedSend(ctx, reducerName, ctx.db.statusGuard, evaluateStatusSend)) return;
-  const existing = ctx.db.playerStatus.identity.find(ctx.sender);
-  upsertByIdentity(ctx.db.playerStatus, {
+  upsertByIdentity(ctx.db.playerStatus, ctx.sender, (existing) => ({
     identity: ctx.sender,
     ...statusViewOf(existing),
     ...patch,
-  });
+  }));
 }
 
 // Sets the sender's availability (ステータス手動切替 — ROADMAP Phase 2):
