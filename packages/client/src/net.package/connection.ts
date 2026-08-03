@@ -86,15 +86,23 @@ export async function connect(
         // be re-minted per connect, and overwriting the anonymous token with
         // it would strand the guest identity after sign-out.
         if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
-        // The world (player and the name labels split off it) plus
-        // everything admission is decided from: the member directory and the
-        // space settings. All four must be applied before we resolve, so the
-        // first admission decision rules on real rows rather than an empty
-        // cache.
+        // The world (player and the name labels split off it), everything
+        // admission is decided from (the member directory and the space
+        // settings), and the chat history. All must be applied before we
+        // resolve, so the first admission decision rules on real rows rather
+        // than an empty cache, and the chat log seeds from the full retained
+        // history (bounded server-side to CHAT_HISTORY_MAX rows — see the
+        // chat_message table).
         conn
           .subscriptionBuilder()
           .onApplied(() => resolve({ conn, myIdentity: identity, myIdHex: identity.toHexString() }))
-          .subscribe([tables.player, tables.playerName, tables.spaceMember, tables.spaceSetting]);
+          .subscribe([
+            tables.player,
+            tables.playerName,
+            tables.spaceMember,
+            tables.spaceSetting,
+            tables.chatMessage,
+          ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping
       // the identity here used to spawn a fresh character (and strand the old

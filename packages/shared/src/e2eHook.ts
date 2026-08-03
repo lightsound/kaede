@@ -13,9 +13,22 @@ export interface E2EWorldSnapshot {
    */
   tick: number;
   /** Rendered position and label of the local player (world pixels, y-down). */
-  local: { x: number; y: number; name: string };
+  local: E2EPlayerSnapshot;
   /** Rendered positions and labels of every remote player currently in the world. */
-  remotePlayers: { x: number; y: number; name: string }[];
+  remotePlayers: E2EPlayerSnapshot[];
+}
+
+/**
+ * One rendered player as the hook reports it. `bubble` is the speech-bubble
+ * text currently shown above the avatar, absent while none is — bubbles are
+ * canvas-drawn (like positions), so the chat spec can only assert on them
+ * through this hook.
+ */
+export interface E2EPlayerSnapshot {
+  x: number;
+  y: number;
+  name: string;
+  bubble?: string;
 }
 
 export interface E2EHook {

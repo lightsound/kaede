@@ -4,16 +4,9 @@ import {
   type DisplayNameRejectReason,
   normalizeDisplayName,
 } from '@maple/shared';
-import { type CSSProperties, type FormEvent, useState } from 'react';
-import {
-  UI_BUTTON_BG,
-  UI_ERROR_COLOR,
-  UI_FONT,
-  UI_GOLD_BORDER,
-  UI_GOLD_BORDER_SOFT,
-  UI_PANEL_BG,
-  UI_TEXT_COLOR,
-} from '../theme';
+import type { CSSProperties } from 'react';
+import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG } from '../theme';
+import { DraftForm } from '../ui.package';
 
 const REJECT_MESSAGES: Record<DisplayNameRejectReason, string> = {
   empty: '表示名を入力してください',
@@ -35,30 +28,6 @@ const formStyle: CSSProperties = {
   font: UI_FONT,
 };
 
-const inputStyle: CSSProperties = {
-  width: 160,
-  padding: '4px 8px',
-  borderRadius: 6,
-  border: UI_GOLD_BORDER_SOFT,
-  background: 'rgba(0, 0, 0, 0.4)',
-  color: UI_TEXT_COLOR,
-  font: 'inherit',
-};
-
-const buttonStyle: CSSProperties = {
-  padding: '4px 10px',
-  borderRadius: 6,
-  border: UI_GOLD_BORDER,
-  background: UI_BUTTON_BG,
-  color: UI_TEXT_COLOR,
-  font: 'inherit',
-  cursor: 'pointer',
-};
-
-const errorStyle: CSSProperties = {
-  color: UI_ERROR_COLOR,
-};
-
 /**
  * The minimal display-name form (ROADMAP Phase 1: プロフィールの永続化).
  * Validates with the same shared rules the server enforces, so a well-formed
@@ -66,6 +35,11 @@ const errorStyle: CSSProperties = {
  * (`no-target`, a rename with nowhere to land) surfaces as the label not
  * changing. The applied name comes back through the player row and shows
  * above the avatar.
+ *
+ * The draft is deliberately NOT cleared on submit (clearOnSubmit false): the
+ * success signal is the applied name coming back through the player row onto
+ * the avatar label, and a rename dropped in transit (disconnect racing the
+ * submit) leaves the text here to resubmit rather than silently discarding it.
  */
 export function NameEditor({
   disabled,
@@ -78,41 +52,20 @@ export function NameEditor({
   currentName?: string;
   onSubmit: (name: string) => void;
 }) {
-  const [draft, setDraft] = useState('');
-  const [error, setError] = useState<string>();
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const verdict = normalizeDisplayName(draft);
-    if (!verdict.ok) {
-      setError(REJECT_MESSAGES[verdict.reason]);
-      return;
-    }
-    setError(undefined);
-    // The draft is deliberately NOT cleared: the success signal is the applied
-    // name coming back through the player row onto the avatar label, and a
-    // rename dropped in transit (disconnect racing the submit) leaves the text
-    // here to resubmit rather than silently discarding it.
-    onSubmit(verdict.name);
-  };
-
   return (
-    <form style={formStyle} onSubmit={handleSubmit}>
-      <input
-        style={inputStyle}
-        value={draft}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          setError(undefined);
-        }}
-        placeholder={currentName ?? '表示名'}
-        aria-label="表示名"
-        disabled={disabled}
-      />
-      <button type="submit" style={buttonStyle} disabled={disabled}>
-        変更
-      </button>
-      {error !== undefined && <span style={errorStyle}>{error}</span>}
-    </form>
+    <DraftForm
+      disabled={disabled}
+      placeholder={currentName ?? '表示名'}
+      ariaLabel="表示名"
+      buttonLabel="変更"
+      clearOnSubmit={false}
+      formStyle={formStyle}
+      submit={(draft) => {
+        const verdict = normalizeDisplayName(draft);
+        if (!verdict.ok) return REJECT_MESSAGES[verdict.reason];
+        onSubmit(verdict.name);
+        return undefined;
+      }}
+    />
   );
 }

@@ -2,8 +2,15 @@
 import { membershipPrompt } from '@maple/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
+import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
-import { type ConnectionStatus, type Net, type SpaceView, startNet } from './net.package';
+import {
+  type ChatLog,
+  type ConnectionStatus,
+  type Net,
+  type SpaceView,
+  startNet,
+} from './net.package';
 import { RenameControl } from './profile.package';
 import { AdminSection, AdmissionOverlay, ApplyBanner } from './space.package';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
@@ -43,6 +50,13 @@ export function App() {
   // undefined until the first session reports. Held as one value so the
   // overlays and the admin panel can never disagree about the same instant.
   const [space, setSpace] = useState<SpaceView>();
+  // The global-scope chat history, published whole by the net stack on
+  // every chat_message change (seed and row events alike).
+  const [chatLog, setChatLog] = useState<ChatLog>([]);
+  // True after a send was dropped or refused server-side (onChatRefused) —
+  // the panel clears its draft optimistically, so this is the only trace
+  // the sender gets. Cleared by the next send attempt.
+  const [chatSendRefused, setChatSendRefused] = useState(false);
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -64,7 +78,13 @@ export function App() {
         return;
       }
       game = created;
-      netRef.current = startNet(created, setStatus, session.getToken, setOwnName, setSpace);
+      netRef.current = startNet(created, session.getToken, {
+        onStatus: setStatus,
+        onOwnName: setOwnName,
+        onSpace: setSpace,
+        onChat: setChatLog,
+        onChatRefused: () => setChatSendRefused(true),
+      });
     })();
 
     return () => {
@@ -109,6 +129,16 @@ export function App() {
         space={space}
         onMemberAction={(action, member) => netRef.current?.memberAction(action, member.identity)}
         onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
+      />
+      <ChatPanel
+        connected={connected}
+        ownName={ownName}
+        log={chatLog}
+        sendRefused={chatSendRefused}
+        onSend={(text) => {
+          setChatSendRefused(false);
+          netRef.current?.sendChatMessage(text);
+        }}
       />
     </div>
   );

@@ -9,6 +9,8 @@ import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
+import { createChatFeed } from './chatFeed';
+import type { ChatLog } from './chatLog';
 import { type AuthTokenGetter, type Connected, connect, target } from './connection';
 import { createHeartbeat } from './heartbeat';
 import {
@@ -107,6 +109,40 @@ export interface Net {
    */
   memberAction(action: MemberAction, member: Identity): void;
   setGuestsAllowed(allowed: boolean): void;
+  /**
+   * Posts one message to the global-scope chat (send_chat_message). Success
+   * arrives as a chat_message row event — the log line and the speech
+   * bubble both come from it, so the sender sees exactly what everyone
+   * else received. Failures (a disconnect racing the submit, a server
+   * refusal) log AND report through NetHooks.onChatRefused: the panel
+   * clears the draft optimistically, so unlike the other reducers a
+   * dropped call has no visible "nothing changed" signal to fall back on.
+   */
+  sendChatMessage(text: string): void;
+}
+
+/**
+ * Everything the net stack reports back to the UI. One object rather than
+ * a parameter per callback: the four `(x) => void` consumers had grown
+ * positional (swapping onOwnName/onSpace would have compiled), and the
+ * admission package already set the object-of-hooks precedent.
+ */
+export interface NetHooks {
+  onStatus(status: ConnectionStatus): void;
+  /** See startNet's own-name contract in the doc comment below. */
+  onOwnName(name: string | undefined): void;
+  /** Every space_member / space_setting change, as one SpaceView. */
+  onSpace(view: SpaceView): void;
+  /** Every chat_message change (seed and row events), as one whole log. */
+  onChat(log: ChatLog): void;
+  /**
+   * A chat send that will never land: dropped while disconnected, or
+   * refused by the server after the client-side mirror let it through
+   * (e.g. the per-identity rate bucket shared by a member's other tab —
+   * the mirror is per-tab). The panel surfaces it; without this the
+   * cleared draft would just silently vanish.
+   */
+  onChatRefused(): void;
 }
 
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
@@ -151,14 +187,11 @@ const MEMBER_ACTION_CALLS: Record<
  * retention sweep). "Defined" therefore means "a row exists for
  * set_display_name to land on", which is what gates the name form.
  */
-export function startNet(
-  gameApp: GameApp,
-  onStatus: (status: ConnectionStatus) => void,
-  getAuthToken: AuthTokenGetter,
-  onOwnName: (name: string | undefined) => void,
-  onSpace: (view: SpaceView) => void,
-): Net {
+export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks: NetHooks): Net {
   const remoteViews = createRemoteViews();
+  // The chat log and bubbles, wired per session (wireSession); the feed
+  // owns the log across sessions (see chatFeed.ts).
+  const chatFeed = createChatFeed(hooks.onChat);
   let conn: DbConnection | undefined;
   // The whole retry/suspension/generation bookkeeping lives in this pure
   // state (see lifecycle.ts); everything below reads it through `life`.
@@ -222,7 +255,7 @@ export function startNet(
     // stays visible while offline (the sim keeps running), so blanking the
     // label would flash; the replacement row brings the authoritative name.
     if (name !== undefined) gameApp.setLocalPlayerName(name);
-    onOwnName(name);
+    hooks.onOwnName(name);
   }
 
   function dropSession(): void {
@@ -351,7 +384,7 @@ export function startNet(
     // Admission (承認制 / ゲスト入場設定): the rules live in admission.ts;
     // this session supplies what acting on them needs.
     const admission = wireAdmission(c, myIdentity, {
-      onSpace,
+      onSpace: hooks.onSpace,
       enterWorld,
       isStale: stale,
     });
@@ -365,6 +398,14 @@ export function startNet(
       const idHex = row.identity.toHexString();
       if (idHex !== myIdHex) recordRemote(idHex, row);
     }
+
+    // Chat: the feed seeds its log from the cache and keeps it (and the
+    // speech bubbles) fed by row events — see chatFeed.ts.
+    chatFeed.wire(c, myIdHex, {
+      isStale: stale,
+      showLocalBubble: (text) => gameApp.showLocalBubble(text),
+      showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
+    });
 
     // Every handler below refuses to run once stale: the socket closes
     // asynchronously, so this session's row events can still be delivered
@@ -456,7 +497,7 @@ export function startNet(
     settled: Connected | undefined,
   ): EffectRunners {
     return {
-      status: (e) => onStatus(e.status),
+      status: (e) => hooks.onStatus(e.status),
       connect: (e) => startConnect(e.generation, e.consecutiveFailures),
       'wire-session': (e) => {
         if (!settled) {
@@ -571,14 +612,23 @@ export function startNet(
    * The shared shell of every user-triggered reducer call: drop with a
    * warning while disconnected, log a server refusal. Success never needs
    * handling here — it arrives as row events (see the Net method docs).
+   * `onRefused` is for the one caller (chat) whose UI otherwise has no
+   * "nothing changed" signal to fall back on; it runs on both the
+   * disconnected drop and a server rejection.
    */
-  function callReducer(name: string, call: (c: DbConnection) => Promise<unknown>): void {
+  function callReducer(
+    name: string,
+    call: (c: DbConnection) => Promise<unknown>,
+    onRefused?: () => void,
+  ): void {
     if (!conn) {
       console.warn(`SpacetimeDB: not connected, ${name} dropped`);
+      onRefused?.();
       return;
     }
     call(conn).catch((err: unknown) => {
       console.error(`SpacetimeDB: ${name} rejected`, err);
+      onRefused?.();
     });
   }
 
@@ -614,6 +664,13 @@ export function startNet(
     },
     setGuestsAllowed(allowed) {
       callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
+    },
+    sendChatMessage(text) {
+      callReducer(
+        'send_chat_message',
+        (c) => c.reducers.sendChatMessage({ text }),
+        hooks.onChatRefused,
+      );
     },
   };
 }

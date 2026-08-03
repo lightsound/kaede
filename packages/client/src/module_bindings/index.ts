@@ -39,6 +39,7 @@ import ApproveMemberReducer from "./approve_member_reducer";
 import BanMemberReducer from "./ban_member_reducer";
 import JoinReducer from "./join_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
+import SendChatMessageReducer from "./send_chat_message_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
 import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
@@ -47,6 +48,7 @@ import UnbanMemberReducer from "./unban_member_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import ChatMessageRow from "./chat_message_table";
 import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
 import SpaceMemberRow from "./space_member_table";
@@ -56,6 +58,17 @@ import SpaceSettingRow from "./space_setting_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  chatMessage: __table({
+    name: 'chat_message',
+    indexes: [
+      { accessor: 'id', name: 'chat_message_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'chat_message_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ChatMessageRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -109,6 +122,7 @@ const reducersSchema = __reducers(
   __reducerSchema("ban_member", BanMemberReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
+  __reducerSchema("send_chat_message", SendChatMessageReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),
   __reducerSchema("set_guests_allowed", SetGuestsAllowedReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),

@@ -4,6 +4,7 @@ import {
   DEFAULT_MAP,
   DT,
   type E2EHook,
+  type E2EPlayerSnapshot,
   type Facing,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
@@ -17,6 +18,7 @@ import {
 } from '@maple/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
+import { type Bubble, createBubble, expireBubble, showBubble, visibleBubbleText } from './bubble';
 import { cameraOffset } from './camera';
 import { createInput, mergeInputs } from './input';
 import { createTouchControls } from './touchControls';
@@ -62,12 +64,22 @@ export interface GameApp {
   removeRemotePlayer(id: string): void;
   /** Drop every remote player sprite (e.g. when the connection is lost). */
   clearRemotePlayers(): void;
+  /**
+   * Shows `text` in a speech bubble above the local avatar for
+   * CHAT_BUBBLE_DURATION_MS; a newer message replaces it and restarts the
+   * clock.
+   */
+  showLocalBubble(text: string): void;
+  /** Same, above the remote player `id`; a no-op while that player has no sprite. */
+  showRemoteBubble(id: string, text: string): void;
 }
 
 interface PlayerView {
   root: Container;
   body: Graphics;
   label: Text;
+  /** The speech bubble, hidden until this player chats (showBubble). */
+  bubble: Bubble;
 }
 
 /** A labelled rectangle sprite parented under the world container. */
@@ -79,9 +91,21 @@ function createPlayerView(world: Container, name: string, color: number): Player
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
-  root.addChild(body, label);
+  const bubble = createBubble();
+  root.addChild(body, label, bubble.root);
   world.addChild(root);
-  return { root, body, label };
+  return { root, body, label, bubble };
+}
+
+/** One player as the e2e hook reports it: rendered pose plus any live bubble. */
+function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
+  const bubble = visibleBubbleText(view.bubble);
+  return {
+    x: view.root.x,
+    y: view.root.y,
+    name: view.label.text,
+    ...(bubble === undefined ? {} : { bubble }),
+  };
 }
 
 /**
@@ -99,12 +123,8 @@ function createE2EHook(
   return {
     snapshot: () => ({
       tick: currentTick(),
-      local: { x: local.root.x, y: local.root.y, name: local.label.text },
-      remotePlayers: [...remotes.values()].map((view) => ({
-        x: view.root.x,
-        y: view.root.y,
-        name: view.label.text,
-      })),
+      local: playerSnapshot(local),
+      remotePlayers: [...remotes.values()].map(playerSnapshot),
     }),
   };
 }
@@ -197,12 +217,20 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     world.position.set(cam.x, cam.y);
   }
 
+  /** Hides every speech bubble whose time is up (see expireBubble). */
+  function expireBubbles(nowMs: number): void {
+    expireBubble(local.bubble, nowMs);
+    for (const view of remotes.values()) expireBubble(view.bubble, nowMs);
+  }
+
   app.ticker.add((ticker) => {
-    for (const cb of frameCbs) cb(performance.now());
+    const now = performance.now();
+    for (const cb of frameCbs) cb(now);
     // Simulation is gated until start(): never pre-accumulate before it runs.
     acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
     while (acc >= DT) simulateTick();
     renderLocal(ticker.deltaMS);
+    expireBubbles(now);
   });
 
   const e2eHook = createE2EHook(local, remotes, () => tick);
@@ -272,6 +300,13 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     clearRemotePlayers() {
       for (const view of remotes.values()) view.root.destroy({ children: true });
       remotes.clear();
+    },
+    showLocalBubble(text) {
+      showBubble(local.bubble, text, performance.now());
+    },
+    showRemoteBubble(id, text) {
+      const view = remotes.get(id);
+      if (view) showBubble(view.bubble, text, performance.now());
     },
   };
 }
