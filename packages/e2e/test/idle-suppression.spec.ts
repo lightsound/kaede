@@ -1,20 +1,10 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
-import type { E2ENetStats } from '@maple/shared';
 import { expect, type Page, test } from '@playwright/test';
-import { enterWorld, snapshot } from './helpers';
+import { enterWorld, netStats, snapshot } from './helpers';
 
 const remoteCount = async (page: Page) => (await snapshot(page)).remotePlayers.length;
 /** The single remote player's x, or undefined during a transient empty list. */
 const remoteX = async (page: Page) => (await snapshot(page)).remotePlayers[0]?.x;
-
-/** クライアントが実際に送った submit_inputs の数(sync.ts の dev 限定フック)。 */
-function sends(page: Page): Promise<E2ENetStats> {
-  return page.evaluate(() => {
-    const stats = window.__mapleE2ENet;
-    if (!stats) throw new Error('__mapleE2ENet hook is not installed');
-    return { ...stats };
-  });
-}
 
 /**
  * 送信が止まる(=静止に到達し全バッチが ack された)まで待つ。入場直後は
@@ -25,9 +15,9 @@ async function settleSends(page: Page): Promise<void> {
   await expect
     .poll(
       async () => {
-        const before = (await sends(page)).inputBatchesSent;
+        const before = (await netStats(page)).inputBatchesSent;
         await page.waitForTimeout(1200);
-        const after = (await sends(page)).inputBatchesSent;
+        const after = (await netStats(page)).inputBatchesSent;
         return after - before;
       },
       { timeout: 30_000 },
@@ -53,9 +43,9 @@ test('静止中は送信が完全に止まり、行は残り、移動再開で�
   // 静止中: 入力バッチは 1 本も送られない(これが「静止中 0 calls/秒」の
   // 実測そのもの)。ハートビートは差分で見る — 入場時の生存宣言 1 本が
   // 絶対値に乗るのに対し、定期便は 2 分間隔なのでこの窓では増えない。
-  const idleBefore = await sends(pageA);
+  const idleBefore = await netStats(pageA);
   await pageA.waitForTimeout(3000);
-  const idleAfter = await sends(pageA);
+  const idleAfter = await netStats(pageA);
   expect(idleAfter.inputBatchesSent).toBe(idleBefore.inputBatchesSent);
   expect(idleAfter.heartbeatsSent).toBe(idleBefore.heartbeatsSent);
 
@@ -70,7 +60,7 @@ test('静止中は送信が完全に止まり、行は残り、移動再開で�
   await pageA.waitForTimeout(1500);
   await pageA.keyboard.up('ArrowRight');
 
-  const moved = await sends(pageA);
+  const moved = await netStats(pageA);
   const movingBatches = moved.inputBatchesSent - idleAfter.inputBatchesSent;
   expect(movingBatches).toBeGreaterThan(0);
   // 移動中のレートは目標帯(2〜3 calls/秒)+末尾フラッシュに収まる:
@@ -83,9 +73,9 @@ test('静止中は送信が完全に止まり、行は残り、移動再開で�
 
   // 停止すると再び完全に黙る(減速・着地ぶんを送り切ってから)。
   await settleSends(pageA);
-  const again = await sends(pageA);
+  const again = await netStats(pageA);
   await pageA.waitForTimeout(3000);
-  expect((await sends(pageA)).inputBatchesSent).toBe(again.inputBatchesSent);
+  expect((await netStats(pageA)).inputBatchesSent).toBe(again.inputBatchesSent);
 
   await contextA.close();
   await contextB.close();

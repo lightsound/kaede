@@ -80,13 +80,16 @@ export function createChatFeed(onChat: (log: ChatLog) => void) {
         text: row.text,
         own: row.sender.toHexString() === myIdHex,
       });
-      const dmEvent = (row: DmMessageRow, source: DmRowSource): DmRowEvent => ({
-        source,
-        own: row.sender.toHexString() === myIdHex,
-        senderName: row.senderName,
-        senderKey: row.sender.toHexString(),
-        text: row.text,
-      });
+      const dmEvent = (row: DmMessageRow, source: DmRowSource): DmRowEvent => {
+        const senderKey = row.sender.toHexString();
+        return {
+          source,
+          own: senderKey === myIdHex,
+          senderName: row.senderName,
+          senderKey,
+          text: row.text,
+        };
+      };
 
       let seeded: ChatLog = [];
       for (const row of c.db.chatMessage.iter()) {

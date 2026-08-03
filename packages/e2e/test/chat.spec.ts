@@ -1,13 +1,7 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
 import { CHAT_BUBBLE_DURATION_MS } from '@maple/shared';
-import { expect, type Page, test } from '@playwright/test';
-import { enterWorld, snapshot } from './helpers';
-
-/** Fills the chat input and submits (Enter, like a chat box should). */
-async function sendChat(page: Page, text: string): Promise<void> {
-  await page.getByLabel('チャット入力').fill(text);
-  await page.getByLabel('チャット入力').press('Enter');
-}
+import { expect, test } from '@playwright/test';
+import { enterWorld, sendChat, snapshot } from './helpers';
 
 /**
  * The global-scope chat end to end (ROADMAP Phase 2 第一弾): a message sent

@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E helpers; drive real browsers against a live SpacetimeDB host, outside unit coverage
-import type { E2EWorldSnapshot } from '@maple/shared';
+import type { E2ENetStats, E2EWorldSnapshot } from '@maple/shared';
 import type { Page } from '@playwright/test';
 
 /** Reads the world through the client's read-only test hook (see e2eHook.ts). */
@@ -9,6 +9,26 @@ export function snapshot(page: Page): Promise<E2EWorldSnapshot> {
     if (!hook) throw new Error('__mapleE2E hook is not installed');
     return hook.snapshot();
   });
+}
+
+/**
+ * Reads the net-layer counters (sync.ts の dev 限定フック) as one value
+ * snapshot. What the invisible-by-design assertions read: sends stopping
+ * (idle suppression), DM rows NOT arriving (privacy), notification
+ * decisions (OS notifications are unobservable from a test).
+ */
+export function netStats(page: Page): Promise<E2ENetStats> {
+  return page.evaluate(() => {
+    const stats = window.__mapleE2ENet;
+    if (!stats) throw new Error('__mapleE2ENet hook is not installed');
+    return { ...stats };
+  });
+}
+
+/** Fills the chat input and submits (Enter, like a chat box should). */
+export async function sendChat(page: Page, text: string): Promise<void> {
+  await page.getByLabel('チャット入力').fill(text);
+  await page.getByLabel('チャット入力').press('Enter');
 }
 
 /**

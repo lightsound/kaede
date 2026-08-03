@@ -1,12 +1,6 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
 import { expect, type Page, test } from '@playwright/test';
-import { enterWorld, snapshot } from './helpers';
-
-/** Fills the chat input and submits (Enter — the chat.spec way). */
-async function sendChat(page: Page, text: string): Promise<void> {
-  await page.getByLabel('チャット入力').fill(text);
-  await page.getByLabel('チャット入力').press('Enter');
-}
+import { enterWorld, netStats, sendChat, snapshot } from './helpers';
 
 /**
  * How many DM rows this client DECIDED to notify for, via the dev-only
@@ -15,21 +9,13 @@ async function sendChat(page: Page, text: string): Promise<void> {
  * regardless of) Notification construction, so it measures the unit-tested
  * rule applied to live inputs, not the platform's willingness to display.
  */
-function dmNotifyDecisions(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const stats = window.__mapleE2ENet;
-    if (!stats) throw new Error('__mapleE2ENet hook is not installed');
-    return stats.dmNotifyDecisions;
-  });
+async function dmNotifyDecisions(page: Page): Promise<number> {
+  return (await netStats(page)).dmNotifyDecisions;
 }
 
-/** The privacy probe from dm.spec.ts: rows actually handed to this client. */
-function dmRowsReceived(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const stats = window.__mapleE2ENet;
-    if (!stats) throw new Error('__mapleE2ENet hook is not installed');
-    return stats.dmRowsReceived;
-  });
+/** The privacy probe (the dm.spec rule): rows actually handed to this client. */
+async function dmRowsReceived(page: Page): Promise<number> {
+  return (await netStats(page)).dmRowsReceived;
 }
 
 /**
