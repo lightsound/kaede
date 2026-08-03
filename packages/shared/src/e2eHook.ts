@@ -57,6 +57,15 @@ export interface E2ENetStats {
   heartbeatsSent: number;
   /** dm_message rows handed to this client (subscription seed + insert events). */
   dmRowsReceived: number;
+  /**
+   * DM rows this client DECIDED to notify for (shouldNotifyDm returned
+   * true), counted before the Notification is constructed and regardless
+   * of whether construction succeeds — an OS notification itself is
+   * unobservable from a test, so the decision count is what the
+   * notification spec asserts on (the dmRowsReceived idea pointed at the
+   * outbound side of notifications).
+   */
+  dmNotifyDecisions: number;
 }
 
 declare global {

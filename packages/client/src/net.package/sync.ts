@@ -4,6 +4,7 @@ import {
   type ChatDraftPlan,
   collectDmCandidates,
   type DmCandidate,
+  type DmRowEvent,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
   type MemberAction,
@@ -117,7 +118,12 @@ function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
  */
 function installNetStats(): E2ENetStats | undefined {
   if (!import.meta.env.DEV) return undefined;
-  const stats: E2ENetStats = { inputBatchesSent: 0, heartbeatsSent: 0, dmRowsReceived: 0 };
+  const stats: E2ENetStats = {
+    inputBatchesSent: 0,
+    heartbeatsSent: 0,
+    dmRowsReceived: 0,
+    dmNotifyDecisions: 0,
+  };
   window.__mapleE2ENet = stats;
   return stats;
 }
@@ -224,6 +230,16 @@ export interface NetHooks {
    * the cleared draft would just silently vanish.
    */
   onChatRefused(): void;
+  /**
+   * Every dm_message row handed to this client (subscription seed and
+   * insert events alike, source-tagged) — the browser-notification feed.
+   * Whether a row becomes a notification, and every environment read that
+   * takes (visibility, permission, the mute), lives behind this hook
+   * (notify.package), so the net stack stays notification-agnostic.
+   * Already isStale-guarded: it fires inside the chat feed's session
+   * handlers, never for a torn-down or superseded session.
+   */
+  onDmRow(event: DmRowEvent): void;
 }
 
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
@@ -533,7 +549,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       isStale: stale,
       showLocalBubble: (text) => gameApp.showLocalBubble(text),
       showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
-      countDmRow: () => bumpStat('dmRowsReceived'),
+      onDmRow: (event) => {
+        bumpStat('dmRowsReceived');
+        hooks.onDmRow(event);
+      },
     });
 
     // Reactions: display-only wiring, row events only (no seed) — see

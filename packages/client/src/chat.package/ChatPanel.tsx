@@ -10,6 +10,7 @@ import {
 } from '@maple/shared';
 import { type CSSProperties, useEffect, useRef } from 'react';
 import { type ChatEntryView, type ChatLog, chatEntryKey } from '../net.package';
+import { NotificationControl } from '../notify.package';
 import {
   UI_DM_COLOR,
   UI_ERROR_COLOR,
@@ -243,6 +244,11 @@ export function ChatPanel({
 
   return (
     <div style={panelStyle}>
+      {/* At the top of the panel DMs land in — the setting lives with the
+          feature it governs. Self-contained (the notifier is per-tab
+          environment state, not connection state), so it takes no props
+          and no posting gate. */}
+      <NotificationControl />
       {log.length > 0 && (
         <div ref={logRef} role="log" aria-label="チャットログ" style={logStyle}>
           {log.map((m) => (

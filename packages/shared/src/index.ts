@@ -8,6 +8,7 @@ export * from './guard';
 export * from './input';
 export * from './map';
 export * from './membership';
+export * from './notification';
 export * from './physics';
 export * from './player';
 export * from './reaction';
