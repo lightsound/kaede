@@ -9,6 +9,12 @@ import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
+import {
+  type ChatLog,
+  type ChatMessageView,
+  insertChatMessage,
+  removeChatMessage,
+} from './chatLog';
 import { type AuthTokenGetter, type Connected, connect, target } from './connection';
 import { createHeartbeat } from './heartbeat';
 import {
@@ -38,6 +44,9 @@ type PlayerRow = RowOf<'player'>;
 
 /** The generated player_name row type (the display name split off the hot row). */
 type PlayerNameRow = RowOf<'playerName'>;
+
+/** The generated chat_message row type (the global-scope chat history). */
+type ChatMessageRow = RowOf<'chatMessage'>;
 
 /** ユーザーの在席とみなす操作イベント。タイムスタンプを書くだけなので capture+passive で広く拾う。 */
 const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const;
@@ -107,6 +116,15 @@ export interface Net {
    */
   memberAction(action: MemberAction, member: Identity): void;
   setGuestsAllowed(allowed: boolean): void;
+  /**
+   * Posts one message to the global-scope chat (send_chat_message). Success
+   * arrives as a chat_message row event — the log line and the speech
+   * bubble both come from it, so the sender sees exactly what everyone
+   * else received. Failures (a disconnect racing the submit, a server
+   * refusal) only log; the client-side mirror of the shared validation and
+   * rate rules (ChatPanel) makes them rare.
+   */
+  sendChatMessage(text: string): void;
 }
 
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
@@ -157,6 +175,7 @@ export function startNet(
   getAuthToken: AuthTokenGetter,
   onOwnName: (name: string | undefined) => void,
   onSpace: (view: SpaceView) => void,
+  onChat: (log: ChatLog) => void,
 ): Net {
   const remoteViews = createRemoteViews();
   let conn: DbConnection | undefined;
@@ -214,6 +233,17 @@ export function startNet(
   // dispose-guarded at its entry point (see wireSession's handlers) —
   // dispose() itself is the only caller that may run after the flip, and
   // only with `undefined`.
+  // The chat log, published whole on every change (the SpaceView precedent:
+  // one value, so the panel can never render a half-applied update). It
+  // survives a disconnect deliberately — stale history beats a blanked
+  // panel — and the next session's seed replaces it with the authoritative
+  // retained rows.
+  let chatLog: ChatLog = [];
+  function publishChat(next: ChatLog): void {
+    chatLog = next;
+    onChat(chatLog);
+  }
+
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
     if (name === lastOwnName) return;
@@ -366,6 +396,32 @@ export function startNet(
       if (idHex !== myIdHex) recordRemote(idHex, row);
     }
 
+    // Chat: the panel gets one view value per change (seeded from the
+    // cache here, row events below), and each newly arriving message also
+    // shows as a speech bubble. Bubbles come only from the insert EVENTS,
+    // never from this seed: the seed is history (a reload must not replay
+    // a burst of bubbles), an event is someone speaking now.
+    const toChatView = (row: ChatMessageRow): ChatMessageView => ({
+      id: row.id,
+      senderName: row.senderName,
+      text: row.text,
+      own: row.sender.toHexString() === myIdHex,
+    });
+    let seededChat: ChatLog = [];
+    for (const row of c.db.chatMessage.iter()) {
+      seededChat = insertChatMessage(seededChat, toChatView(row));
+    }
+    publishChat(seededChat);
+
+    // The bubble shows over whoever spoke: our own avatar, or the sender's
+    // remote view. A message from a player whose view is not on screen
+    // (hidden as offline, or already removed) is a no-op in gameApp.
+    const showChatBubble = (row: ChatMessageRow): void => {
+      const idHex = row.sender.toHexString();
+      if (idHex === myIdHex) gameApp.showLocalBubble(row.text);
+      else gameApp.showRemoteBubble(idHex, row.text);
+    };
+
     // Every handler below refuses to run once stale: the socket closes
     // asynchronously, so this session's row events can still be delivered
     // after dispose() or after an idle resume replaced the session, and
@@ -410,6 +466,18 @@ export function startNet(
     c.db.playerName.onUpdate((_ctx, _old, row) => {
       if (stale()) return;
       applyName(row);
+    });
+    c.db.chatMessage.onInsert((_ctx, row) => {
+      if (stale()) return;
+      publishChat(insertChatMessage(chatLog, toChatView(row)));
+      showChatBubble(row);
+    });
+    // Retention trims (the server keeps only the newest CHAT_HISTORY_MAX
+    // rows) arrive as deletes; the panel drops the line the moment the
+    // authority does.
+    c.db.chatMessage.onDelete((_ctx, row) => {
+      if (stale()) return;
+      publishChat(removeChatMessage(chatLog, row.id));
     });
     c.db.player.onDelete((_ctx, row) => {
       if (stale()) return;
@@ -614,6 +682,9 @@ export function startNet(
     },
     setGuestsAllowed(allowed) {
       callReducer('set_guests_allowed', (c) => c.reducers.setGuestsAllowed({ allowed }));
+    },
+    sendChatMessage(text) {
+      callReducer('send_chat_message', (c) => c.reducers.sendChatMessage({ text }));
     },
   };
 }

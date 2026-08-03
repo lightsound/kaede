@@ -2,8 +2,15 @@
 import { membershipPrompt } from '@maple/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
+import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
-import { type ConnectionStatus, type Net, type SpaceView, startNet } from './net.package';
+import {
+  type ChatLog,
+  type ConnectionStatus,
+  type Net,
+  type SpaceView,
+  startNet,
+} from './net.package';
 import { RenameControl } from './profile.package';
 import { AdminSection, AdmissionOverlay, ApplyBanner } from './space.package';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
@@ -13,6 +20,17 @@ const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = 
   reconnecting: '接続が切れました。再接続しています…',
   idle: '離席中のため接続を休止しています。キーボードかマウスの操作で再開します',
 };
+
+/**
+ * When the chat input is unusable: sending needs a player row to speak from
+ * (the server refuses otherwise), and ownName is defined exactly while one
+ * exists — the same gate the rename form uses. A separate function (not
+ * inlined) to keep the untestable component under the CRAP budget fallow
+ * enforces for uncovered functions (the currentNameOf precedent).
+ */
+function chatDisabled(connected: boolean, ownName: string | undefined): boolean {
+  return !connected || ownName === undefined;
+}
 
 const overlayStyle: CSSProperties = {
   position: 'absolute',
@@ -43,6 +61,9 @@ export function App() {
   // undefined until the first session reports. Held as one value so the
   // overlays and the admin panel can never disagree about the same instant.
   const [space, setSpace] = useState<SpaceView>();
+  // The global-scope chat history, published whole by the net stack on
+  // every chat_message change (seed and row events alike).
+  const [chatLog, setChatLog] = useState<ChatLog>([]);
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -64,7 +85,14 @@ export function App() {
         return;
       }
       game = created;
-      netRef.current = startNet(created, setStatus, session.getToken, setOwnName, setSpace);
+      netRef.current = startNet(
+        created,
+        setStatus,
+        session.getToken,
+        setOwnName,
+        setSpace,
+        setChatLog,
+      );
     })();
 
     return () => {
@@ -109,6 +137,11 @@ export function App() {
         space={space}
         onMemberAction={(action, member) => netRef.current?.memberAction(action, member.identity)}
         onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
+      />
+      <ChatPanel
+        disabled={chatDisabled(connected, ownName)}
+        log={chatLog}
+        onSend={(text) => netRef.current?.sendChatMessage(text)}
       />
     </div>
   );
