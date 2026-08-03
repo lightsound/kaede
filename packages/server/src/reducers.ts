@@ -215,10 +215,11 @@ export const submitInputs = spacetimedb.reducer(
   { startTick: t.u32(), inputs: t.array(t.u8()) },
   (ctx, { startTick, inputs }) => {
     // Not in the world, or no longer admitted (findAdmittedWorldRows
-    // reclaims the row in that case): silently drop the batch.
+    // reclaims the row in that case): silently drop the batch — movement
+    // needs no loud refusal, so both verdict reasons read the same here.
     const found = findAdmittedWorldRows(ctx);
-    if (!found) return;
-    const { row, guard } = found;
+    if (!found.ok) return;
+    const { row, guard } = found.rows;
 
     const verdict = evaluateInputBatch({
       batchLength: inputs.length,
@@ -235,7 +236,7 @@ export const submitInputs = spacetimedb.reducer(
       return;
     }
 
-    applyAcceptedBatch(ctx, found, startTick, inputs, verdict);
+    applyAcceptedBatch(ctx, found.rows, startTick, inputs, verdict);
   },
 );
 

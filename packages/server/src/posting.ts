@@ -22,21 +22,20 @@ import { type Ctx, findAdmittedWorldRows, type WorldRows } from './world';
 /**
  * The shared preamble of every posting reducer (send_chat_message /
  * send_reaction): the sender's world rows, or undefined after a refusal.
- * Splits the two refusal cases along the loud/silent rule documented on
- * sendChatMessage — no player row at all is loud (thrown before anything
- * can write), while findAdmittedWorldRows returning undefined DESPITE the
- * row existing means a reclaim just happened and must commit, so that
- * refusal stays a logged return.
+ * The two refusal reasons split along the loud/silent rule documented on
+ * sendChatMessage, and the verdict's contract (WorldRowsVerdict) is what
+ * makes each branch safe: `not-in-world` wrote nothing, so it may throw;
+ * `reclaimed` just deleted the sender's rows and must commit, so it stays
+ * a logged return.
  */
 function findPostingSender(ctx: Ctx, reducerName: string): WorldRows | undefined {
-  if (ctx.db.player.identity.find(ctx.sender) === null) {
+  const found = findAdmittedWorldRows(ctx);
+  if (found.ok) return found.rows;
+  if (found.reason === 'not-in-world') {
     throw new SenderError(`${reducerName} refused (not-in-world)`);
   }
-  const found = findAdmittedWorldRows(ctx);
-  if (!found) {
-    console.warn(`${reducerName} dropped (reclaimed): sender=${ctx.sender.toHexString()}`);
-  }
-  return found;
+  console.warn(`${reducerName} dropped (reclaimed): sender=${ctx.sender.toHexString()}`);
+  return undefined;
 }
 
 /** A send-rate token-bucket marker table (identity → allowanceMicros). */
@@ -109,14 +108,14 @@ function trimChatHistory(ctx: Ctx): void {
 // Which refusals are loud follows one line — a SenderError is safe exactly
 // while nothing has been written (reducers are atomic, so a throw rolls
 // every prior write back):
-// - No player row at all (the common refusal; checked before anything can
-//   write): loud, so the sender's client hears it (NetHooks.onChatRefused)
-//   instead of the message silently evaporating.
-// - findAdmittedWorldRows returned undefined DESPITE the row existing: a
-//   reclaim just happened (lost admission, or a broken sibling pair) and
-//   must commit, so this refusal stays silent — the sender still gets
-//   feedback, because deleting its player row reaches it as a row event
-//   and flips its UI to the admission notice.
+// - No player row at all (the common refusal; nothing was written): loud,
+//   so the sender's client hears it (NetHooks.onChatRefused) instead of
+//   the message silently evaporating.
+// - The verdict says `reclaimed`: a reclaim just happened (lost admission,
+//   or a broken sibling pair) and must commit, so this refusal stays
+//   silent — the sender still gets feedback, because deleting its player
+//   row reaches it as a row event and flips its UI to the admission
+//   notice.
 // - A bad message or the rate limit: loud; they throw before any write.
 // Validation and the rate rule are pure functions in @maple/shared, shared
 // with the client so its input-side feedback can never disagree with the

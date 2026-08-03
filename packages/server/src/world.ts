@@ -67,8 +67,13 @@ export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   ctx.db.reactionGuard.identity.delete(identity);
 }
 
+/** A row as this schema's tables return it (not re-exported by the server SDK). */
+export type RowIn<T extends 'player' | 'playerName' | 'playerGuard'> = NonNullable<
+  ReturnType<Ctx['db'][T]['identity']['find']>
+>;
+
 /** The player_name row as this schema returns it (not re-exported by the server SDK). */
-type PlayerNameRow = NonNullable<ReturnType<Ctx['db']['playerName']['identity']['find']>>;
+type PlayerNameRow = RowIn<'playerName'>;
 
 /**
  * Upserts the sender's player_* sibling rows for a join: the display name to
@@ -128,16 +133,35 @@ export function spawnOrResume(ctx: Ctx): void {
   });
 }
 
+/** The rows the in-world reducers act on. */
+export interface WorldRows {
+  row: RowIn<'player'>;
+  guard: RowIn<'playerGuard'>;
+  nameRow: RowIn<'playerName'>;
+}
+
 /**
- * The sender's hot row and its name/guard siblings, or undefined when the
- * sender is not in the world — split out of the reducers that act on the
- * in-world sender (submitInputs, the posting reducers) to keep those
- * uncovered arrows under the CRAP budget fallow enforces (the
- * backfillAccountName precedent). A row missing either sibling cannot
- * happen through this module's write paths (the lifecycle functions
- * above), but if one ever appears (manual sql, a future bug) it is
- * reclaimed rather than tolerated — the transitionMember precedent that an
- * "unreachable" branch must not read as a silent no-op. A missing guard
+ * Why the sender has no world rows to act on. The two reasons encode the
+ * loud/silent refusal rule (see sendChatMessage in posting.ts): after
+ * `not-in-world` nothing was written, so a caller may throw a SenderError;
+ * after `reclaimed` this module just deleted the sender's rows and a throw
+ * would roll that reclaim back — reducers are atomic — so callers must
+ * RETURN. The discriminant makes that rule a checked value instead of
+ * prose the caller re-derives with its own row lookup.
+ */
+export type WorldRowsVerdict =
+  | { ok: true; rows: WorldRows }
+  | { ok: false; reason: 'not-in-world' | 'reclaimed' };
+
+/**
+ * The sender's hot row and its name/guard siblings — split out of the
+ * reducers that act on the in-world sender (submitInputs, the posting
+ * reducers) to keep those uncovered arrows under the CRAP budget fallow
+ * enforces (the backfillAccountName precedent). A row missing either
+ * sibling cannot happen through this module's write paths (the lifecycle
+ * functions above), but if one ever appears (manual sql, a future bug) it
+ * is reclaimed rather than tolerated — the transitionMember precedent that
+ * an "unreachable" branch must not read as a silent no-op. A missing guard
  * would otherwise silence the sender's inputs forever with nothing to
  * repair it; a missing name would otherwise persist too, since only this
  * check sees the resume path (a client resuming its surviving row never
@@ -145,46 +169,39 @@ export function spawnOrResume(ctx: Ctx): void {
  * set_display_name refuses rather than adopts a nameless player. The owner
  * sees its row deleted and re-joins, recreating all three siblings.
  */
-function findWorldRows(ctx: Ctx) {
+function findWorldRows(ctx: Ctx): WorldRowsVerdict {
   const row = ctx.db.player.identity.find(ctx.sender);
-  if (!row) return undefined;
+  if (!row) return { ok: false, reason: 'not-in-world' };
   const guard = ctx.db.playerGuard.identity.find(ctx.sender);
   const nameRow = ctx.db.playerName.identity.find(ctx.sender);
-  if (guard && nameRow) return { row, guard, nameRow };
+  if (guard && nameRow) return { ok: true, rows: { row, guard, nameRow } };
   console.warn(`player row missing a sibling, reclaiming: sender=${ctx.sender.toHexString()}`);
   removePlayer(ctx, ctx.sender);
-  return undefined;
+  return { ok: false, reason: 'reclaimed' };
 }
 
-/** The rows the in-world reducers act on, as findWorldRows returns them. */
-export type WorldRows = NonNullable<ReturnType<typeof findWorldRows>>;
-
 /**
- * The sender's world rows if the admission rules would still admit it, or
- * undefined — the shared preamble of every reducer that acts as "someone in
- * the world" (submitInputs, and the posting reducers through posting.ts's
+ * The sender's world rows if the admission rules would still admit it —
+ * the shared preamble of every reducer that acts as "someone in the world"
+ * (submitInputs, and the posting reducers through posting.ts's
  * findPostingSender). Admission applies to acting, not just to joining: a
  * player row whose owner the rules would now refuse (possible only as a
  * leftover from before the rules — e.g. a re-publish onto a database with
  * pre-admission rows, since every status change deletes the row
  * transactionally) must not keep driving movement or speaking, so it is
- * reclaimed rather than obeyed.
- *
- * Callers must treat undefined as "refused, and any reclaim is already
- * done" and RETURN, never throw: reducers are atomic, so a thrown
- * SenderError would roll back the very reclaim this function performed
- * (both the admission reclaim here and findWorldRows' broken-pair one).
+ * reclaimed rather than obeyed. What a refusal permits the caller to do is
+ * carried by the verdict's reason — see WorldRowsVerdict.
  */
-export function findAdmittedWorldRows(ctx: Ctx): WorldRows | undefined {
+export function findAdmittedWorldRows(ctx: Ctx): WorldRowsVerdict {
   const found = findWorldRows(ctx);
-  if (!found) return undefined;
+  if (!found.ok) return found;
   const admission = evaluateJoin({
     membership: membershipOf(ctx, ctx.sender),
     guestsAllowed: guestsAllowed(ctx),
   });
   if (admission.ok) return found;
   removePlayer(ctx, ctx.sender);
-  return undefined;
+  return { ok: false, reason: 'reclaimed' };
 }
 
 /**

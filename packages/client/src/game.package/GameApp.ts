@@ -243,19 +243,20 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   }
 
   /**
-   * Hides every overhead display whose time is up (see expireOverhead) and
-   * keeps each reaction stacked clear of its bubble — re-laid out every
-   * frame because either can appear, resize or expire mid-display.
+   * Hides one view's overhead displays whose time is up (see
+   * expireOverhead) and keeps its reaction stacked clear of its bubble —
+   * re-laid out every frame because either can appear, resize or expire
+   * mid-display.
    */
+  function expireViewOverheads(view: PlayerView, nowMs: number): void {
+    expireOverhead(view.bubble, nowMs);
+    expireOverhead(view.reaction, nowMs);
+    layoutReaction(view.reaction, view.bubble);
+  }
+
   function expireOverheads(nowMs: number): void {
-    expireOverhead(local.bubble, nowMs);
-    expireOverhead(local.reaction, nowMs);
-    layoutReaction(local.reaction, local.bubble);
-    for (const view of remotes.values()) {
-      expireOverhead(view.bubble, nowMs);
-      expireOverhead(view.reaction, nowMs);
-      layoutReaction(view.reaction, view.bubble);
-    }
+    expireViewOverheads(local, nowMs);
+    for (const view of remotes.values()) expireViewOverheads(view, nowMs);
   }
 
   app.ticker.add((ticker) => {
