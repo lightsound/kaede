@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './chat';
 export * from './constants';
 export * from './displayName';
 export * from './e2eHook';
