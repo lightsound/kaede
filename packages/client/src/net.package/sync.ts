@@ -607,13 +607,20 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     connect(
       {
         onDisconnect() {
+          // Read BEFORE the dispatch: a failed handshake reports both a
+          // rejection and this socket close, and the close's transition
+          // still performs a (vacuous) drop-session — so the effect alone
+          // cannot tell "an established session dropped" from "the connect
+          // attempt never got one". Only the former is a disconnect; the
+          // latter is already reported as spacetimedb_connect_failed.
+          const wasLive = life.sessionLive;
           const effects = dispatch({ kind: 'socket-closed', generation });
           // Only an unexpected drop of the live session is worth a log: a
           // stale close produces no effects, and a close the idle guard
           // asked for leaves the state suspended. The same rule picks what
           // is worth a telemetry event (ADR §8.2-A: WebSocket は自動計装
           // されないため、送らなければ何も記録されない).
-          if (effects.some((e) => e.kind === 'drop-session') && !life.suspended) {
+          if (wasLive && effects.some((e) => e.kind === 'drop-session') && !life.suspended) {
             console.warn('SpacetimeDB: connection dropped, reconnecting');
             captureEvent('spacetimedb_disconnected');
           }
@@ -623,13 +630,17 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       getAuthToken,
     )
       .then((settled) => {
-        // Recovery after a failure streak, reported before the dispatch
-        // resets the count. Successful first connects and clean reconnects
-        // stay silent — the metric is "how long did retries fail".
-        if (life.consecutiveFailures > 0) {
-          captureEvent('spacetimedb_reconnected', { failedAttempts: life.consecutiveFailures });
+        // Recovery after a failure streak. The count is read before the
+        // dispatch resets it, but the event is sent only if the success was
+        // ADOPTED (wire-session): a connect settling into an idle-suspended
+        // or disposed stack is discarded and leaves the user offline, which
+        // must not read as a recovery. Successful first connects and clean
+        // reconnects stay silent — the metric is "how long did retries fail".
+        const failuresBeforeSuccess = life.consecutiveFailures;
+        const effects = dispatch({ kind: 'connect-ok' }, settled);
+        if (failuresBeforeSuccess > 0 && effects.some((e) => e.kind === 'wire-session')) {
+          captureEvent('spacetimedb_reconnected', { failedAttempts: failuresBeforeSuccess });
         }
-        dispatch({ kind: 'connect-ok' }, settled);
       })
       // The overlay can only ever say "connecting", so without this the actual
       // cause (host not running, unknown database name, stale schema) never
