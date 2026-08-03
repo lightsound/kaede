@@ -1,17 +1,22 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, rate limits, retention) are delegated to normalizeChatText / isReactionEmoji / evaluateChatSend / evaluateReactionSend / chatOverflowIds in @maple/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, rate limits, retention) are delegated to normalizeChatText / isReactionEmoji / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @maple/shared and unit-tested there
 
-// The posting reducers (ROADMAP Phase 2): what someone in the world says or
-// gestures — the global-scope chat and the emoji reactions. Split from
-// reducers.ts (which keeps the world lifecycle, membership and settings)
-// because this section grows with every Phase 2/3 conversation feature
-// while depending on the lifecycle only through findAdmittedWorldRows.
+// The posting reducers (ROADMAP Phase 2): what someone in the world says,
+// gestures or claims about themselves — the global-scope chat, the emoji
+// reactions and the manual status. Split from reducers.ts (which keeps the
+// world lifecycle, membership and settings) because this section grows
+// with every Phase 2/3 conversation feature while depending on the
+// lifecycle only through findAdmittedWorldRows.
 import {
   CHAT_HISTORY_MAX,
   chatOverflowIds,
+  DEFAULT_STATUS,
   evaluateChatSend,
   evaluateReactionSend,
+  evaluateStatusSend,
+  isAvailability,
   isReactionEmoji,
   normalizeChatText,
+  normalizeStatusText,
   type SendAllowanceRequest,
   type SendAllowanceVerdict,
 } from '@maple/shared';
@@ -39,7 +44,7 @@ function findPostingSender(ctx: Ctx, reducerName: string): WorldRows | undefined
 }
 
 /** A send-rate token-bucket marker table (identity → allowanceMicros). */
-type SendGuardTable = Ctx['db']['chatGuard'] | Ctx['db']['reactionGuard'];
+type SendGuardTable = Ctx['db']['chatGuard'] | Ctx['db']['reactionGuard'] | Ctx['db']['statusGuard'];
 
 /** A send-rate guard row, as either marker table returns it. */
 type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
@@ -178,4 +183,60 @@ export const sendReaction = spacetimedb.reducer({ emoji: t.string() }, (ctx, { e
   }
   chargeSendAllowance(ctx, ctx.db.reactionGuard, evaluateReactionSend, 'send_reaction');
   upsertReaction(ctx, emoji);
+});
+
+/**
+ * Writes one column of the sender's status row, defaulting the other on
+ * first write (a missing row means DEFAULT_STATUS — see the player_status
+ * table). The server-side read-modify-write is the point of having two
+ * reducers over one: each control sends only its own value, so a stale
+ * client-side view of the OTHER column can never be written back.
+ */
+function upsertStatus(ctx: Ctx, patch: { availability: string } | { text: string }): void {
+  const existing = ctx.db.playerStatus.identity.find(ctx.sender);
+  const row = { identity: ctx.sender, ...DEFAULT_STATUS, ...existing, ...patch };
+  if (existing) ctx.db.playerStatus.identity.update(row);
+  else ctx.db.playerStatus.insert(row);
+}
+
+// Sets the sender's availability (ステータス手動切替 — ROADMAP Phase 2):
+// online / away / busy, shown persistently beside the name until changed.
+// Deliberately unrelated to the connection-liveness machinery: the manual
+// 離席 is the player's own claim, while player.online and the idle guard
+// (net.package/idle.ts) answer "is the socket alive" — neither reads nor
+// writes the other. Eligibility is exactly send_chat_message's (presence
+// in the world plus the admission re-check, so guests may set a status
+// whenever they may be in the world, and the guests_allowed kick deletes
+// their row in the same transaction). Which refusals are loud follows
+// sendChatMessage's rule verbatim: no player row, an unknown availability
+// and the rate limit all throw before any write; the reclaim path stays
+// silent because its row deletion must commit. The availability is
+// validated by exact match against the shared vocabulary (isAvailability
+// — the reaction-palette precedent), so free-form strings never reach the
+// public table through this column.
+export const setAvailability = spacetimedb.reducer(
+  { availability: t.string() },
+  (ctx, { availability }) => {
+    if (!findPostingSender(ctx, 'set_availability')) return;
+    if (!isAvailability(availability)) {
+      throw new SenderError('set_availability refused (unknown-availability)');
+    }
+    chargeSendAllowance(ctx, ctx.db.statusGuard, evaluateStatusSend, 'set_availability');
+    upsertStatus(ctx, { availability });
+  },
+);
+
+// Sets (or, with an empty text, clears) the sender's free-text status line
+// (自由文ステータス — ROADMAP Phase 2). Everything above about
+// set_availability — eligibility, guests, the loud/silent rule, the shared
+// guard bucket — applies verbatim; the validation is normalizeStatusText
+// (the normalizeSingleLineText rules at the status cap, with '' accepted
+// as the clear operation), shared with the client's form so a text that
+// leaves the UI is never refused for its content.
+export const setStatusText = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+  if (!findPostingSender(ctx, 'set_status_text')) return;
+  const verdict = normalizeStatusText(text);
+  if (!verdict.ok) throw new SenderError(`set_status_text refused (${verdict.reason})`);
+  chargeSendAllowance(ctx, ctx.db.statusGuard, evaluateStatusSend, 'set_status_text');
+  upsertStatus(ctx, { text: verdict.text });
 });

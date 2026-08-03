@@ -13,8 +13,10 @@ import JoinReducer from "../join_reducer";
 import RejectMemberReducer from "../reject_member_reducer";
 import SendChatMessageReducer from "../send_chat_message_reducer";
 import SendReactionReducer from "../send_reaction_reducer";
+import SetAvailabilityReducer from "../set_availability_reducer";
 import SetDisplayNameReducer from "../set_display_name_reducer";
 import SetGuestsAllowedReducer from "../set_guests_allowed_reducer";
+import SetStatusTextReducer from "../set_status_text_reducer";
 import SubmitInputsReducer from "../submit_inputs_reducer";
 import UnbanMemberReducer from "../unban_member_reducer";
 
@@ -25,8 +27,10 @@ export type JoinParams = __Infer<typeof JoinReducer>;
 export type RejectMemberParams = __Infer<typeof RejectMemberReducer>;
 export type SendChatMessageParams = __Infer<typeof SendChatMessageReducer>;
 export type SendReactionParams = __Infer<typeof SendReactionReducer>;
+export type SetAvailabilityParams = __Infer<typeof SetAvailabilityReducer>;
 export type SetDisplayNameParams = __Infer<typeof SetDisplayNameReducer>;
 export type SetGuestsAllowedParams = __Infer<typeof SetGuestsAllowedReducer>;
+export type SetStatusTextParams = __Infer<typeof SetStatusTextReducer>;
 export type SubmitInputsParams = __Infer<typeof SubmitInputsReducer>;
 export type UnbanMemberParams = __Infer<typeof UnbanMemberReducer>;
 

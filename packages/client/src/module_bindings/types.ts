@@ -61,6 +61,13 @@ export const PlayerName = __t.object("PlayerName", {
 });
 export type PlayerName = __Infer<typeof PlayerName>;
 
+export const PlayerStatus = __t.object("PlayerStatus", {
+  identity: __t.identity(),
+  availability: __t.string(),
+  text: __t.string(),
+});
+export type PlayerStatus = __Infer<typeof PlayerStatus>;
+
 export const Reaction = __t.object("Reaction", {
   identity: __t.identity(),
   emoji: __t.string(),
@@ -89,4 +96,10 @@ export const SpaceSetting = __t.object("SpaceSetting", {
   guestsAllowed: __t.bool(),
 });
 export type SpaceSetting = __Infer<typeof SpaceSetting>;
+
+export const StatusGuard = __t.object("StatusGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type StatusGuard = __Infer<typeof StatusGuard>;
 

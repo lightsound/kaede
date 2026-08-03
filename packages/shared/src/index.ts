@@ -12,4 +12,5 @@ export * from './player';
 export * from './reaction';
 export * from './sendAllowance';
 export * from './sendGate';
+export * from './status';
 export * from './types';

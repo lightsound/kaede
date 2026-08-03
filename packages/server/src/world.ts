@@ -50,13 +50,14 @@ export function guestsAllowed(ctx: Ctx): boolean {
  * reclaim (sweep, guest kick, status change, stale-row and broken-pair
  * reclaim) goes through here, which is what keeps the three player_*
  * tables paired (a player row always has its siblings). The chat_guard,
- * reaction and reaction_guard rows ride along even though they are not
- * siblings (created lazily by send_chat_message / send_reaction, so a
- * player row need not have them): their owner may chat and react only
- * while in the world, so leaving the world is when they stop meaning
- * anything — and deleting them here is what keeps per-tab guest
- * identities from piling up rows forever (for the public `reaction`
- * table, rows that would ride every entering client's egress).
+ * reaction, player_status and their guard rows ride along even though they
+ * are not siblings (created lazily by send_chat_message / send_reaction /
+ * the status reducers, so a player row need not have them): their owner
+ * may chat, react and set a status only while in the world, so leaving
+ * the world is when they stop meaning anything — and deleting them here
+ * is what keeps per-tab guest identities from piling up rows forever (for
+ * the public `reaction` and `player_status` tables, rows that would ride
+ * every entering client's egress).
  */
 export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   ctx.db.player.identity.delete(identity);
@@ -65,6 +66,8 @@ export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   ctx.db.chatGuard.identity.delete(identity);
   ctx.db.reaction.identity.delete(identity);
   ctx.db.reactionGuard.identity.delete(identity);
+  ctx.db.playerStatus.identity.delete(identity);
+  ctx.db.statusGuard.identity.delete(identity);
 }
 
 /** A row as this schema's tables return it (not re-exported by the server SDK). */
@@ -205,10 +208,11 @@ export function findAdmittedWorldRows(ctx: Ctx): WorldRowsVerdict {
 }
 
 /**
- * Identities holding a name, guard or reaction row whose player row is gone.
- * `reaction` is enumerated alongside the join siblings because it is public:
- * an orphaned reaction row would ride every entering client's egress, where
- * the private lazy guards (chat_guard, reaction_guard) merely sit as junk —
+ * Identities holding a name, guard, reaction or status row whose player row
+ * is gone. `reaction` and `player_status` are enumerated alongside the join
+ * siblings because they are public: an orphaned row in either would ride
+ * every entering client's egress, where the private lazy guards
+ * (chat_guard, reaction_guard, status_guard) merely sit as junk —
  * removePlayer deletes those too once an orphan is found by any table here.
  */
 function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
@@ -217,6 +221,7 @@ function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
     ...ctx.db.playerName.iter(),
     ...ctx.db.playerGuard.iter(),
     ...ctx.db.reaction.iter(),
+    ...ctx.db.playerStatus.iter(),
   ]) {
     if (ctx.db.player.identity.find(row.identity) === null) orphans.push(row.identity);
   }
