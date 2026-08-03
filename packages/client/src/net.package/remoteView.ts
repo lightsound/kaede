@@ -15,12 +15,14 @@ export interface Snapshot extends HermitePoint {
 }
 
 /**
- * Per-remote render state: the display name, the snapshot buffer, plus the
- * smoothing carry (the decaying error offset and the previous rendered position
- * used to detect target discontinuities).
+ * Per-remote render state: the display name and status label, the snapshot
+ * buffer, plus the smoothing carry (the decaying error offset and the
+ * previous rendered position used to detect target discontinuities).
  */
 interface RemoteView {
   name: string;
+  /** The composed status line under the avatar (statusLabel), or undefined while default. */
+  status: string | undefined;
   snaps: Snapshot[];
   offset: Vec2;
   prevRendered?: Vec2;
@@ -61,7 +63,10 @@ export function createRemoteViews() {
     clock.record(row.updatedAtMs, nowMs);
     let view = views.get(idHex);
     if (!view) {
-      view = { name, snaps: [], offset: { x: 0, y: 0 } };
+      // The status starts undefined and arrives via setStatus: the caller
+      // pairs every record() with the cached status (see recordRemote), the
+      // same way it supplies the cached name.
+      view = { name, status: undefined, snaps: [], offset: { x: 0, y: 0 } };
       views.set(idHex, view);
     }
     view.name = name;
@@ -86,6 +91,17 @@ export function createRemoteViews() {
     if (view) view.name = name;
   }
 
+  /**
+   * Updates an existing view's status label (a player_status row changed
+   * without the hot row moving, or the caller pairing it with record()).
+   * Skipped like setName while the view does not exist: the next record()
+   * call is paired with the cached status anyway.
+   */
+  function setStatus(idHex: string, status: string | undefined): void {
+    const view = views.get(idHex);
+    if (view) view.status = status;
+  }
+
   function remove(idHex: string): void {
     views.delete(idHex);
   }
@@ -100,7 +116,14 @@ export function createRemoteViews() {
   // error offset so the rendered path stays continuous.
   function renderFrame(
     nowMs: number,
-    draw: (idHex: string, name: string, x: number, y: number, facing: Facing) => void,
+    draw: (
+      idHex: string,
+      name: string,
+      status: string | undefined,
+      x: number,
+      y: number,
+      facing: Facing,
+    ) => void,
   ): void {
     const serverNowMs = clock.serverNow(nowMs);
     if (serverNowMs === undefined) return; // no samples yet: nothing to render anyway
@@ -126,11 +149,11 @@ export function createRemoteViews() {
       const ry = target.y + view.offset.y;
       view.prevRendered = { x: rx, y: ry };
       view.lastFrameMs = nowMs;
-      draw(idHex, view.name, rx, ry, target.facing);
+      draw(idHex, view.name, view.status, rx, ry, target.facing);
     }
   }
 
-  return { record, setName, remove, clear, renderFrame };
+  return { record, setName, setStatus, remove, clear, renderFrame };
 }
 
 /** Euclidean distance between two points. */

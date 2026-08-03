@@ -44,7 +44,10 @@ function findPostingSender(ctx: Ctx, reducerName: string): WorldRows | undefined
 }
 
 /** A send-rate token-bucket marker table (identity → allowanceMicros). */
-type SendGuardTable = Ctx['db']['chatGuard'] | Ctx['db']['reactionGuard'] | Ctx['db']['statusGuard'];
+type SendGuardTable =
+  | Ctx['db']['chatGuard']
+  | Ctx['db']['reactionGuard']
+  | Ctx['db']['statusGuard'];
 
 /** A send-rate guard row, as either marker table returns it. */
 type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
@@ -186,18 +189,26 @@ export const sendReaction = spacetimedb.reducer({ emoji: t.string() }, (ctx, { e
 });
 
 /**
- * Writes one column of the sender's status row, defaulting the other on
- * first write (a missing row means DEFAULT_STATUS — see the player_status
- * table). The server-side read-modify-write is the point of having two
- * reducers over one: each control sends only its own value, so a stale
- * client-side view of the OTHER column can never be written back.
+ * The shared body of both status reducers, everything after their (loud,
+ * pre-write) validation: eligibility, the rate charge, and the
+ * single-column write onto the sender's status row, defaulting the other
+ * column on first write (a missing row means DEFAULT_STATUS — see the
+ * player_status table). The server-side read-modify-write is the point of
+ * having two reducers over one: each control sends only its own validated
+ * value, so a stale client-side view of the OTHER column can never be
+ * written back.
  */
-function upsertStatus(ctx: Ctx, patch: { availability: string } | { text: string }): void {
+function writeStatus(ctx: Ctx, reducerName: string, patch: StatusPatch): void {
+  if (!findPostingSender(ctx, reducerName)) return;
+  chargeSendAllowance(ctx, ctx.db.statusGuard, evaluateStatusSend, reducerName);
   const existing = ctx.db.playerStatus.identity.find(ctx.sender);
   const row = { identity: ctx.sender, ...DEFAULT_STATUS, ...existing, ...patch };
   if (existing) ctx.db.playerStatus.identity.update(row);
   else ctx.db.playerStatus.insert(row);
 }
+
+/** One validated column of the status row, as either reducer writes it. */
+type StatusPatch = { availability: string } | { text: string };
 
 // Sets the sender's availability (ステータス手動切替 — ROADMAP Phase 2):
 // online / away / busy, shown persistently beside the name until changed.
@@ -217,26 +228,22 @@ function upsertStatus(ctx: Ctx, patch: { availability: string } | { text: string
 export const setAvailability = spacetimedb.reducer(
   { availability: t.string() },
   (ctx, { availability }) => {
-    if (!findPostingSender(ctx, 'set_availability')) return;
     if (!isAvailability(availability)) {
       throw new SenderError('set_availability refused (unknown-availability)');
     }
-    chargeSendAllowance(ctx, ctx.db.statusGuard, evaluateStatusSend, 'set_availability');
-    upsertStatus(ctx, { availability });
+    writeStatus(ctx, 'set_availability', { availability });
   },
 );
 
 // Sets (or, with an empty text, clears) the sender's free-text status line
-// (自由文ステータス — ROADMAP Phase 2). Everything above about
-// set_availability — eligibility, guests, the loud/silent rule, the shared
-// guard bucket — applies verbatim; the validation is normalizeStatusText
-// (the normalizeSingleLineText rules at the status cap, with '' accepted
-// as the clear operation), shared with the client's form so a text that
-// leaves the UI is never refused for its content.
+// (自由文ステータス — ROADMAP Phase 2). Everything about set_availability
+// — eligibility, guests, the loud/silent rule, the shared guard bucket —
+// applies verbatim (both delegate to writeStatus); the validation is
+// normalizeStatusText (the normalizeSingleLineText rules at the status
+// cap, with '' accepted as the clear operation), shared with the client's
+// form so a text that leaves the UI is never refused for its content.
 export const setStatusText = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
-  if (!findPostingSender(ctx, 'set_status_text')) return;
   const verdict = normalizeStatusText(text);
   if (!verdict.ok) throw new SenderError(`set_status_text refused (${verdict.reason})`);
-  chargeSendAllowance(ctx, ctx.db.statusGuard, evaluateStatusSend, 'set_status_text');
-  upsertStatus(ctx, { text: verdict.text });
+  writeStatus(ctx, 'set_status_text', { text: verdict.text });
 });

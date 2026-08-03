@@ -55,8 +55,8 @@ describe('createRemoteViews', () => {
 
   /** Collect draw() calls for one renderFrame. */
   function render(views: ReturnType<typeof createRemoteViews>, nowMs: number) {
-    const drawn: { id: string; x: number; y: number }[] = [];
-    views.renderFrame(nowMs, (id, _name, x, y) => drawn.push({ id, x, y }));
+    const drawn: { id: string; status: string | undefined; x: number; y: number }[] = [];
+    views.renderFrame(nowMs, (id, _name, status, x, y) => drawn.push({ id, status, x, y }));
     return drawn;
   }
 
@@ -85,6 +85,19 @@ describe('createRemoteViews', () => {
     }
     // Both estimated the same (minimum) offset, so they render identically.
     expect(render(jittered, 540)[0].x).toBeCloseTo(render(steady, 540)[0].x, 5);
+  });
+
+  it('carries the status label set by setStatus into draw(), undefined until then', () => {
+    const views = createRemoteViews();
+    views.record('a', 'A', row(0, 0), 40);
+    expect(render(views, 240)[0].status).toBeUndefined();
+    views.setStatus('a', '🔴 取り込み中');
+    expect(render(views, 250)[0].status).toBe('🔴 取り込み中');
+    views.setStatus('a', undefined);
+    expect(render(views, 260)[0].status).toBeUndefined();
+    // A view that does not exist is skipped, not created (the setName rule).
+    views.setStatus('ghost', '🟡 離席');
+    expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
   });
 
   it('remove() and clear() drop views', () => {

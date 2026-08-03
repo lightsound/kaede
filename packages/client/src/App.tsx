@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a React component that mounts the canvas and renders connection status; needs a DOM, and no DOM test environment is configured
-import { membershipPrompt } from '@maple/shared';
+import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@maple/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
 import { ChatPanel } from './chat.package';
@@ -13,6 +13,7 @@ import {
 } from './net.package';
 import { RenameControl } from './profile.package';
 import { AdminSection, AdmissionOverlay, ApplyBanner } from './space.package';
+import { StatusControl } from './status.package';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
 
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
@@ -57,6 +58,10 @@ export function App() {
   // the panel clears its draft optimistically, so this is the only trace
   // the sender gets. Cleared by the next send attempt.
   const [chatSendRefused, setChatSendRefused] = useState(false);
+  // The authoritative own status (ステータス手動切替), published by the net
+  // stack on session entry and every own player_status change. Never
+  // undefined: a missing row IS the default status.
+  const [ownStatus, setOwnStatus] = useState<StatusView>(DEFAULT_STATUS);
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -84,6 +89,7 @@ export function App() {
         onSpace: setSpace,
         onChat: setChatLog,
         onChatRefused: () => setChatSendRefused(true),
+        onOwnStatus: setOwnStatus,
       });
     })();
 
@@ -123,6 +129,13 @@ export function App() {
         ownName={ownName}
         self={self}
         onSubmit={(name) => netRef.current?.setDisplayName(name)}
+      />
+      <StatusControl
+        connected={connected}
+        ownName={ownName}
+        status={ownStatus}
+        onSetAvailability={(availability) => netRef.current?.setAvailability(availability)}
+        onSetStatusText={(text) => netRef.current?.setStatusText(text)}
       />
       <AdminSection
         connected={connected}
