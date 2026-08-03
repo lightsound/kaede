@@ -209,6 +209,96 @@ describe('アイドル休止と再開', () => {
   });
 });
 
+describe('ページ復帰(page-resume)と死んだソケットの再構築', () => {
+  it('武装済みの再試行は前倒しされ、backoff が初期化される', () => {
+    // 背景タブでタイマーが間引かれて停滞していた再試行を、復帰した今すぐ撃つ。
+    let state = initialLifecycle();
+    for (const kind of ['start', 'connect-failed', 'retry-due', 'connect-failed'] as const) {
+      state = transition(state, { kind }).state;
+    }
+    expect(state.retryDelayMs).toBe(RETRY_INITIAL_MS * 4);
+    const resumed = transition(state, { kind: 'page-resume' });
+    expect(kinds(resumed.effects)).toEqual(['cancel-retry', 'status', 'connect']);
+    expect(resumed.state.retryArmed).toBe(false);
+    // 前倒しの connect が失敗しても次の再武装は初期値から。
+    expect(resumed.state.retryDelayMs).toBe(RETRY_INITIAL_MS);
+  });
+
+  it('pending な connect 中は何もしない(single-flight の帰還路を保つ)', () => {
+    const { last } = run([{ kind: 'start' }, { kind: 'page-resume' }]);
+    expect(last).toEqual([]);
+  });
+
+  it('LIVE セッションには probe-session を出す(ソケット状態はシェルが読む)', () => {
+    const { last } = run([{ kind: 'start' }, { kind: 'connect-ok' }, { kind: 'page-resume' }]);
+    expect(last).toEqual([{ kind: 'probe-session', generation: 1 }]);
+  });
+
+  it('休止中の page-resume は何もしない(休止を終えるのはユーザー入力だけ)', () => {
+    const { last, state } = run([
+      { kind: 'start' },
+      { kind: 'connect-ok' },
+      { kind: 'idle-timeout' },
+      { kind: 'page-resume' },
+    ]);
+    expect(last).toEqual([]);
+    expect(state.suspended).toBe(true);
+  });
+
+  it('session-dead は後始末して即時再接続する(backoff 初期化・世代を進める)', () => {
+    const { last, state } = run([
+      { kind: 'start' },
+      { kind: 'connect-ok' },
+      { kind: 'page-resume' },
+      { kind: 'session-dead', generation: 1 },
+    ]);
+    expect(last).toEqual([
+      { kind: 'drop-session' },
+      { kind: 'disconnect' },
+      { kind: 'status', status: 'reconnecting' },
+      { kind: 'connect', generation: 2, consecutiveFailures: 0 },
+    ]);
+    expect(state.sessionLive).toBe(false);
+    expect(state.retryDelayMs).toBe(RETRY_INITIAL_MS);
+    // 死んだソケットの閉じ終わり報告(世代1)は以後 stale。
+    const lateClose = transition(state, { kind: 'socket-closed', generation: 1 });
+    expect(lateClose.effects).toEqual([]);
+  });
+
+  it('古い世代の session-dead は無視する', () => {
+    const { last } = run([
+      { kind: 'start' },
+      { kind: 'connect-ok' },
+      { kind: 'idle-timeout' }, // LIVE を切って世代が進む
+      { kind: 'session-dead', generation: 1 },
+    ]);
+    expect(last).toEqual([]);
+  });
+
+  it('セッションが LIVE でない session-dead は無視する', () => {
+    // probe と verdict の間に socket-closed が届いて後始末済みのケース。
+    const { last } = run([
+      { kind: 'start' },
+      { kind: 'connect-ok' },
+      { kind: 'socket-closed', generation: 1 },
+      { kind: 'session-dead', generation: 1 },
+    ]);
+    expect(last).toEqual([]);
+  });
+
+  it('dispose 後の page-resume / session-dead は何もしない', () => {
+    const { steps } = run([
+      { kind: 'start' },
+      { kind: 'connect-ok' },
+      { kind: 'dispose' },
+      { kind: 'page-resume' },
+      { kind: 'session-dead', generation: 1 },
+    ]);
+    expect(steps[3]).toEqual([]);
+    expect(steps[4]).toEqual([]);
+  });
+});
+
 describe('dispose', () => {
   it('武装済みタイマーを解除し、現行接続を閉じ、以後のイベントを無効化する', () => {
     const { steps, state } = run([

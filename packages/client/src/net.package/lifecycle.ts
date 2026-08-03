@@ -18,6 +18,12 @@
  *   イベントは stale として無視する。休止が LIVE セッションを切るときは
  *   世代を進めて即座に stale 化する(閉じ終わるのを待たない)。pending な
  *   connect は世代を保つ — 復帰時にそのまま採用できる唯一の帰還路だから。
+ * - ページ復帰(page-resume)は自動回復の入口。バックグラウンドタブでは
+ *   再試行タイマーが間引かれて停滞し、凍結中に死んだソケットは onclose が
+ *   届かないまま「生きているつもり」で残る(ゾンビ)。SDK 2.7.1 の
+ *   ConnectionManager が同じ回復を持つが、それはフレームワークプロバイダ
+ *   専用で、素の builder 接続を使う kaede には効かない — 同等の規則を
+ *   この状態機械で持つ(検出だけは SDK 2.7.1 の isSocketClosed を使う)。
  */
 
 /**
@@ -74,6 +80,16 @@ export type LifecycleEvent =
   | { kind: 'idle-timeout' }
   /** User input while suspended (idle.activity → 'resume'). */
   | { kind: 'resume' }
+  /**
+   * The page likely resumed from a background/frozen state: the tab became
+   * visible or focused, the network came back, or a bfcache page was restored.
+   */
+  | { kind: 'page-resume' }
+  /**
+   * The shell's probe-session verdict: the live session of `generation` holds
+   * a socket that is CLOSING/CLOSED but never delivered its close event.
+   */
+  | { kind: 'session-dead'; generation: number }
   /** The stack is being torn down. */
   | { kind: 'dispose' };
 
@@ -92,6 +108,11 @@ export type LifecycleEffect =
   | { kind: 'drop-session' }
   /** Close the current live connection (a ref captured before drop-session). */
   | { kind: 'disconnect' }
+  /**
+   * Check the live session's socket for a silent death; the shell answers
+   * with `session-dead` when it finds one (see onPageResume).
+   */
+  | { kind: 'probe-session'; generation: number }
   /** Report the connection status to the UI. */
   | { kind: 'status'; status: ConnectionStatus };
 
@@ -241,6 +262,52 @@ function onResume(d: Draft): void {
   attempt(d);
 }
 
+/**
+ * Page resume: bring the machine back to life NOW instead of waiting out
+ * timers that background throttling may have paused indefinitely.
+ * - A stalled armed retry fires immediately with backoff reset — the delay
+ *   protected the host from an unattended hammering loop, and the network
+ *   (or the tab) just came back, so the old delay is stale evidence.
+ * - A pending connect is left alone: attempts are single-flight and that
+ *   connect is the way back in (the resume precedent).
+ * - A live session is probed for a zombie socket; only the shell can read
+ *   socket state, so the verdict comes back as a `session-dead` event.
+ * - Idle suspension is deliberately untouched: a tab becoming visible is not
+ *   presence, and only user input (resume) may end the suspension.
+ */
+function onPageResume(d: Draft): void {
+  if (d.next.disposed || d.next.suspended) return;
+  if (d.next.retryArmed) {
+    disarmRetry(d);
+    d.next.retryDelayMs = RETRY_INITIAL_MS;
+    attempt(d);
+    return;
+  }
+  if (d.next.attemptInFlight) return;
+  if (d.next.sessionLive) {
+    d.effects.push({ kind: 'probe-session', generation: d.next.generation });
+  }
+}
+
+/**
+ * The probe found the live session's socket dead without a delivered close
+ * (torn down while the tab was frozen or the machine slept). Tear the session
+ * down like a socket-closed would, but reconnect immediately with backoff
+ * reset — the close this event stands in for happened while we were hidden,
+ * and the user is back now. The disconnect closes a socket that may only be
+ * CLOSING; its eventual close report carries this (pre-bump) generation and
+ * attempt() has already made that stale.
+ */
+function onSessionDead(d: Draft, generation: number): void {
+  if (d.next.disposed || generation !== d.next.generation) return;
+  if (!d.next.sessionLive) return;
+  d.next.sessionLive = false;
+  d.effects.push({ kind: 'drop-session' });
+  d.effects.push({ kind: 'disconnect' });
+  d.next.retryDelayMs = RETRY_INITIAL_MS;
+  attempt(d);
+}
+
 function onDispose(d: Draft): void {
   if (d.next.disposed) return;
   d.next.disposed = true;
@@ -278,6 +345,12 @@ export function transition(state: LifecycleState, event: LifecycleEvent): Transi
       break;
     case 'resume':
       onResume(d);
+      break;
+    case 'page-resume':
+      onPageResume(d);
+      break;
+    case 'session-dead':
+      onSessionDead(d, event.generation);
       break;
     case 'dispose':
       onDispose(d);
