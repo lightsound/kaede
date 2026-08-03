@@ -2,9 +2,12 @@
 import {
   type Availability,
   type ChatDraftPlan,
+  collectDmCandidates,
+  type DmCandidate,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
   type MemberAction,
+  type PlannedSend,
   planChatDraft,
   type ReactionEmoji,
   type StatusView,
@@ -15,7 +18,7 @@ import { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { type SpaceView, wireAdmission } from './admission';
-import { createChatFeed, dmCandidatesOf } from './chatFeed';
+import { createChatFeed } from './chatFeed';
 import type { ChatLog } from './chatLog';
 import { type AuthTokenGetter, type Connected, connect, target } from './connection';
 import { createHeartbeat } from './heartbeat';
@@ -76,6 +79,37 @@ function runEffect<K extends LifecycleEffect['kind']>(
 }
 
 /**
+ * The draft plan while no session exists: no candidates, so public drafts
+ * still classify and mentions refuse. The ONE home of the
+ * "disconnected means nobody to resolve against" rule — Net.planChatSend
+ * delegates here, and the App-side fallback for the pre-mount instant
+ * (when no Net exists to ask) is this same function through the package
+ * index.
+ */
+export function planChatDraftOffline(draft: string): ChatDraftPlan {
+  return planChatDraft(draft, []);
+}
+
+/**
+ * Everyone a DM mention can resolve to right now, read at submit time from
+ * the subscribed cache — so no state has to stream to the UI as people
+ * come and go. This is only the cache projection; the eligibility rule
+ * (in the world, online, named) is the pure collectDmCandidates,
+ * unit-tested in @maple/shared — deliberately not the player_name table
+ * alone, whose rows linger for the retention window (~10 minutes) after
+ * their owner leaves.
+ */
+function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
+  return collectDmCandidates(
+    [...c.db.player.iter()].map((row) => ({
+      online: row.online,
+      name: c.db.playerName.identity.find(row.identity)?.name,
+      key: row.identity.toHexString(),
+    })),
+  );
+}
+
+/**
  * 送信カウンタ(Playwright 用の読み取り専用フック)。「静止中は送信が止まる」
  * はレンダリングからは観測できないので、送った回数そのものを dev ビルド
  * だけ窓に晒す(GameApp の __mapleE2E と同じ流儀)。本番ビルドはビルド時
@@ -115,34 +149,29 @@ export interface Net {
   memberAction(action: MemberAction, member: Identity): void;
   setGuestsAllowed(allowed: boolean): void;
   /**
-   * Posts one message to the global-scope chat (send_chat_message). Success
-   * arrives as a chat_message row event — the log line and the speech
-   * bubble both come from it, so the sender sees exactly what everyone
-   * else received. Failures (a disconnect racing the submit, a server
-   * refusal) log AND report through NetHooks.onChatRefused: the panel
-   * clears the draft optimistically, so unlike the other reducers a
-   * dropped call has no visible "nothing changed" signal to fall back on.
-   */
-  sendChatMessage(text: string): void;
-  /**
    * Classifies one chat draft: public message, DM (with the mention
    * resolved against who is in the world and online RIGHT NOW, read from
    * the subscribed cache), or refused. The rules are the pure planChatDraft
    * in @maple/shared — this method only supplies the live candidate list
-   * (empty while disconnected, so an @mention refuses rather than
-   * resolving against stale rows). The caller sends the plan's text
-   * through sendChatMessage or sendDm; splitting plan from send keeps the
-   * panel's rate-limit mirror charging in between, exactly once per kind.
+   * (planChatDraftOffline while disconnected, so an @mention refuses
+   * rather than resolving against stale rows). The caller dispatches an
+   * accepted plan through sendPlanned; splitting plan from send keeps the
+   * panel's rate-limit mirror charging in between, exactly once per
+   * accepted plan.
    */
   planChatSend(draft: string): ChatDraftPlan;
   /**
-   * Sends one DM (send_dm) to the identity a plan resolved (its
-   * recipientKey). Success arrives as a dm_message row event — the log
-   * line comes from it, so the sender sees exactly what the recipient
-   * received. Failures report through NetHooks.onChatRefused like a public
-   * send: the panel cleared the draft optimistically either way.
+   * Sends one accepted plan: send_chat_message for the public kind, send_dm
+   * (to the identity the plan resolved) for the DM kind — the one place
+   * that dispatches on the plan's kind. Success arrives as a chat_message /
+   * dm_message row event; the log line (and, for public messages, the
+   * speech bubble) comes from it, so the sender sees exactly what the
+   * receivers received. Failures (a disconnect racing the submit, a server
+   * refusal) log AND report through NetHooks.onChatRefused: the panel
+   * clears the draft optimistically, so unlike the other reducers a
+   * dropped call has no visible "nothing changed" signal to fall back on.
    */
-  sendDm(recipientKey: string, text: string): void;
+  sendPlanned(plan: PlannedSend): void;
   /**
    * Posts one palette-emoji reaction (send_reaction). Success arrives as a
    * reaction row event — the badge over the sender's avatar comes from it,
@@ -789,20 +818,25 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     setGuestsAllowed: forward('set_guests_allowed', (c, allowed: boolean) =>
       c.reducers.setGuestsAllowed({ allowed }),
     ),
-    sendChatMessage(text) {
+    planChatSend(draft) {
+      return conn ? planChatDraft(draft, dmCandidatesOf(conn)) : planChatDraftOffline(draft);
+    },
+    sendPlanned(plan) {
+      if (plan.kind === 'dm') {
+        callReducer(
+          'send_dm',
+          (c) =>
+            c.reducers.sendDm({
+              recipient: Identity.fromString(plan.recipientKey),
+              text: plan.text,
+            }),
+          hooks.onChatRefused,
+        );
+        return;
+      }
       callReducer(
         'send_chat_message',
-        (c) => c.reducers.sendChatMessage({ text }),
-        hooks.onChatRefused,
-      );
-    },
-    planChatSend(draft) {
-      return planChatDraft(draft, conn ? dmCandidatesOf(conn) : []);
-    },
-    sendDm(recipientKey, text) {
-      callReducer(
-        'send_dm',
-        (c) => c.reducers.sendDm({ recipient: Identity.fromString(recipientKey), text }),
+        (c) => c.reducers.sendChatMessage({ text: plan.text }),
         hooks.onChatRefused,
       );
     },

@@ -83,9 +83,7 @@ test('DM が宛先にだけ届き、第三者にはリロード後も行が届�
 
   // No speech bubble for a DM — a bubble is public speech. Checked on B
   // right after the row event that would have shown one.
-  expect(
-    (await snapshot(pageB)).remotePlayers.every((p) => p.bubble === undefined),
-  ).toBe(true);
+  expect((await snapshot(pageB)).remotePlayers.every((p) => p.bubble === undefined)).toBe(true);
 
   // The strong negative, timed AFTER B's receipt: C's client was handed no
   // dm_message row at all.

@@ -1,5 +1,4 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the chat log and bubbles; needs a running host. The log operations it applies are pure and unit-tested (chatLog.ts), as are the mention rules it feeds candidates to (planChatDraft in @maple/shared)
-import { collectDmCandidates, type DmCandidate } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the chat log and bubbles; needs a running host. The log operations it applies are pure and unit-tested (chatLog.ts)
 import type { DbConnection } from '../module_bindings';
 import { type ChatEntryView, type ChatLog, insertChatEntry, removeChatEntry } from './chatLog';
 import type { RowOf } from './rows';
@@ -24,25 +23,6 @@ interface ChatFeedHooks {
    * row from the DOM without this count moving).
    */
   countDmRow(): void;
-}
-
-/**
- * Everyone a DM mention can resolve to right now, read at submit time from
- * the subscribed cache — so no state has to stream to the UI as people
- * come and go. This is only the cache projection; the eligibility rule
- * (in the world, online, named) is the pure collectDmCandidates,
- * unit-tested in @maple/shared — deliberately not the player_name table
- * alone, whose rows linger for the retention window (~10 minutes) after
- * their owner leaves.
- */
-export function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
-  return collectDmCandidates(
-    [...c.db.player.iter()].map((row) => ({
-      online: row.online,
-      name: c.db.playerName.identity.find(row.identity)?.name,
-      key: row.identity.toHexString(),
-    })),
-  );
 }
 
 /**

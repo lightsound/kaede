@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a React component that mounts the canvas and renders connection status; needs a DOM, and no DOM test environment is configured
-import { DEFAULT_STATUS, membershipPrompt, planChatDraft, type StatusView } from '@maple/shared';
+import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@maple/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
 import { ChatPanel } from './chat.package';
@@ -8,6 +8,7 @@ import {
   type ChatLog,
   type ConnectionStatus,
   type Net,
+  planChatDraftOffline,
   type SpaceView,
   startNet,
 } from './net.package';
@@ -149,16 +150,12 @@ export function App() {
         log={chatLog}
         sendRefused={chatSendRefused}
         // The netRef-less fallback (mount not finished — the panel is
-        // disabled then anyway) plans against no candidates: public drafts
-        // still classify, mentions refuse.
-        planDraft={(draft) => netRef.current?.planChatSend(draft) ?? planChatDraft(draft, [])}
-        onSend={(text) => {
+        // disabled then anyway) delegates to the same no-session rule
+        // Net.planChatSend applies, so the rule has one home.
+        planDraft={(draft) => netRef.current?.planChatSend(draft) ?? planChatDraftOffline(draft)}
+        onSendPlan={(plan) => {
           setChatSendRefused(false);
-          netRef.current?.sendChatMessage(text);
-        }}
-        onSendDm={(recipientKey, text) => {
-          setChatSendRefused(false);
-          netRef.current?.sendDm(recipientKey, text);
+          netRef.current?.sendPlanned(plan);
         }}
         onSendReaction={(emoji) => netRef.current?.sendReaction(emoji)}
       />

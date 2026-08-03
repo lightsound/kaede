@@ -77,6 +77,14 @@ export type ChatDraftPlan =
   | { kind: 'refused'; reason: ChatDraftRejectReason };
 
 /**
+ * A plan the submit path may dispatch — everything but the refused arm,
+ * which never leaves the form. What the send callback receives, so the
+ * kind-dispatch (public reducer vs DM reducer) lives with the reducer
+ * calls instead of branching in the presentation layer.
+ */
+export type PlannedSend = Exclude<ChatDraftPlan, { kind: 'refused' }>;
+
+/**
  * Classifies one chat draft: a message whose NORMALIZED text starts with
  * '@' is a DM attempt, everything else is public. The whole draft goes
  * through normalizeChatText first, so a DM body inherits the exact rules a
@@ -105,42 +113,40 @@ export function planChatDraft(raw: string, candidates: readonly DmCandidate[]): 
 
 /** Resolves the mention half of a '@'-leading draft (see planChatDraft). */
 function planDm(rest: string, candidates: readonly DmCandidate[]): ChatDraftPlan {
-  const name = longestMentionedName(rest, candidates);
-  if (name === undefined) return { kind: 'refused', reason: 'dm-no-recipient' };
-  const holders = candidates.filter((c) => c.name === name);
+  const holders = mentionHolders(rest, candidates);
+  const recipient = holders[0];
+  if (recipient === undefined) return { kind: 'refused', reason: 'dm-no-recipient' };
   // Two or more people currently hold the mentioned name; delivering to a
   // deterministic "first" one would leak the message to whichever the
   // sender did not mean.
-  if (holders.length > 1 || holders[0] === undefined) {
-    return { kind: 'refused', reason: 'dm-ambiguous-recipient' };
-  }
-  if (rest.length === name.length) return { kind: 'refused', reason: 'dm-empty-body' };
+  if (holders.length > 1) return { kind: 'refused', reason: 'dm-ambiguous-recipient' };
+  if (rest.length === recipient.name.length) return { kind: 'refused', reason: 'dm-empty-body' };
   return {
     kind: 'dm',
-    recipientKey: holders[0].key,
-    recipientName: name,
+    recipientKey: recipient.key,
+    recipientName: recipient.name,
     // Past "name + space"; already normalized (whitespace runs collapsed,
     // ends trimmed), so no leading/trailing space can survive here.
-    text: rest.slice(name.length + 1),
+    text: rest.slice(recipient.name.length + 1),
   };
 }
 
 /**
- * The longest candidate name the mention text starts with, terminated by a
- * space or the end of the text. Two DIFFERENT names of equal length cannot
- * both prefix the same text, so "longest" is a unique name (though several
- * candidates may hold it — the caller's ambiguity check).
+ * Every candidate holding the LONGEST name the mention text starts with
+ * (terminated by a space or the end of the text); empty when nothing
+ * matches. Two DIFFERENT names of equal length cannot both prefix the same
+ * text, so the longest matching name is unique and the returned candidates
+ * all share it — several entries mean several people hold that one name.
  */
-function longestMentionedName(
-  rest: string,
-  candidates: readonly DmCandidate[],
-): string | undefined {
-  let longest: string | undefined;
-  for (const { name } of candidates) {
-    if (rest !== name && !rest.startsWith(`${name} `)) continue;
-    if (longest === undefined || name.length > longest.length) longest = name;
+function mentionHolders(rest: string, candidates: readonly DmCandidate[]): DmCandidate[] {
+  let holders: DmCandidate[] = [];
+  for (const candidate of candidates) {
+    if (rest !== candidate.name && !rest.startsWith(`${candidate.name} `)) continue;
+    const held = holders[0];
+    if (held === undefined || candidate.name.length > held.name.length) holders = [candidate];
+    else if (candidate.name === held.name) holders.push(candidate);
   }
-  return longest;
+  return holders;
 }
 
 /**

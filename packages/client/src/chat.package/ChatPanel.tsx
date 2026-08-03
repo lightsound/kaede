@@ -4,6 +4,7 @@ import {
   type ChatDraftPlan,
   type ChatDraftRejectReason,
   evaluateChatSend,
+  type PlannedSend,
   REACTION_EMOJIS,
   type ReactionEmoji,
 } from '@maple/shared';
@@ -158,8 +159,10 @@ function ReactionRow({
  * One input serves both kinds: `planDraft` classifies the draft (public,
  * @mention DM, or refused — the shared planChatDraft rules), and a refused
  * plan shows its reason WITHOUT sending anything; in particular a mention
- * that resolves to nobody never falls back to the public chat. Rate
- * limiting mirrors the server's ONE chat bucket for both kinds (DMs charge
+ * that resolves to nobody never falls back to the public chat. An accepted
+ * plan goes to `onSendPlan` whole — which reducer it means is the network
+ * layer's dispatch (Net.sendPlanned), not this panel's. Rate limiting
+ * mirrors the server's ONE chat bucket for both kinds (DMs charge
  * chat_guard server-side precisely so this mirror stays honest); the
  * mirror is UX — the server's verdict is the authority. The draft clears
  * on submit — the success signal is the message coming back through the
@@ -173,8 +176,7 @@ export function ChatPanel({
   log,
   sendRefused,
   planDraft,
-  onSend,
-  onSendDm,
+  onSendPlan,
   onSendReaction,
 }: {
   connected: boolean;
@@ -191,9 +193,8 @@ export function ChatPanel({
   sendRefused: boolean;
   /** Classifies one draft (public / DM / refused) — see Net.planChatSend. */
   planDraft: (draft: string) => ChatDraftPlan;
-  onSend: (text: string) => void;
-  /** Sends one DM to the recipient a plan resolved. */
-  onSendDm: (recipientKey: string, text: string) => void;
+  /** Dispatches one accepted plan (public message or DM) — see Net.sendPlanned. */
+  onSendPlan: (plan: PlannedSend) => void;
   /** Sends one palette-emoji reaction (fire-and-forget; see ReactionRow). */
   onSendReaction: (emoji: ReactionEmoji) => void;
 }) {
@@ -236,8 +237,7 @@ export function ChatPanel({
     if (!send.ok) return RATE_LIMITED_MESSAGE;
     chargedFromRef.current = allowanceRef.current;
     allowanceRef.current = send.allowanceMicros;
-    if (plan.kind === 'dm') onSendDm(plan.recipientKey, plan.text);
-    else onSend(plan.text);
+    onSendPlan(plan);
     return undefined;
   };
 
