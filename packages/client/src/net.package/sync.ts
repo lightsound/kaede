@@ -1,7 +1,6 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
 import {
   type Availability,
-  DEFAULT_STATUS,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
   type MemberAction,
@@ -9,7 +8,6 @@ import {
   type StatusView,
   stateFromRow,
   statusLabel,
-  statusViewOf,
 } from '@maple/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
@@ -36,6 +34,7 @@ import { createPrediction } from './prediction';
 import { wireReactions } from './reactionFeed';
 import { createRemoteViews } from './remoteView';
 import type { RowOf } from './rows';
+import { cachedStatusView, wireStatuses } from './statusFeed';
 
 export type { ConnectionStatus } from './lifecycle';
 
@@ -350,14 +349,14 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     const nameOf = (identity: Identity): string =>
       c.db.playerName.identity.find(identity)?.name ?? '';
 
-    // Statuses live on player_status, an upsert row a missing entry of which
-    // means the default (see the table comment); the same cache-before-event
-    // guarantee as nameOf makes reading it here safe. statusViewOf also
-    // narrows the raw row at this boundary (the isReactionEmoji rule): a row
-    // this module cannot vouch for reads as the default rather than
-    // rendering an unvetted string.
-    const statusOf = (identity: Identity): StatusView =>
-      statusViewOf(c.db.playerStatus.identity.find(identity));
+    // The display attributes record() carries per row change, read from the
+    // cache like nameOf. The status seed rides here: a freshly (re)created
+    // view — session seed, or a player coming back from the offline-hidden
+    // state — starts with the cached status (see cachedStatusView).
+    const labelOf = (identity: Identity) => ({
+      name: nameOf(identity),
+      status: statusLabel(cachedStatusView(c, identity)),
+    });
 
     // Our row appears (or already exists, when resuming an identity) via join
     // below. Start/refresh the simulation from that authoritative state.
@@ -366,8 +365,8 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       publishOwnName(nameOf(row.identity));
       // The seed half of the status display (a status is state, so unlike
       // reactions the subscribed cache restores it on entry/reload); row
-      // events keep it fresh from here.
-      publishOwnStatus(statusOf(row.identity));
+      // events keep it fresh from here (wireStatuses).
+      publishOwnStatus(cachedStatusView(c, row.identity));
       // Announce liveness once per session start, unconditionally. Resuming
       // a surviving row skips join, so nothing server-side flips its offline
       // flag back or refreshes its updatedAt — and the send gate means no
@@ -410,14 +409,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       }
       remoteViews.record(
         idHex,
-        nameOf(row.identity),
+        labelOf(row.identity),
         { ...row, updatedAtMs: Number(row.updatedAt.toMillis()) },
         performance.now(),
       );
-      // Paired with every record() so a freshly (re)created view — session
-      // seed, or a player coming back from the offline-hidden state — starts
-      // with the cached status, the way record() itself carries the name.
-      remoteViews.setStatus(idHex, statusLabel(statusOf(row.identity)));
     };
 
     // A player_name change without the hot row moving: a rename round trip,
@@ -434,20 +429,14 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       remoteViews.setName(idHex, row.name);
     };
 
-    // A player_status change without the hot row moving — the applyName
-    // wiring, for the status line. Unlike names this table DOES see
-    // deletes while its owner stays rendered on this screen (the sender's
-    // own row set: removePlayer deletes player and status together, but the
-    // delete events land while our sprite is still drawn), so onDelete is
-    // wired too, reporting the default the missing row now means.
-    const applyStatus = (identity: Identity, view: StatusView): void => {
-      const idHex = identity.toHexString();
-      if (idHex === myIdHex) {
-        publishOwnStatus(view);
-        return;
-      }
-      remoteViews.setStatus(idHex, statusLabel(view));
-    };
+    // Statuses: state wiring, seed + row events (the opposite of the
+    // reaction seed rule) — see statusFeed.ts. The seed half rides labelOf
+    // and handleOwnRow; the events land here.
+    wireStatuses(c, myIdHex, {
+      isStale: stale,
+      applyOwn: publishOwnStatus,
+      applyRemote: (idHex, view) => remoteViews.setStatus(idHex, statusLabel(view)),
+    });
 
     /**
      * Enters the world once admission says so: resume the surviving own row
@@ -544,18 +533,6 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     c.db.playerName.onUpdate((_ctx, _old, row) => {
       if (stale()) return;
       applyName(row);
-    });
-    c.db.playerStatus.onInsert((_ctx, row) => {
-      if (stale()) return;
-      applyStatus(row.identity, statusViewOf(row));
-    });
-    c.db.playerStatus.onUpdate((_ctx, _old, row) => {
-      if (stale()) return;
-      applyStatus(row.identity, statusViewOf(row));
-    });
-    c.db.playerStatus.onDelete((_ctx, row) => {
-      if (stale()) return;
-      applyStatus(row.identity, DEFAULT_STATUS);
     });
     c.db.player.onDelete((_ctx, row) => {
       if (stale()) return;

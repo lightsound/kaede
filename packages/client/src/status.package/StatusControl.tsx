@@ -18,7 +18,7 @@ import {
   UI_PANEL_BG,
   UI_TEXT_COLOR,
 } from '../theme';
-import { DraftForm } from '../ui.package';
+import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
 
 const REJECT_MESSAGES: Record<StatusTextRejectReason, string> = {
   'too-long': `ステータスは${STATUS_TEXT_MAX_LENGTH}文字以内にしてください`,
@@ -86,11 +86,9 @@ const clearButtonStyle: CSSProperties = {
  * authoritative row (never from the click — the row event is what everyone
  * else sees). Buttons rather than a <select> deliberately: isTextEntry
  * (game.package/input.ts) exempts only text fields, so a focused select
- * would feed arrow keys to BOTH the value and the avatar's movement, and
- * each click BLURS its button for exactly the ReactionRow reasons (Enter
- * re-firing the send, held keys leaking into world input — see that
- * component's comment for the browser specifics; behavior re-verified by
- * hand for these buttons, 2026-08-03).
+ * would feed arrow keys to BOTH the value and the avatar's movement. Each
+ * click blurs its button (blurringClick — see its comment for the
+ * keyboard reasons; re-verified by hand for these buttons, 2026-08-03).
  */
 function AvailabilityRow({
   disabled,
@@ -111,10 +109,7 @@ function AvailabilityRow({
           aria-label={`ステータス ${AVAILABILITY_LABELS[availability]}`}
           aria-pressed={availability === current}
           disabled={disabled}
-          onClick={(e) => {
-            onSetAvailability(availability);
-            e.currentTarget.blur();
-          }}
+          onClick={blurringClick(() => onSetAvailability(availability))}
         >
           {AVAILABILITY_ICONS[availability]} {AVAILABILITY_LABELS[availability]}
         </button>
@@ -154,9 +149,8 @@ export function StatusControl({
   /** Sets the free-text status line; '' clears it. */
   onSetStatusText: (text: string) => void;
 }) {
-  // The same gate as the chat panel (chatDisabled): sending needs a player
-  // row to land on, and ownName is defined exactly while one exists.
-  const disabled = !connected || ownName === undefined;
+  // The shared posting gate: a status write needs a player row to land on.
+  const disabled = postingDisabled(connected, ownName);
 
   const submit = (draft: string): string | undefined => {
     const verdict = normalizeStatusText(draft);
@@ -187,10 +181,7 @@ export function StatusControl({
           style={clearButtonStyle}
           aria-label="ひとことステータスをクリア"
           disabled={disabled || status.text === ''}
-          onClick={(e) => {
-            onSetStatusText('');
-            e.currentTarget.blur();
-          }}
+          onClick={blurringClick(() => onSetStatusText(''))}
         >
           クリア
         </button>

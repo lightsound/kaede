@@ -53,10 +53,15 @@ describe('createRemoteViews', () => {
     return { x, y: 0, vx, vy: 0, facing: 1, updatedAtMs };
   }
 
+  /** The display attributes record() expects; status defaults to "none". */
+  function label(name: string, status?: string) {
+    return { name, status };
+  }
+
   /** Collect draw() calls for one renderFrame. */
   function render(views: ReturnType<typeof createRemoteViews>, nowMs: number) {
     const drawn: { id: string; status: string | undefined; x: number; y: number }[] = [];
-    views.renderFrame(nowMs, (id, _name, status, x, y) => drawn.push({ id, status, x, y }));
+    views.renderFrame(nowMs, (id, l, x, y) => drawn.push({ id, status: l.status, x, y }));
     return drawn;
   }
 
@@ -66,7 +71,7 @@ describe('createRemoteViews', () => {
     // Enough samples that renderTime (INTERP_DELAY_MS in the past) still
     // falls between buffered snapshots.
     for (let i = 0; i <= 12; i++) {
-      views.record('a', 'A', row(i * 100, i * 10, 100), i * 100 + 40);
+      views.record('a', label('A'), row(i * 100, i * 10, 100), i * 100 + 40);
     }
     // Local 1240 maps to server 1200; render time is 1200 - INTERP_DELAY_MS.
     const drawn = render(views, 1240);
@@ -80,17 +85,17 @@ describe('createRemoteViews', () => {
     for (let i = 0; i <= 5; i++) {
       // Same server-time samples; one connection delivers with jitter.
       const jitter = i % 2 === 0 ? 0 : 35;
-      jittered.record('a', 'A', row(i * 100, i * 10, 100), i * 100 + 40 + jitter);
-      steady.record('a', 'A', row(i * 100, i * 10, 100), i * 100 + 40);
+      jittered.record('a', label('A'), row(i * 100, i * 10, 100), i * 100 + 40 + jitter);
+      steady.record('a', label('A'), row(i * 100, i * 10, 100), i * 100 + 40);
     }
     // Both estimated the same (minimum) offset, so they render identically.
     expect(render(jittered, 540)[0].x).toBeCloseTo(render(steady, 540)[0].x, 5);
   });
 
-  it('carries the status label set by setStatus into draw(), undefined until then', () => {
+  it('carries the recorded status into draw() and follows setStatus updates', () => {
     const views = createRemoteViews();
-    views.record('a', 'A', row(0, 0), 40);
-    expect(render(views, 240)[0].status).toBeUndefined();
+    views.record('a', label('A', '🟢 もくもく'), row(0, 0), 40);
+    expect(render(views, 240)[0].status).toBe('🟢 もくもく');
     views.setStatus('a', '🔴 取り込み中');
     expect(render(views, 250)[0].status).toBe('🔴 取り込み中');
     views.setStatus('a', undefined);
@@ -102,8 +107,8 @@ describe('createRemoteViews', () => {
 
   it('remove() and clear() drop views', () => {
     const views = createRemoteViews();
-    views.record('a', 'A', row(0, 0), 40);
-    views.record('b', 'B', row(0, 0), 40);
+    views.record('a', label('A'), row(0, 0), 40);
+    views.record('b', label('B'), row(0, 0), 40);
     views.remove('a');
     expect(render(views, 240).map((d) => d.id)).toEqual(['b']);
     views.clear();

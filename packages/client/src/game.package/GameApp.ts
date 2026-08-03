@@ -49,6 +49,18 @@ const REMOTE_COLOR = 0xd08770;
 
 const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
 
+/**
+ * The per-player display attributes rendered alongside the pose: the name
+ * label and the status line under the avatar (`undefined` while default).
+ * One object rather than adjacent positional strings so a swapped call
+ * site cannot compile (the NetHooks precedent), and so the Phase 5 avatar
+ * attributes (pose, gear) land as fields instead of a seventh parameter.
+ */
+export interface PlayerLabel {
+  name: string;
+  status: string | undefined;
+}
+
 export interface GameApp {
   destroy(): void;
   setLocalPlayerName(name: string): void;
@@ -78,14 +90,7 @@ export interface GameApp {
   resetLocal(state: PlayerState, tick: number): void;
   onLocalTick(cb: (state: PlayerState, tick: number, packedInput: number) => void): void;
   onFrame(cb: (nowMs: number) => void): void;
-  upsertRemotePlayer(
-    id: string,
-    name: string,
-    status: string | undefined,
-    x: number,
-    y: number,
-    facing: Facing,
-  ): void;
+  upsertRemotePlayer(id: string, label: PlayerLabel, x: number, y: number, facing: Facing): void;
   removeRemotePlayer(id: string): void;
   /** Drop every remote player sprite (e.g. when the connection is lost). */
   clearRemotePlayers(): void;
@@ -162,27 +167,20 @@ function setViewStatus(view: PlayerView, status: string | undefined): void {
 }
 
 /**
- * The status line's snapshot field: present exactly while visible. Its own
- * function (not a fourth conditional in playerSnapshot) to keep that
- * uncovered function under the CRAP budget fallow enforces (the
- * backfillAccountName precedent).
+ * One player as the e2e hook reports it: rendered pose plus any live
+ * overheads and the status line. The optional fields are guarded
+ * assignments (one uniform shape) rather than conditional spreads — three
+ * spread ternaries put this uncovered function over the CRAP budget
+ * fallow enforces.
  */
-function statusSnapshot(view: PlayerView): Pick<E2EPlayerSnapshot, 'status'> {
-  return view.status.visible ? { status: view.status.text } : {};
-}
-
-/** One player as the e2e hook reports it: rendered pose plus any live overheads. */
 function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
+  const snap: E2EPlayerSnapshot = { x: view.root.x, y: view.root.y, name: view.label.text };
   const bubble = visibleBubbleText(view.bubble);
+  if (bubble !== undefined) snap.bubble = bubble;
   const reaction = visibleReactionEmoji(view.reaction);
-  return {
-    x: view.root.x,
-    y: view.root.y,
-    name: view.label.text,
-    ...(bubble === undefined ? {} : { bubble }),
-    ...(reaction === undefined ? {} : { reaction }),
-    ...statusSnapshot(view),
-  };
+  if (reaction !== undefined) snap.reaction = reaction;
+  if (view.status.visible) snap.status = view.status.text;
+  return snap;
 }
 
 /**
@@ -377,14 +375,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     onFrame(cb) {
       frameCbs.push(cb);
     },
-    upsertRemotePlayer(id, name, status, x, y, facing) {
+    upsertRemotePlayer(id, label, x, y, facing) {
       let view = remotes.get(id);
       if (!view) {
-        view = createPlayerView(world, name, REMOTE_COLOR);
+        view = createPlayerView(world, label.name, REMOTE_COLOR);
         remotes.set(id, view);
       }
-      view.label.text = name;
-      setViewStatus(view, status);
+      view.label.text = label.name;
+      setViewStatus(view, label.status);
       view.root.position.set(x, y);
       // Flip only the body; flipping the root would mirror the name label.
       view.body.scale.x = facing;

@@ -7,9 +7,9 @@
 // with every Phase 2/3 conversation feature while depending on the
 // lifecycle only through findAdmittedWorldRows.
 import {
+  type Availability,
   CHAT_HISTORY_MAX,
   chatOverflowIds,
-  DEFAULT_STATUS,
   evaluateChatSend,
   evaluateReactionSend,
   evaluateStatusSend,
@@ -19,10 +19,11 @@ import {
   normalizeStatusText,
   type SendAllowanceRequest,
   type SendAllowanceVerdict,
+  statusViewOf,
 } from '@maple/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, findAdmittedWorldRows, type WorldRows } from './world';
+import { type Ctx, findAdmittedWorldRows, type SenderIdentity, type WorldRows } from './world';
 
 /**
  * The shared preamble of every posting reducer (send_chat_message /
@@ -75,6 +76,25 @@ function chargeSendAllowance(
   });
   if (!verdict.ok) throw new SenderError(`${reducerName} refused (rate-limited)`);
   writeSendAllowance(ctx, guardTable, guard, verdict.allowanceMicros);
+}
+
+/**
+ * The shared preamble of the row-writing sends that need no sender rows
+ * (reactions and the status columns): eligibility plus the rate charge.
+ * False when the silent reclaim path refused — the caller must RETURN
+ * without writing (WorldRowsVerdict); every loud refusal throws inside.
+ * send_chat_message keeps calling the pieces itself: it needs the sender's
+ * rows (the name snapshot on the message), not just admission.
+ */
+function admitGuardedSend(
+  ctx: Ctx,
+  reducerName: string,
+  guardTable: SendGuardTable,
+  evaluate: (request: SendAllowanceRequest) => SendAllowanceVerdict,
+): boolean {
+  if (!findPostingSender(ctx, reducerName)) return false;
+  chargeSendAllowance(ctx, guardTable, evaluate, reducerName);
+  return true;
 }
 
 /** Writes the advanced marker back: the sender's row, or its lazy first one. */
@@ -154,11 +174,26 @@ export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, {
   trimChatHistory(ctx);
 });
 
-/** Writes the sender's reaction: the upsert row (see the `reaction` table). */
-function upsertReaction(ctx: Ctx, emoji: string): void {
-  const row = { identity: ctx.sender, emoji, sentAt: ctx.timestamp };
-  if (ctx.db.reaction.identity.find(ctx.sender)) ctx.db.reaction.identity.update(row);
-  else ctx.db.reaction.insert(row);
+/** An identity-keyed table, as the upsert-row features (reaction, status) shape theirs. */
+interface IdentityKeyedTable<Row extends { identity: SenderIdentity }> {
+  insert(row: Row): unknown;
+  identity: {
+    find(identity: SenderIdentity): Row | null;
+    update(row: Row): unknown;
+  };
+}
+
+/**
+ * Writes one identity-keyed upsert row: the row-write half every
+ * upsert-row feature shares (the reaction, and both status columns
+ * through writeStatus), so the find/update/insert dance exists once.
+ */
+function upsertByIdentity<Row extends { identity: SenderIdentity }>(
+  table: IdentityKeyedTable<Row>,
+  row: Row,
+): void {
+  if (table.identity.find(row.identity)) table.identity.update(row);
+  else table.insert(row);
 }
 
 // Posts one emoji reaction, shown transiently above the sender's avatar
@@ -174,41 +209,43 @@ function upsertReaction(ctx: Ctx, emoji: string): void {
 //
 // The emoji is validated by exact match against the shared palette
 // (isReactionEmoji) — free-form strings never reach the public table, so
-// no text normalization questions apply. Unlike chat there is no
+// no text normalization questions apply; the check runs before the
+// admission preamble, which is safe because both are loud pre-write
+// refusals (nothing to roll back either way). Unlike chat there is no
 // client-side bucket mirror and no refusal notice: a reaction is a
 // transient gesture, so a burst-exceeding click simply not appearing is
 // feedback enough (an accepted simplification; the server refusal above
 // stays loud for the reducer log).
 export const sendReaction = spacetimedb.reducer({ emoji: t.string() }, (ctx, { emoji }) => {
-  if (!findPostingSender(ctx, 'send_reaction')) return;
   if (!isReactionEmoji(emoji)) {
     throw new SenderError('send_reaction refused (unknown-emoji)');
   }
-  chargeSendAllowance(ctx, ctx.db.reactionGuard, evaluateReactionSend, 'send_reaction');
-  upsertReaction(ctx, emoji);
+  if (!admitGuardedSend(ctx, 'send_reaction', ctx.db.reactionGuard, evaluateReactionSend)) return;
+  upsertByIdentity(ctx.db.reaction, { identity: ctx.sender, emoji, sentAt: ctx.timestamp });
 });
+
+/** One VALIDATED column of the status row, as either reducer writes it. */
+type StatusPatch = { availability: Availability } | { text: string };
 
 /**
  * The shared body of both status reducers, everything after their (loud,
  * pre-write) validation: eligibility, the rate charge, and the
- * single-column write onto the sender's status row, defaulting the other
- * column on first write (a missing row means DEFAULT_STATUS — see the
- * player_status table). The server-side read-modify-write is the point of
- * having two reducers over one: each control sends only its own validated
- * value, so a stale client-side view of the OTHER column can never be
- * written back.
+ * single-column write onto the sender's status row. The other column
+ * defaults through statusViewOf — the same "missing row means
+ * DEFAULT_STATUS" rule clients read with, unit-tested in @maple/shared.
+ * The server-side read-modify-write is the point of having two reducers
+ * over one: each control sends only its own validated value, so a stale
+ * client-side view of the OTHER column can never be written back.
  */
 function writeStatus(ctx: Ctx, reducerName: string, patch: StatusPatch): void {
-  if (!findPostingSender(ctx, reducerName)) return;
-  chargeSendAllowance(ctx, ctx.db.statusGuard, evaluateStatusSend, reducerName);
+  if (!admitGuardedSend(ctx, reducerName, ctx.db.statusGuard, evaluateStatusSend)) return;
   const existing = ctx.db.playerStatus.identity.find(ctx.sender);
-  const row = { identity: ctx.sender, ...DEFAULT_STATUS, ...existing, ...patch };
-  if (existing) ctx.db.playerStatus.identity.update(row);
-  else ctx.db.playerStatus.insert(row);
+  upsertByIdentity(ctx.db.playerStatus, {
+    identity: ctx.sender,
+    ...statusViewOf(existing),
+    ...patch,
+  });
 }
-
-/** One validated column of the status row, as either reducer writes it. */
-type StatusPatch = { availability: string } | { text: string };
 
 // Sets the sender's availability (ステータス手動切替 — ROADMAP Phase 2):
 // online / away / busy, shown persistently beside the name until changed.

@@ -75,12 +75,17 @@ test('ステータスの3値切替と自由文が両画面に反映され、リ�
 
   // A status is STATE: a fresh navigation resumes the same identity and
   // restores both values from the initial subscription's seed — exactly
-  // what a reaction must never do — and B keeps seeing them untouched.
+  // what a reaction must never do — and B keeps seeing them once A is
+  // back. Polled on B's side too: the reload briefly flips A's row
+  // offline, which hides A's remote view (and its status) until the
+  // resume heartbeat lands.
   await enterWorld(pageA);
   await expect
     .poll(async () => (await snapshot(pageA)).local.status, { timeout: 10_000 })
     .toBe(busyWithNote);
-  expect((await snapshot(pageB)).remotePlayers[0]?.status).toBe(busyWithNote);
+  await expect
+    .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.status, { timeout: 10_000 })
+    .toBe(busyWithNote);
 
   // Clearing both (the クリア button and the オンライン switch) returns the
   // default — no line — on both sides of the wire.
