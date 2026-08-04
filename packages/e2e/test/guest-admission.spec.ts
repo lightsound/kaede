@@ -22,7 +22,7 @@ const SPACETIME_BIN = process.env.SPACETIME_BIN ?? 'spacetime';
  * are the real ones.
  */
 async function sql(query: string): Promise<void> {
-  await exec(SPACETIME_BIN, ['sql', 'kaedetown', query, '--server', 'local']);
+  await exec(SPACETIME_BIN, ['sql', 'kaede', query, '--server', 'local']);
 }
 
 /**

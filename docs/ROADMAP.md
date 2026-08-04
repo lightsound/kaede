@@ -228,15 +228,16 @@
 - 任意: パッケージ名の整理（`maple-like` / `@maple/*` → kaede 系へ改名。
   DB 名やデプロイ設定を触るこのタイミングが最小コスト。ただし**名前の最終確定
   ＝ドメイン取得まで後置する** — 先に改名すると名前変更時に二度手間になるため）
-  ✅ **完了（2026-08-04、PR 2 本に分割）**: PR #50 でリポジトリ内を改名
+  ✅ **完了（2026-08-04、PR 3 本に分割）**: PR #50 でリポジトリ内を改名
   （`@maple/*` → `@kaede/*`、ルート `package.json` は `kaede`、E2E フックは
   `__kaedeE2E`、ゲスト再開トークンのキーも `kaede.spacetime.token` — 既存タブの
-  ゲストが新規ゲスト扱いになるだけで実害なし）。続く本 PR で Maincloud の
-  DB 名を `maple-like` → **`kaedetown`** に `spacetime rename`（identity は
-  不変のため `PRODUCTION_DATABASE_IDENTITY` ピンはそのまま）。第一候補の
-  `kaede` は、同一アカウントに過去の実験由来の未使用 DB `kaede`・`kaede-366x1`
-  が既存（paused で中身の検分不可）で、削除は不可逆のためオーナー確認なしに
-  行わず、了承済みの代替名 `kaedetown` を採用（ドメインと同名）。
+  ゲストが新規ゲスト扱いになるだけで実害なし）。続いて Maincloud の DB 名を
+  `spacetime rename` で改名（identity は不変のため
+  `PRODUCTION_DATABASE_IDENTITY` ピンはそのまま）: PR #51 ではまず `maple-like`
+  → `kaedetown`（同一アカウントに過去の実験由来の未使用 DB `kaede` が既存
+  — paused で中身の検分不可 — で、不可逆な削除をオーナー確認なしに行わない
+  ための暫定名）。同日オーナーが旧 `kaede` の削除を了承したため削除して
+  名前を解放し、最終名 **`kaede`** へ再 rename（本 PR）。
   MapleStory への言及・VISION の和訳説明・決定ログの文意は不変
 
 **完了条件**: 2つのデバイスから同一アカウントで同じキャラクターを操作できる。

@@ -167,7 +167,7 @@ jobs:
             fi
             sleep 1
           done
-          spacetimedb-cli publish kaedetown --server local --yes
+          spacetimedb-cli publish kaede --server local --yes
 
       - name: E2E smoke test
         run: pnpm test:e2e
@@ -259,7 +259,7 @@ jobs:
           SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
         run: |
           spacetimedb-cli login --token "$SPACETIMEDB_TOKEN"
-          spacetimedb-cli publish kaedetown --server maincloud --yes
+          spacetimedb-cli publish kaede --server maincloud --yes
 
       # Builds the client and converges the Cloudflare resources declared in
       # infra/alchemy.run.ts (see README「デプロイ(公開手順)」).

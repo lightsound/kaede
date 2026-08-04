@@ -62,7 +62,7 @@ const CLERK_PRODUCTION_ISSUER = 'https://clerk.kaede.town';
 const CLERK_DEVELOPMENT_ISSUER = 'https://accepted-toucan-79.clerk.accounts.dev';
 
 /**
- * The production database: Maincloud `kaedetown` (`spacetime list` /
+ * The production database: Maincloud `kaede` (`spacetime list` /
  * the Maincloud dashboard; renamed from `maple-like` 2026-08-04 — a rename
  * keeps the identity, so this pin survived it). The database's own identity is the
  * only production marker a reducer can see — it cannot ask which host it
