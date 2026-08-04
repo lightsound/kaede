@@ -4,6 +4,7 @@
   （SpacetimeAuth・WorkOS との比較を含む）を経てオーナーが承認
 - **対象**: kaede
 - **最終更新**: 2026-08-04
+- **やさしい解説（図解付き）**: [auth-architecture.md](./auth-architecture.md)
 
 ---
 
