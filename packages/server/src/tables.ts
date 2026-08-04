@@ -140,12 +140,21 @@ export const spacetimedb = schema({
   // that split this table off is not undone. The rows' lifecycle is
   // unchanged: created with the player row, deleted with it (removePlayer),
   // so "a named row exists" still means "in the world (within retention)".
+  //
+  // The default is FALSE deliberately, for the one moment it applies: the
+  // migration backfill of rows that predate the column. Backfilling true
+  // would resurrect disconnected-but-retained players as DM candidates for
+  // up to the retention window (send_dm would refuse them, but only after
+  // the sender tried); backfilling false merely hides players until their
+  // reconnect writes true back (every live path does: join's sibling
+  // upsert, the heartbeat refresh, every accepted batch) — a false
+  // negative that self-heals in seconds beats a lingering false positive.
   playerName: table(
     { name: 'player_name', public: true },
     {
       identity: t.identity().primaryKey(),
       name: t.string(),
-      online: t.bool().default(true),
+      online: t.bool().default(false),
     },
   ),
   // The speed-hack guard's token-bucket marker (micros since epoch), split
