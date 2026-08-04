@@ -8,6 +8,10 @@ test-results/
 spacetime.local.json
 .fallow/
 
+# 本番データベースのエクスポート先(scripts/backup-maincloud.sh)。
+# 個人情報を含む成果物なのでリポジトリには入れない — docs/backup-restore.md 参照。
+backups/
+
 # Alchemy のステート: 共有するのは prod ステージだけ(README 参照)。
 # それ以外のステージ(既定の dev_$USER を含む)・ログ・バージョンチェックの
 # キャッシュは個人環境の産物なので共有しない。

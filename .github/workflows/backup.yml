@@ -1,0 +1,54 @@
+# 本番データベース(Maincloud)の日次エクスポート。手順と復旧方法の全体は
+# docs/backup-restore.md を参照。Maincloud には利用者向けのバックアップ /
+# リストア API がなく、SLA もデータ復旧を除外しているため、恒久データ
+# (account / space_member / space_setting)の保全はこのエクスポートが唯一の
+# 手段。成果物は GitHub Actions の artifact として 90 日保持する。
+name: Backup
+
+on:
+  schedule:
+    # 04:00 JST (19:00 UTC)。日本の利用者が寝静まった時間帯 = 書き込みが
+    # 最も少なく、スナップショットとして一貫した内容になりやすい。
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # ci.yml と同じピン留め(バージョンの根拠はそちらのコメントを参照)。
+  SPACETIME_VERSION: v2.7.1
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install SpacetimeDB CLI (pinned)
+        uses: ./.github/actions/install-spacetimedb
+        with:
+          version: ${{ env.SPACETIME_VERSION }}
+
+      - name: Export all tables
+        env:
+          SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
+          SPACETIME_BIN: spacetimedb-cli
+        run: |
+          spacetimedb-cli login --token "$SPACETIMEDB_TOKEN"
+          scripts/backup-maincloud.sh backup-out
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maincloud-backup-${{ github.run_id }}
+          path: backup-out/
+          retention-days: 90
+          # 空のエクスポートは「取れていない」であって「空のバックアップ」では
+          # ない。黙って成功させず失敗として気づけるようにする。
+          if-no-files-found: error
