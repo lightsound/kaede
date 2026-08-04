@@ -19,7 +19,9 @@
 | 初代管理者 | ✅ 確保（2026-08-04）— オーナーが本番 issuer でサインイン → 申請 → 入場。`space_member` に approved/admin 1 行を実測確認 |
 | Maincloud プラン | **当面 Free で小規模に試す**（オーナー判断 2026-08-04）。無料枠は月 2,500 TeV — 実測（§6）でエネルギー消費を見ながら Pro 化を判断。オートポーズは接続で 1 秒未満の自動再開なので小規模運用では実害なし |
 
-**残タスク**:
+**残タスク**（⏸️ **保留中 — 2026-08-04 オーナー判断**: 実際に試用した結果、
+現状の機能セットでは常用に至らないため、作り込み（Phase 3 以降）を進めてから
+再開する — VISION 決定ログ参照）:
 1. URL のコミュニティ共有（オーナー。共有した日＝実測の起点）
 2. 共有から数日〜2週間の実測（§6。別セッションで集計）
 
@@ -137,7 +139,7 @@ Clerk でサインインする限り本番側の Identity になる）。あわ�
 | --- | --- | --- |
 | Maincloud 利用料金 | Maincloud ダッシュボードのエネルギー消費（日次で記録） | 月換算で 5〜7.5万 TeV ≒ Pro 枠 100,000 TeV 内か（$1≒2,592 TeV、egress 2,000 TeV/GB、ストレージ $1/GB/月）。超えるなら ROADMAP の変化点駆動へのエスカレーションを検討 |
 | エネルギー内訳の CPU 命令数 | 同ダッシュボードの内訳 | CPU が支配項なら「クライアント権威＋サーバー側クランプ」への縮退を再検討（ROADMAP Phase 2） |
-| 日本からの RTT | `curl -o /dev/null -s -w 'connect %{time_connect}s ttfb %{time_starttransfer}s\n' https://maincloud.spacetimedb.com/v1/ping` を日本の回線から数回。体感は入力→リモート反映の遅延 | 問題があればセルフホストを検討（VISION） |
+| 日本からの RTT | `curl -o /dev/null -s -w 'connect %{time_connect}s ttfb %{time_starttransfer}s\n' https://maincloud.spacetimedb.com/v1/ping` を日本の回線から数回。体感は入力→リモート反映の遅延 | 問題があれば補間・プロトコル側の調整で吸収（セルフホストは 2026-08-04 に選択肢から除外 — VISION 決定ログ） |
 | PostHog の広告ブロッカー欠落率（ADR §9-6） | サーバー側 `connection_event`（member の connected 件数 — `spacetime sql` で日次集計）と PostHog の `spacetimedb_connected` 件数の差分 | 欠落率が高ければリバースプロキシ（`us.i.posthog.com` を自ドメイン経由に）の要否を判断 |
 | エラーグルーピング精度（ADR §9-1） | 最初の 2 週間、PostHog の issue リストで同一バグの分裂／無関係な統合を観察 | 原因究明に時間を取られるようなら ADR §7-4 の見直しトリガー |
 
