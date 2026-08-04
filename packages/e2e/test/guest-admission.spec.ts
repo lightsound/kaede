@@ -1,29 +1,6 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
-import { enterWorld, snapshot } from './helpers';
-
-const exec = promisify(execFile);
-
-/**
- * The pinned CLI ships as `spacetimedb-cli` in CI (see ci.yml) while the
- * official installer names it `spacetime`; SPACETIME_BIN picks the former
- * where it applies.
- */
-const SPACETIME_BIN = process.env.SPACETIME_BIN ?? 'spacetime';
-
-/**
- * Writes to the module's database as its owner, which is how this spec plays
- * admin: flipping the setting through the set_guests_allowed reducer needs
- * an approved admin member, and member identities require a Clerk sign-in,
- * which stays out of E2E (see display-name.spec.ts). Subscribed clients see
- * SQL writes exactly like reducer writes, so the reactive paths under test
- * are the real ones.
- */
-async function sql(query: string): Promise<void> {
-  await exec(SPACETIME_BIN, ['sql', 'kaede', query, '--server', 'local']);
-}
+import { enterWorld, snapshot, sql } from './helpers';
 
 /**
  * Replaces the settings singleton (id 0). Only safe while no browser under

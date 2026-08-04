@@ -15,10 +15,13 @@ import {
   isExpiredRow,
   type Membership,
   resolveJoinName,
+  resolveZoneOccupancy,
   type SendAllowanceRequest,
   type SendAllowanceVerdict,
   SPAWN_X,
   SPAWN_Y,
+  sortedZoneRows,
+  type ZoneShape,
 } from '@kaede/shared';
 import type { InferSchema, ReducerCtx } from 'spacetimedb/server';
 import { SenderError } from 'spacetimedb/server';
@@ -89,15 +92,19 @@ export function trimHistory(table: HistoryTable, max: number): void {
  * every entering client's egress).
  */
 export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
-  ctx.db.player.identity.delete(identity);
-  ctx.db.playerName.identity.delete(identity);
-  ctx.db.playerGuard.identity.delete(identity);
-  ctx.db.chatGuard.identity.delete(identity);
-  ctx.db.reaction.identity.delete(identity);
-  ctx.db.reactionGuard.identity.delete(identity);
-  ctx.db.playerStatus.identity.delete(identity);
-  ctx.db.statusGuard.identity.delete(identity);
-  ctx.db.portalGuard.identity.delete(identity);
+  const identityKeyed: { identity: { delete(identity: SenderIdentity): unknown } }[] = [
+    ctx.db.player,
+    ctx.db.playerName,
+    ctx.db.playerGuard,
+    ctx.db.chatGuard,
+    ctx.db.reaction,
+    ctx.db.reactionGuard,
+    ctx.db.playerStatus,
+    ctx.db.statusGuard,
+    ctx.db.portalGuard,
+    ctx.db.groupMember,
+  ];
+  for (const table of identityKeyed) table.identity.delete(identity);
 }
 
 /** A row as this schema's tables return it (not re-exported by the server SDK). */
@@ -144,12 +151,14 @@ export function spawnOrResume(ctx: Ctx): void {
   if (existing) {
     // Reload / network blip within the retention window: resume the saved
     // character where it stood (the sibling upsert above already refreshed
-    // the name and input allowance).
+    // the name and input allowance). The occupancy re-check covers zones
+    // edited while the row sat offline.
     ctx.db.player.identity.update({
       ...existing,
       online: true,
       updatedAt: ctx.timestamp,
     });
+    syncZoneOccupancy(ctx, ctx.sender, { x: existing.x, y: existing.y }, existing.mapId);
     return;
   }
 
@@ -167,6 +176,7 @@ export function spawnOrResume(ctx: Ctx): void {
     updatedAt: ctx.timestamp,
     mapId: DEFAULT_MAP_ID, // fresh spawns start on the default map; resumes keep theirs
   });
+  syncZoneOccupancy(ctx, ctx.sender, { x: SPAWN_X, y: SPAWN_Y }, DEFAULT_MAP_ID);
 }
 
 /**
@@ -253,12 +263,14 @@ export function findAdmittedWorldRows(ctx: Ctx): WorldRowsVerdict {
 }
 
 /**
- * Identities holding a name, guard, reaction or status row whose player row
- * is gone. `reaction` and `player_status` are enumerated alongside the join
- * siblings because they are public: an orphaned row in either would ride
- * every entering client's egress, where the private lazy guards
- * (chat_guard, reaction_guard, status_guard) merely sit as junk —
- * removePlayer deletes those too once an orphan is found by any table here.
+ * Identities holding a name, guard, reaction, status or group-membership
+ * row whose player row is gone. The public tables (player_name, reaction,
+ * player_status, group_member) are enumerated because an orphaned row in
+ * any of them would ride every entering client's egress — and an orphaned
+ * group_member row additionally holds a conversation-group seat (増分④
+ * reads chat visibility off it); the private lazy guards (chat_guard,
+ * reaction_guard, status_guard) merely sit as junk — removePlayer deletes
+ * those too once an orphan is found by any table here.
  */
 function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
   const orphans = [];
@@ -267,6 +279,7 @@ function orphanedSiblingIdentities(ctx: Ctx): SenderIdentity[] {
     ...ctx.db.playerGuard.iter(),
     ...ctx.db.reaction.iter(),
     ...ctx.db.playerStatus.iter(),
+    ...ctx.db.groupMember.iter(),
   ]) {
     if (ctx.db.player.identity.find(row.identity) === null) orphans.push(row.identity);
   }
@@ -309,6 +322,92 @@ export function sweepExpiredRows(ctx: Ctx): void {
   for (const identity of stale) removePlayer(ctx, identity);
 }
 // ── End player lifecycle ────────────────────────────────────────────────
+
+// ── Zone occupancy (ROADMAP Phase 3 増分②) ──────────────────────────────
+// Who is in which meeting-room zone, judged server-side wherever the
+// authoritative position or the zone set changes: accepted input batches
+// and portal landings (reducers.ts), joins (spawnOrResume above), and the
+// admin zone edits (zones.ts, through recomputeZoneOccupancyOnMap). The
+// rule itself — hysteresis, overlap priority — is resolveZoneOccupancy,
+// unit-tested in @kaede/shared; see zone.ts there for why this is
+// deliberately NOT the portal pattern of client-detected reducer calls.
+
+/**
+ * The zone-kind groups placed on `mapId` in id order (sortedZoneRows —
+ * the deterministic overlap priority), shaped for the occupancy rule.
+ */
+function zonesOnMap(ctx: Ctx, mapId: number): ZoneShape[] {
+  return sortedZoneRows(ctx.db.conversationGroup.iter())
+    .filter((row) => row.mapId === mapId)
+    .map((row) => ({ id: row.id, rect: { x: row.x, y: row.y, w: row.w, h: row.h } }));
+}
+
+/**
+ * Re-rules one player's group_member row against the zones on its map and
+ * writes only actual transitions (enter: insert; the rest through
+ * moveZoneMembership) — a no-transition pass writes nothing, so the common
+ * case (moving around inside or outside a zone) costs reads only.
+ * `position` is the authoritative AABB center AFTER the movement being
+ * ruled on.
+ */
+export function syncZoneOccupancy(
+  ctx: Ctx,
+  identity: SenderIdentity,
+  position: { x: number; y: number },
+  mapId: number,
+): void {
+  const member = ctx.db.groupMember.identity.find(identity);
+  const next = resolveZoneOccupancy({
+    position,
+    zones: zonesOnMap(ctx, mapId),
+    currentZoneId: member?.groupId,
+  });
+  if (member === null) {
+    if (next !== undefined) ctx.db.groupMember.insert({ identity, groupId: next });
+    return;
+  }
+  moveZoneMembership(ctx, identity, member, next);
+}
+
+/**
+ * Writes an existing membership's transition: leave (delete) or switch
+ * (update); a same-zone verdict writes nothing — an unchanged upsert would
+ * still broadcast to every subscriber. Split from syncZoneOccupancy to
+ * keep these uncovered functions under the CRAP budget fallow enforces
+ * (the backfillAccountName precedent).
+ */
+function moveZoneMembership(
+  ctx: Ctx,
+  identity: SenderIdentity,
+  member: NonNullable<ReturnType<Ctx['db']['groupMember']['identity']['find']>>,
+  next: bigint | undefined,
+): void {
+  if (next === undefined) {
+    ctx.db.groupMember.identity.delete(identity);
+    return;
+  }
+  if (next !== member.groupId) {
+    ctx.db.groupMember.identity.update({ ...member, groupId: next });
+  }
+}
+
+/**
+ * Re-rules every player on `mapId` — the zone-edit counterpart of the
+ * per-movement pass, because a zone appearing, resizing, moving or
+ * vanishing changes occupancy for players who are standing still (and a
+ * quiescent player sends nothing the movement pass could rule on).
+ * Offline-but-retained rows are included on purpose: their occupancy must
+ * track the zone set so a resume within the retention window comes back
+ * consistent. O(players × zones) on one map, on a rare admin action.
+ */
+export function recomputeZoneOccupancyOnMap(ctx: Ctx, mapId: number): void {
+  for (const row of ctx.db.player.iter()) {
+    if (row.mapId === mapId) {
+      syncZoneOccupancy(ctx, row.identity, { x: row.x, y: row.y }, mapId);
+    }
+  }
+}
+// ── End zone occupancy ──────────────────────────────────────────────────
 
 /** A send-rate token-bucket marker table (identity → allowanceMicros). */
 export type SendGuardTable =

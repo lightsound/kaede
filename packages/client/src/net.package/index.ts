@@ -4,3 +4,4 @@ export { type ChatEntryView, type ChatLog, chatEntryKey } from './chatLog';
 export type { AuthTokenGetter } from './connection';
 export { planChatDraftOffline } from './netApi';
 export { type ConnectionStatus, type Net, startNet } from './sync';
+export type { ZoneAdminView } from './zoneFeed';

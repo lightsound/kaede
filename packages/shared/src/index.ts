@@ -17,3 +17,4 @@ export * from './sendAllowance';
 export * from './sendGate';
 export * from './status';
 export * from './types';
+export * from './zone';

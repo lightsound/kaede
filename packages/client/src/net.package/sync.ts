@@ -46,6 +46,7 @@ import { wireReactions } from './reactionFeed';
 import { createRemoteViews } from './remoteView';
 import type { RowOf } from './rows';
 import { cachedStatusView, wireStatuses } from './statusFeed';
+import { cachedZoneTag, wireZones, type ZoneAdminView } from './zoneFeed';
 
 export type { ConnectionStatus } from './lifecycle';
 
@@ -153,6 +154,11 @@ export interface NetHooks {
    * handlers, never for a torn-down or superseded session.
    */
   onDmRow(event: DmRowEvent): void;
+  /**
+   * Every conversation_group change, as the whole zone list (all maps) —
+   * what the admin panel's zone section renders (ROADMAP Phase 3 増分②).
+   */
+  onZones(zones: ZoneAdminView[]): void;
 }
 
 /**
@@ -379,12 +385,14 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       c.db.playerName.identity.find(identity)?.name ?? '';
 
     // The display attributes record() carries per row change, read from the
-    // cache like nameOf. The status seed rides here: a freshly (re)created
-    // view — session seed, or a player coming back from the offline-hidden
-    // state — starts with the cached status (see cachedStatusView).
+    // cache like nameOf. The status and zone-tag seeds ride here: a freshly
+    // (re)created view — session seed, or a player coming back from the
+    // offline-hidden state — starts with the cached status and occupancy
+    // (see cachedStatusView / cachedZoneTag).
     const labelOf = (identity: Identity) => ({
       name: nameOf(identity),
       status: statusLabel(cachedStatusView(c, identity)),
+      zone: cachedZoneTag(c, identity),
     });
 
     // Our row appears (or already exists, when resuming an identity) via join
@@ -450,6 +458,11 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       remoteViews.clear();
       gameApp.clearRemotePlayers();
       gameApp.setMap(mapFor(row.mapId));
+      // The zone layer is a per-map projection like the map geometry; the
+      // occupancy tags re-derive with it. Safe before zoneFeed's const
+      // initializer only because nothing calls switchMap until the session
+      // is fully wired (enterWorld and the row handlers all run later).
+      zoneFeed.refresh();
       handleOwnRow(row);
       const outgoing = mapSub;
       mapSub = subscribeMapPlayers(c, row.mapId, () => {
@@ -524,6 +537,20 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       isStale: stale,
       applyOwn: publishOwnStatus,
       applyRemote: (idHex, view) => remoteViews.setStatus(idHex, statusLabel(view)),
+    });
+
+    // Zones (ROADMAP Phase 3 増分②): the rendered zone layer, the occupancy
+    // tags and the admin panel's zone list — statuses' wiring shape, plus a
+    // per-map projection the map switch below re-pushes. Wired before the
+    // admission block so its enterWorld (which may route through switchMap)
+    // finds the feed ready.
+    const zoneFeed = wireZones(c, myIdentity, {
+      isStale: stale,
+      currentMapId: () => currentMapId,
+      setMapZones: (zones) => gameApp.setZones(zones),
+      applyOwnZone: (tag) => gameApp.setLocalZone(tag),
+      applyRemoteZone: (idHex, tag) => remoteViews.setZone(idHex, tag),
+      onZones: hooks.onZones,
     });
 
     /**

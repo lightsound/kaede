@@ -1,7 +1,7 @@
 // fallow-ignore-file coverage-gaps -- a React panel over the subscribed member directory; needs a DOM, and no DOM test environment is configured. The authority for every action here is server-side (evaluateMemberAction / evaluateSettingChange, unit-tested in @kaede/shared)
 import type { MemberAction, MemberStatus } from '@kaede/shared';
 import type { CSSProperties } from 'react';
-import type { SpaceMemberView } from '../net.package';
+import type { SpaceMemberView, ZoneAdminView } from '../net.package';
 import {
   UI_BUTTON_BG,
   UI_FONT,
@@ -10,6 +10,7 @@ import {
   UI_PANEL_BG,
   UI_TEXT_COLOR,
 } from '../theme';
+import { type ZoneActions, ZonePanel } from './ZonePanel';
 
 const panelStyle: CSSProperties = {
   position: 'absolute',
@@ -152,21 +153,27 @@ function MemberRow({
 
 /**
  * The minimal admin panel (ROADMAP Phase 1: 管理者ロール): applications to
- * decide, members to expel, mistakes to undo, and the guest-admission
- * toggle. Rendering this panel is gated on the viewer's own role, but that
- * gate is cosmetic — every action is re-checked server-side against the
- * sender's membership. Results arrive as row events refreshing the props;
- * there is no local success state to get out of sync.
+ * decide, members to expel, mistakes to undo, the guest-admission toggle,
+ * and the meeting-room zones (Phase 3 増分② — see ZonePanel). Rendering
+ * this panel is gated on the viewer's own role, but that gate is cosmetic
+ * — every action is re-checked server-side against the sender's
+ * membership. Results arrive as row events refreshing the props; there is
+ * no local success state to get out of sync.
  */
 export function AdminPanel({
   members,
   guestsAllowed,
+  zones,
+  zoneActions,
   onMemberAction,
   onGuestsAllowedChange,
 }: {
   /** The whole member directory, oldest application first (see SpaceView.members). */
   members: SpaceMemberView[];
   guestsAllowed: boolean;
+  /** The whole zone list, every map, creation order (see ZoneAdminView). */
+  zones: ZoneAdminView[];
+  zoneActions: ZoneActions;
   onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
 }) {
@@ -202,6 +209,8 @@ export function AdminPanel({
           </div>
         );
       })}
+
+      <ZonePanel zones={zones} actions={zoneActions} />
     </section>
   );
 }

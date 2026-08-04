@@ -22,15 +22,28 @@ export interface E2EWorldSnapshot {
   local: E2EPlayerSnapshot;
   /** Rendered positions and labels of every remote player currently in the world. */
   remotePlayers: E2EPlayerSnapshot[];
+  /** The meeting-room zones rendered on the current map (ROADMAP Phase 3 増分②). */
+  zones: E2EZoneSnapshot[];
+}
+
+/**
+ * One rendered zone as the hook reports it: the composed canvas label
+ * (zoneLabel in zone.ts — the closed marker rides it) plus the closed flag,
+ * which drives the rendering the zone spec asserts on.
+ */
+export interface E2EZoneSnapshot {
+  label: string;
+  closed: boolean;
 }
 
 /**
  * One rendered player as the hook reports it. `bubble` is the speech-bubble
- * text currently shown above the avatar, `reaction` the emoji reaction, and
+ * text currently shown above the avatar, `reaction` the emoji reaction,
  * `status` the composed status line under the avatar (statusLabel in
- * status.ts), each absent while none is — all are canvas-drawn (like
- * positions), so the chat, reaction and status specs can only assert on
- * them through this hook.
+ * status.ts), and `zone` the composed occupancy tag below that
+ * (zoneTagLabel in zone.ts), each absent while none is — all are
+ * canvas-drawn (like positions), so the chat, reaction, status and zone
+ * specs can only assert on them through this hook.
  */
 export interface E2EPlayerSnapshot {
   x: number;
@@ -39,6 +52,7 @@ export interface E2EPlayerSnapshot {
   bubble?: string;
   reaction?: string;
   status?: string;
+  zone?: string;
 }
 
 export interface E2EHook {

@@ -363,6 +363,73 @@ export const spacetimedb = schema({
       sentAt: t.timestamp(),
     },
   ),
+  // 会話グループ (ROADMAP Phase 3 増分② / VISION の統一抽象): one row per
+  // conversation group. `kind` discriminates the group's nature — 'zone'
+  // (this increment: the admin-placed meeting-room zone, whose placement
+  // lives in mapId + x/y/w/h) — and 増分③'s 立ち話グループ arrives as
+  // kind='huddle' rows on this SAME table (an additive row vocabulary, no
+  // schema change; a huddle's position derives from its members' avatars,
+  // so the placement columns simply stay unused). 増分④'s chat scopes then
+  // reference `id` as their target regardless of kind, which is the whole
+  // point of unifying: one table to scope on, one membership table to
+  // filter visibility with.
+  //
+  // `closed` is the オープン/クローズド setting (VISION): whether the
+  // group's conversation is visible to non-members. In this increment it
+  // only changes the rendering (the 🔒 label); the chat invisibility it
+  // promises is 増分④'s RLS work.
+  //
+  // `mapId` is indexed: the server-side occupancy pass filters zones by the
+  // moving player's map inside movement reducers, and 増分④'s map-scoped
+  // subscriptions may filter on it (the ROADMAP AoI rule — filter columns
+  // carry indexes). Kind is deliberately NOT a fenced enum column: builds
+  // narrow by exact match (GROUP_KIND_ZONE), so rows of a newer kind render
+  // as nothing rather than breaking (the availability-vocabulary rule).
+  //
+  // No timestamp columns, deliberately: zone rows are admin-edited config
+  // with no retention rule (bounded by ZONE_MAX, not by trimming), nothing
+  // renders a created-at, and columns it does not have are columns the E2E
+  // seeding (`spacetimedb-cli sql` INSERT — which cannot express optionals
+  // or timestamps) does not need to fake. Like every realtime table: the
+  // single space's data, no tenant/org column (the scaling invariant).
+  conversationGroup: table(
+    { name: 'conversation_group', public: true },
+    {
+      id: t.u64().primaryKey().autoInc(),
+      kind: t.string(), // GROUP_KIND_ZONE in @kaede/shared ('huddle' arrives with 増分③)
+      name: t.string(),
+      closed: t.bool(),
+      mapId: t.u32().index(),
+      x: t.number(),
+      y: t.number(),
+      w: t.number(),
+      h: t.number(),
+    },
+  ),
+  // Who is in which conversation group (誰がどのゾーンに居るか) — the
+  // space-wide occupancy directory, public so every client renders the
+  // 📍 tag whatever map it is looking at (the player_name presence
+  // precedent). Keyed by identity, so "one conversation group at a time"
+  // is structural, not a rule someone must remember to enforce; the row is
+  // an upsert (enter/switch) or a delete (leave), written ONLY by the
+  // server-side occupancy pass (syncZoneOccupancy in world.ts) — clients
+  // never name their zone, so there is nothing to trust or rate-limit.
+  //
+  // `groupId` carries a btree index for 増分④: the closed-conversation RLS
+  // filter joins chat rows to this table on groupId with :sender bound to
+  // `identity`, and RLS/subscription filter columns must be indexed
+  // (the dm_message sender/recipient precedent, per the ROADMAP AoI rule).
+  //
+  // Rows die with the player (removePlayer), like reaction/player_status:
+  // occupancy is ephemeral presence state, and an orphaned public row
+  // would ride every entering client's egress forever.
+  groupMember: table(
+    { name: 'group_member', public: true },
+    {
+      identity: t.identity().primaryKey(),
+      groupId: t.u64().index(),
+    },
+  ),
   // The connection-event log (ROADMAP Phase 2 エラー監視 ②): one row per
   // clientConnected / clientDisconnected, the server-side primary source for
   // the reconnect-failure metric. It must live HERE and not in the browser's

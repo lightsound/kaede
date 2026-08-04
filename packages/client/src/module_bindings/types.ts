@@ -44,6 +44,19 @@ export const ConnectionEvent = __t.object("ConnectionEvent", {
 });
 export type ConnectionEvent = __Infer<typeof ConnectionEvent>;
 
+export const ConversationGroup = __t.object("ConversationGroup", {
+  id: __t.u64(),
+  kind: __t.string(),
+  name: __t.string(),
+  closed: __t.bool(),
+  mapId: __t.u32(),
+  x: __t.f64(),
+  y: __t.f64(),
+  w: __t.f64(),
+  h: __t.f64(),
+});
+export type ConversationGroup = __Infer<typeof ConversationGroup>;
+
 export const DisconnectIntent = __t.object("DisconnectIntent", {
   connectionId: __t.connectionId(),
   announcedAt: __t.timestamp(),
@@ -60,6 +73,12 @@ export const DmMessage = __t.object("DmMessage", {
   sentAt: __t.timestamp(),
 });
 export type DmMessage = __Infer<typeof DmMessage>;
+
+export const GroupMember = __t.object("GroupMember", {
+  identity: __t.identity(),
+  groupId: __t.u64(),
+});
+export type GroupMember = __Infer<typeof GroupMember>;
 
 export const Player = __t.object("Player", {
   identity: __t.identity(),
