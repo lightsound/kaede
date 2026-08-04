@@ -60,21 +60,45 @@ const MESSAGES: Record<
 /** The prompt's button labels; no prompt, no button (e.g. banned, guests). */
 const PROMPT_LABELS: Record<MembershipPrompt, string> = {
   apply: '参加を申請する',
+  // The space-first application seeds the admin (membershipPrompt) —
+  // labeled with what the press actually does, like the ApplyBanner.
+  'apply-first': '管理者として参加する',
   reapply: 'もう一度申請する',
 };
 
 /**
  * What a held signed-in member reads instead of the guest sign-in hint:
- * they are past signing in, and applying is their next move.
+ * they are past signing in, and applying is their next move. The
+ * space-first variant enters immediately (the first application is seeded
+ * approved — initialMembership), so it must not promise an approval wait.
  */
-const MEMBER_GUESTS_OFF_BODY = 'メンバーとして参加を申請すると、承認後に入場できます。';
+const MEMBER_GUESTS_OFF_BODY: Record<'apply' | 'apply-first', string> = {
+  apply: 'メンバーとして参加を申請すると、承認後に入場できます。',
+  'apply-first': 'まだメンバーがいません。最初に参加した人が管理者になり、すぐに入場できます。',
+};
 
 function bodyFor(
   admission: Exclude<Admission, 'admitted'>,
   prompt: MembershipPrompt | undefined,
 ): string {
-  if (admission === 'guests-not-allowed' && prompt === 'apply') return MEMBER_GUESTS_OFF_BODY;
+  if (admission === 'guests-not-allowed' && (prompt === 'apply' || prompt === 'apply-first')) {
+    return MEMBER_GUESTS_OFF_BODY[prompt];
+  }
   return MESSAGES[admission].body;
+}
+
+/**
+ * What both admission surfaces render from: the blocking overlay (here) and
+ * the in-world ApplyBanner take exactly the same inputs, declared once so
+ * the two cannot drift (and so the clone detector sees one type, not two).
+ */
+export interface AdmissionSurfaceProps {
+  connected: boolean;
+  /** The current admission, or undefined before the net stack's first report. */
+  admission: Admission | undefined;
+  /** The application affordance to offer, if any (see membershipPrompt). */
+  prompt: MembershipPrompt | undefined;
+  onApply: () => void;
 }
 
 function Hint({ text }: { text: string | undefined }) {
@@ -107,19 +131,7 @@ function ApplyButton({
  * the first report, or while disconnected — offline the rows are stale, and
  * the connection overlay speaks instead.
  */
-export function AdmissionOverlay({
-  connected,
-  admission,
-  prompt,
-  onApply,
-}: {
-  connected: boolean;
-  /** The current admission, or undefined before the net stack's first report. */
-  admission: Admission | undefined;
-  /** The application affordance to offer, if any (see membershipPrompt). */
-  prompt: MembershipPrompt | undefined;
-  onApply: () => void;
-}) {
+export function AdmissionOverlay({ connected, admission, prompt, onApply }: AdmissionSurfaceProps) {
   if (!connected || admission === undefined || admission === 'admitted') return null;
   return (
     <div style={overlayStyle}>

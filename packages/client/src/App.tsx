@@ -39,6 +39,21 @@ const overlayStyle: CSSProperties = {
   pointerEvents: 'none',
 };
 
+/**
+ * The application affordance for this client, from the space view (see
+ * membershipPrompt). `anyMemberRow` mirrors the server's admin seed
+ * condition over the public directory — every status counts. Before the
+ * first report there is no admission either, so no surface renders the
+ * fallback prompt.
+ */
+function promptFor(signedIn: boolean, space: SpaceView | undefined) {
+  return membershipPrompt({
+    signedIn,
+    membership: space?.self,
+    anyMemberRow: space !== undefined && space.members.length > 0,
+  });
+}
+
 export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
@@ -116,7 +131,7 @@ export function App() {
   // Whether to offer this client the membership application (join is an
   // explicit act — see membershipPrompt): as a button on the blocking
   // notice, or as a banner while walking around under the guest rules.
-  const prompt = membershipPrompt({ signedIn: session.signedIn, membership: self });
+  const prompt = promptFor(session.signedIn, space);
   const apply = () => netRef.current?.applyForMembership();
 
   return (

@@ -263,15 +263,18 @@ export function evaluateSettingChange(request: {
  * The application affordance the UI can offer: a first application, or a
  * re-application after a rejection.
  */
-export type MembershipPrompt = 'apply' | 'reapply';
+export type MembershipPrompt = 'apply' | 'apply-first' | 'reapply';
 
 /**
  * Which application affordance the UI should offer this client, if any:
- * `apply` for a signed-in member who has not applied, `reapply` after a
- * rejection. Derived from evaluateApplication, so a button is offered
- * exactly when the server would accept the application it files — nothing
- * for guests (no account), for pending or approved members (nothing to
- * file), or for banned members (the admission notice explains instead).
+ * `apply` for a signed-in member who has not applied, `apply-first` when the
+ * application would be the space's very first (it seeds the admin — see
+ * initialMembership — and the button must say so, not read like an ordinary
+ * membership request; confusing in production on 2026-08-04), `reapply`
+ * after a rejection. Derived from evaluateApplication, so a button is
+ * offered exactly when the server would accept the application it files —
+ * nothing for guests (no account), for pending or approved members (nothing
+ * to file), or for banned members (the admission notice explains instead).
  */
 export function membershipPrompt(request: {
   /**
@@ -280,11 +283,19 @@ export function membershipPrompt(request: {
    */
   signedIn: boolean;
   membership: Membership | undefined;
+  /**
+   * Whether ANY space_member row exists, of any status — the client-side
+   * mirror of the `count() === 0` the server feeds initialMembership (a
+   * rejected or pending row already disables the admin seed, so `approved`
+   * rows alone would mislabel the button).
+   */
+  anyMemberRow: boolean;
 }): MembershipPrompt | undefined {
   if (!request.signedIn) return undefined;
   const verdict = evaluateApplication({ hasAccount: true, membership: request.membership });
   if (!verdict.ok) return undefined;
-  return request.membership === undefined ? 'apply' : 'reapply';
+  if (request.membership !== undefined) return 'reapply';
+  return request.anyMemberRow ? 'apply' : 'apply-first';
 }
 
 /**
