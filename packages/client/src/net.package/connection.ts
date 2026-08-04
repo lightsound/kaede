@@ -1,6 +1,7 @@
 // fallow-ignore-file coverage-gaps -- opens a SpacetimeDB WebSocket; needs a running host, not a unit test
+import { DEFAULT_MAP_ID } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
-import { DbConnection, tables } from '../module_bindings';
+import { DbConnection, type SubscriptionHandle, tables } from '../module_bindings';
 
 // Production builds default to Maincloud so a missing env var can't silently
 // point a deployed client at localhost; dev keeps the local server.
@@ -27,6 +28,31 @@ export interface Connected {
   myIdentity: Identity;
   /** Its hex form, pre-computed once: the map key for remote-player views. */
   myIdHex: string;
+  /** The map the player subscription is scoped to: the own row's map, or the default. */
+  mapId: number;
+  /** The map-scoped player subscription; the session swaps it on every portal move. */
+  mapSub: SubscriptionHandle;
+}
+
+/**
+ * Subscribes to the hot player rows of ONE map (Phase 3 AoI 購読絞り込み —
+ * see the ROADMAP entry for the adoption reasoning). This is the query the
+ * session swaps on a portal move: subscribe the destination map, then
+ * unsubscribe the origin (subscription overlap is refcounted client-side,
+ * so the own row — also covered by the identity query below — never
+ * flickers). The mapId column is indexed server-side, which the ROADMAP
+ * AoI rule makes non-negotiable: subscription queries are re-evaluated
+ * per transaction.
+ */
+export function subscribeMapPlayers(
+  conn: DbConnection,
+  mapId: number,
+  onApplied: () => void,
+): SubscriptionHandle {
+  return conn
+    .subscriptionBuilder()
+    .onApplied(onApplied)
+    .subscribe(tables.player.where((p) => p.mapId.eq(mapId)));
 }
 
 /**
@@ -86,25 +112,43 @@ export async function connect(
         // be re-minted per connect, and overwriting the anonymous token with
         // it would strand the guest identity after sign-out.
         if (!authToken) sessionStorage.setItem(TOKEN_KEY, freshToken);
-        // The world (player, plus the name labels and statuses split off /
-        // beside it), everything admission is decided from (the member
-        // directory and the space settings), and the conversation tables
-        // (the chat history, the DM history and the current reactions). All
-        // must be applied before we resolve, so the first admission decision
-        // rules on real rows rather than an empty cache, and the chat log
-        // seeds from the full retained history (bounded server-side to
-        // CHAT_HISTORY_MAX rows — see the chat_message table). dm_message is
-        // subscribed whole like every table here, but its row-level-security
-        // filter means the seed and events carry only THIS identity's own
-        // conversations (see tables.ts in the server). Reactions are
-        // subscribed for their row EVENTS only; the seed never displays
-        // (see reactionFeed.ts). Statuses are the opposite: the seed IS the
-        // display (a status is state, restored on entry — see sync.ts).
+        // Everything space-wide, applied before we resolve so the first
+        // admission decision rules on real rows rather than an empty cache:
+        // the OWN player row (subscribed by identity so it stays visible
+        // whatever map it is on — acks and the map-change signal ride it),
+        // the presence directory (player_name, now carrying `online` — the
+        // DM mention candidates read it), everything admission is decided
+        // from (the member directory and the space settings), and the
+        // conversation tables (the chat history, the DM history and the
+        // current reactions). dm_message is subscribed whole like every
+        // table here, but its row-level-security filter means the seed and
+        // events carry only THIS identity's own conversations (see
+        // tables.ts in the server). Reactions are subscribed for their row
+        // EVENTS only; the seed never displays (see reactionFeed.ts).
+        // Statuses are the opposite: the seed IS the display (a status is
+        // state, restored on entry — see sync.ts).
+        //
+        // The OTHER players' hot rows are deliberately NOT here: they are
+        // map-scoped (subscribeMapPlayers — the Phase 3 AoI 絞り込み), and
+        // which map to scope to is only knowable once the own row has
+        // seeded, hence the second, dependent subscribe below. A fresh
+        // identity has no row and starts on the default map.
         conn
           .subscriptionBuilder()
-          .onApplied(() => resolve({ conn, myIdentity: identity, myIdHex: identity.toHexString() }))
+          .onApplied(() => {
+            const mapId = conn.db.player.identity.find(identity)?.mapId ?? DEFAULT_MAP_ID;
+            const mapSub = subscribeMapPlayers(conn, mapId, () =>
+              resolve({
+                conn,
+                myIdentity: identity,
+                myIdHex: identity.toHexString(),
+                mapId,
+                mapSub,
+              }),
+            );
+          })
           .subscribe([
-            tables.player,
+            tables.player.where((p) => p.identity.eq(identity)),
             tables.playerName,
             tables.spaceMember,
             tables.spaceSetting,

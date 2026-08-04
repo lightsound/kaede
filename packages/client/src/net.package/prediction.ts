@@ -1,5 +1,5 @@
 import {
-  DEFAULT_MAP,
+  type CollisionMap,
   evaluateSendWindow,
   INPUT_BATCH_MAX_TICKS,
   INPUT_FLUSH_INTERVAL_MS,
@@ -42,11 +42,16 @@ const sameState = (a: PlayerState, b: PlayerState): boolean =>
  * startTick runs past the server's row tick and the server accepts the gap
  * because its row state is quiescent (evaluateInputBatch). Local prediction
  * is untouched — only network sends are gated.
+ *
+ * `map` is the geometry replays run on. A prediction never crosses maps:
+ * a portal teleport tears this instance down and the map switch builds a
+ * fresh one from the authoritative row on the destination map (sync.ts).
  */
 export function createPrediction(
   deps: PredictionDeps,
   startTick: number,
   startState: PlayerState,
+  map: CollisionMap,
   nowMs = performance.now(),
 ) {
   // Prediction bookkeeping. history[t] is the packed input applied to produce
@@ -155,6 +160,20 @@ export function createPrediction(
       flush(nowMs);
     },
 
+    /**
+     * Flushes the pending window immediately, off the cadence. The portal
+     * path calls this right before enter_portal: everything the local sim
+     * has done is then in flight AHEAD of the portal call on the ordered
+     * WebSocket, so the server replays it first and the reducer rules on
+     * exactly the state the sender saw (evaluatePortalUse's no-slack
+     * geometry check depends on this). The cadence clock resets so the
+     * next scheduled flush does not double-fire moments later.
+     */
+    flushNow(nowMs: number): void {
+      lastFlushMs = nowMs;
+      flush(nowMs);
+    },
+
     /** Ack path: an own-row update IS the acknowledgement (ackTick = applied). */
     onAck(authoritative: PlayerState, ackTick: number, nowMs: number): void {
       const ack = ackTick;
@@ -193,7 +212,7 @@ export function createPrediction(
 
       let s = authoritative;
       for (let t = ack + 1; t <= currentTick; t++) {
-        s = stepPlayer(s, unpackInput(history.get(t) ?? 0), DEFAULT_MAP);
+        s = stepPlayer(s, unpackInput(history.get(t) ?? 0), map);
         predicted.set(t, s);
       }
       deps.resetLocal(s, currentTick);

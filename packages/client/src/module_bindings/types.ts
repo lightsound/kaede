@@ -73,6 +73,7 @@ export const Player = __t.object("Player", {
   tick: __t.u32(),
   online: __t.bool(),
   updatedAt: __t.timestamp(),
+  mapId: __t.u32(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -85,6 +86,7 @@ export type PlayerGuard = __Infer<typeof PlayerGuard>;
 export const PlayerName = __t.object("PlayerName", {
   identity: __t.identity(),
   name: __t.string(),
+  online: __t.bool(),
 });
 export type PlayerName = __Infer<typeof PlayerName>;
 
@@ -94,6 +96,12 @@ export const PlayerStatus = __t.object("PlayerStatus", {
   text: __t.string(),
 });
 export type PlayerStatus = __Infer<typeof PlayerStatus>;
+
+export const PortalGuard = __t.object("PortalGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type PortalGuard = __Infer<typeof PortalGuard>;
 
 export const Reaction = __t.object("Reaction", {
   identity: __t.identity(),

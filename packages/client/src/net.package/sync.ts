@@ -1,11 +1,16 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @kaede/shared (see admission.ts)
 import {
+  DEFAULT_MAP_ID,
   type DmRowEvent,
+  decidePortalCall,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
+  mapFor,
+  type PlayerState,
   type StatusView,
   stateFromRow,
   statusLabel,
+  unpackInput,
 } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
@@ -14,7 +19,13 @@ import { captureEvent } from '../telemetry.package';
 import { type SpaceView, wireAdmission } from './admission';
 import { createChatFeed } from './chatFeed';
 import type { ChatLog } from './chatLog';
-import { type AuthTokenGetter, type Connected, connect, target } from './connection';
+import {
+  type AuthTokenGetter,
+  type Connected,
+  connect,
+  subscribeMapPlayers,
+  target,
+} from './connection';
 import { createHeartbeat } from './heartbeat';
 import {
   createIdleMonitor,
@@ -191,6 +202,19 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     if (netStats) netStats[key] += 1;
   };
 
+  // The map the live session is scoped to: which player rows are subscribed
+  // (subscribeMapPlayers), which geometry the prediction replays on, and
+  // which map GameApp renders. Session state, but held here (like `conn`
+  // and `prediction`) because the tick callback below — registered once,
+  // outside any session — reads it for portal-intent detection. Updated by
+  // wireSession on entry and by its switchMap on every teleport.
+  let currentMapId = DEFAULT_MAP_ID;
+
+  // Set while an enter_portal call is in flight; cleared when the own
+  // row's map flips (switchMap) or PORTAL_PENDING_TIMEOUT_MS passes (the
+  // rule and its rationale live in decidePortalCall, @kaede/shared).
+  let portalPendingAtMs: number | undefined;
+
   // いつ最後に submit_inputs を送ったか(バッチ・ハートビートとも)。
   // 送信ゲートが閉じている間はこれが HEARTBEAT_INTERVAL_MS だけ古くなり、
   // ハートビートの送りどきの判定材料になる。
@@ -216,9 +240,45 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // back to the authoritative row.
   let prediction: ReturnType<typeof createPrediction> | undefined;
 
+  // The previous tick's packed input, for the portal intent's press edge.
+  let prevPackedInput = 0;
+
+  /**
+   * Fires enter_portal when this tick's input asks for it (standing in a
+   * portal, up pressed this tick, no call already pending —
+   * decidePortalCall in @kaede/shared, where the rule is unit-tested).
+   * The pending window is flushed FIRST, off the cadence: the WebSocket is
+   * ordered, so the server replays every tick the client has simulated
+   * before the reducer runs, and its no-slack geometry re-check rules on
+   * exactly the state this detection saw. The answer arrives as the own
+   * row's mapId flipping (switchMap in wireSession); failures are silent
+   * like submit_inputs — a refusal's only honest consequence is that the
+   * map does not change.
+   */
+  function maybeEnterPortal(state: PlayerState, packedInput: number, prevPacked: number): void {
+    const c = conn;
+    if (!c || !prediction) return;
+    const now = performance.now();
+    const portalId = decidePortalCall({
+      nowMs: now,
+      pendingSinceMs: portalPendingAtMs,
+      input: unpackInput(packedInput),
+      prevInput: unpackInput(prevPacked),
+      state,
+      map: mapFor(currentMapId),
+    });
+    if (portalId === undefined) return;
+    prediction.flushNow(now);
+    portalPendingAtMs = now;
+    c.reducers.enterPortal({ portalId }).catch(() => {});
+  }
+
   gameApp.onLocalTick((state, tick, packedInput) => {
+    const prevPacked = prevPackedInput;
+    prevPackedInput = packedInput;
     if (!prediction) return;
     prediction.onTick(state, tick, packedInput, performance.now());
+    maybeEnterPortal(state, packedInput, prevPacked);
   });
 
   // Render remote players interpolated INTERP_DELAY_MS in the past.
@@ -274,6 +334,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   function dropSession(): void {
     prediction = undefined;
     conn = undefined;
+    portalPendingAtMs = undefined;
     remoteViews.clear();
     gameApp.clearRemotePlayers();
     // Whether our row survives the retention window is unknowable while
@@ -291,16 +352,22 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     });
   }
 
-  function wireSession(
-    c: DbConnection,
-    myIdentity: Identity,
-    myIdHex: string,
-    generation: number,
-  ): void {
+  function wireSession(settled: Connected, generation: number): void {
+    const { conn: c, myIdentity, myIdHex } = settled;
     // True once this session's events must be ignored: the stack is torn
     // down, or a newer connect has taken over (an idle resume can start one
     // while this session's socket is still closing).
     const stale = () => life.disposed || generation !== life.generation;
+
+    // The map-scoped half of the player subscription (see connection.ts),
+    // swapped by switchMap on every teleport. The whole-session state
+    // follows: the shared currentMapId (the tick callback reads it), and
+    // the rendered map — set here because a session may resume an identity
+    // that left off on another map, or replace a session that did.
+    let mapSub = settled.mapSub;
+    currentMapId = settled.mapId;
+    portalPendingAtMs = undefined;
+    gameApp.setMap(mapFor(currentMapId));
 
     // Names live on player_name, split off the hot row so movement updates
     // do not re-broadcast them (ROADMAP Phase 2 の player 行ダイエット). The
@@ -357,14 +424,73 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
         },
         row.tick,
         stateFromRow(row),
+        // The row's own map, not currentMapId: the two are equal on every
+        // path into here (the map checks below route a mismatch through
+        // switchMap first), but the row is the authority.
+        mapFor(row.mapId).collision,
       );
       gameApp.start(stateFromRow(row), row.tick);
     };
 
+    /**
+     * Moves this client to the map its own row just landed on (the
+     * enter_portal answer — or another device of the same identity
+     * teleporting). Everything map-scoped restarts: the prediction (its
+     * geometry is per-map), the rendered scene, the remote views (the
+     * destination's population arrives with the swapped subscription), and
+     * the player subscription itself — the destination map is subscribed
+     * BEFORE the origin is dropped, so there is no window with neither
+     * (the own row, covered by the identity query throughout, never
+     * flickers either way — subscription overlap is refcounted).
+     */
+    const switchMap = (row: PlayerRow): void => {
+      currentMapId = row.mapId;
+      portalPendingAtMs = undefined;
+      prediction = undefined;
+      remoteViews.clear();
+      gameApp.clearRemotePlayers();
+      gameApp.setMap(mapFor(row.mapId));
+      handleOwnRow(row);
+      const outgoing = mapSub;
+      mapSub = subscribeMapPlayers(c, row.mapId, () => {
+        // The destination's rows just landed as insert events (recordRemote
+        // picked them up). A stale session's socket is gone or superseded,
+        // and its handles die with the connection — only a live session
+        // needs to drop the origin's rows.
+        if (!stale()) outgoing.unsubscribe();
+      });
+    };
+
+    /**
+     * One own-row update. The map flip (the enter_portal answer — or
+     * another device of this identity teleporting) routes through
+     * switchMap before anything acks. A live own row flipped to offline is
+     * a half-open TCP session's client_disconnected landing AFTER this
+     * connection took over (the race the reducer comment on `online: true`
+     * describes): other clients hide offline rows immediately, and while
+     * the send gate is closed nothing else would correct the flag until
+     * the next input or scheduled heartbeat (minutes) — so liveness is
+     * re-announced now (pre-suppression, the 100ms input stream fixed this
+     * incidentally). Everything else IS the acknowledgement (row.tick =
+     * applied count).
+     */
+    const applyOwnUpdate = (row: PlayerRow): void => {
+      if (row.mapId !== currentMapId) {
+        switchMap(row);
+        return;
+      }
+      if (!row.online) sendHeartbeat(c);
+      prediction?.onAck(stateFromRow(row), row.tick, performance.now());
+    };
+
     // Offline rows linger server-side for the retention window (so their owner
-    // can resume) but should not be visible in the world.
+    // can resume) but should not be visible in the world. Rows from another
+    // map are dropped the same way: the subscription swap makes them rare
+    // (the origin map's rows delete when its query unsubscribes), but during
+    // the overlap window both maps' rows flow, and a remote player's own
+    // teleport reaches us as an update whose mapId no longer matches.
     const recordRemote = (idHex: string, row: PlayerRow) => {
-      if (!row.online) {
+      if (!row.online || row.mapId !== currentMapId) {
         remoteViews.remove(idHex);
         gameApp.removeRemotePlayer(idHex);
         return;
@@ -410,7 +536,11 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       if (prediction) return;
       const own = c.db.player.identity.find(myIdentity);
       if (own) {
-        handleOwnRow(own);
+        // A resumed row may sit on another map than the one this session
+        // subscribed at connect time (another device of the same identity
+        // teleporting in between): route through the map switch first.
+        if (own.mapId !== currentMapId) switchMap(own);
+        else handleOwnRow(own);
         return;
       }
       joinWorld(c);
@@ -469,7 +599,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       if (stale()) return;
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
-        handleOwnRow(row);
+        // A fresh spawn lands on the session's map, but a re-join racing a
+        // sweep (or another device) can insert the own row elsewhere.
+        if (row.mapId !== currentMapId) switchMap(row);
+        else handleOwnRow(row);
         return;
       }
       recordRemote(idHex, row);
@@ -477,20 +610,8 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     c.db.player.onUpdate((_ctx, _old, row) => {
       if (stale()) return;
       const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) {
-        // A live own row flipped to offline: a half-open TCP session's
-        // client_disconnected landing AFTER this connection took over (the
-        // race the reducer comment on `online: true` describes). Other
-        // clients hide offline rows immediately, and while the send gate is
-        // closed nothing else would correct the flag until the next input
-        // or scheduled heartbeat (minutes) — so re-announce liveness now.
-        // Pre-suppression, the 100ms input stream fixed this incidentally.
-        if (!row.online) sendHeartbeat(c);
-        // An own-row update IS the acknowledgement (row.tick = applied count).
-        prediction?.onAck(stateFromRow(row), row.tick, performance.now());
-        return;
-      }
-      recordRemote(idHex, row);
+      if (idHex === myIdHex) applyOwnUpdate(row);
+      else recordRemote(idHex, row);
     });
     c.db.playerName.onInsert((_ctx, row) => {
       if (stale()) return;
@@ -556,7 +677,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
           return;
         }
         conn = settled.conn;
-        wireSession(settled.conn, settled.myIdentity, settled.myIdHex, e.generation);
+        wireSession(settled, e.generation);
       },
       'discard-attempt': () => settled?.conn.disconnect(),
       'arm-retry': (e) => {

@@ -1,4 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a SpacetimeDB schema declaration; validated by publishing the module, not by unit tests
+import { DEFAULT_MAP_ID } from '@kaede/shared';
 import { schema, t, table } from 'spacetimedb/server';
 
 export const spacetimedb = schema({
@@ -109,6 +110,16 @@ export const spacetimedb = schema({
       tick: t.u32(), // ticks applied so far; state is "after tick `tick`"
       online: t.bool(), // false between disconnect and rejoin/sweep; hidden by clients
       updatedAt: t.timestamp(),
+      // The map this player is on (WorldMap id in @kaede/shared; ROADMAP
+      // Phase 3 AoI). Appended with a default so existing rows migrate on
+      // re-publish (additive-only rule), and INDEXED because clients
+      // subscribe with `WHERE mapId = ...` — subscription queries are
+      // re-evaluated per transaction, so an unindexed filter column would
+      // table-scan on every commit (the dm_message sender/recipient
+      // precedent). Changed only by enter_portal; replays never cross maps.
+      // Per the scaling invariant this stays a MAP id — never a tenant/org
+      // discriminator (the whole database is one org scope).
+      mapId: t.u32().index().default(DEFAULT_MAP_ID),
     },
   ),
   // The display name of everyone in the world, split from `player` because it
@@ -116,11 +127,25 @@ export const spacetimedb = schema({
   // re-broadcasting the string to every client on every movement update.
   // Public — clients render name labels from it — and subscribed alongside
   // `player` (connection.ts).
+  //
+  // Since the map-scoped player subscription (Phase 3 AoI), this table is
+  // also the SPACE-WIDE presence directory: the `player` subscription is
+  // filtered to the client's own map, so anything that must see everyone in
+  // the space regardless of map — today the DM mention candidates
+  // (collectDmCandidates) — reads this table instead. That is why `online`
+  // is mirrored here (appended with a default, additive-only rule): it is
+  // player.online's low-frequency shadow, rewritten only when the flag
+  // actually flips (connect/disconnect/heartbeat-refresh — see
+  // syncNameOnline in world.ts), never on movement, so the hot-row diet
+  // that split this table off is not undone. The rows' lifecycle is
+  // unchanged: created with the player row, deleted with it (removePlayer),
+  // so "a named row exists" still means "in the world (within retention)".
   playerName: table(
     { name: 'player_name', public: true },
     {
       identity: t.identity().primaryKey(),
       name: t.string(),
+      online: t.bool().default(true),
     },
   ),
   // The speed-hack guard's token-bucket marker (micros since epoch), split
@@ -393,6 +418,23 @@ export const spacetimedb = schema({
   // on first send, deleted with the player rows (removePlayer).
   statusGuard: table(
     { name: 'status_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
+    },
+  ),
+  // The portal-use rate limit's token-bucket marker — chat_guard's shape,
+  // for enter_portal (ROADMAP Phase 3). A teleport is a public hot-row write
+  // broadcast to the subscribers of both maps, with no tick budget bounding
+  // it (unlike movement) — and a portal pair lands you inside the return
+  // portal, so ping-ponging as fast as calls can land is always
+  // geometrically valid; the bucket bounds what that can turn into egress
+  // (the status_guard reasoning). Its own table like every other guard:
+  // buckets shared across features drift from their client-side mirrors.
+  // Same lifecycle as the other lazy guards: created on first use, deleted
+  // with the player rows (removePlayer).
+  portalGuard: table(
+    { name: 'portal_guard' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),

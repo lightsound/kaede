@@ -12,6 +12,12 @@ export interface E2EWorldSnapshot {
    * the hook itself gets installed.
    */
   tick: number;
+  /**
+   * The map the local simulation is running on (WorldMap id) —
+   * DEFAULT_MAP_ID until the first start(), the authoritative row's map
+   * after every start/map switch. The map-travel spec polls this.
+   */
+  mapId: number;
   /** Rendered position and label of the local player (world pixels, y-down). */
   local: E2EPlayerSnapshot;
   /** Rendered positions and labels of every remote player currently in the world. */

@@ -9,15 +9,19 @@
 import {
   asMembership,
   chatOverflowIds,
+  DEFAULT_MAP_ID,
   evaluateJoin,
   guestsAllowedFrom,
   isExpiredRow,
   type Membership,
   resolveJoinName,
+  type SendAllowanceRequest,
+  type SendAllowanceVerdict,
   SPAWN_X,
   SPAWN_Y,
 } from '@kaede/shared';
 import type { InferSchema, ReducerCtx } from 'spacetimedb/server';
+import { SenderError } from 'spacetimedb/server';
 import type { spacetimedb } from './tables';
 
 /** The reducer context for this module's schema, for helpers that touch the db. */
@@ -93,6 +97,7 @@ export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   ctx.db.reactionGuard.identity.delete(identity);
   ctx.db.playerStatus.identity.delete(identity);
   ctx.db.statusGuard.identity.delete(identity);
+  ctx.db.portalGuard.identity.delete(identity);
 }
 
 /** A row as this schema's tables return it (not re-exported by the server SDK). */
@@ -112,8 +117,10 @@ type PlayerNameRow = RowIn<'playerName'>;
  * the row to resolve the join name), passed in rather than re-found.
  */
 function upsertPlayerSiblings(ctx: Ctx, nameRow: PlayerNameRow | null, name: string): void {
-  if (nameRow) ctx.db.playerName.identity.update({ ...nameRow, name });
-  else ctx.db.playerName.insert({ identity: ctx.sender, name });
+  // `online: true` because a join IS liveness — the resumed row's stale
+  // offline flag must not linger on the presence directory.
+  if (nameRow) ctx.db.playerName.identity.update({ ...nameRow, name, online: true });
+  else ctx.db.playerName.insert({ identity: ctx.sender, name, online: true });
 
   const allowanceMicros = ctx.timestamp.microsSinceUnixEpoch;
   const guard = ctx.db.playerGuard.identity.find(ctx.sender);
@@ -158,7 +165,20 @@ export function spawnOrResume(ctx: Ctx): void {
     tick: 0,
     online: true,
     updatedAt: ctx.timestamp,
+    mapId: DEFAULT_MAP_ID, // fresh spawns start on the default map; resumes keep theirs
   });
+}
+
+/**
+ * Mirrors player.online onto the public player_name row — the space-wide
+ * presence directory the map-scoped player subscription cannot serve (see
+ * the player_name table comment). Written only when the flag actually
+ * flips, so the mirror costs nothing on the hot paths that assert
+ * `online: true` on every accepted batch.
+ */
+export function syncNameOnline(ctx: Ctx, nameRow: RowIn<'playerName'>, online: boolean): void {
+  if (nameRow.online === online) return;
+  ctx.db.playerName.identity.update({ ...nameRow, online });
 }
 
 /** The rows the in-world reducers act on. */
@@ -289,3 +309,55 @@ export function sweepExpiredRows(ctx: Ctx): void {
   for (const identity of stale) removePlayer(ctx, identity);
 }
 // ── End player lifecycle ────────────────────────────────────────────────
+
+/** A send-rate token-bucket marker table (identity → allowanceMicros). */
+export type SendGuardTable =
+  | Ctx['db']['chatGuard']
+  | Ctx['db']['reactionGuard']
+  | Ctx['db']['statusGuard']
+  | Ctx['db']['portalGuard'];
+
+/** A send-rate guard row, as any marker table returns it. */
+type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
+
+/**
+ * Charges one send against the sender's token bucket on `guardTable`, or
+ * refuses the send (乱用対策 — the Phase 0 input guard's thinking applied
+ * to chat, reactions, statuses and portal use). The rule itself is the pure
+ * `evaluate` (evaluateChatSend and friends, unit-tested in @kaede/shared);
+ * a missing guard row reads as the epoch marker, which the bucket's bank
+ * cap turns into exactly one full burst. Lives here rather than posting.ts
+ * (its original home) because the guarded reducers now span both reducer
+ * files, and index.ts `export *`s those, while the host refuses
+ * non-spacetime entry exports (this file's header rule). The marker
+ * write-back is split into writeSendAllowance to keep these uncovered
+ * arrows under the CRAP budget fallow enforces.
+ */
+export function chargeSendAllowance(
+  ctx: Ctx,
+  guardTable: SendGuardTable,
+  evaluate: (request: SendAllowanceRequest) => SendAllowanceVerdict,
+  reducerName: string,
+): void {
+  const guard = guardTable.identity.find(ctx.sender);
+  const verdict = evaluate({
+    allowanceMicros: guard?.allowanceMicros ?? 0n,
+    nowMicros: ctx.timestamp.microsSinceUnixEpoch,
+  });
+  if (!verdict.ok) throw new SenderError(`${reducerName} refused (rate-limited)`);
+  writeSendAllowance(ctx, guardTable, guard, verdict.allowanceMicros);
+}
+
+/** Writes the advanced marker back: the sender's row, or its lazy first one. */
+function writeSendAllowance(
+  ctx: Ctx,
+  guardTable: SendGuardTable,
+  existing: SendGuardRow | null,
+  allowanceMicros: bigint,
+): void {
+  if (existing) {
+    guardTable.identity.update({ ...existing, allowanceMicros });
+    return;
+  }
+  guardTable.insert({ identity: ctx.sender, allowanceMicros });
+}

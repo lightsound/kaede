@@ -10,8 +10,6 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  identity: __t.identity().primaryKey(),
-  name: __t.string(),
-  online: __t.bool(),
-});
+export default {
+  portalId: __t.u32(),
+};
