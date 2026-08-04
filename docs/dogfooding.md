@@ -5,18 +5,27 @@
 ログインした瞬間から実質変更不可**（Identity が issuer から導出される — VISION
 参照）なので、URL を人に渡す前にここを全部通すこと。作成 2026-08-04。
 
-## 0. 前提の現在地
+## 0. 前提の現在地（2026-08-04 更新）
 
 | 項目 | 状態 |
 | --- | --- |
 | issuer ゲート②（未登録 issuer 拒否） | ✅ 完了（2026-08-02、触らない） |
 | エラー監視（PostHog） | ✅ 完了（2026-08-04、再導入しない） |
-| バックアップ・復旧手順 | PR #42（`docs/backup-restore.md`。本番 DB の削除ロック適用済み） |
-| kaede.town の空き | ✅ 未登録を確認（2026-08-04、RDAP 404・NS なし） |
-| カスタムドメイン IaC | PR #43（ドメイン取得後にマージ） |
-| issuer ゲート①＋本番キー切替 | PR #44（Clerk 本番確定後にマージ） |
-| 本番クライアント | workers.dev のみ・Clerk キー未注入（サインイン導線は本番未開通） |
-| 本番 DB（Maincloud `maple-like`） | 恒久テーブルは空（2026-08-04 実測）— 初代管理者の先取りリスクはまだ顕在化していない |
+| バックアップ・復旧手順 | ✅ PR #42 マージ済み（`docs/backup-restore.md`。削除ロック・日次エクスポート稼働） |
+| kaede.town | ✅ 取得済み（オーナー購入）・Workers に紐付け済み（PR #43。https://kaede.town 200 を実測） |
+| Clerk 本番インスタンス | ✅ 作成済み（production_domain: kaede.town、issuer = `https://clerk.kaede.town`）。JWT テンプレート・許可オリジン設定済み |
+| issuer ゲート① | ✅ PR #44 マージ・デプロイ済み。**本番で実測**: 開発 issuer（accepted-toucan-79）の member トークンは接続拒否（module log に記録）・ゲストは従来どおり入場可 |
+| 本番クライアントのサインイン導線 | ⏳ **未開通** — 残り: Clerk 用 DNS（§2-4）＋ GitHub secret `VITE_CLERK_PUBLISHABLE_KEY`（§2-9）＋再デプロイ |
+| 本番 DB（Maincloud `maple-like`） | 恒久テーブルは空・Clerk 本番ユーザー 0 — 初代管理者の先取りは未実施（§5） |
+
+**残タスク（すべてオーナー操作、上から順に）**:
+1. Cloudflare の kaede.town ゾーンに Clerk 用 CNAME 5 件を追加（§2-4。DNS only）
+2. GitHub Actions secret `VITE_CLERK_PUBLISHABLE_KEY` に pk_live_ を登録（§2-9）
+3. main で CI を workflow_dispatch（再デプロイ。サインイン導線が開通）
+4. Google OAuth クライアントの作成・設定（§2-6。email コードサインインは DNS 完了後すぐ使えるため、初代管理者の先取りは Google を待たなくてよい）
+5. Maincloud Pro へアップグレード＋支出上限（§3）
+6. 初代管理者の先取り（§5）→ URL 共有
+7. Cursor Cloud Agents の secret `CLERK_SECRET_KEY` を新しい sk_test_ に更新（旧開発インスタンスは消滅済み。値はローカルで `stripe projects env --pull` した `.env` の `CLERK_ENVIRONMENTS` → development.secret_key）
 
 ## 1. ドメイン取得（オーナー操作）
 
@@ -53,6 +62,17 @@ Stripe CLI はこの環境ではブラウザ認証が必要（`stripe login --no
    Cloudflare 側は **DNS only（プロキシ無効）** にすること。アプリ用 DNS
    （Workers カスタムドメイン、Alchemy 管理）とは別物で両方必要。証明書発行まで
    待って dashboard の DNS チェックを通す。
+   必要なレコードは確定済み（2026-08-04、Clerk API `GET /v1/domains` で取得。
+   CI の API トークンは DNS:Edit を持たないためオーナーがダッシュボードで追加
+   するか、トークンに Zone / DNS:Edit を足してエージェントに任せる）:
+
+   | Type | Name | Target |
+   | --- | --- | --- |
+   | CNAME | `clerk` | `frontend-api.clerk.services` |
+   | CNAME | `accounts` | `accounts.clerk.services` |
+   | CNAME | `clkmail` | `mail.g0p7xy4ozs5m.clerk.services` |
+   | CNAME | `clk._domainkey` | `dkim1.g0p7xy4ozs5m.clerk.services` |
+   | CNAME | `clk2._domainkey` | `dkim2.g0p7xy4ozs5m.clerk.services` |
 5. 本番インスタンスに JWT テンプレート `spacetimedb` を Backend API で作成する。
    開発側の既存テンプレートを GET して同じ内容を POST するのが確実
    （aud: `kaede-spacetimedb`、寿命 60 秒、`"name": "{{user.full_name}}"`）:
