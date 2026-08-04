@@ -12,24 +12,31 @@
     "assets": {
       "directory": "../packages/client/dist",
       "hash": {
-        "output": "d68086c787e57f7ccc214a505d20326bb94c0401b187ec8796c8e9f87dab7394",
-        "input": "e7213a197f85cfb6f55c3595b912a130a19962d1bcea316b2ff04adc2d84cdf9"
+        "output": "4f7236af9815e8999241b320018cd3a9709622d6063d0913e0ca8b68afe72565",
+        "input": "62ee15ab4c53ddc82ab5cfd7885165c1c89cf2aecac749657955d2c7bd282987"
       },
       "notFoundHandling": "single-page-application"
     },
     "compatibility": {
       "date": "2026-08-01"
     },
+    "domain": "kaede.town",
     "isExternal": true
   },
   "attr": {
     "workerId": "kaede",
     "workerName": "kaede",
     "logpush": false,
-    "url": "https://kaede.kaede-751.workers.dev",
+    "url": "https://kaede.town",
     "urls": [
+      "https://kaede.town",
       "https://kaede.kaede-751.workers.dev"
     ],
+    "domain": {
+      "name": "kaede.town",
+      "aliases": [],
+      "redirects": []
+    },
     "tags": [
       "alchemy:stack:kaede",
       "alchemy:stage:prod",
@@ -41,8 +48,8 @@
     "crons": [],
     "hash": {
       "assets": {
-        "output": "d68086c787e57f7ccc214a505d20326bb94c0401b187ec8796c8e9f87dab7394",
-        "input": "e7213a197f85cfb6f55c3595b912a130a19962d1bcea316b2ff04adc2d84cdf9"
+        "output": "4f7236af9815e8999241b320018cd3a9709622d6063d0913e0ca8b68afe72565",
+        "input": "62ee15ab4c53ddc82ab5cfd7885165c1c89cf2aecac749657955d2c7bd282987"
       },
       "metadata": "7e366b51863d67e0c6465be4a322448ce18d53779c463b52085065c6c2ac49c3"
     }
