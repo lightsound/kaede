@@ -95,6 +95,15 @@ export default Alchemy.Stack(
       // 実害はないが、「乖離させない」という逃げ道の不変条件が最初から
       // 破れてしまう)。
       compatibility: { date: '2026-08-01' },
+      // 本番のカスタムドメイン(docs/VISION.md の「名前・ドメイン」)。
+      // Alchemy が DNS レコードとエッジ証明書を自動管理する。前提:
+      // ①ゾーン kaede.town がアカウントに存在する(Cloudflare Registrar での
+      // 取得時に自動作成される) ②CLOUDFLARE_API_TOKEN にゾーン権限がある
+      // (README の「デプロイ(公開手順)」参照)。prod 以外のステージは
+      // workers.dev のまま(ドメインは本番だけの概念)。workers.dev の URL も
+      // 併存して同じ Worker を配信し続ける — Clerk 本番切替(ROADMAP ゲート①)
+      // の移行中 URL として使う。
+      ...(stage === 'prod' ? { domain: 'kaede.town' } : {}),
     });
 
     return { url: client.url };

@@ -253,7 +253,11 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 1. **前提**
 
    - 環境変数 `CLOUDFLARE_API_TOKEN`（必要権限: Account / Workers Scripts:Edit と
-     User / User Details:Read・Memberships:Read。ゾーン・R2 権限は不要）。
+     User / User Details:Read・Memberships:Read、およびカスタムドメイン
+     `kaede.town` の管理に必要なゾーン権限 — 最低でも Zone:Read、Alchemy に
+     DNS レコード・証明書を管理させる場合は Zone / DNS:Edit と
+     Workers Routes:Edit も。R2 権限は不要）。ゾーン権限を追加したら
+     `pnpm --filter @maple/infra plan:prod` で収束を確認すること。
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
      `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
    - Node 22.18 未満では TS の型ストリッピングにフラグが要ります。`infra` の
