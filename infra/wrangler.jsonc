@@ -9,6 +9,12 @@
   // alchemy.run.ts の domain: 'kaede.town' と対になる設定。wrangler は
   // routes の custom_domain でカスタムドメインを宣言する。
   "routes": [{ "pattern": "kaede.town", "custom_domain": true }],
+  // routes を書くと wrangler は workers_dev を false と推定して
+  // *.workers.dev の配信を落としてしまうため明示する(Bugbot 指摘)。
+  // workers.dev URL は Clerk 本番切替の移行中 URL として併存させる方針
+  // (alchemy.run.ts の domain コメント参照)で、Alchemy 側の既定
+  // (WorkersDevConfig.enabled: true)とも揃える。
+  "workers_dev": true,
   "assets": {
     "directory": "../packages/client/dist",
     "not_found_handling": "single-page-application"
