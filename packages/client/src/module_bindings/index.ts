@@ -38,6 +38,7 @@ import AnnounceIdleSuspendReducer from "./announce_idle_suspend_reducer";
 import ApplyForMembershipReducer from "./apply_for_membership_reducer";
 import ApproveMemberReducer from "./approve_member_reducer";
 import BanMemberReducer from "./ban_member_reducer";
+import EnterPortalReducer from "./enter_portal_reducer";
 import JoinReducer from "./join_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
@@ -99,6 +100,9 @@ const tablesSchema = __schema({
     indexes: [
       { accessor: 'identity', name: 'player_identity_idx_btree', algorithm: 'btree', columns: [
         'identity',
+      ] },
+      { accessor: 'mapId', name: 'player_map_id_idx_btree', algorithm: 'btree', columns: [
+        'mapId',
       ] },
     ],
     constraints: [
@@ -168,6 +172,7 @@ const reducersSchema = __reducers(
   __reducerSchema("apply_for_membership", ApplyForMembershipReducer),
   __reducerSchema("approve_member", ApproveMemberReducer),
   __reducerSchema("ban_member", BanMemberReducer),
+  __reducerSchema("enter_portal", EnterPortalReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),

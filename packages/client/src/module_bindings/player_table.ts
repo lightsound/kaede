@@ -22,4 +22,5 @@ export default __t.row({
   tick: __t.u32(),
   online: __t.bool(),
   updatedAt: __t.timestamp().name("updated_at"),
+  mapId: __t.u32().name("map_id"),
 });

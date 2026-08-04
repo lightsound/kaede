@@ -1,21 +1,22 @@
 // fallow-ignore-file coverage-gaps -- drives PixiJS against a live WebGL canvas; the logic worth testing is extracted into camera.ts, input.ts, and smoothing.ts, which are unit-tested
 import {
   type CollisionMap,
-  DEFAULT_MAP,
+  DEFAULT_MAP_ID,
   DT,
   type E2EHook,
   type E2EPlayerSnapshot,
   type Facing,
+  mapFor,
   PLAYER_HALF_H,
   PLAYER_HALF_W,
   type PlayerState,
+  type Portal,
   packInput,
   type ReactionEmoji,
   SPAWN_X,
   SPAWN_Y,
   stepPlayer,
-  WORLD_HEIGHT,
-  WORLD_WIDTH,
+  type WorldMap,
 } from '@kaede/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
@@ -64,6 +65,13 @@ export interface PlayerLabel {
 
 export interface GameApp {
   destroy(): void;
+  /**
+   * Swaps the rendered geometry AND the local physics to `map` (Phase 3
+   * 複数マップ). Idempotent for the current map. Remote sprites are the
+   * caller's business (clearRemotePlayers): which players belong on which
+   * map is subscription knowledge, not scene knowledge.
+   */
+  setMap(map: WorldMap): void;
   setLocalPlayerName(name: string): void;
   /**
    * Shows `status` (the composed line from statusLabel) under the local
@@ -194,34 +202,73 @@ function createE2EHook(
   local: PlayerView,
   remotes: Map<string, PlayerView>,
   currentTick: () => number,
+  currentMapId: () => number,
 ): E2EHook | undefined {
   if (!import.meta.env.DEV) return undefined;
   return {
     snapshot: () => ({
       tick: currentTick(),
+      mapId: currentMapId(),
       local: playerSnapshot(local),
       remotePlayers: [...remotes.values()].map(playerSnapshot),
     }),
   };
 }
 
+const PORTAL_COLOR = 0x7aa2f7;
+// The portal's destination and the up-key affordance, hovering over the gate.
+const PORTAL_LABEL_STYLE = new TextStyle({
+  fill: 0xbdd3ff,
+  fontSize: 12,
+  fontFamily: 'sans-serif',
+});
+
 /**
- * The static map geometry as one Graphics. Ropes hang behind everything;
- * platforms and the ground slab draw on top of them. Added to the world before
- * any player view, so the whole map renders behind players.
+ * One portal's visuals: the glowing gate over its trigger area and the
+ * destination label (with the up-key affordance) above it.
  */
-function drawMap(map: CollisionMap): Graphics {
+function drawPortal(layer: Container, portal: Portal): void {
+  const { rect } = portal;
+  const gate = new Graphics()
+    .ellipse(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w / 2, rect.h / 2)
+    .fill({ color: PORTAL_COLOR, alpha: 0.35 })
+    .ellipse(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w / 3, rect.h / 2.6)
+    .fill({ color: PORTAL_COLOR, alpha: 0.5 });
+  const label = new Text({ text: `↑ ${portal.label}`, style: PORTAL_LABEL_STYLE });
+  label.anchor.set(0.5, 1);
+  label.position.set(rect.x + rect.w / 2, rect.y - 6);
+  layer.addChild(gate, label);
+}
+
+/**
+ * The collision geometry as one Graphics: ropes hang behind everything;
+ * platforms and the ground slab draw on top of them.
+ */
+function drawCollision(collision: CollisionMap): Graphics {
   const gfx = new Graphics();
-  for (const r of map.ropes) {
+  for (const r of collision.ropes) {
     // Visual span: rope.top down to rope.bottom + PLAYER_HALF_H (the lower end
     // rests on a floor, while rope.bottom bounds the climbing player's center).
     gfx
       .rect(r.x - ROPE_WIDTH / 2, r.top, ROPE_WIDTH, r.bottom + PLAYER_HALF_H - r.top)
       .fill(ROPE_COLOR);
   }
-  for (const s of map.solids) gfx.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
-  for (const p of map.platforms) gfx.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
+  for (const s of collision.solids) gfx.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
+  for (const p of collision.platforms) gfx.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
   return gfx;
+}
+
+/**
+ * The static map visuals as one Container: the collision geometry with the
+ * portals glowing on top. Added to the world before any player view, so
+ * the whole map renders behind players — and rebuilt whole by setMap, so a
+ * map switch cannot leak the previous map's shapes.
+ */
+function buildMapLayer(map: WorldMap): Container {
+  const layer = new Container();
+  layer.addChild(drawCollision(map.collision));
+  for (const portal of map.portals) drawPortal(layer, portal);
+  return layer;
 }
 
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
@@ -231,7 +278,12 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
   const world = new Container();
   app.stage.addChild(world);
-  world.addChild(drawMap(DEFAULT_MAP));
+  // The map being simulated AND rendered — swapped whole by setMap. The
+  // default map is only the pre-session placeholder; the net stack sets the
+  // authoritative map when the session wires up.
+  let currentMap: WorldMap = mapFor(DEFAULT_MAP_ID);
+  let mapLayer = buildMapLayer(currentMap);
+  world.addChild(mapLayer);
 
   const local = createPlayerView(world, 'You', LOCAL_COLOR);
   const remotes = new Map<string, PlayerView>();
@@ -270,7 +322,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   function simulateTick(): void {
     prev = curr;
     const sample = touch ? mergeInputs(input.sample(), touch.sample()) : input.sample();
-    curr = stepPlayer(curr, sample, DEFAULT_MAP);
+    curr = stepPlayer(curr, sample, currentMap.collision);
     tick += 1;
     acc -= DT;
     for (const cb of tickCbs) cb(curr, tick, packInput(sample));
@@ -289,7 +341,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     local.root.position.set(sx, sy);
     local.body.scale.x = curr.facing;
 
-    const cam = cameraOffset(sx, sy, VIEW_W, VIEW_H, WORLD_WIDTH, WORLD_HEIGHT);
+    const cam = cameraOffset(
+      sx,
+      sy,
+      VIEW_W,
+      VIEW_H,
+      currentMap.collision.width,
+      currentMap.collision.height,
+    );
     world.position.set(cam.x, cam.y);
   }
 
@@ -320,7 +379,12 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     expireOverheads(now);
   });
 
-  const e2eHook = createE2EHook(local, remotes, () => tick);
+  const e2eHook = createE2EHook(
+    local,
+    remotes,
+    () => tick,
+    () => currentMap.id,
+  );
 
   /** Runs `act` on the remote player's view; a no-op while it has no sprite. */
   function withRemoteView(id: string, act: (view: PlayerView) => void): void {
@@ -336,6 +400,13 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       input.dispose();
       touch?.dispose();
       app.destroy(true, { children: true });
+    },
+    setMap(map) {
+      if (map.id === currentMap.id) return;
+      currentMap = map;
+      mapLayer.destroy({ children: true });
+      mapLayer = buildMapLayer(map);
+      world.addChildAt(mapLayer, 0);
     },
     setLocalPlayerName(name) {
       local.label.text = name;

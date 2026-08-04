@@ -37,15 +37,20 @@ export function planChatDraftOffline(draft: string): ChatDraftPlan {
  * the subscribed cache — so no state has to stream to the UI as people
  * come and go. This is only the cache projection; the eligibility rule
  * (in the world, online, named) is the pure collectDmCandidates,
- * unit-tested in @kaede/shared — deliberately not the player_name table
- * alone, whose rows linger for the retention window (~10 minutes) after
- * their owner leaves.
+ * unit-tested in @kaede/shared. Read from player_name — the space-wide
+ * presence directory — NOT from `player`: since the Phase 3 AoI 絞り込み
+ * the player subscription covers only the client's own map, while a DM
+ * must reach anyone in the space (会話フロアが違っても届く). player_name
+ * rows share the player rows' lifecycle and now mirror `online`, so the
+ * rule's inputs are unchanged: rows lingering through the retention
+ * window (~10 minutes after leaving) are excluded by the online flag,
+ * exactly as before.
  */
 function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
   return collectDmCandidates(
-    [...c.db.player.iter()].map((row) => ({
+    [...c.db.playerName.iter()].map((row) => ({
       online: row.online,
-      name: c.db.playerName.identity.find(row.identity)?.name,
+      name: row.name,
       key: row.identity.toHexString(),
     })),
   );

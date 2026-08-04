@@ -25,8 +25,10 @@ import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
 import {
   type Ctx,
+  chargeSendAllowance,
   findAdmittedWorldRows,
   type SenderIdentity,
+  type SendGuardTable,
   trimHistory,
   type WorldRows,
 } from './world';
@@ -50,47 +52,15 @@ function findPostingSender(ctx: Ctx, reducerName: string): WorldRows | undefined
   return undefined;
 }
 
-/** A send-rate token-bucket marker table (identity → allowanceMicros). */
-type SendGuardTable =
-  | Ctx['db']['chatGuard']
-  | Ctx['db']['reactionGuard']
-  | Ctx['db']['statusGuard'];
-
-/** A send-rate guard row, as either marker table returns it. */
-type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
-
-/**
- * Charges one send against the sender's token bucket on `guardTable`, or
- * refuses the send (乱用対策 — the Phase 0 input guard's thinking applied
- * to chat and reactions). The rule itself is the pure `evaluate`
- * (evaluateChatSend / evaluateReactionSend, unit-tested in @kaede/shared);
- * a missing guard row reads as the epoch marker, which the bucket's bank
- * cap turns into exactly one full burst. The marker write-back is split
- * into writeSendAllowance to keep these uncovered arrows under the CRAP
- * budget fallow enforces (the backfillAccountName precedent).
- */
-function chargeSendAllowance(
-  ctx: Ctx,
-  guardTable: SendGuardTable,
-  evaluate: (request: SendAllowanceRequest) => SendAllowanceVerdict,
-  reducerName: string,
-): void {
-  const guard = guardTable.identity.find(ctx.sender);
-  const verdict = evaluate({
-    allowanceMicros: guard?.allowanceMicros ?? 0n,
-    nowMicros: ctx.timestamp.microsSinceUnixEpoch,
-  });
-  if (!verdict.ok) throw new SenderError(`${reducerName} refused (rate-limited)`);
-  writeSendAllowance(ctx, guardTable, guard, verdict.allowanceMicros);
-}
-
 /**
  * The shared preamble of the row-writing sends that need no sender rows
- * (reactions and the status columns): eligibility plus the rate charge.
- * False when the silent reclaim path refused — the caller must RETURN
- * without writing (WorldRowsVerdict); every loud refusal throws inside.
- * send_chat_message keeps calling the pieces itself: it needs the sender's
- * rows (the name snapshot on the message), not just admission.
+ * (reactions and the status columns): eligibility plus the rate charge
+ * (chargeSendAllowance — moved to world.ts when enter_portal joined the
+ * guarded reducers). False when the silent reclaim path refused — the
+ * caller must RETURN without writing (WorldRowsVerdict); every loud
+ * refusal throws inside. send_chat_message keeps calling the pieces
+ * itself: it needs the sender's rows (the name snapshot on the message),
+ * not just admission.
  */
 function admitGuardedSend(
   ctx: Ctx,
@@ -101,20 +71,6 @@ function admitGuardedSend(
   if (!findPostingSender(ctx, reducerName)) return false;
   chargeSendAllowance(ctx, guardTable, evaluate, reducerName);
   return true;
-}
-
-/** Writes the advanced marker back: the sender's row, or its lazy first one. */
-function writeSendAllowance(
-  ctx: Ctx,
-  guardTable: SendGuardTable,
-  existing: SendGuardRow | null,
-  allowanceMicros: bigint,
-): void {
-  if (existing) {
-    guardTable.identity.update({ ...existing, allowanceMicros });
-    return;
-  }
-  guardTable.insert({ identity: ctx.sender, allowanceMicros });
 }
 
 // Posts one message to the global-scope chat (ROADMAP Phase 2 第一弾).

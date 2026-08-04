@@ -10,6 +10,7 @@ import AnnounceIdleSuspendReducer from "../announce_idle_suspend_reducer";
 import ApplyForMembershipReducer from "../apply_for_membership_reducer";
 import ApproveMemberReducer from "../approve_member_reducer";
 import BanMemberReducer from "../ban_member_reducer";
+import EnterPortalReducer from "../enter_portal_reducer";
 import JoinReducer from "../join_reducer";
 import RejectMemberReducer from "../reject_member_reducer";
 import SendChatMessageReducer from "../send_chat_message_reducer";
@@ -26,6 +27,7 @@ export type AnnounceIdleSuspendParams = __Infer<typeof AnnounceIdleSuspendReduce
 export type ApplyForMembershipParams = __Infer<typeof ApplyForMembershipReducer>;
 export type ApproveMemberParams = __Infer<typeof ApproveMemberReducer>;
 export type BanMemberParams = __Infer<typeof BanMemberReducer>;
+export type EnterPortalParams = __Infer<typeof EnterPortalReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type RejectMemberParams = __Infer<typeof RejectMemberReducer>;
 export type SendChatMessageParams = __Infer<typeof SendChatMessageReducer>;

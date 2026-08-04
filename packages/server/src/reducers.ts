@@ -6,19 +6,21 @@ import {
   CONNECTION_EVENT_MAX,
   type ConnectionPolicy,
   classifyConnection,
-  DEFAULT_MAP,
   DISCONNECT_INTENT_FRESH_MS,
   disconnectReasonFrom,
   evaluateApplication,
   evaluateInputBatch,
   evaluateJoin,
   evaluateMemberAction,
+  evaluatePortalSend,
+  evaluatePortalUse,
   evaluateRename,
   evaluateSettingChange,
   initialMembership,
   isQuiescent,
   type MemberAction,
   type Membership,
+  mapFor,
   memberIssuersFor,
   profileNameFrom,
   replayInputs,
@@ -28,6 +30,7 @@ import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
 import {
   type Ctx,
+  chargeSendAllowance,
   findAdmittedWorldRows,
   guestsAllowed,
   membershipOf,
@@ -36,6 +39,7 @@ import {
   spawnOrResume,
   sweepExpiredRows,
   sweepOrphanedSiblings,
+  syncNameOnline,
   trimHistory,
   type WorldRows,
 } from './world';
@@ -369,7 +373,7 @@ function applyAcceptedBatch(
   inputs: number[],
   verdict: AcceptedBatchVerdict,
 ): void {
-  const { row, guard } = rows;
+  const { row, guard, nameRow } = rows;
   if (verdict.kind === 'heartbeat') {
     // Liveness only: no replay, no guard update. `refresh` covers both the
     // periodic keep-alive (only once the row has aged past
@@ -378,11 +382,14 @@ function applyAcceptedBatch(
     // flips an offline resumed row back to visible.
     if (verdict.refresh) {
       ctx.db.player.identity.update({ ...row, online: true, updatedAt: ctx.timestamp });
+      syncNameOnline(ctx, nameRow, true);
     }
     return;
   }
 
-  const s = replayInputs(stateFromRow(row), inputs, DEFAULT_MAP);
+  // The replay runs on the map the row is on: enter_portal is the only map
+  // transition, so a batch never crosses maps mid-replay.
+  const s = replayInputs(stateFromRow(row), inputs, mapFor(row.mapId).collision);
 
   ctx.db.playerGuard.identity.update({ ...guard, allowanceMicros: verdict.allowanceMicros });
   ctx.db.player.identity.update({
@@ -401,7 +408,68 @@ function applyAcceptedBatch(
     online: true, // a stale disconnect event may have raced us; inputs prove liveness
     updatedAt: ctx.timestamp,
   });
+  syncNameOnline(ctx, nameRow, true);
 }
+
+// Teleports the sender through a portal it is standing in (ROADMAP Phase 3
+// ポータル移動): the one write path that changes a player's mapId. The
+// client flushes its pending inputs before calling (sync.ts), so the
+// deterministic replay has already put the row exactly where the sender's
+// prediction stood and evaluatePortalUse (pure, unit-tested in
+// @kaede/shared) re-checks the same geometry the client's intent detection
+// used — no position slack, no trust in the client's resolution. The
+// landing pose is standing-still at the target (a quiescent fixpoint,
+// fixed by the shared map unit tests), so the traveler's send gate can go
+// silent immediately.
+//
+// `tick` advances by ONE even though a teleport applies no inputs: it is
+// the fence that invalidates in-flight input batches. The client keeps
+// ticking on the ORIGIN map until the teleported row round-trips back
+// (its prediction is torn down only then — sync.ts switchMap), so a flush
+// cadence can land origin-map inputs here after the teleport; with the
+// old tick they replayed from the landing spot on the DESTINATION map
+// (walking the traveler around a map its inputs never saw), while a
+// bumped tick makes every batch minted against the pre-teleport counter
+// refuse as stale-tick — the resend watchdog's silent duplicate path, no
+// log noise. The client's fresh prediction starts from this row's tick,
+// so it is never out of step.
+//
+// Refusals follow the movement rule (silent drop + warn) rather than
+// chat's loud SenderError: a stale double-press racing the first teleport
+// is the common refusal, and honest clients cannot act on the error
+// anyway. The rate charge (portal_guard) still throws — nothing is
+// written before it, and a rate-limited spammer deserves the log line.
+export const enterPortal = spacetimedb.reducer({ portalId: t.u32() }, (ctx, { portalId }) => {
+  const found = findAdmittedWorldRows(ctx);
+  if (!found.ok) return;
+  const { row, nameRow } = found.rows;
+  const verdict = evaluatePortalUse({
+    state: stateFromRow(row),
+    portalId,
+    map: mapFor(row.mapId),
+  });
+  if (!verdict.ok) {
+    console.warn(
+      `enter_portal rejected (${verdict.reason}): sender=${ctx.sender.toHexString()} mapId=${row.mapId} portalId=${portalId}`,
+    );
+    return;
+  }
+  chargeSendAllowance(ctx, ctx.db.portalGuard, evaluatePortalSend, 'enter_portal');
+  ctx.db.player.identity.update({
+    ...row,
+    mapId: verdict.target.mapId,
+    x: verdict.target.x,
+    y: verdict.target.y,
+    vx: 0,
+    vy: 0,
+    onGround: true,
+    rope: -1,
+    tick: row.tick + 1, // the in-flight-batch fence — see the doc comment
+    online: true, // using a portal proves liveness (the accepted-batch rule)
+    updatedAt: ctx.timestamp,
+  });
+  syncNameOnline(ctx, nameRow, true);
+});
 
 // Spawning is an explicit opt-in, not a connection side effect: observer
 // connections (spacetime sql/subscribe, admin tooling) never call join, so
@@ -676,4 +744,9 @@ export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
   const row = ctx.db.player.identity.find(ctx.sender);
   if (!row) return;
   ctx.db.player.identity.update({ ...row, online: false, updatedAt: ctx.timestamp });
+  // Mirror onto the presence directory (see player_name in tables.ts). The
+  // name row is the player row's sibling by construction; a broken pair is
+  // reclaimed on the next act, so a missing row here is just skipped.
+  const nameRow = ctx.db.playerName.identity.find(ctx.sender);
+  if (nameRow) syncNameOnline(ctx, nameRow, false);
 });
