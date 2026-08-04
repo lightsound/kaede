@@ -1,0 +1,137 @@
+# ドッグフーディング開始ランブック
+
+実ユーザー投入（ROADMAP Phase 2 の実測開始）までの残作業を、依存順に一本の
+チェックリストにしたもの。**ドメインと Clerk 本番 issuer は、実ユーザーが本番で
+ログインした瞬間から実質変更不可**（Identity が issuer から導出される — VISION
+参照）なので、URL を人に渡す前にここを全部通すこと。作成 2026-08-04。
+
+## 0. 前提の現在地
+
+| 項目 | 状態 |
+| --- | --- |
+| issuer ゲート②（未登録 issuer 拒否） | ✅ 完了（2026-08-02、触らない） |
+| エラー監視（PostHog） | ✅ 完了（2026-08-04、再導入しない） |
+| バックアップ・復旧手順 | PR #42（`docs/backup-restore.md`。本番 DB の削除ロック適用済み） |
+| kaede.town の空き | ✅ 未登録を確認（2026-08-04、RDAP 404・NS なし） |
+| カスタムドメイン IaC | PR #43（ドメイン取得後にマージ） |
+| issuer ゲート①＋本番キー切替 | PR #44（Clerk 本番確定後にマージ） |
+| 本番クライアント | workers.dev のみ・Clerk キー未注入（サインイン導線は本番未開通） |
+| 本番 DB（Maincloud `maple-like`） | 恒久テーブルは空（2026-08-04 実測）— 初代管理者の先取りリスクはまだ顕在化していない |
+
+## 1. ドメイン取得（オーナー操作）
+
+1. Cloudflare アカウント「Kaede」(`751c8a59858c9c04a8e722df7330444d`) の
+   Registrar で **kaede.town** を購入する（先取りされていたら VISION どおり
+   別候補を選び直し、PR #43/#44 の値を差し替える）。
+2. Registrar 取得ならゾーンは自動でアカウントに入る。
+3. CI / 手動デプロイ用の `CLOUDFLARE_API_TOKEN` にゾーン権限を追加する
+   （最低 Zone:Read。Alchemy に DNS・証明書を任せるので Zone / DNS:Edit と
+   Workers Routes:Edit を推奨）。GitHub Actions の secret と Cloud Agents の
+   secret の両方を更新。
+4. **PR #43 をマージ** → CI デプロイで `https://kaede.town` が配信される
+   （workers.dev は併存 — 移行中 URL）。
+
+## 2. Clerk 本番インスタンス（Stripe Projects、オーナーのブラウザ認証が要る）
+
+Stripe CLI はこの環境ではブラウザ認証が必要（`stripe login --non-interactive`
+で `browser_url` と `verification_code` が出るので、オーナーが完了させる）。
+
+1. `stripe projects status` で現状の Clerk リソース名を確認する。
+2. 既存 Clerk リソースに production 環境（`production_domain`）が無いことを
+   確認し、**作り直す**（プロビジョニング後の設定変更は不可 — ROADMAP）。
+   `stripe projects catalog clerk --json` で正確なスラッグを確認してから:
+   `stripe projects remove <既存リソース>` → `stripe projects add clerk/<サービス> --config '{"app_name":"kaede","production_domain":"kaede.town"}'`。
+   **⚠️ 削除はオーナー確認のうえ**。
+3. **⚠️ 作り直しは開発インスタンスも新しくなる**（新しいアプリになるため）。
+   波及先を同じタイミングで全部更新する:
+   - 新しい開発 issuer（`https://<新スラッグ>.clerk.accounts.dev`）を
+     PR #44 の `CLERK_DEVELOPMENT_ISSUER` に反映
+   - 新しい pk_test_ を各自のローカル `.env` に（`stripe projects env --pull`）
+   - 新しい sk_test_ を Cloud Agents の `CLERK_SECRET_KEY` secret に
+   - 開発インスタンスにも JWT テンプレート `spacetimedb` を作り直す（下記 5.）
+4. `dns_setup_url` から Clerk 用 DNS（`clerk.kaede.town` 等の CNAME）を設定する。
+   Cloudflare 側は **DNS only（プロキシ無効）** にすること。アプリ用 DNS
+   （Workers カスタムドメイン、Alchemy 管理）とは別物で両方必要。証明書発行まで
+   待って dashboard の DNS チェックを通す。
+5. 本番インスタンスに JWT テンプレート `spacetimedb` を Backend API で作成する。
+   開発側の既存テンプレートを GET して同じ内容を POST するのが確実
+   （aud: `kaede-spacetimedb`、寿命 60 秒、`"name": "{{user.full_name}}"`）:
+
+   ```sh
+   # 開発側から複製元を取る（sk_test_）
+   curl -s https://api.clerk.com/v1/jwt_templates -H "Authorization: Bearer $SK_TEST"
+   # 本番へ作成（sk_live_）
+   curl -s -X POST https://api.clerk.com/v1/jwt_templates \
+     -H "Authorization: Bearer $SK_LIVE" -H "Content-Type: application/json" \
+     -d '<開発側と同じ name/claims/lifetime の JSON>'
+   ```
+
+6. Google ログインを本番に揃える。**本番インスタンスは Clerk の共有 OAuth
+   資格情報を使えない**ので、Google Cloud Console で OAuth クライアントを作成
+   してオーナーが設定する（リダイレクト URI は Clerk が指示する
+   `https://clerk.kaede.town/v1/oauth_callback`）。
+7. 許可オリジン／リダイレクトに `https://kaede.town` と、切替中に使う
+   `https://kaede.kaede-751.workers.dev` を入れる。
+8. **実 issuer を実測で確認**: 本番インスタンスでサインインしてトークンの `iss`
+   が `https://clerk.kaede.town` であることを確認（違ったら PR #44 の
+   `CLERK_PRODUCTION_ISSUER` を修正）。
+9. pk_live_ を GitHub Actions secret `VITE_CLERK_PUBLISHABLE_KEY` に登録する
+   （ローカル用 pk_test_ と混ぜない）。**sk_live_ はクライアントにも git にも
+   どのシークレットストアにも入れない** — JWT テンプレート作成など Backend API
+   の一時利用のみ。
+
+## 3. Maincloud を常用に耐える状態へ（オーナー操作）
+
+- Free 枠（2,500 TeV/月）は常時接続オフィスに不足＝ **Pro（$25/月、
+  100,000 TeV 込み）へアップグレード**し、支出上限を設定する（ROADMAP の
+  試算: アイドル抑制込みで月 5〜7.5万 TeV ≒ Pro 枠内）。
+- Free のままだと無活動時にオートポーズされる点も常設オフィスと相性が悪い。
+
+## 4. 切替デプロイ（PR #44 のマージ）
+
+PR #44 のマージ前提チェックリスト（PR 本文）を全部満たしてからマージする。
+モジュールの issuer 差し替えとクライアントの pk_live_ 注入が同一デプロイで出る。
+
+## 5. 初代管理者の先取り（オーナー操作、URL 共有前に必ず）
+
+デプロイ完了直後に、オーナー自身が本番 issuer でサインイン →「参加を申請する」。
+空のデータベースでは最初の申請者が管理者になる（`initialMembership`）。
+workers.dev の URL でもよい（Identity は issuer から導出されるので、本番
+Clerk でサインインする限り本番側の Identity になる）。あわせて
+**サインイン → JWT テンプレート経由で接続 → 申請 → 入場**の一連をオーナーが
+確認する。**開発 Clerk の Identity で実メンバーを入れないこと**（切替時に
+全アカウントの Identity 付け替えになる）。
+
+ここまで通ったら URL をコミュニティに共有してよい。ROADMAP Phase 2 の
+「ドッグフーディング開始」を ✅ にする PR を出す。
+
+## 6. 実測（開始後 数日〜2週間、別セッション可）
+
+| 項目 | 見るもの・やり方 | 判断基準 |
+| --- | --- | --- |
+| Maincloud 利用料金 | Maincloud ダッシュボードのエネルギー消費（日次で記録） | 月換算で 5〜7.5万 TeV ≒ Pro 枠 100,000 TeV 内か（$1≒2,592 TeV、egress 2,000 TeV/GB、ストレージ $1/GB/月）。超えるなら ROADMAP の変化点駆動へのエスカレーションを検討 |
+| エネルギー内訳の CPU 命令数 | 同ダッシュボードの内訳 | CPU が支配項なら「クライアント権威＋サーバー側クランプ」への縮退を再検討（ROADMAP Phase 2） |
+| 日本からの RTT | `curl -o /dev/null -s -w 'connect %{time_connect}s ttfb %{time_starttransfer}s\n' https://maincloud.spacetimedb.com/v1/ping` を日本の回線から数回。体感は入力→リモート反映の遅延 | 問題があればセルフホストを検討（VISION） |
+| PostHog の広告ブロッカー欠落率（ADR §9-6） | サーバー側 `connection_event`（member の connected 件数 — `spacetime sql` で日次集計）と PostHog の `spacetimedb_connected` 件数の差分 | 欠落率が高ければリバースプロキシ（`us.i.posthog.com` を自ドメイン経由に）の要否を判断 |
+| エラーグルーピング精度（ADR §9-1） | 最初の 2 週間、PostHog の issue リストで同一バグの分裂／無関係な統合を観察 | 原因究明に時間を取られるようなら ADR §7-4 の見直しトリガー |
+
+`connection_event` の集計例（オーナー実行、RLS 対象外）:
+
+```sh
+spacetime sql maple-like --server maincloud \
+  "SELECT * FROM connection_event WHERE kind = 'connected' AND detail = 'member'" --format json
+```
+
+## 付記: パッケージ名整理（⑤、任意）の判断
+
+- **npm スコープ・表示名の改名（`maple-like` / `@maple/*` → kaede 系）は
+  PR #42/#43/#44 がマージされるまで保留**する。リポジトリ全域に触る改名を
+  今開くと、切替系 PR と広範に衝突するため。切替完了後の静かなタイミングで
+  専用 PR にする。
+- **Maincloud の DB 名 `maple-like` の改名は別判断**。`spacetime rename` は
+  identity を変えないので `PRODUCTION_DATABASE_IDENTITY` ピンはそのまま使える
+  が、接続先（クライアント既定値）・CI の publish・バックアップスクリプトの
+  既定値に波及するので、やるなら専用 PR＋検証手順で。なお Maincloud には
+  過去の実験由来とみられる未使用 DB `kaede`・`kaede-366x1` が同一アカウントに
+  既存（2026-08-04 確認）なので、`kaede` へ改名するならその整理が先。
+  やらなくてもドッグフーディングは止めない。
