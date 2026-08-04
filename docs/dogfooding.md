@@ -15,17 +15,13 @@
 | kaede.town | ✅ 取得済み（オーナー購入）・Workers に紐付け済み（PR #43。https://kaede.town 200 を実測） |
 | Clerk 本番インスタンス | ✅ 作成済み（production_domain: kaede.town、issuer = `https://clerk.kaede.town`）。JWT テンプレート・許可オリジン設定済み |
 | issuer ゲート① | ✅ PR #44 マージ・デプロイ済み。**本番で実測**: 開発 issuer（accepted-toucan-79）の member トークンは接続拒否（module log に記録）・ゲストは従来どおり入場可 |
-| 本番クライアントのサインイン導線 | ⏳ **未開通** — 残り: Clerk 用 DNS（§2-4）＋ GitHub secret `VITE_CLERK_PUBLISHABLE_KEY`（§2-9）＋再デプロイ |
+| 本番クライアントのサインイン導線 | ✅ 前提そろい済み — Clerk 用 CNAME 5 件追加済み（トークンに Zone/DNS:Edit 追加後、API で作成）・GitHub secret `VITE_CLERK_PUBLISHABLE_KEY` 登録済み。本ドキュメント更新のマージ＝再デプロイで開通 |
 | 本番 DB（Maincloud `maple-like`） | 恒久テーブルは空・Clerk 本番ユーザー 0 — 初代管理者の先取りは未実施（§5） |
 
-**残タスク（すべてオーナー操作、上から順に）**:
-1. Cloudflare の kaede.town ゾーンに Clerk 用 CNAME 5 件を追加（§2-4。DNS only）
-2. GitHub Actions secret `VITE_CLERK_PUBLISHABLE_KEY` に pk_live_ を登録（§2-9）
-3. main で CI を workflow_dispatch（再デプロイ。サインイン導線が開通）
-4. Google OAuth クライアントの作成・設定（§2-6。email コードサインインは DNS 完了後すぐ使えるため、初代管理者の先取りは Google を待たなくてよい）
-5. Maincloud Pro へアップグレード＋支出上限（§3）
-6. 初代管理者の先取り（§5）→ URL 共有
-7. Cursor Cloud Agents の secret `CLERK_SECRET_KEY` を新しい sk_test_ に更新（旧開発インスタンスは消滅済み。値はローカルで `stripe projects env --pull` した `.env` の `CLERK_ENVIRONMENTS` → development.secret_key）
+**残タスク（上から順に）**:
+1. Google OAuth クライアントの作成・設定（オーナー、§2-6。email コードサインインは Clerk の DNS 検証完了後すぐ使えるため、初代管理者の先取りは Google を待たなくてよい）
+2. 初代管理者の先取り（オーナー、§5）→ URL 共有
+3. Maincloud Pro へのアップグレードは**当面見送り、Free で小規模に試す**（オーナー判断 2026-08-04）。無料枠は月 2,500 TeV — 実測（§6）でエネルギー消費を見ながら Pro 化を判断する。無活動時のオートポーズは接続で 1 秒未満の自動再開なので小規模運用では実害なし
 
 ## 1. ドメイン取得（オーナー操作）
 
