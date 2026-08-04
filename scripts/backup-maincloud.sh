@@ -12,7 +12,7 @@
 #   - 環境変数:
 #     SPACETIME_BIN  CLI のバイナリ名 (既定 spacetime。リリース tarball 直置きの
 #                    環境では spacetimedb-cli — packages/e2e と同じ流儀)
-#     DATABASE       対象データベース名 (既定 maple-like)
+#     DATABASE       対象データベース名 (既定 kaedetown)
 #     SERVER         対象サーバー (既定 maincloud)
 #
 # 設計メモ:
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 SPACETIME_BIN="${SPACETIME_BIN:-spacetime}"
-DATABASE="${DATABASE:-maple-like}"
+DATABASE="${DATABASE:-kaedetown}"
 SERVER="${SERVER:-maincloud}"
 OUT="${1:-backups/$(date -u +%Y%m%dT%H%M%SZ)}"
 

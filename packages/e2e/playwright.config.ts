@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * The smoke tests need the full stack. Playwright boots the Vite dev client
  * itself (below); the SpacetimeDB host must already be running with the
- * module published — `spacetime start` + `spacetime publish maple-like
+ * module published — `spacetime start` + `spacetime publish kaedetown
  * --server local --yes`, exactly the README dev workflow (the e2e job in
  * ci.yml does the same with `spacetimedb-cli`).
  */
