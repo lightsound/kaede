@@ -219,21 +219,42 @@ describe('evaluateSettingChange', () => {
 
 describe('membershipPrompt', () => {
   it('offers a signed-in member without a membership the application', () => {
-    expect(membershipPrompt({ signedIn: true, membership: undefined })).toBe('apply');
+    expect(membershipPrompt({ signedIn: true, membership: undefined, anyMemberRow: true })).toBe(
+      'apply',
+    );
+  });
+
+  // The very first application seeds the admin (initialMembership), so the
+  // affordance must say so instead of reading like an ordinary request —
+  // the production owner pressed it thinking it was mislabeled (2026-08-04).
+  it('offers the space-first application as the admin-seeding variant', () => {
+    expect(membershipPrompt({ signedIn: true, membership: undefined, anyMemberRow: false })).toBe(
+      'apply-first',
+    );
   });
 
   it('offers a rejected member the re-application', () => {
-    expect(membershipPrompt({ signedIn: true, membership: REJECTED_MEMBER })).toBe('reapply');
+    expect(
+      membershipPrompt({ signedIn: true, membership: REJECTED_MEMBER, anyMemberRow: true }),
+    ).toBe('reapply');
   });
 
   it('offers guests nothing (they cannot apply)', () => {
-    expect(membershipPrompt({ signedIn: false, membership: undefined })).toBeUndefined();
+    expect(
+      membershipPrompt({ signedIn: false, membership: undefined, anyMemberRow: false }),
+    ).toBeUndefined();
   });
 
   it('offers nothing when there is nothing to file', () => {
-    expect(membershipPrompt({ signedIn: true, membership: PENDING_MEMBER })).toBeUndefined();
-    expect(membershipPrompt({ signedIn: true, membership: APPROVED_MEMBER })).toBeUndefined();
-    expect(membershipPrompt({ signedIn: true, membership: BANNED_MEMBER })).toBeUndefined();
+    expect(
+      membershipPrompt({ signedIn: true, membership: PENDING_MEMBER, anyMemberRow: true }),
+    ).toBeUndefined();
+    expect(
+      membershipPrompt({ signedIn: true, membership: APPROVED_MEMBER, anyMemberRow: true }),
+    ).toBeUndefined();
+    expect(
+      membershipPrompt({ signedIn: true, membership: BANNED_MEMBER, anyMemberRow: true }),
+    ).toBeUndefined();
   });
 });
 
