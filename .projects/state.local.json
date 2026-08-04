@@ -1,6 +1,7 @@
 {
   "version": 1,
   "project": {
+    "catalog": "prod",
     "initializedAt": "2026-07-30T06:30:00.526Z",
     "merchantDisplayName": "Kaede",
     "merchantId": "acct_1TynReI5Rh4xhuxN",
@@ -55,15 +56,16 @@
   "resources": {
     "clerk-auth": {
       "configuration": {
-        "app_name": "kaede"
+        "app_name": "kaede",
+        "production_domain": "kaede.town"
       },
-      "createdAt": "2026-07-30T06:37:40.239Z",
-      "lastRevealedAt": "2026-07-30T06:37:40.449Z",
+      "createdAt": "2026-08-04T01:57:48.474Z",
+      "lastRevealedAt": "2026-08-04T01:57:48.706Z",
       "lastStatus": "complete",
       "name": "clerk-auth",
       "providerId": "prvdr_61UGOeSW4e0T9Etwn537w",
       "providerName": "Clerk",
-      "resourceId": "fres_61V8BYRUeMB4qkE2Q16V8BP0QNHNxDDN3Hbmac0oaMsK",
+      "resourceId": "fres_61V9vZItU2Zcv3eJO16V8BP0QNHNxDDN3Hbmac0oaCiu",
       "serviceId": "auth"
     },
     "clerk-plan": {

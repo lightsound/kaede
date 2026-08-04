@@ -59,7 +59,7 @@ const CLERK_PRODUCTION_ISSUER = 'https://clerk.kaede.town';
  * memberIssuersFor, keyed on the database's own identity in
  * connectionPolicyFor below.
  */
-const CLERK_DEVELOPMENT_ISSUER = 'https://famous-hornet-40.clerk.accounts.dev';
+const CLERK_DEVELOPMENT_ISSUER = 'https://accepted-toucan-79.clerk.accounts.dev';
 
 /**
  * The production database: Maincloud `maple-like` (`spacetime list` /
