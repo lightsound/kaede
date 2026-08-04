@@ -420,8 +420,19 @@ function applyAcceptedBatch(
 // used — no position slack, no trust in the client's resolution. The
 // landing pose is standing-still at the target (a quiescent fixpoint,
 // fixed by the shared map unit tests), so the traveler's send gate can go
-// silent immediately. `tick` is deliberately untouched: a teleport applies
-// no inputs, and the client restarts its prediction from this row.
+// silent immediately.
+//
+// `tick` advances by ONE even though a teleport applies no inputs: it is
+// the fence that invalidates in-flight input batches. The client keeps
+// ticking on the ORIGIN map until the teleported row round-trips back
+// (its prediction is torn down only then — sync.ts switchMap), so a flush
+// cadence can land origin-map inputs here after the teleport; with the
+// old tick they replayed from the landing spot on the DESTINATION map
+// (walking the traveler around a map its inputs never saw), while a
+// bumped tick makes every batch minted against the pre-teleport counter
+// refuse as stale-tick — the resend watchdog's silent duplicate path, no
+// log noise. The client's fresh prediction starts from this row's tick,
+// so it is never out of step.
 //
 // Refusals follow the movement rule (silent drop + warn) rather than
 // chat's loud SenderError: a stale double-press racing the first teleport
@@ -431,7 +442,7 @@ function applyAcceptedBatch(
 export const enterPortal = spacetimedb.reducer({ portalId: t.u32() }, (ctx, { portalId }) => {
   const found = findAdmittedWorldRows(ctx);
   if (!found.ok) return;
-  const { row } = found.rows;
+  const { row, nameRow } = found.rows;
   const verdict = evaluatePortalUse({
     state: stateFromRow(row),
     portalId,
@@ -453,8 +464,11 @@ export const enterPortal = spacetimedb.reducer({ portalId: t.u32() }, (ctx, { po
     vy: 0,
     onGround: true,
     rope: -1,
+    tick: row.tick + 1, // the in-flight-batch fence — see the doc comment
+    online: true, // using a portal proves liveness (the accepted-batch rule)
     updatedAt: ctx.timestamp,
   });
+  syncNameOnline(ctx, nameRow, true);
 });
 
 // Spawning is an explicit opt-in, not a connection side effect: observer
