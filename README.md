@@ -136,7 +136,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 4. **サーバーモジュールの publish**（リポジトリルートで実行。`spacetime.json` が `packages/server` を指しています）
 
    ```sh
-   spacetime publish maple-like --server local --yes
+   spacetime publish kaedetown --server local --yes
    ```
 
 5. **TypeScript バインディングの生成**
@@ -218,7 +218,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 **Alchemy v2**（TypeScript ネイティブの IaC。ベータのためバージョンを厳密にピン留め）にあります。
 SPA なので存在しないパスへのリクエストは `index.html` にフォールバックします
 （`not_found_handling: single-page-application`）。サーバーモジュールの本番 DB は
-Maincloud の **`maple-like`**（ダッシュボード: https://spacetimedb.com/maple-like ）です。
+Maincloud の **`kaedetown`**（ダッシュボード: https://spacetimedb.com/kaedetown ）です。
 
 ### 通常経路: main マージで自動デプロイ
 
@@ -319,13 +319,14 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 
 5. **Maincloud へのモジュール公開**
 
-   本番 DB は Maincloud の **`maple-like`**（2026-08-02 公開済み）。クライアントの
+   本番 DB は Maincloud の **`kaedetown`**（2026-08-02 に `maple-like` として公開、
+   2026-08-04 に改名 — rename は identity を変えない）。クライアントの
    既定 DB 名と一致しているため、ビルド時の環境変数は現状不要です。
    通常は CI が publish するので手動操作は不要ですが、手動で行う場合:
 
    ```sh
    spacetime login                                        # 初回のみ（CI 等では login --token）
-   spacetime publish maple-like --server maincloud --yes  # リポジトリルートで実行
+   spacetime publish kaedetown --server maincloud --yes  # リポジトリルートで実行
    ```
 
    TypeScript バインディングは生成済みのものがリポジトリに含まれているため、デプロイ時に再生成する必要はありません。

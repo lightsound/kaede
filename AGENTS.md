@@ -24,11 +24,11 @@ mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/b
 ### Running the game end-to-end
 Order matters and the backend must be running before publish:
 1. `spacetimedb-cli start` — long-running host on `ws://localhost:3000` (run in its own tmux session, leave it up).
-2. `spacetimedb-cli publish maple-like --server local --yes` — run from repo root (`spacetime.json` points at `packages/server`).
+2. `spacetimedb-cli publish kaedetown --server local --yes` — run from repo root (`spacetime.json` points at `packages/server`).
 3. `spacetimedb-cli generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings --yes` — only needed if the server schema changed; committed bindings must not drift (CI enforces this).
 4. `pnpm dev` — Vite client on `http://localhost:5173`. Open two browser windows to see multiplayer sync.
 
-The client defaults to `ws://localhost:3000` and DB `maple-like` in dev, so no env vars are needed locally.
+The client defaults to `ws://localhost:3000` and DB `kaedetown` in dev, so no env vars are needed locally.
 
 `pnpm test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @kaede/e2e exec playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli pnpm test:e2e` (CI sets the same variable in `ci.yml`).
 
