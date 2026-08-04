@@ -151,14 +151,16 @@
   要求するため不可 — README のデプロイ節参照)。`vercel.json` は撤去済み。
   Vercel 側の Git 連携解除とプロジェクト削除もオーナーが完了(2026-08-02)し、
   移行はクローズ。CI からの自動デプロイは下の「デプロイフロー」項で別途行う
-- **ドメインの取得** ✅ **完了（2026-08、ドッグフーディング開始のトリガーとして
-  実施）**: **kaede.town** を Cloudflare Registrar で取得（2026-08-04 の空き確認
+- **ドメインの取得** ✅ **完了（2026-08-04、ドッグフーディング開始のトリガー
+  として実施）**: **kaede.town** を Cloudflare Registrar で取得（同日の空き確認
   — RDAP 404・NS なし — を経てオーナーが購入）。Workers へのカスタムドメイン
   紐付けは Alchemy（`infra/alchemy.run.ts` の `domain`）で IaC 化し、workers.dev
-  URL は移行中 URL として併存。Clerk 本番インスタンスをこのドメインで設定済み
-  （発行者＝Identity がこのドメインに紐づくため、実ユーザー投入後は変更不可 —
-  VISION 参照）。アプリ用 DNS（Workers、Alchemy 管理）と Clerk 用 DNS
-  （`clerk.kaede.town` 等の CNAME、Clerk の dns_setup）は別物で両方設定済み
+  URL は移行中 URL として併存。Clerk 本番インスタンスをこのドメインで作成済み
+  （発行者 `https://clerk.kaede.town` ＝ Identity がこのドメインに紐づくため、
+  実ユーザー投入後は変更不可 — VISION 参照）。アプリ用 DNS（Workers、Alchemy
+  管理）は設定済み。**Clerk 用 DNS（`clerk.kaede.town` 等 5 件の CNAME、Clerk の
+  dns_setup）は別物で、オーナーの追加待ち** — レコード一覧と手順は
+  [docs/dogfooding.md](./dogfooding.md) §2
 - 環境戦略の確立: ローカル開発（SpacetimeDB local ＋ Clerk 開発インスタンス）と
   本番（Maincloud ＋ Clerk 本番インスタンス）の分離、環境変数・シークレットの
   整理（Cloudflare のシークレットは Alchemy / CI から注入）、
