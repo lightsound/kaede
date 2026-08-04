@@ -144,7 +144,7 @@ Clerk でサインインする限り本番側の Identity になる）。あわ�
 `connection_event` の集計例（オーナー実行、RLS 対象外）:
 
 ```sh
-spacetime sql kaedetown --server maincloud \
+spacetime sql kaede --server maincloud \
   "SELECT * FROM connection_event WHERE kind = 'connected' AND detail = 'member'" --format json
 ```
 

@@ -7,7 +7,7 @@ import { DbConnection, tables } from '../module_bindings';
 const URI =
   import.meta.env.VITE_SPACETIME_URI ??
   (import.meta.env.PROD ? 'wss://maincloud.spacetimedb.com' : 'ws://localhost:3000');
-const DB = import.meta.env.VITE_SPACETIME_DB ?? 'kaedetown';
+const DB = import.meta.env.VITE_SPACETIME_DB ?? 'kaede';
 
 /**
  * Where this client is pointed. Reported when a connection fails: the two
