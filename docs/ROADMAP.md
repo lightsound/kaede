@@ -319,11 +319,48 @@
   による）で固定
 - エラー監視の導入（**PostHog で確定** — 2026-08-03 に Sentry から変更。判断の全記録は
   [ADR](./adr-observability-posthog-over-sentry.md)）。無料枠で開始し、SaaS 期の利用分析も
-  同じ PostHog に載せる（生涯 2 系統: Cloudflare ＋ PostHog）。導入順序は ADR §8.1 のとおり:
-  ①SpacetimeDB SDK の再接続自動回復の有無を確認（観測可能にするより起きなくする方が安い）
-  ②接続イベント（`client_connected` / `client_disconnected`）をサーバー側テーブルに記録
-  ③`posthog-js` を最小構成で導入（リプレイなし。ゲームループのレート制限・課金上限・
-  匿名 `identify()` 抑制は ADR §8.2 の必須実装） ④リプレイは必要になってから追加
+  同じ PostHog に載せる（生涯 2 系統: Cloudflare ＋ PostHog）
+  ✅ **完了（2026-08-04）**: ADR §8.1 の順序（①→④）で実施し、完了条件も実測 —
+  本番のテスト例外 1 件が**ソースマップ解決済み**（issue の source が元 TS パス
+  `src/telemetry.package/posthog.ts`）で issue 化され、メール通知が届くことを確認後、
+  テスト例外は削除。実装の要点:
+  ①SDK 2.7.1 に再接続自動回復（visibilitychange/focus/online/pageshow でのバックオフ
+  リセット＋ゾンビソケット再構築）が入っていることを確認して更新（PR #35）。ただし自動
+  リスナーは `ConnectionManager`（React 等のフレームワークプロバイダ専用）にあり、素の
+  builder 接続を使う本リポジトリには効かないため、同等の規則を自前の lifecycle 状態機械へ
+  `page-resume` / `session-dead` イベントとして配線（ゾンビ検出は 2.7.1 の `isSocketClosed`）
+  ②接続イベントは**非公開テーブル** `connection_event`（公開すると全クライアントに配信され
+  egress を浪費する）。`connectionId` 列で接続と切断を SQL でペア照合でき、行数は
+  `CONNECTION_EVENT_MAX`（10,000）で書き込み側が間引く。アイドル抑制（無操作60分の自主切断 —
+  idle.ts）は正常系のため、クライアントが切断前に `announce_idle_suspend` を送り
+  `idle` / `unannounced` を区別（規則 `disconnectReasonFrom` は単体テスト、E2E 実測で
+  放置タブ= idle・タブ閉鎖= unannounced を確認 — PR #36）
+  ③`posthog-js` は `telemetry.package` に最小構成（リプレイ・サーベイ・pageview・DOM
+  autocapture・性能計測なし）: 未捕捉例外/unhandled rejection の自動捕捉、SpacetimeDB 接続
+  ライフサイクルの明示イベント 4 種（§8.2-A — WebSocket は自動計装されない）、`before_send` の
+  フィンガープリント単位 30 秒スロットル（§8.2-B — ticker 内エラーは毎フレーム発火する）、
+  `person_profiles: identified_only` ＋ サインイン済みツリーだけが Clerk user ID で
+  `identify()`（§8.2-D）。**初期化ゲートはビルドモード**（本番ビルドのみ vite define で phc_ を
+  注入。dev は常に空 — ローカル .env に実キーが常在するためキー有無では判定不可）。
+  ソースマップは `@posthog/rollup-plugin` ＋ `sourcemap: 'hidden'` で、アップロードは
+  `POSTHOG_API_KEY` / `POSTHOG_PROJECT_ID` を渡す main マージ後のデプロイジョブ限定
+  （PR ビルドが symbol sets を汚さない — PR #37/#39）
+  ④アラートは**メール宛**（通知先はオーナー確認済み）: インサイト「エラー件数(時間別)」
+  （`$exception` 件数・hourly）＋アラート「エラー発生(1時間に1件以上)」（absolute_value・
+  上限 0 超で発火・hourly = Free 枠の最短・進行中バケットも評価・スヌーズは `snoozed_until`）。
+  **制約 2 件を実測で確認**: (a) issue 作成/再オープン/スパイク通知の宛先は
+  Slack/Webhook/Discord/Teams/Linear/GitHub/GitLab のみで**メール宛が存在しない** —
+  必要になったら Webhook（Discord 等）を追加する (b) **課金上限（ADR §8.2-C）は
+  personal API key ではアクセス不可**（billing API が拒否）。Free（サブスクなし）の間は
+  超過課金自体が発生しないため、**有料化する日にオーナーがダッシュボード
+  （/organization/billing）で全プロダクトの上限を設定する**（未了のオーナー手順）。
+  運用メモ: スコープ付き personal API key「kaede-agent-mcp-ci」（project 540373 限定）を
+  GitHub シークレット `POSTHOG_API_KEY`（ソースマップ）と `~/.cursor/mcp.json`（公式 MCP
+  `mcp.posthog.com`）に登録。PostHog プロジェクトは「kaede」（ID 540373）へリネーム済み
+  （同名で紛らわしかった初期プロジェクト 540372 は未使用）。posthog-js は既定でボット
+  （HeadlessChrome UA / `navigator.webdriver`）からのイベントを捨てるため、自動化ブラウザでの
+  動作検証は webdriver 偽装が必要（検証時の実測）。リプレイは必要になってから追加（ADR §8.3）、
+  外形監視は別タスク（§8.5）、広告ブロッカー由来の欠落率は導入後の実測待ち（ADR §9-6）
 - チャットの乱用対策: 送信レート制限（Phase 0 の入力ガードと同様の考え方を
   チャットにも適用）。あわせて**ゲストに許可する行動範囲**（チャット可否・
   DM 可否・リアクション可否）をここで設計する
