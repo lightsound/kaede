@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- a React control over the live Notification permission; needs a DOM, and no DOM test environment is configured. The decision rules it configures are shouldNotifyDm, unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- a React control over the live Notification permission; needs a DOM, and no DOM test environment is configured. The decision rules it configures are shouldNotifyDm, unit-tested in @kaede/shared
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { UI_GOLD_BORDER_SOFT, UI_TEXT_COLOR } from '../theme';

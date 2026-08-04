@@ -1,4 +1,4 @@
-import type { PlayerInput } from '@maple/shared';
+import type { PlayerInput } from '@kaede/shared';
 
 const MOVE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space']);
 

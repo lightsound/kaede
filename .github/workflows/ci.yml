@@ -71,7 +71,7 @@ jobs:
         run: pnpm test:coverage
 
       - name: Build client
-        run: pnpm --filter @maple/client build
+        run: pnpm --filter @kaede/client build
 
       - name: Dead-code check
         run: pnpm exec fallow dead-code
@@ -141,12 +141,12 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @maple/e2e exec playwright install --with-deps chromium
+        run: pnpm --filter @kaede/e2e exec playwright install --with-deps chromium
 
       # On a cache hit only the OS packages are (re-)checked, not the browser.
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @maple/e2e exec playwright install-deps chromium
+        run: pnpm --filter @kaede/e2e exec playwright install-deps chromium
 
       - name: Install SpacetimeDB CLI (pinned)
         uses: ./.github/actions/install-spacetimedb
@@ -288,7 +288,7 @@ jobs:
           POSTHOG_ANALYTICS_HOST: https://us.posthog.com
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_PROJECT_ID: '540373'
-        run: CI=true pnpm --filter @maple/infra deploy:prod --yes
+        run: CI=true pnpm --filter @kaede/infra deploy:prod --yes
 
       # Alchemy keeps its state in files that are committed to git (README
       # 「Alchemy のステート管理」), and a deploy rewrites them, so push the

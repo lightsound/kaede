@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- a small React form; needs a DOM, and no DOM test environment is configured. The validation callers plug in lives in @maple/shared, unit-tested there
+// fallow-ignore-file coverage-gaps -- a small React form; needs a DOM, and no DOM test environment is configured. The validation callers plug in lives in @kaede/shared, unit-tested there
 import { type CSSProperties, type FormEvent, useState } from 'react';
 import {
   UI_BUTTON_BG,

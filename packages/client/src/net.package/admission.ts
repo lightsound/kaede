@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the admission rules; needs a running host. The rules themselves (decideAdmission, evaluateJoin, asMembership, guestsAllowedFrom) are pure and unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the admission rules; needs a running host. The rules themselves (decideAdmission, evaluateJoin, asMembership, guestsAllowedFrom) are pure and unit-tested in @kaede/shared
 import {
   type Admission,
   asMembership,
@@ -6,7 +6,7 @@ import {
   guestsAllowedFrom,
   type MemberRole,
   type MemberStatus,
-} from '@maple/shared';
+} from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { RowOf } from './rows';

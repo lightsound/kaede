@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
-import { CHAT_BUBBLE_DURATION_MS } from '@maple/shared';
+import { CHAT_BUBBLE_DURATION_MS } from '@kaede/shared';
 import { expect, test } from '@playwright/test';
 import { enterWorld, sendChat, snapshot } from './helpers';
 
@@ -10,7 +10,7 @@ import { enterWorld, sendChat, snapshot } from './helpers';
  * bubble hides after its display window, and a reload still shows the
  * history (the server retains the newest CHAT_HISTORY_MAX rows, and the
  * initial subscription replays them). The log is DOM, asserted with
- * locators; bubbles are canvas-drawn, asserted through the __mapleE2E
+ * locators; bubbles are canvas-drawn, asserted through the __kaedeE2E
  * snapshot hook (the remotePlayers precedent).
  *
  * Message texts carry a nonce: the world (and its retained history) is

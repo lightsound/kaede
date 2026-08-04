@@ -61,9 +61,9 @@ export const spacetimedb = schema({
     {
       identity: t.identity().primaryKey(),
       displayName: t.string().optional(),
-      // MemberStatus in @maple/shared: 'pending' | 'approved' | 'rejected' | 'banned'
+      // MemberStatus in @kaede/shared: 'pending' | 'approved' | 'rejected' | 'banned'
       status: t.string(),
-      role: t.string(), // MemberRole in @maple/shared: 'member' | 'admin'
+      role: t.string(), // MemberRole in @kaede/shared: 'member' | 'admin'
       requestedAt: t.timestamp(), // when the (latest) application was filed
       updatedAt: t.timestamp(),
     },
@@ -258,7 +258,7 @@ export const spacetimedb = schema({
   //   nothing needs to force an update event (the reason reaction carries
   //   sentAt does not apply).
   // - A missing row reads as the default (online, no text — DEFAULT_STATUS
-  //   in @maple/shared, the space_setting missing-row precedent), so no
+  //   in @kaede/shared, the space_setting missing-row precedent), so no
   //   join hook seeds rows and only players who changed their status ever
   //   occupy entry egress.
   // - Both values live on one row: they are one concept (the status beside
@@ -284,7 +284,7 @@ export const spacetimedb = schema({
     { name: 'player_status', public: true },
     {
       identity: t.identity().primaryKey(),
-      availability: t.string(), // Availability in @maple/shared: 'online' | 'away' | 'busy'
+      availability: t.string(), // Availability in @kaede/shared: 'online' | 'away' | 'busy'
       text: t.string(), // free-text status line, '' while unset
     },
   ),
@@ -305,7 +305,7 @@ export const spacetimedb = schema({
   //   source (player rows sweep ~10 minutes after leaving, a guest identity
   //   is per-tab), and a render-time recipient lookup would leave the other
   //   side of an old conversation nameless the moment they left.
-  // - Retention is one global cap, DM_HISTORY_MAX in @maple/shared (see its
+  // - Retention is one global cap, DM_HISTORY_MAX in @kaede/shared (see its
   //   comment for why a per-pair cap would grow storage without bound), and
   //   rows deliberately do NOT ride removePlayer: the reaction /
   //   player_status "rows die with the player" rule is for ephemeral state,
@@ -348,7 +348,7 @@ export const spacetimedb = schema({
   // 'connected' and one 'disconnected' row, while `identity` alone cannot
   // tell a member's two tabs apart. `detail` carries the classification —
   // 'member' | 'guest' on connect (the classifyConnection verdict),
-  // DisconnectReason ('idle' | 'unannounced', @maple/shared) on disconnect —
+  // DisconnectReason ('idle' | 'unannounced', @kaede/shared) on disconnect —
   // because an idle cut (the idle guard's deliberate suspension after
   // IDLE_DISCONNECT_MS without input — idle.ts) is the majority disconnect
   // in an always-open office and counting it as a failure would drown the
@@ -370,7 +370,7 @@ export const spacetimedb = schema({
   // The announced-disconnect marker: announce_idle_suspend files one row for
   // the sender CONNECTION (not identity — a member's second tab must not
   // relabel the first tab's drop), and clientDisconnected consumes it to
-  // classify the drop (disconnectReasonFrom in @maple/shared). Private and
+  // classify the drop (disconnectReasonFrom in @kaede/shared). Private and
   // transient — a row normally lives for the milliseconds between the
   // announce and the socket close; rows orphaned past their freshness window
   // (an announce whose disconnect never fired) are swept by the disconnect

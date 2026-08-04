@@ -21,7 +21,7 @@ async function setStatusText(page: Page, text: string): Promise<void> {
  * the free-text line joins it, a reload keeps both (the seed half of the
  * display — a status is state, the opposite of the reaction's event-only
  * rule), and clearing both returns the default (no line) on both sides.
- * The line is canvas-drawn, so all assertions go through the __mapleE2E
+ * The line is canvas-drawn, so all assertions go through the __kaedeE2E
  * snapshot hook (the bubble/reaction precedent).
  *
  * The expected strings are the composed statusLabel output. Spelled out

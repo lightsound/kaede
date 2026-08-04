@@ -1,4 +1,4 @@
-# maple-like
+# kaede
 
 > **プロジェクトの方向性について**: 本プロジェクトは、ゲーム（MMORPG）ではなく
 > **メイプルストーリー風 2D 横スクロールのワークコラボレーションツール「kaede」**
@@ -201,12 +201,12 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
    ジョブも同じ手順を踏みます）。初回はブラウザのインストールが必要です:
 
    ```sh
-   pnpm --filter @maple/e2e exec playwright install chromium
+   pnpm --filter @kaede/e2e exec playwright install chromium
    ```
 
    世界は WebGL キャンバスに描画されるため DOM ではアサートできず、テストは
-   クライアントが公開する読み取り専用スナップショットフック `window.__mapleE2E`
-   （契約は `@maple/shared` の `E2EHook`。`GameApp.ts` が開発ビルド限定で設置）で
+   クライアントが公開する読み取り専用スナップショットフック `window.__kaedeE2E`
+   （契約は `@kaede/shared` の `E2EHook`。`GameApp.ts` が開発ビルド限定で設置）で
    プレイヤー位置を読みます。テストは「世界に居るのは自分たち2人だけ」を前提に
    するので、実行前に localhost:5173 を開いている他のタブ・ウィンドウを
    閉じてください（接続中のクライアントが残っていると人数のアサートが失敗します）。
@@ -271,12 +271,12 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 2. **クライアントのデプロイ（Alchemy）**
 
    ```sh
-   pnpm --filter @maple/infra deploy:prod          # plan を表示して確認後に適用
-   CI=true pnpm --filter @maple/infra deploy:prod --yes   # CI など非対話環境（env 認証 + 自動承認）
+   pnpm --filter @kaede/infra deploy:prod          # plan を表示して確認後に適用
+   CI=true pnpm --filter @kaede/infra deploy:prod --yes   # CI など非対話環境（env 認証 + 自動承認）
    ```
 
-   デプロイはクライアントのビルド（`pnpm --filter @maple/client build`）込みです。
-   `pnpm --filter @maple/infra plan:prod` で差分のプレビューだけもできます。
+   デプロイはクライアントのビルド（`pnpm --filter @kaede/client build`）込みです。
+   `pnpm --filter @kaede/infra plan:prod` で差分のプレビューだけもできます。
    （スクリプト名が `deploy` ではなく `deploy:prod` なのは、`pnpm deploy` が
    pnpm の組み込みサブコマンドと衝突してスクリプトが実行されないためです。）
    prod 以外のステージや他の alchemy サブコマンドは、ワークアラウンド
@@ -284,7 +284,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    素の `pnpm exec alchemy` や `npx alchemy` は Node 22.18 未満で失敗します:
 
    ```sh
-   pnpm --filter @maple/infra alchemy plan --stage dev_yourname
+   pnpm --filter @kaede/infra alchemy plan --stage dev_yourname
    ```
 
    prod 以外のステージは `kaede-<ステージ名のスラッグ>` という別の Worker に
@@ -296,7 +296,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    デプロイできます。設定は `infra/wrangler.jsonc`（`alchemy.run.ts` と同じ構成。乖離させないこと）。
 
    ```sh
-   pnpm --filter @maple/client build
+   pnpm --filter @kaede/client build
    cd infra && npx wrangler deploy --config wrangler.jsonc
    ```
 

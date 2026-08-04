@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- a React chat panel; needs a DOM, and no DOM test environment is configured. The validation and rate rules it relies on are normalizeChatText / evaluateChatSend, unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- a React chat panel; needs a DOM, and no DOM test environment is configured. The validation and rate rules it relies on are normalizeChatText / evaluateChatSend, unit-tested in @kaede/shared
 import {
   CHAT_TEXT_MAX_LENGTH,
   type ChatDraftPlan,
@@ -7,7 +7,7 @@ import {
   type PlannedSend,
   REACTION_EMOJIS,
   type ReactionEmoji,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { type CSSProperties, useEffect, useRef } from 'react';
 import { type ChatEntryView, type ChatLog, chatEntryKey } from '../net.package';
 import { NotificationControl } from '../notify.package';

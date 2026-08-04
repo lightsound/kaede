@@ -83,12 +83,12 @@ declare global {
      * `snapshot().tick >= 0` — never this hook's mere presence, which is an
      * install-timing implementation detail.
      */
-    __mapleE2E?: E2EHook;
+    __kaedeE2E?: E2EHook;
     /**
      * Net-layer counters; installed and torn down by the client's sync.ts,
      * dev builds only. dmNotifyDecisions is written by notify.package's
      * notifier (see the E2ENetStats doc for the lifecycle invariant).
      */
-    __mapleE2ENet?: E2ENetStats;
+    __kaedeE2ENet?: E2ENetStats;
   }
 }

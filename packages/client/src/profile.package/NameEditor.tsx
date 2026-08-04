@@ -1,9 +1,9 @@
-// fallow-ignore-file coverage-gaps -- a small React form; needs a DOM, and no DOM test environment is configured. The validation it relies on is normalizeDisplayName, unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- a small React form; needs a DOM, and no DOM test environment is configured. The validation it relies on is normalizeDisplayName, unit-tested in @kaede/shared
 import {
   DISPLAY_NAME_MAX_LENGTH,
   type DisplayNameRejectReason,
   normalizeDisplayName,
-} from '@maple/shared';
+} from '@kaede/shared';
 import type { CSSProperties } from 'react';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG } from '../theme';
 import { DraftForm } from '../ui.package';

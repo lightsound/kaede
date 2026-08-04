@@ -1,5 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a small React banner; needs a DOM, and no DOM test environment is configured. Whether it shows is membershipPrompt + decideAdmission, unit-tested in @maple/shared
-import type { MembershipPrompt } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- a small React banner; needs a DOM, and no DOM test environment is configured. Whether it shows is membershipPrompt + decideAdmission, unit-tested in @kaede/shared
+import type { MembershipPrompt } from '@kaede/shared';
 import type { CSSProperties } from 'react';
 import { UI_BUTTON_BG, UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import type { AdmissionSurfaceProps } from './AdmissionOverlay';

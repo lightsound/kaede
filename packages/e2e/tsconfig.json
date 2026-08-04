@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     // Specs evaluate snippets inside the browser page, so they reference the
-    // Window global that @maple/shared's e2eHook.ts augments with the hook.
+    // Window global that @kaede/shared's e2eHook.ts augments with the hook.
     "lib": ["ES2022", "DOM"],
     // The config reads process.env; specs otherwise run in Node via Playwright.
     "types": ["node"]

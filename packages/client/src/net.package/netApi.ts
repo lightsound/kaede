@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- forwards user actions to live SpacetimeDB reducers; needs a running host. The rules it applies are pure and unit-tested in @maple/shared (planChatDraft / collectDmCandidates)
+// fallow-ignore-file coverage-gaps -- forwards user actions to live SpacetimeDB reducers; needs a running host. The rules it applies are pure and unit-tested in @kaede/shared (planChatDraft / collectDmCandidates)
 /**
  * The user-action half of the Net facade (PR #32 で予告した分割の片翼):
  * every method a UI control calls, each forwarding one argument set to one
@@ -16,7 +16,7 @@ import {
   type PlannedSend,
   planChatDraft,
   type ReactionEmoji,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 
@@ -37,7 +37,7 @@ export function planChatDraftOffline(draft: string): ChatDraftPlan {
  * the subscribed cache — so no state has to stream to the UI as people
  * come and go. This is only the cache projection; the eligibility rule
  * (in the world, online, named) is the pure collectDmCandidates,
- * unit-tested in @maple/shared — deliberately not the player_name table
+ * unit-tested in @kaede/shared — deliberately not the player_name table
  * alone, whose rows linger for the retention window (~10 minutes) after
  * their owner leaves.
  */
@@ -92,7 +92,7 @@ export interface NetApi {
    * Classifies one chat draft: public message, DM (with the mention
    * resolved against who is in the world and online RIGHT NOW, read from
    * the subscribed cache), or refused. The rules are the pure planChatDraft
-   * in @maple/shared — this method only supplies the live candidate list
+   * in @kaede/shared — this method only supplies the live candidate list
    * (planChatDraftOffline while disconnected, so an @mention refuses
    * rather than resolving against stale rows). The caller dispatches an
    * accepted plan through sendPlanned; splitting plan from send keeps the

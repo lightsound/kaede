@@ -19,7 +19,7 @@ export const target = `${URI}/${DB}`;
 // Per-tab identity: sessionStorage survives a reload (so the server resumes
 // the same character) while each new window still gets its own identity,
 // keeping the two-windows-side-by-side demo working.
-const TOKEN_KEY = 'maple.spacetime.token';
+const TOKEN_KEY = 'kaede.spacetime.token';
 
 export interface Connected {
   conn: DbConnection;

@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
-import { REACTION_DURATION_MS } from '@maple/shared';
+import { REACTION_DURATION_MS } from '@kaede/shared';
 import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, snapshot } from './helpers';
 
@@ -17,7 +17,7 @@ async function sendReaction(page: Page, emoji: string): Promise<void> {
  * display window elapses, and a reload does not replay it — the row
  * persists server-side, but display is event-only (the bubble seed/event
  * rule). Reactions are canvas-drawn, so all assertions go through the
- * __mapleE2E snapshot hook (the bubble precedent).
+ * __kaedeE2E snapshot hook (the bubble precedent).
  *
  * No nonce is needed, unlike the chat spec's messages: leftover reaction
  * rows from previous runs never display (seeds don't render), and only row

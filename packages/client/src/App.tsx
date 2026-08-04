@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a React component that mounts the canvas and renders connection status; needs a DOM, and no DOM test environment is configured
-import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@maple/shared';
+import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@kaede/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
 import { ChatPanel } from './chat.package';

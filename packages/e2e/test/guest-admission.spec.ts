@@ -46,7 +46,7 @@ async function setGuestsAllowed(allowed: boolean): Promise<void> {
  * shows and no world entry happens — and re-allowing lets the same waiting
  * client enter on its own (the space_setting subscription drives the join;
  * no reload needed). The member paths (waiting room, approval, removal) are
- * covered by @maple/shared unit tests instead, since they need Clerk
+ * covered by @kaede/shared unit tests instead, since they need Clerk
  * identities.
  */
 test('ゲスト入場を不許可にすると入場できず、再許可で自動的に入場する', async ({ browser }) => {
@@ -62,12 +62,12 @@ test('ゲスト入場を不許可にすると入場できず、再許可で自�
     });
     // And no world entry happened: the e2e hook only installs when the local
     // simulation starts, i.e. after an (unwanted) successful join.
-    expect(await page.evaluate(() => window.__mapleE2E?.snapshot().tick ?? -1)).toBe(-1);
+    expect(await page.evaluate(() => window.__kaedeE2E?.snapshot().tick ?? -1)).toBe(-1);
 
     // Re-allowing must admit the waiting client without a reload: the
     // setting row flips in its subscription and the client joins itself.
     await setGuestsAllowed(true);
-    await page.waitForFunction(() => (window.__mapleE2E?.snapshot().tick ?? -1) >= 0, undefined, {
+    await page.waitForFunction(() => (window.__kaedeE2E?.snapshot().tick ?? -1) >= 0, undefined, {
       timeout: 15_000,
     });
     await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeHidden();
@@ -131,7 +131,7 @@ test('入場中のゲストは不許可への切替で即キックされ、再�
 
     // Re-allowing readmits the kicked client on its own, no reload needed.
     await setGuestsAllowed(true);
-    await page.waitForFunction(() => (window.__mapleE2E?.snapshot().tick ?? -1) >= 0, undefined, {
+    await page.waitForFunction(() => (window.__kaedeE2E?.snapshot().tick ?? -1) >= 0, undefined, {
       timeout: 15_000,
     });
     await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeHidden();

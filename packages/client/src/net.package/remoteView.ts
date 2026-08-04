@@ -1,4 +1,4 @@
-import { type Facing, INTERP_DELAY_MS, toFacing } from '@maple/shared';
+import { type Facing, INTERP_DELAY_MS, toFacing } from '@kaede/shared';
 import type { PlayerLabel } from '../game.package';
 import {
   correctionOffset,

@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @maple/shared (see admission.ts)
+// fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @kaede/shared (see admission.ts)
 import {
   type DmRowEvent,
   type E2ENetStats,
@@ -6,7 +6,7 @@ import {
   type StatusView,
   stateFromRow,
   statusLabel,
-} from '@maple/shared';
+} from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
@@ -77,7 +77,7 @@ function runEffect<K extends LifecycleEffect['kind']>(
 /**
  * 送信カウンタ(Playwright 用の読み取り専用フック)。「静止中は送信が止まる」
  * はレンダリングからは観測できないので、送った回数そのものを dev ビルド
- * だけ窓に晒す(GameApp の __mapleE2E と同じ流儀)。本番ビルドはビルド時
+ * だけ窓に晒す(GameApp の __kaedeE2E と同じ流儀)。本番ビルドはビルド時
  * 定数でコードごと消える。
  */
 function installNetStats(): E2ENetStats | undefined {
@@ -88,7 +88,7 @@ function installNetStats(): E2ENetStats | undefined {
     dmRowsReceived: 0,
     dmNotifyDecisions: 0,
   };
-  window.__mapleE2ENet = stats;
+  window.__kaedeE2ENet = stats;
   return stats;
 }
 
@@ -735,7 +735,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       heartbeat.dispose();
       // Guarded so a torn-down instance cannot erase the counters installed
       // by the instance that outlives it (StrictMode mounts two in parallel).
-      if (netStats && window.__mapleE2ENet === netStats) window.__mapleE2ENet = undefined;
+      if (netStats && window.__kaedeE2ENet === netStats) window.__kaedeE2ENet = undefined;
       for (const type of ACTIVITY_EVENTS) {
         window.removeEventListener(type, onActivity, { capture: true });
       }

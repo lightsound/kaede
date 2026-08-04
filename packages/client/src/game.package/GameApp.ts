@@ -16,7 +16,7 @@ import {
   stepPlayer,
   WORLD_HEIGHT,
   WORLD_WIDTH,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
 import {
@@ -158,7 +158,7 @@ function createPlayerView(world: Container, name: string, color: number): Player
 }
 
 /**
- * Applies a composed status line (statusLabel in @maple/shared, undefined
+ * Applies a composed status line (statusLabel in @kaede/shared, undefined
  * while default) to one view. Unlike the transient overheads there is no
  * timer: a status is state, visible until the next row event replaces it.
  */
@@ -186,7 +186,7 @@ function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
 
 /**
  * Test affordance for the Playwright smoke tests — see E2EHook in
- * @maple/shared for the contract and who consumes it. Constructed only in dev
+ * @kaede/shared for the contract and who consumes it. Constructed only in dev
  * builds, so the build-time DEV constant lets production bundles drop the
  * hook code entirely.
  */
@@ -332,7 +332,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     destroy() {
       // Guarded so a torn-down instance cannot erase a hook installed by the
       // instance that outlives it (StrictMode mounts two in parallel).
-      if (e2eHook && window.__mapleE2E === e2eHook) window.__mapleE2E = undefined;
+      if (e2eHook && window.__kaedeE2E === e2eHook) window.__kaedeE2E = undefined;
       input.dispose();
       touch?.dispose();
       app.destroy(true, { children: true });
@@ -352,7 +352,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       // network wires up ever starts, whereas StrictMode creates two instances
       // concurrently and creation-time installs can interleave so that the
       // doomed instance installs last and its destroy() clears the hook.
-      if (e2eHook) window.__mapleE2E = e2eHook;
+      if (e2eHook) window.__kaedeE2E = e2eHook;
     },
     stop() {
       tick = -1; // the ticker treats tick < 0 as "not running" (see start)

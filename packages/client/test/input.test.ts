@@ -1,4 +1,4 @@
-import type { PlayerInput } from '@maple/shared';
+import type { PlayerInput } from '@kaede/shared';
 import { describe, expect, it } from 'vitest';
 import { mergeInputs } from '../src/game.package/mergeInputs';
 

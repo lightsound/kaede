@@ -10,7 +10,7 @@ import {
   PLAYER_HALF_H,
   REACTION_DURATION_MS,
   type ReactionEmoji,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 
 // Dark text on a light rounded rect, wrapped narrow so a max-length message

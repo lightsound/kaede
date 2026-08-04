@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- spawns a real Web Worker; the decision of WHEN a heartbeat is due lives in sync.ts against HEARTBEAT_INTERVAL_MS, and what the server does with one is evaluateInputBatch, unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- spawns a real Web Worker; the decision of WHEN a heartbeat is due lives in sync.ts against HEARTBEAT_INTERVAL_MS, and what the server does with one is evaluateInputBatch, unit-tested in @kaede/shared
 /**
  * 静止中の生存証明(ハートビート)を予定するタイマー。
  *
@@ -11,7 +11,7 @@
  * 専用 Web Worker のタイマーはこの間引きの対象外なので、tick だけ Worker で
  * 刻み、本体(送るかどうか・何を送るか)はメインスレッド側で判断する。
  */
-import { HEARTBEAT_CHECK_INTERVAL_MS } from '@maple/shared';
+import { HEARTBEAT_CHECK_INTERVAL_MS } from '@kaede/shared';
 
 export interface Heartbeat {
   dispose(): void;
