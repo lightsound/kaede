@@ -253,7 +253,12 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 1. **前提**
 
    - 環境変数 `CLOUDFLARE_API_TOKEN`（必要権限: Account / Workers Scripts:Edit と
-     User / User Details:Read・Memberships:Read。ゾーン・R2 権限は不要）。
+     User / User Details:Read・Memberships:Read、および Zone:Read。カスタム
+     ドメイン `kaede.town` の紐付けはアカウントレベルの Workers Custom
+     Domains API が DNS レコードと証明書ごと面倒を見るため、この権限で足りる
+     — 2026-08-04 に現行トークンで attach 成功を実測。Zone / DNS:Edit は
+     Workers には不要だが、**Clerk 用 CNAME（`clerk.kaede.town` 等）を API /
+     IaC で管理したい場合は別途必要**。R2 権限は不要）。
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
      `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
    - Node 22.18 未満では TS の型ストリッピングにフラグが要ります。`infra` の
