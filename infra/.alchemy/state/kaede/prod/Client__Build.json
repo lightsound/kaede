@@ -5,7 +5,7 @@
   "instanceId": "e1ee1052ddaf3ef99dd5b56a1bac1891",
   "resourceType": "Command.Build",
   "props": {
-    "command": "pnpm --filter @maple/client build",
+    "command": "pnpm --filter @kaede/client build",
     "cwd": "..",
     "outdir": "packages/client/dist",
     "env": {}
@@ -13,8 +13,8 @@
   "attr": {
     "outdir": "../packages/client/dist",
     "hash": {
-      "output": "07c84ef9deb14404510111ef058e05e44d8a981bdea8c838d105f3ee5678a5dc",
-      "input": "8ef6de32abd5b7c14f571839514622443b070ec2fe3190996ae95b6766ea1938"
+      "output": "b91ca006086a7e86539d1184824948bcfce4a9f400c144652732a86bb8528d3b",
+      "input": "80c255bdf8f91377f1add0f0e54440c55156b4fb29d38f1e28f26c7c73e3439c"
     }
   },
   "bindings": [],
