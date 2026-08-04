@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { type ConnectionClaims, type ConnectionPolicy, classifyConnection } from '../src';
+import {
+  type ConnectionClaims,
+  type ConnectionPolicy,
+  classifyConnection,
+  memberIssuersFor,
+} from '../src';
 
 const CLERK_PRODUCTION = 'https://clerk.example.town';
 const CLERK_DEVELOPMENT = 'https://dev-instance.clerk.accounts.dev';
@@ -66,8 +71,11 @@ describe('classifyConnection', () => {
     });
   });
 
-  // The window ROADMAP gate 1 warns about: production is live while the
-  // development instance is still trusted, and both mint members.
+  // The window ROADMAP gate ① exists to prevent: production is live while
+  // the development instance is still trusted, and both mint members. This
+  // is exactly the policy memberIssuersFor builds for NON-production
+  // databases (see below), which is why the production database must never
+  // receive it.
   it('makes members of every issuer the policy lists', () => {
     const bothInstances: ConnectionPolicy = {
       ...policy,
@@ -78,6 +86,43 @@ describe('classifyConnection', () => {
       subject: 'user_abc',
     });
     expect(classifyConnection(claims(), bothInstances)).toEqual({
+      kind: 'member',
+      subject: 'user_abc',
+    });
+  });
+});
+
+// ROADMAP Phase 1 gate ①, as a rule: which database gets to treat the
+// development instance as a member mint.
+describe('memberIssuersFor', () => {
+  const issuers = { production: CLERK_PRODUCTION, development: CLERK_DEVELOPMENT };
+
+  it('trusts only the production issuer on the production database', () => {
+    expect(memberIssuersFor(true, issuers)).toEqual([CLERK_PRODUCTION]);
+  });
+
+  it('keeps the development issuer on every other database', () => {
+    expect(memberIssuersFor(false, issuers)).toEqual([CLERK_PRODUCTION, CLERK_DEVELOPMENT]);
+  });
+
+  // The full loop: the list memberIssuersFor builds, fed through
+  // classifyConnection — a dev-instance token is refused as a member by the
+  // production policy (unregistered-issuer, which onConnect rejects) and
+  // admitted by the local one.
+  it('closes gate ① end to end: a dev token is refused on production, admitted locally', () => {
+    const production: ConnectionPolicy = {
+      ...policy,
+      memberIssuers: memberIssuersFor(true, issuers),
+    };
+    const local: ConnectionPolicy = { ...policy, memberIssuers: memberIssuersFor(false, issuers) };
+    const devToken = claims({ issuer: CLERK_DEVELOPMENT });
+    expect(classifyConnection(devToken, production)).toEqual({
+      kind: 'unregistered-issuer',
+      issuer: CLERK_DEVELOPMENT,
+    });
+    expect(classifyConnection(devToken, local)).toEqual({ kind: 'member', subject: 'user_abc' });
+    // The production issuer is a member mint on both.
+    expect(classifyConnection(claims(), production)).toEqual({
       kind: 'member',
       subject: 'user_abc',
     });

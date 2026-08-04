@@ -19,6 +19,7 @@ import {
   isQuiescent,
   type MemberAction,
   type Membership,
+  memberIssuersFor,
   profileNameFrom,
   replayInputs,
   stateFromRow,
@@ -40,18 +41,53 @@ import {
 } from './world';
 
 /**
- * The Clerk **development** instance. Its sign-up flow is open, so it must be
- * dropped from CONNECTION_POLICY.memberIssuers in the same change that adds the
- * production instance — otherwise anyone who signs up on the dev instance holds
- * a member token against production (ROADMAP Phase 1 lists this as a gate that
- * has to close before real users).
+ * The Clerk **production** instance (kaede.town). The issuer is derived from
+ * the domain, and every real member's Identity is derived from this issuer —
+ * once anyone has signed in against it, changing it means migrating every
+ * account's Identity, so treat it as immutable (VISION 名前・ドメイン).
  */
-const CLERK_DEVELOPMENT_ISSUER = 'https://famous-hornet-40.clerk.accounts.dev';
+const CLERK_PRODUCTION_ISSUER = 'https://clerk.kaede.town';
+
+/**
+ * The Clerk **development** instance. Its sign-up flow is open, so the
+ * production database must never accept it as a member issuer — anyone who
+ * signed up on the dev instance would hold a member token against
+ * production: they could queue in the application list, and on an empty
+ * database they could seed themselves as the very first admin (ROADMAP
+ * Phase 1 gate ①). It STAYS a member issuer on every other database so
+ * local development keeps signing in with the pk_test_ keys; the split is
+ * memberIssuersFor, keyed on the database's own identity in
+ * connectionPolicyFor below.
+ */
+const CLERK_DEVELOPMENT_ISSUER = 'https://accepted-toucan-79.clerk.accounts.dev';
+
+/**
+ * The production database: Maincloud `maple-like` (`spacetime list` /
+ * the Maincloud dashboard, 2026-08-04). The database's own identity is the
+ * only production marker a reducer can see — it cannot ask which host it
+ * runs on, while `ctx.databaseIdentity` is stable for the database's
+ * lifetime (re-publishes keep it; only delete-and-recreate mints a new
+ * one).
+ *
+ * ⚠️ A stale value fails OPEN: if the production database is ever
+ * recreated (the docs/backup-restore.md runbook), its new identity no
+ * longer matches, the module assumes non-production and re-admits the
+ * development issuer as a member mint. Update this constant in the same
+ * deploy that recreates the database. The tripwire for a silent miss is
+ * the console.warn in onConnect — a dev-issuer member connect on
+ * production shows up in the Maincloud module log.
+ */
+const PRODUCTION_DATABASE_IDENTITY =
+  'c200fd9e16f8d33914950b193af4ac48b398f115db831634b86c6dc5f11b23c3';
 
 /**
  * SpacetimeDB validates any well-formed OIDC token's signature and derives an
  * Identity from issuer+subject, so deciding which issuers mean what is the
  * module's job — this policy is what "registering our issuer" amounts to.
+ * `memberIssuers` depends on which database the module woke up in (gate ① —
+ * see memberIssuersFor and the constants above), so the policy is built per
+ * connection rather than once at module load; the ctx is not available
+ * earlier, and the two-entry array cost is nothing next to a connect.
  *
  * `guestIssuers` names the hosts whose own tokens we expect: a guest connects
  * tokenless, is handed a host-issued token, and replays it to resume its
@@ -66,11 +102,16 @@ const CLERK_DEVELOPMENT_ISSUER = 'https://famous-hornet-40.clerk.accounts.dev';
  * 2026-08-02 — with the host's issuer removed, fresh tokenless connects were
  * refused alongside replays), so a missing entry shuts every guest out.
  */
-const CONNECTION_POLICY: ConnectionPolicy = {
-  memberIssuers: [CLERK_DEVELOPMENT_ISSUER],
-  memberAudience: 'kaede-spacetimedb',
-  guestIssuers: ['localhost', 'https://auth.spacetimedb.com'],
-};
+function connectionPolicyFor(ctx: Ctx): ConnectionPolicy {
+  return {
+    memberIssuers: memberIssuersFor(
+      ctx.databaseIdentity.toHexString() === PRODUCTION_DATABASE_IDENTITY,
+      { production: CLERK_PRODUCTION_ISSUER, development: CLERK_DEVELOPMENT_ISSUER },
+    ),
+    memberAudience: 'kaede-spacetimedb',
+    guestIssuers: ['localhost', 'https://auth.spacetimedb.com'],
+  };
+}
 
 /**
  * Guarantees a member has an account row, carrying the display name its
@@ -126,6 +167,24 @@ function backfillAccountName(
 }
 
 /**
+ * The tripwire for a stale PRODUCTION_DATABASE_IDENTITY (see its comment):
+ * a dev-issuer member mint is business as usual on a local database but
+ * must never appear in the production module log — if this warn shows up
+ * there, the identity pin has gone stale and gate ① has silently reopened.
+ * The member verdict does not carry the issuer, so it is re-read from the
+ * claims (non-null on every member connection by definition). A separate
+ * function (not inlined into onConnect) to keep the untestable reducer
+ * under the CRAP budget fallow enforces — the backfillAccountName
+ * precedent.
+ */
+function warnDevIssuerMint(ctx: Ctx): void {
+  if (ctx.senderAuth.jwt?.issuer !== CLERK_DEVELOPMENT_ISSUER) return;
+  console.warn(
+    `member minted by the DEVELOPMENT issuer (database ${ctx.databaseIdentity.toHexString()} presumed non-production — gate ①)`,
+  );
+}
+
+/**
  * Vets every connection before it can act in the world. Which refusals
  * belong here and which in `join` follows one line: a refusal the user can
  * act on goes to `join` (an ordinary reducer error on an open connection,
@@ -154,7 +213,7 @@ function backfillAccountName(
  * module log (spacetimedb-cli logs / the Maincloud dashboard).
  */
 export const onConnect = spacetimedb.clientConnected((ctx) => {
-  const auth = classifyConnection(ctx.senderAuth.jwt, CONNECTION_POLICY);
+  const auth = classifyConnection(ctx.senderAuth.jwt, connectionPolicyFor(ctx));
   if (auth.kind === 'audience-mismatch') {
     throw new SenderError('Unauthorized: this token was minted for another application');
   }
@@ -171,6 +230,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     throw new SenderError(`Unauthorized: unregistered token issuer: ${auth.issuer}`);
   }
   if (auth.kind === 'member') {
+    warnDevIssuerMint(ctx);
     // The account (global profile) is a fact of signing in; the membership
     // is not — joining this space is an explicit application, filed by the
     // apply_for_membership reducer when the user asks to.

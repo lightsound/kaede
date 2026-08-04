@@ -264,6 +264,14 @@ jobs:
       # Builds the client and converges the Cloudflare resources declared in
       # infra/alchemy.run.ts (see README「デプロイ(公開手順)」).
       #
+      # VITE_CLERK_PUBLISHABLE_KEY is the PRODUCTION Clerk key (pk_live_)
+      # baked into the client bundle (ClerkGate). Only this deploy job
+      # provides it: local dev keeps the development instance's pk_test_ in
+      # its own .env, and the two must never mix — the module's member-issuer
+      # policy is keyed per database (gate ①, CONNECTION_POLICY in
+      # packages/server), so a pk_test_ client deployed against production
+      # would sign users in only for every connection to be refused.
+      #
       # The POSTHOG_* variables reach the Vite build Alchemy spawns
       # (vite.config.ts reads them; see the initialization gate there):
       # - POSTHOG_ANALYTICS_API_KEY (phc_): the publishable project key baked
@@ -275,6 +283,7 @@ jobs:
       - name: Deploy client (Alchemy)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           POSTHOG_ANALYTICS_API_KEY: ${{ secrets.POSTHOG_ANALYTICS_API_KEY }}
           POSTHOG_ANALYTICS_HOST: https://us.posthog.com
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}

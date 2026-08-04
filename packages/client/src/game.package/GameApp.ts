@@ -32,7 +32,8 @@ import {
   visibleReactionEmoji,
 } from './bubble';
 import { cameraOffset } from './camera';
-import { createInput, mergeInputs } from './input';
+import { createInput } from './input';
+import { mergeInputs } from './mergeInputs';
 import { createTouchControls } from './touchControls';
 
 const VIEW_W = 1280;

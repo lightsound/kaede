@@ -239,8 +239,10 @@ Maincloud の **`maple-like`**（ダッシュボード: https://spacetimedb.com/
 - 同時実行: `ci` / `e2e` は従来どおり新しい push が古い実行をキャンセルしますが、
   **`deploy` ジョブだけはキャンセルされず直列にキュー**されます（デプロイ途中の
   キャンセルは「モジュールだけ新しい」等の中途半端な状態を残すため）。
-- 必要なシークレット（GitHub Actions の Secrets）: `CLOUDFLARE_API_TOKEN` と
-  `SPACETIMEDB_TOKEN`。
+- 必要なシークレット（GitHub Actions の Secrets）: `CLOUDFLARE_API_TOKEN`・
+  `SPACETIMEDB_TOKEN`・`VITE_CLERK_PUBLISHABLE_KEY`（本番 Clerk の
+  pk_live_。ローカルの pk_test_ と混ぜないこと — `ci.yml` の deploy ジョブの
+  コメント参照）。
 - 手動で再デプロイしたいときは、GitHub Actions から **CI ワークフローの
   `workflow_dispatch` を `main` で実行**します（空コミット不要）。`main` 以外の
   ref で dispatch した場合はチェックだけ走り、デプロイはスキップされます
