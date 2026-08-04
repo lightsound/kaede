@@ -12,8 +12,8 @@
     "assets": {
       "directory": "../packages/client/dist",
       "hash": {
-        "output": "27744b205b6ffcfd3f5cac6bc11792ce42815aa2003558257e4a4fefeb0f8e7e",
-        "input": "71975b46c0bfb8bb4a05950b660191b9f7bc58c391f04d7c91885a19ab3cbf0d"
+        "output": "a8cd7aaf42a4d7f26b0dda4253a0e30140253388d4668f2a6547a63acb9362e7",
+        "input": "01ed22aeb9464e5d2e0293b40c664f49af77ed74759943e5bffa4a46110dbf2c"
       },
       "notFoundHandling": "single-page-application"
     },
@@ -48,8 +48,8 @@
     "crons": [],
     "hash": {
       "assets": {
-        "output": "27744b205b6ffcfd3f5cac6bc11792ce42815aa2003558257e4a4fefeb0f8e7e",
-        "input": "71975b46c0bfb8bb4a05950b660191b9f7bc58c391f04d7c91885a19ab3cbf0d"
+        "output": "a8cd7aaf42a4d7f26b0dda4253a0e30140253388d4668f2a6547a63acb9362e7",
+        "input": "01ed22aeb9464e5d2e0293b40c664f49af77ed74759943e5bffa4a46110dbf2c"
       },
       "metadata": "7e366b51863d67e0c6465be4a322448ce18d53779c463b52085065c6c2ac49c3"
     }
