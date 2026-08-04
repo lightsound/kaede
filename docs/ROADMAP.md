@@ -485,7 +485,13 @@
   ゲート2件のクローズを済ませる — Phase 1 参照。開発インスタンスの Identity で
   実メンバーを入れると本番切替時に全アカウントの Identity 付け替えが必要になる
   ため。**開始チェックリストと実測項目の全文は
-  [docs/dogfooding.md](./dogfooding.md)** — 2026-08-04 作成）:
+  [docs/dogfooding.md](./dogfooding.md)** — 2026-08-04 作成）
+  ✅ **開始条件クローズ（2026-08-04）**: 前提の全ゲートを閉じ、オーナーが
+  https://kaede.town で本番 issuer（Google ログイン）→ JWT テンプレート経由の
+  接続 → 申請 → 入場を通して**初代管理者を確保済み**（`space_member` に
+  approved/admin 1 行を実測確認）。開発 issuer の member トークンは本番 DB で
+  拒否されることも実トークンで実測済み（ゲート①）。残るは URL のコミュニティ
+  共有（オーナー）と、共有後 数日〜2週間の実測（下記、別セッションで集計）:
   Maincloud の利用料金（上記試算の検証。
   料金は $1≒2,592 TeV、egress 2,000 TeV/GB、ストレージ $1/GB/月、Free 枠は
   2,500 TeV/月で常用には不足＝Pro 前提）と日本からの RTT。問題があれば
