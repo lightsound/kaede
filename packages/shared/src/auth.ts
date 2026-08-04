@@ -57,6 +57,27 @@ export type ConnectionAuth =
  * (localhost and Maincloud are both registered — see the server's
  * CONNECTION_POLICY).
  */
+/**
+ * Builds the member-issuer list for the database the module woke up in —
+ * the ROADMAP Phase 1 gate ① rule. The production database trusts ONLY the
+ * production Clerk instance: the development instance's sign-up is open, so
+ * a development token must never mint a member against production (it could
+ * queue in the application list, and on an empty database it could seed
+ * itself as the very first admin). Every other database — the local
+ * standalone, e2e, a staging clone — keeps the development issuer, so local
+ * development with the pk_test_ Clerk instance keeps signing in as members.
+ *
+ * Which database counts as production is the caller's judgment; the server
+ * pins its own database identity (see CONNECTION_POLICY in the server
+ * package) because a reducer cannot see which host it runs on.
+ */
+export function memberIssuersFor(
+  isProductionDatabase: boolean,
+  issuers: { readonly production: string; readonly development: string },
+): readonly string[] {
+  return isProductionDatabase ? [issuers.production] : [issuers.production, issuers.development];
+}
+
 export function classifyConnection(
   claims: ConnectionClaims | null,
   policy: ConnectionPolicy,

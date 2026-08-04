@@ -47,14 +47,22 @@
   `@maple/shared` の `classifyConnection` に切り出して単体テスト済み。
   承認制の実装により member 判定は実権限 — 入場資格・最初の接続での
   管理者シード — を持つようになったため、2件とも閉じるまで実ユーザー投入は
-  不可。**⚠️ ①が未クローズで残っている（2026-08-02 時点）**）:
+  不可。**✅ 2件ともクローズ済み（2026-08-04）**）:
   ① **開発 Clerk インスタンスの issuer を `memberIssuers` から外す**
-  ⚠️ **未クローズ**（本番 Clerk インスタンス作成＝ドメイン取得後の作業と
-  同時に行う）。開発インスタンスはサインアップが開いているため、本番
-  issuer を追加する同じ変更で必ず取り除く（残すと開発インスタンスで
-  登録した誰でも本番のメンバートークンを持てる。承認制で入場自体は
-  管理者承認待ちになるが、申請列に並べること・空のデータベースなら
-  初代管理者を先取りできることが穴として残る）
+  ✅ **完了（2026-08-04）**: member issuer は**データベース単位**で分岐する
+  形にした（`@maple/shared` の `memberIssuersFor` — 単体テスト済み）。
+  本番データベース（Maincloud `maple-like`、`ctx.databaseIdentity` を
+  定数でピン留め）では本番 issuer（`https://clerk.kaede.town`）**のみ**が
+  member を鋳造でき、開発 issuer は未登録 issuer としてゲート②の拒否に
+  落ちる。それ以外のデータベース（ローカル standalone・E2E・ステージング）
+  では開発 issuer も member のままなので、ローカル開発は今後も
+  pk_test_ で進められる。ピン留めが古びると開発 issuer が本番で復活する
+  （fail-open）ため、開発 issuer による member 鋳造を module log に warn
+  するトリップワイヤを併設（DB を作り直したら定数を同時更新 —
+  `PRODUCTION_DATABASE_IDENTITY` のコメント参照）。クライアントの本番キー
+  切替（CI deploy の `VITE_CLERK_PUBLISHABLE_KEY`）とモジュールの issuer
+  差し替えは同一 PR・同一デプロイ（サインイン済みクライアントは拒否
+  issuer で手動サインアウトまで再試行が続くため — `onConnect` コメント）
   ② **未登録 issuer をゲストとして通す暫定措置をやめる** ✅ **完了
   （2026-08-02）**: Maincloud のサーバー発行トークンの issuer
   （`https://auth.spacetimedb.com` — 本番ログで実測）を `guestIssuers` に
@@ -68,9 +76,13 @@
   するため手動サインアウトまで再試行が続く — ゲート①で issuer を
   差し替える際はクライアントとモジュールを同時デプロイすること）は
   `onConnect` のコメント参照
-- Clerk ＋ Google ログイン（既存の `sessionStorage` 匿名トークン方式を置換。
-  再接続のたびに `getToken()` で新トークンを取得する。本番 Clerk インスタンスを
-  実ユーザー投入前に確定させる — VISION の実装上の注意を参照）
+- Clerk ＋ Google ログイン ✅ **完了（クライアント実装は 2026-07 済み、本番
+  インスタンス確定 2026-08-04）**: 既存の `sessionStorage` 匿名トークン方式を
+  置換済み（`ClerkGate`。再接続のたびに `getToken({ skipCache })` で新トークン
+  取得）。本番 Clerk インスタンスは kaede.town で確定し（issuer =
+  `https://clerk.kaede.town`）、本番クライアントには CI deploy が
+  `VITE_CLERK_PUBLISHABLE_KEY`（pk_live_）を注入する。ローカル開発は
+  開発インスタンス（pk_test_）のまま — ゲート①の DB 単位分岐を参照
 - **プロフィール（表示名）の永続化** ✅ **完了（2026-07-30）**:
   `set_display_name` リデューサー＋最小の変更 UI（クライアント左下のフォーム）。
   メンバーの表示名は `account.displayName` に永続化され、再接続・別デバイスでも
@@ -139,13 +151,14 @@
   要求するため不可 — README のデプロイ節参照)。`vercel.json` は撤去済み。
   Vercel 側の Git 連携解除とプロジェクト削除もオーナーが完了(2026-08-02)し、
   移行はクローズ。CI からの自動デプロイは下の「デプロイフロー」項で別途行う
-- **ドメインの取得**: 第一候補は **kaede.town**（2026-07-30 選定）。ただし
-  **取得は実ユーザー投入直前 — ドッグフーディング開始（Phase 2）のトリガー —
-  まで後置する**（2026-08-01 方針変更。費用を名前の最終確定まで払わない判断で、
-  先取りされた場合は別候補から選び直す）。取得時に Cloudflare Registrar で
-  登録し、Clerk 本番インスタンスをこのドメインで設定する（発行者＝Identity が
-  このドメインに紐づくため、実ユーザー投入後は変更不可 — VISION 参照。
-  それまでの開発は Clerk 開発インスタンス＋workers.dev で進められる）
+- **ドメインの取得** ✅ **完了（2026-08、ドッグフーディング開始のトリガーとして
+  実施）**: **kaede.town** を Cloudflare Registrar で取得（2026-08-04 の空き確認
+  — RDAP 404・NS なし — を経てオーナーが購入）。Workers へのカスタムドメイン
+  紐付けは Alchemy（`infra/alchemy.run.ts` の `domain`）で IaC 化し、workers.dev
+  URL は移行中 URL として併存。Clerk 本番インスタンスをこのドメインで設定済み
+  （発行者＝Identity がこのドメインに紐づくため、実ユーザー投入後は変更不可 —
+  VISION 参照）。アプリ用 DNS（Workers、Alchemy 管理）と Clerk 用 DNS
+  （`clerk.kaede.town` 等の CNAME、Clerk の dns_setup）は別物で両方設定済み
 - 環境戦略の確立: ローカル開発（SpacetimeDB local ＋ Clerk 開発インスタンス）と
   本番（Maincloud ＋ Clerk 本番インスタンス）の分離、環境変数・シークレットの
   整理（Cloudflare のシークレットは Alchemy / CI から注入）、
@@ -160,9 +173,10 @@
   新規開設強制はなし）。Clerk・Sentry は Projects 管理の新規アカウント作成方式
   （いずれも未セットアップだったため問題なし）②`.env` 自動同期と名前付き環境
   （`env create` / `env use`、リソースの環境別割当）が環境戦略と整合。
-  残タスク: ドメイン取得後（実ユーザー投入直前 — 上のドメイン項目参照）に
-  Clerk を `production_domain` 付きで再プロビジョニングして本番インスタンスを
-  作る（プロビジョニング後の設定変更は不可）。留意: Cloudflare のカタログに R2 はなく汎用 API トークンも発行されない
+  残タスクだった「ドメイン取得後に Clerk を `production_domain` 付きで
+  再プロビジョニングして本番インスタンスを作る」は ✅ **完了（2026-08）**
+  （プロビジョニング後の設定変更は不可のため作り直し方式 — 上のドメイン項目と
+  ゲート①を参照）。留意: Cloudflare のカタログに R2 はなく汎用 API トークンも発行されない
   ため、Alchemy 用の API トークンは従来どおり別途発行する（役割分担どおり）
 - **バックアップ・復旧手段の確認**: Maincloud のバックアップ／エクスポート機能を
   調査し、恒久データ（アカウント・持ち物）の復旧手順を決めておく。

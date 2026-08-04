@@ -2,6 +2,11 @@ import type { PlayerInput } from '@maple/shared';
 
 const MOVE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space']);
 
+// mergeInputs (the keyboard/touch combinator) lives in its own file:
+// sampling (this file) and combining are separate concerns with separate
+// consumers, and fallow's health gate flags the pairing as a high-impact
+// split candidate.
+
 /**
  * True when the key event is aimed at a text-entry element (the display-name
  * form today, chat later), so the avatar must not react to it. Structural
@@ -11,17 +16,6 @@ const MOVE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'S
 function isTextEntry(target: EventTarget | null): boolean {
   const el = target as { tagName?: string; isContentEditable?: boolean } | null;
   return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable === true;
-}
-
-/** Field-wise OR of two inputs, so multiple sources (keyboard, touch) combine. */
-export function mergeInputs(a: PlayerInput, b: PlayerInput): PlayerInput {
-  return {
-    left: a.left || b.left,
-    right: a.right || b.right,
-    up: a.up || b.up,
-    down: a.down || b.down,
-    jump: a.jump || b.jump,
-  };
 }
 
 /** Window keyboard listener that samples held keys into a PlayerInput. */
