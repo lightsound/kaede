@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- a small React gate around NameEditor; needs a DOM, and no DOM test environment is configured. The validation behind it is normalizeDisplayName/evaluateRename, unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- a small React gate around NameEditor; needs a DOM, and no DOM test environment is configured. The validation behind it is normalizeDisplayName/evaluateRename, unit-tested in @kaede/shared
 import type { SpaceMemberView } from '../net.package';
 import { NameEditor } from './NameEditor';
 

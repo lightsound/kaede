@@ -34,7 +34,7 @@ async function dmRowsReceived(page: Page): Promise<number> {
  * real tab switch is not reproducible headlessly. The override replaces
  * only the ENVIRONMENT INPUTS of the decision; the decision rule itself
  * (shouldNotifyDm — seed/own/visible/permission) is fixed by unit tests
- * in @maple/shared.
+ * in @kaede/shared.
  */
 
 // Full Chromium instead of the default headless shell, for this file only:

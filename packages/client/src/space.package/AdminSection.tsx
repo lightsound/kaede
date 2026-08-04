@@ -1,5 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a React gate around the admin panel; needs a DOM, and no DOM test environment is configured. The gating rule is isActingAdmin, unit-tested in @maple/shared
-import { isActingAdmin, type MemberAction } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- a React gate around the admin panel; needs a DOM, and no DOM test environment is configured. The gating rule is isActingAdmin, unit-tested in @kaede/shared
+import { isActingAdmin, type MemberAction } from '@kaede/shared';
 import type { SpaceMemberView, SpaceView } from '../net.package';
 import { AdminPanel } from './AdminPanel';
 

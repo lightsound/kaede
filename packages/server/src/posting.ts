@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, mention resolution, rate limits, retention) are delegated to normalizeChatText / planChatDraft / isReactionEmoji / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @maple/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, mention resolution, rate limits, retention) are delegated to normalizeChatText / planChatDraft / isReactionEmoji / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @kaede/shared and unit-tested there
 
 // The posting reducers (ROADMAP Phase 2): what someone in the world says,
 // gestures or claims about themselves — the global-scope chat, the
@@ -20,7 +20,7 @@ import {
   type SendAllowanceRequest,
   type SendAllowanceVerdict,
   statusViewOf,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
 import {
@@ -63,7 +63,7 @@ type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
  * Charges one send against the sender's token bucket on `guardTable`, or
  * refuses the send (乱用対策 — the Phase 0 input guard's thinking applied
  * to chat and reactions). The rule itself is the pure `evaluate`
- * (evaluateChatSend / evaluateReactionSend, unit-tested in @maple/shared);
+ * (evaluateChatSend / evaluateReactionSend, unit-tested in @kaede/shared);
  * a missing guard row reads as the epoch marker, which the bucket's bank
  * cap turns into exactly one full burst. The marker write-back is split
  * into writeSendAllowance to keep these uncovered arrows under the CRAP
@@ -137,7 +137,7 @@ function writeSendAllowance(
 //   row reaches it as a row event and flips its UI to the admission
 //   notice.
 // - A bad message or the rate limit: loud; they throw before any write.
-// Validation and the rate rule are pure functions in @maple/shared, shared
+// Validation and the rate rule are pure functions in @kaede/shared, shared
 // with the client so its input-side feedback can never disagree with the
 // authority here. The sender's display name is snapshotted onto the row —
 // see the chat_message table comment for why identity lookups cannot
@@ -194,7 +194,7 @@ function resolveDmRecipientName(ctx: Ctx, recipient: SenderIdentity): string {
 // to its sender and recipient by the dm_message row-level-security filter
 // (see tables.ts). The argument is the RESOLVED recipient identity, not the
 // mentioned name — the client resolves the mention against the players on
-// its screen (planChatDraft in @maple/shared, where the rules are
+// its screen (planChatDraft in @kaede/shared, where the rules are
 // unit-tested) so the message goes to whoever the sender was looking at,
 // not to whoever holds the name by the time the call lands (rename races).
 // The server re-validates what it must never take on faith: the sender's
@@ -303,7 +303,7 @@ type StatusPatch = { availability: Availability } | { text: string };
  * pre-write) validation: eligibility, the rate charge, and the
  * single-column write onto the sender's status row. The other column
  * defaults through statusViewOf — the same "missing row means
- * DEFAULT_STATUS" rule clients read with, unit-tested in @maple/shared.
+ * DEFAULT_STATUS" rule clients read with, unit-tested in @kaede/shared.
  * The server-side read-modify-write is the point of having two reducers
  * over one: each control sends only its own validated value, so a stale
  * client-side view of the OTHER column can never be written back.

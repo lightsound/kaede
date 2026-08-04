@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reads the live document / Notification environment and constructs OS notifications; the decision and content rules are shouldNotifyDm / dmNotificationContent, unit-tested in @maple/shared, and the dev-only override parser is visibilityOverride.ts (unit-tested here in packages/client)
+// fallow-ignore-file coverage-gaps -- reads the live document / Notification environment and constructs OS notifications; the decision and content rules are shouldNotifyDm / dmNotificationContent, unit-tested in @kaede/shared, and the dev-only override parser is visibilityOverride.ts (unit-tested here in packages/client)
 import {
   type DmNotificationContent,
   type DmNotifyContext,
@@ -6,7 +6,7 @@ import {
   dmNotificationContent,
   type NotificationPermissionState,
   shouldNotifyDm,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { parseVisibilityOverride, type VisibilityReading } from './visibilityOverride';
 
 /** What the permission UI renders from (see NotificationControl). */
@@ -51,7 +51,7 @@ function readPermission(): NotificationPermissionState {
  */
 function countDecisionForE2E(): void {
   if (!import.meta.env.DEV) return;
-  const stats = window.__mapleE2ENet;
+  const stats = window.__kaedeE2ENet;
   if (stats) stats.dmNotifyDecisions += 1;
 }
 

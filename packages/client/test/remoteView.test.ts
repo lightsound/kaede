@@ -1,4 +1,4 @@
-import { type Facing, INTERP_DELAY_MS } from '@maple/shared';
+import { type Facing, INTERP_DELAY_MS } from '@kaede/shared';
 import { describe, expect, it } from 'vitest';
 import {
   createRemoteViews,

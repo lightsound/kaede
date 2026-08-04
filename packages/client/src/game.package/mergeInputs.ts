@@ -1,4 +1,4 @@
-import type { PlayerInput } from '@maple/shared';
+import type { PlayerInput } from '@kaede/shared';
 
 /** Field-wise OR of two inputs, so multiple sources (keyboard, touch) combine. */
 export function mergeInputs(a: PlayerInput, b: PlayerInput): PlayerInput {

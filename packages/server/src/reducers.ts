@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredRow in @maple/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, replay, retention) are delegated to evaluateInputBatch / replayInputs / isExpiredRow in @kaede/shared and unit-tested there
 import {
   type AcceptedBatchVerdict,
   asMembership,
@@ -23,7 +23,7 @@ import {
   profileNameFrom,
   replayInputs,
   stateFromRow,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
 import {
@@ -276,7 +276,7 @@ function recordConnectionEvent(ctx: Ctx, kind: 'connected' | 'disconnected', det
 // idle guard's suspension after IDLE_DISCONNECT_MS without input (the
 // client's net.package/idle.ts), sent right before it closes the socket so
 // clientDisconnected can label the drop 'idle' instead of 'unannounced'
-// (disconnectReasonFrom in @maple/shared; see the disconnect_intent table
+// (disconnectReasonFrom in @kaede/shared; see the disconnect_intent table
 // comment). Delivery rides the WebSocket close contract: data queued before
 // close() is flushed first, so no ack round-trip is needed. Keyed by
 // connectionId, so a member's second tab cannot relabel the first tab's
@@ -317,7 +317,7 @@ function logRejection(
 // them through the same shared physics. Position cannot change any other way.
 // Admission (batch size, gap/ordering, token-bucket rate limit, heartbeat
 // classification) lives in the pure evaluateInputBatch so it is unit-tested
-// in @maple/shared. Two idle-suppression cases ride on this one reducer so
+// in @kaede/shared. Two idle-suppression cases ride on this one reducer so
 // no new reducer (= no bindings regeneration) is needed (ROADMAP Phase 2):
 // - An EMPTY batch is a heartbeat: a quiescent client sends no input ticks
 //   at all, so this is how its row's updatedAt keeps moving and the
@@ -359,7 +359,7 @@ export const submitInputs = spacetimedb.reducer(
  * or a replayed input batch. Split out of the reducer to keep that uncovered
  * arrow under the CRAP budget fallow enforces (the backfillAccountName
  * precedent); the decisions themselves live in evaluateInputBatch,
- * unit-tested in @maple/shared.
+ * unit-tested in @kaede/shared.
  */
 function applyAcceptedBatch(
   ctx: Ctx,
@@ -448,7 +448,7 @@ function persistMemberName(ctx: Ctx, name: string): void {
 // under it. Guests have no account, so their rename lives only as long as
 // their per-tab identity's player rows.
 // Admission (name validation, refusing a rename with nowhere to land) is the
-// pure evaluateRename, unit-tested in @maple/shared — the same rules the
+// pure evaluateRename, unit-tested in @kaede/shared — the same rules the
 // client checks against before sending.
 // Deliberately does NOT touch player.updatedAt (the pre-split rename did,
 // incidentally, by rewriting the whole row): renaming is not liveness.
@@ -543,7 +543,7 @@ function syncPlayerToStatus(
  * The shared body of the four admin actions on one membership (approve /
  * reject / ban / unban — 承認制の管理側). Every action is a status
  * transition on the existing row, vetted by the pure evaluateMemberAction
- * (unit-tested in @maple/shared); the account is never touched, so no
+ * (unit-tested in @kaede/shared); the account is never touched, so no
  * space-level action can damage the target's global profile, and any
  * mistake is reversible by another action. The admin check is server-side
  * and final — the client-side gating of the admin panel is cosmetic.
@@ -583,7 +583,7 @@ function memberActionReducer(action: MemberAction) {
 }
 
 // The four admin actions (what each does and when it is allowed:
-// MemberAction and evaluateMemberAction in @maple/shared). An approved
+// MemberAction and evaluateMemberAction in @kaede/shared). An approved
 // member's waiting client sees its space_member row update and joins on its
 // own; the other three also remove the target's avatar (transitionMember).
 export const approveMember = memberActionReducer('approve');

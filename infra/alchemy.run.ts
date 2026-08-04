@@ -5,7 +5,7 @@
 // IaC 行のベータ採用条件)。アプリコードはこのファイルの存在を知らない。
 //
 // 実行は infra/ を作業ディレクトリとして `alchemy deploy --stage prod` で行う
-// (`pnpm --filter @maple/infra deploy:prod`。素の `deploy` は pnpm の
+// (`pnpm --filter @kaede/infra deploy:prod`。素の `deploy` は pnpm の
 // 組み込みサブコマンドと衝突するため使わない)。手順の全体は README の
 // 「デプロイ(公開手順)」を参照。
 //
@@ -84,7 +84,7 @@ export default Alchemy.Stack(
       name: stage === 'prod' ? 'kaede' : `kaede-${workerNameSlug(stage)}`,
       // ビルドはリポジトリルートで実行する(infra/ からの相対)。
       cwd: '..',
-      command: 'pnpm --filter @maple/client build',
+      command: 'pnpm --filter @kaede/client build',
       outdir: 'packages/client/dist',
       assets: {
         notFoundHandling: 'single-page-application',

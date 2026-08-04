@@ -1,5 +1,5 @@
 {
-  "name": "@maple/client",
+  "name": "@kaede/client",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.12.9",
-    "@maple/shared": "workspace:*",
+    "@kaede/shared": "workspace:*",
     "pixi.js": "^8.19.0",
     "posthog-js": "^1.410.4",
     "react": "^19.2.8",

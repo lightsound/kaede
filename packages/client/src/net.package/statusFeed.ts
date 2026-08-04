@@ -1,5 +1,5 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the status lines; needs a running host. The narrowing, default and label rules live in @maple/shared (statusViewOf / DEFAULT_STATUS / statusLabel), unit-tested there
-import { DEFAULT_STATUS, type StatusView, statusViewOf } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the status lines; needs a running host. The narrowing, default and label rules live in @kaede/shared (statusViewOf / DEFAULT_STATUS / statusLabel), unit-tested there
+import { DEFAULT_STATUS, type StatusView, statusViewOf } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 

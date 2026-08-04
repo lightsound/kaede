@@ -38,7 +38,7 @@ const memberToken: AuthTokenGetter = async () => {
  * How the mounted tree authenticates, and what that means: the token source
  * for SpacetimeDB connections, plus whether this client is a signed-in
  * member — which is what gates the membership-application UI (a guest has no
- * account to hang an application on; see membershipPrompt in @maple/shared).
+ * account to hang an application on; see membershipPrompt in @kaede/shared).
  * The two travel together because they must flip together: a token source
  * that says member with a flag that says guest (or vice versa) is exactly
  * the race the remount-based design rules out.

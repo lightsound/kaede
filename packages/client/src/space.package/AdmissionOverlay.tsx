@@ -1,5 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a React overlay; needs a DOM, and no DOM test environment is configured. The admission and prompt it renders are decideAdmission / membershipPrompt, unit-tested in @maple/shared
-import type { Admission, MembershipPrompt } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- a React overlay; needs a DOM, and no DOM test environment is configured. The admission and prompt it renders are decideAdmission / membershipPrompt, unit-tested in @kaede/shared
+import type { Admission, MembershipPrompt } from '@kaede/shared';
 import type { CSSProperties } from 'react';
 import { UI_BUTTON_BG, UI_GOLD, UI_GOLD_BORDER, UI_OVERLAY_BG, UI_TEXT_COLOR } from '../theme';
 

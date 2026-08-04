@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- a React status panel; needs a DOM, and no DOM test environment is configured. The validation and label rules it relies on are isAvailability / normalizeStatusText / statusLabel, unit-tested in @maple/shared
+// fallow-ignore-file coverage-gaps -- a React status panel; needs a DOM, and no DOM test environment is configured. The validation and label rules it relies on are isAvailability / normalizeStatusText / statusLabel, unit-tested in @kaede/shared
 import {
   AVAILABILITIES,
   AVAILABILITY_ICONS,
@@ -8,7 +8,7 @@ import {
   STATUS_TEXT_MAX_LENGTH,
   type StatusTextRejectReason,
   type StatusView,
-} from '@maple/shared';
+} from '@kaede/shared';
 import type { CSSProperties } from 'react';
 import {
   UI_BUTTON_BG,

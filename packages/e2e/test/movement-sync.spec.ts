@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
-import { MOVE_SPEED } from '@maple/shared';
+import { MOVE_SPEED } from '@kaede/shared';
 import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, snapshot } from './helpers';
 

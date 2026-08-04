@@ -11,7 +11,7 @@ import {
   RESEND_TIMEOUT_MS,
   SPAWN_X,
   stepPlayer,
-} from '@maple/shared';
+} from '@kaede/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPrediction, type PredictionDeps } from '../src/net.package/prediction';
 

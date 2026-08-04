@@ -8,7 +8,7 @@ import {
   RESEND_TIMEOUT_MS,
   stepPlayer,
   unpackInput,
-} from '@maple/shared';
+} from '@kaede/shared';
 
 /** Transport + sim hooks the prediction loop drives, decoupled from SpacetimeDB/Pixi. */
 export interface PredictionDeps {
@@ -36,7 +36,7 @@ const sameState = (a: PlayerState, b: PlayerState): boolean =>
  * Outbound traffic is where the idle suppression lives (ROADMAP Phase 2):
  * pending ticks flush every INPUT_FLUSH_INTERVAL_MS, but a flush whose
  * window the send gate rules a no-op (no input, quiescent, fully acked —
- * see evaluateSendWindow in @maple/shared) is SKIPPED: nothing is sent, and
+ * see evaluateSendWindow in @kaede/shared) is SKIPPED: nothing is sent, and
  * the sent/acked horizon advances virtually past the window. The server
  * never hears about those ticks; when input resumes, the next batch's
  * startTick runs past the server's row tick and the server accepts the gap

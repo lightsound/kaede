@@ -53,7 +53,7 @@ importers:
       '@clerk/react':
         specifier: ^6.12.9
         version: 6.12.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@maple/shared':
+      '@kaede/shared':
         specifier: workspace:*
         version: link:../shared
       pixi.js:
@@ -93,7 +93,7 @@ importers:
 
   packages/e2e:
     devDependencies:
-      '@maple/shared':
+      '@kaede/shared':
         specifier: workspace:*
         version: link:../shared
       '@playwright/test':
@@ -108,7 +108,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@maple/shared':
+      '@kaede/shared':
         specifier: workspace:*
         version: link:../shared
       spacetimedb:

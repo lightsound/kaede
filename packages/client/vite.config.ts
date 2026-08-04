@@ -30,7 +30,7 @@ function envReader(mode: string): (name: string) => string | undefined {
  * 判定は不可 — ローカル .env に実キーが常在するため、それでは `pnpm dev`
  * のノイズが本番プロジェクト(Free 枠は 1 プロジェクト)を汚染する。
  * 動作確認は明示オプトインのローカル本番ビルド(pnpm --filter
- * @maple/client build && vite preview)で行う。
+ * @kaede/client build && vite preview)で行う。
  */
 function posthogKey(mode: string, readEnv: (name: string) => string | undefined): string {
   if (mode !== 'production') return '';

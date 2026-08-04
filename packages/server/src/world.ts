@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- helpers over the SpacetimeDB reducer context; they only run inside a module host, and the rules worth testing (admission, retention, name precedence) are delegated to evaluateJoin / isExpiredRow / resolveJoinName in @maple/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- helpers over the SpacetimeDB reducer context; they only run inside a module host, and the rules worth testing (admission, retention, name precedence) are delegated to evaluateJoin / isExpiredRow / resolveJoinName in @kaede/shared and unit-tested there
 
 // Who is in the world, and how their rows enter and leave it — the player
 // lifecycle plus the admission reads it depends on. Its own module (not
@@ -16,7 +16,7 @@ import {
   resolveJoinName,
   SPAWN_X,
   SPAWN_Y,
-} from '@maple/shared';
+} from '@kaede/shared';
 import type { InferSchema, ReducerCtx } from 'spacetimedb/server';
 import type { spacetimedb } from './tables';
 
@@ -126,7 +126,7 @@ export function spawnOrResume(ctx: Ctx): void {
   const existing = ctx.db.player.identity.find(ctx.sender);
   const nameRow = ctx.db.playerName.identity.find(ctx.sender);
   // Precedence (persisted account name > resumed row's name > default) lives
-  // in resolveJoinName, unit-tested in @maple/shared.
+  // in resolveJoinName, unit-tested in @kaede/shared.
   const name = resolveJoinName({
     persistedName: ctx.db.account.identity.find(ctx.sender)?.displayName,
     resumedRowName: nameRow?.name,

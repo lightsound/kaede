@@ -11,7 +11,7 @@ Do not add gameplay features (combat, mobs, XP); that direction was abandoned (P
 
 ## Cursor Cloud specific instructions
 
-`maple-like` is a single-product pnpm monorepo (a MapleStory-style 2D multiplayer game). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `test:e2e`, `lint`, `lint:imports`, `analyze`).
+`kaede` is a single-product pnpm monorepo (a MapleStory-style 2D virtual office). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `test:e2e`, `lint`, `lint:imports`, `analyze`).
 
 ### SpacetimeDB CLI binary name
 The pinned CLI (`v2.7.1`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`. If the binary is missing on a fresh VM, reinstall it:
@@ -30,7 +30,7 @@ Order matters and the backend must be running before publish:
 
 The client defaults to `ws://localhost:3000` and DB `maple-like` in dev, so no env vars are needed locally.
 
-`pnpm test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @maple/e2e exec playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli pnpm test:e2e` (CI sets the same variable in `ci.yml`).
+`pnpm test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @kaede/e2e exec playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli pnpm test:e2e` (CI sets the same variable in `ci.yml`).
 
 ### Merging checklist
 Before merging a PR, check the review feedback the GitHub apps left on the PR

@@ -1,5 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a React panel over the subscribed member directory; needs a DOM, and no DOM test environment is configured. The authority for every action here is server-side (evaluateMemberAction / evaluateSettingChange, unit-tested in @maple/shared)
-import type { MemberAction, MemberStatus } from '@maple/shared';
+// fallow-ignore-file coverage-gaps -- a React panel over the subscribed member directory; needs a DOM, and no DOM test environment is configured. The authority for every action here is server-side (evaluateMemberAction / evaluateSettingChange, unit-tested in @kaede/shared)
+import type { MemberAction, MemberStatus } from '@kaede/shared';
 import type { CSSProperties } from 'react';
 import type { SpaceMemberView } from '../net.package';
 import {

@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the chat log and bubbles; needs a running host. The log operations it applies are pure and unit-tested (chatLog.ts)
-import type { DmRowEvent, DmRowSource } from '@maple/shared';
+import type { DmRowEvent, DmRowSource } from '@kaede/shared';
 import type { DbConnection } from '../module_bindings';
 import { type ChatEntryView, type ChatLog, insertChatEntry, removeChatEntry } from './chatLog';
 import type { RowOf } from './rows';
