@@ -61,6 +61,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 | `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期） |
 | `packages/server` | SpacetimeDB モジュール（`player`・`player_name`・`player_guard`・`account`・`space_member`・`space_setting` テーブルと `join`・`submit_inputs`・管理系リデューサー。サーバー権威で物理・入場制御を実施。高頻度更新の `player` 行から低頻度の表示名（`player_name`、公開）とガード内部値（`player_guard`、非公開）を分離し、行更新1回あたりの egress を抑える） |
 | `packages/e2e` | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証） |
+| `packages/worker` | 通話 API の Cloudflare Worker（`kaede-call`）。RealtimeKit のミーティング作成・参加トークン発行という「シークレットを要する外部 API 呼び出し」だけを行う薄いステートレスなグルー（VISION のバックエンド原則）。状態は持たない — どのグループにどのミーティングが紐づくかは SpacetimeDB の `group_call` 行が真実源 |
 | `infra` | Cloudflare リソースの IaC（Alchemy v2）。Alchemy / Effect への依存はこのディレクトリに隔離し、アプリコードには漏らさない（デプロイ手順は後述） |
 
 ## 同期方式
@@ -333,6 +334,44 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    別名の DB に向けたいときは、クライアントのビルド時に `VITE_SPACETIME_DB=<DB名>` を
    設定します（`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com`
    なので、Maincloud を使う限り設定不要です）。
+
+### 通話 API Worker（kaede-call）
+
+ビデオ通話（ROADMAP Phase 4）の RealtimeKit 呼び出しのうち、シークレットを要する
+**ミーティング作成・参加トークン発行**だけを行う Worker です（`packages/worker`）。
+CI の自動デプロイに含まれ、リソース定義は `infra/alchemy.run.ts` の `CallApi`、
+wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
+
+- **ランタイムシークレット `REALTIMEKIT_API_TOKEN`**（Realtime Admin 権限の
+  アカウント API トークン）は **Alchemy のバインディングにしていません** —
+  Alchemy のステート（prod は git コミット対象）は `Redacted` 値も平文で保存する
+  ことを実測済みのため（2026-08-05）。CI のデプロイジョブが Alchemy デプロイ後に
+  `wrangler secret put` で毎回同期します（GitHub Actions シークレット
+  `REALTIMEKIT_API_TOKEN` が必要）。Alchemy のスクリプト再アップロードは帯域外の
+  secret_text バインディングを保持します（同日実測）。手動で入れ直す場合:
+
+  ```sh
+  cd infra && printf '%s' "$REALTIMEKIT_API_TOKEN" | \
+    pnpm exec wrangler secret put REALTIMEKIT_API_TOKEN --name kaede-call
+  ```
+
+- **ローカル開発**は Alchemy を通さず `wrangler dev` で動かします。
+  `infra/.dev.vars`（gitignore 済み — wrangler は設定ファイルの隣の
+  `.dev.vars` を読む）に `REALTIMEKIT_API_TOKEN` と開発 Clerk インスタンスの
+  `CLERK_ISSUER` を書き:
+
+  ```sh
+  cd infra && pnpm exec wrangler dev --config wrangler-call.jsonc --port 8787
+  ```
+
+  クライアントの開発ビルドは既定で `http://localhost:8787` を呼びます
+  （`VITE_CALL_API_URL` で上書き可能。本番ビルドの既定は
+  `https://kaede-call.kaede-751.workers.dev`）。
+
+- 通話の**状態は SpacetimeDB が真実源**です: どのグループにどのミーティングが
+  紐づくかは `group_call` 行（メンバー限定 RLS）、Worker は「スペースのメンバーで
+  あること」（Clerk JWT）だけを検証します。ゲストの通話参加は増分①では未対応
+  （ROADMAP Phase 4 参照）。
 
 ## CI
 

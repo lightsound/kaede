@@ -280,20 +280,36 @@ jobs:
       # - POSTHOG_API_KEY (phx_) + POSTHOG_PROJECT_ID: enable the sourcemap
       #   upload plugin (ADR §8.4). Deliberately ONLY here — uploading from
       #   PR builds would pollute the project's symbol sets.
-      # REALTIMEKIT_API_TOKEN is the Realtime-Admin account API token the
-      # call Worker (kaede-call) holds as its runtime secret; Alchemy reads
-      # it here at deploy time (Config.redacted in infra/alchemy.run.ts) and
-      # fails the deploy if it is missing.
       - name: Deploy client (Alchemy)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           POSTHOG_ANALYTICS_API_KEY: ${{ secrets.POSTHOG_ANALYTICS_API_KEY }}
           POSTHOG_ANALYTICS_HOST: https://us.posthog.com
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_PROJECT_ID: '540373'
         run: CI=true pnpm --filter @kaede/infra deploy:prod --yes
+
+      # The call Worker's runtime secret (the Realtime-Admin account API
+      # token), synced out-of-band with wrangler on every deploy.
+      # Deliberately NOT an Alchemy binding: Alchemy writes Redacted values
+      # into its state files in PLAINTEXT, and the prod state is committed
+      # to git (measured 2026-08-05 on a dev stage — see the CallApi env
+      # comment in infra/alchemy.run.ts). Runs after the Alchemy deploy so
+      # the Worker exists on the very first run; Alchemy's later script
+      # uploads preserve out-of-band secret_text bindings (also measured).
+      - name: Sync call Worker secret (wrangler)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 751c8a59858c9c04a8e722df7330444d
+          REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
+        run: |
+          if [ -z "$REALTIMEKIT_API_TOKEN" ]; then
+            echo "::error::REALTIMEKIT_API_TOKEN is not set (GitHub Actions secret). The call Worker cannot mint tokens without it."
+            exit 1
+          fi
+          printf '%s' "$REALTIMEKIT_API_TOKEN" \
+            | pnpm --filter @kaede/infra exec wrangler secret put REALTIMEKIT_API_TOKEN --name kaede-call
 
       # Alchemy keeps its state in files that are committed to git (README
       # 「Alchemy のステート管理」), and a deploy rewrites them, so push the

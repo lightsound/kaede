@@ -17,7 +17,6 @@
 // 設定は Windows の cmd.exe でも動くよう cross-env 経由にしている。
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
-import * as Config from 'effect/Config';
 import * as Effect from 'effect/Effect';
 
 // アカウント「Kaede」の ID(シークレットではない公開識別子)。API トークンと
@@ -122,12 +121,15 @@ export default Alchemy.Stack(
       main: '../packages/worker/src/index.ts',
       compatibility: { date: '2026-08-01' },
       env: {
-        // デプロイ実行環境の環境変数から解決され secret_text として
-        // バインドされる(CI は GitHub シークレット REALTIMEKIT_API_TOKEN を
-        // 渡す — ci.yml のデプロイジョブ)。欠けているとデプロイ自体が
-        // 失敗する(fail-fast: 空シークレットの Worker が黙って 502 を
-        // 返し続けるより早く気づける)。
-        REALTIMEKIT_API_TOKEN: Config.redacted('REALTIMEKIT_API_TOKEN'),
+        // シークレット REALTIMEKIT_API_TOKEN は意図的にここに無い:
+        // Alchemy のステート(git コミット対象 — README「Alchemy の
+        // ステート管理」の注意書き)は Redacted 値も平文で保存することを
+        // 実測済み(2026-08-05、dev ステージで確認)。シークレットは
+        // デプロイ後に wrangler で帯域外投入する(ci.yml のデプロイ
+        // ジョブ / README「通話 API Worker」)。Alchemy のスクリプト
+        // 再アップロードが帯域外の secret_text バインディングを保持する
+        // ことも同じ dev ステージで実測済み。
+        //
         // RealtimeKit アプリ「kaede」(増分0 スパイクが名前で冪等作成した
         // もの)の ID。シークレットではない公開識別子(アカウント ID と
         // 同格)なので平文バインドでよい。
