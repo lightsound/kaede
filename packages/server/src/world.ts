@@ -126,6 +126,7 @@ export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
     ctx.db.statusGuard,
     ctx.db.portalGuard,
     ctx.db.huddleGuard,
+    ctx.db.callGuard,
     ctx.db.groupMember,
   ];
   for (const table of identityKeyed) table.identity.delete(identity);
@@ -436,6 +437,18 @@ export function otherHuddleMemberPositions(
 }
 
 /**
+ * Deletes a group's call row alongside its group row (ROADMAP Phase 4
+ * 増分①) — the group_call lifecycle rule ("the row lives as long as its
+ * group", see tables.ts), called by both group-deletion paths
+ * (cleanupEmptyHuddle below, delete_zone in zones.ts). A call row naming
+ * a deleted group would otherwise sit forever: it matches no RLS join, so
+ * nobody could even see it to clean it up.
+ */
+export function deleteGroupCall(ctx: Ctx, groupId: bigint): void {
+  ctx.db.groupCall.groupId.delete(groupId);
+}
+
+/**
  * Deletes a huddle row once nothing references it — the 「0人になったら
  * 行を掃除」 rule, called by every membership-removal path (the huddle
  * reducers' leave/switch, the occupancy pass's auto-leave, removePlayer).
@@ -448,6 +461,7 @@ export function cleanupEmptyHuddle(ctx: Ctx, groupId: bigint): void {
     if (member.groupId === groupId) return;
   }
   ctx.db.conversationGroup.id.delete(groupId);
+  deleteGroupCall(ctx, groupId);
 }
 
 /**

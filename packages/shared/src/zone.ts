@@ -452,3 +452,37 @@ export function groupTagLabel(group: {
  */
 export const HUDDLE_SEND_COST_MICROS = 1_000_000n;
 export const HUDDLE_BURST_SENDS = 5;
+
+// ── 会話グループ単位の通話 (ROADMAP Phase 4 増分①) ──────────────────────
+// A conversation group's call is one `group_call` row: groupId → the call
+// provider's meeting id (the reusable room the CallProvider joins). The row
+// is REGISTERED by a member (register_group_call) after the Worker
+// provisioned the meeting, and its meeting id is the JOIN CAPABILITY — the
+// token-minting Worker knows nothing about groups, so whoever can read the
+// row can join the call, which is why the row rides a members-only RLS
+// filter (see groupCallVisibility in the server's tables.ts). These are the
+// shared rules of that flow; the reducer stays a thin untestable wrapper
+// (the huddle precedent).
+
+/**
+ * Whether `meetingId` has the shape the call provider issues (a UUID) —
+ * what register_group_call accepts into the group_call row. The row's
+ * meeting id is dialed by every joining member's CallProvider, so garbage
+ * must be refused at the write (the sender is the one client the server
+ * cannot trust): a wrong-but-well-formed id fails harmlessly at the
+ * provider, while an unbounded string is a stored-injection surface.
+ */
+export function isMeetingIdLike(meetingId: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(meetingId);
+}
+
+/**
+ * The call-registration token bucket's parameters (the huddle numbers, a
+ * bucket of its own — register_group_call writes a public row broadcast to
+ * the group's subscribers, and buckets shared across features drift from
+ * their client-side mirrors). The evaluator wrapper lives server-side
+ * (calls.ts), for the HUDDLE_SEND_COST_MICROS reason: a shared wrapper
+ * would add type-coupling edges past the evidence cap.
+ */
+export const CALL_SEND_COST_MICROS = 1_000_000n;
+export const CALL_BURST_SENDS = 5;

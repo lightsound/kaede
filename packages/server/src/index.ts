@@ -7,6 +7,7 @@ export default spacetimedb;
 // Only reducer files may be re-exported here: the host refuses an
 // entry-module export that is not a spacetime export, which is why the
 // lifecycle helpers both files build on live in world.ts (not re-exported).
+export * from './calls';
 export * from './huddles';
 export * from './posting';
 export * from './reducers';
@@ -20,5 +21,6 @@ export {
   chatOpenGroupVisibility,
   chatSpaceVisibility,
   dmMessageVisibility,
+  groupCallVisibility,
 } from './tables';
 export * from './zones';

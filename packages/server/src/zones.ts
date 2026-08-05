@@ -21,7 +21,7 @@ import {
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, recomputeZoneOccupancyOnMap, requireAdmin } from './world';
+import { type Ctx, deleteGroupCall, recomputeZoneOccupancyOnMap, requireAdmin } from './world';
 
 /** The zone-kind group row `zoneId` names, or a loud refusal. */
 function requireZone(ctx: Ctx, zoneId: bigint, reducerName: string) {
@@ -136,6 +136,7 @@ export const deleteZone = spacetimedb.reducer({ zoneId: t.u64() }, (ctx, { zoneI
   requireAdmin(ctx, 'delete_zone');
   const row = requireZone(ctx, zoneId, 'delete_zone');
   ctx.db.conversationGroup.id.delete(zoneId);
+  deleteGroupCall(ctx, zoneId);
   const members = [];
   for (const member of ctx.db.groupMember.iter()) {
     if (member.groupId === zoneId) members.push(member.identity);

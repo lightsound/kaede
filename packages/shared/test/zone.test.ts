@@ -8,6 +8,7 @@ import {
   HUDDLE_JOIN_DISTANCE,
   HUDDLE_LEAVE_DISTANCE,
   huddleLabel,
+  isMeetingIdLike,
   keepsHuddleMembership,
   normalizeHuddleName,
   resolveZoneOccupancy,
@@ -342,5 +343,16 @@ describe('findJoinableHuddleId', () => {
 
   it('別マップの立ち話は候補にならない', () => {
     expect(findJoinableHuddleId({ x: 500, y: 600 }, 2, huddles)).toBeUndefined();
+  });
+});
+
+describe('isMeetingIdLike', () => {
+  it('プロバイダ発行の UUID 形式だけを受理する', () => {
+    expect(isMeetingIdLike('bbb8280d-7d30-430b-a3a0-78802ed5617c')).toBe(true);
+    expect(isMeetingIdLike('')).toBe(false);
+    expect(isMeetingIdLike('bbb8280d-7d30-430b-a3a0')).toBe(false);
+    expect(isMeetingIdLike('BBB8280D-7D30-430B-A3A0-78802ED5617C')).toBe(false);
+    expect(isMeetingIdLike('bbb8280d-7d30-430b-a3a0-78802ed5617c\n')).toBe(false);
+    expect(isMeetingIdLike("'; DROP TABLE group_call; --")).toBe(false);
   });
 });
