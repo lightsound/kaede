@@ -76,9 +76,13 @@ test('DM が宛先にだけ届き、第三者にはリロード後も行が届�
   expect((await snapshot(pageB)).remotePlayers.every((p) => p.bubble === undefined)).toBe(true);
 
   // The strong negative, timed AFTER B's receipt: C's client was handed no
-  // dm_message row at all.
+  // dm_message row at all. The DOM-level double check counts matching TEXT
+  // rather than reading the log element: the panel renders no log element
+  // at all while C's log is empty (exactly the state when no public line
+  // preceded this spec in the run), and `not.toContainText` FAILS on an
+  // absent element instead of passing (the chat-scope expectUnseen rule).
   expect(await dmRowsReceived(pageC)).toBe(0);
-  await expect(pageC.getByRole('log')).not.toContainText(dmBody);
+  await expect(pageC.getByText(dmBody, { exact: false })).toHaveCount(0);
   // Positive control for the probe itself: both participants counted rows.
   expect(await dmRowsReceived(pageB)).toBeGreaterThan(0);
   expect(await dmRowsReceived(pageA)).toBeGreaterThan(0);

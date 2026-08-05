@@ -43,6 +43,9 @@ const RATE_LIMITED_MESSAGE = '送信が速すぎます。少し待ってから�
 
 const SEND_REFUSED_MESSAGE = '送信できませんでした。少し待ってからもう一度お試しください';
 
+const SCOPE_LOST_MESSAGE =
+  '選択していた送信先が無くなったため送信していません。送信先を確認してください';
+
 const panelStyle: CSSProperties = {
   position: 'absolute',
   bottom: 12,
@@ -347,7 +350,9 @@ export function ChatPanel({
   // the offered list on every render (fallbackChatScope): the offered list
   // changes underfoot — walking out of a zone, a huddle disbanding — and
   // the reconciliation is what keeps the control off a scope the send would
-  // refuse without an effect chasing the change.
+  // refuse without an effect chasing the change. The reconciled value is for
+  // RENDERING only; a submit whose pick went stale refuses instead of
+  // sending under the fallback (see `submit`).
   const [picked, setPicked] = useState<ChatScope>(CHAT_SCOPE_SPACE);
   const scope = fallbackChatScope(
     picked,
@@ -372,9 +377,30 @@ export function ChatPanel({
   // form need the same player row to speak from.
   const disabled = postingDisabled(connected, ownName);
 
+  // The stale-pick gate: the pick going stale (scope !== picked) means the
+  // offered list moved while the draft was being typed — walking out of
+  // the group, the huddle disbanding. Dispatching the reconciled fallback
+  // then would silently re-scope the message to 全体 — for a CLOSED
+  // conversation, a confidentiality leak — so the submit refuses and keeps
+  // the draft (the resolveChatRoute rule that a message whose destination
+  // moved must fail loudly, applied one layer earlier). Snapping the pick
+  // to the rendered fallback makes the refusal one-shot: the NEXT submit
+  // goes where the control visibly says. Only a PUBLIC plan is gated: a DM
+  // addresses the recipient the plan resolved and ignores the scope
+  // selector (see Net.sendPlanned). Split from `submit` to keep both
+  // uncovered functions under the CRAP budget fallow enforces (the
+  // backfillAccountName precedent).
+  const refuseStaleScope = (plan: PlannedSend): string | undefined => {
+    if (plan.kind !== 'public' || scope === picked) return undefined;
+    setPicked(scope);
+    return SCOPE_LOST_MESSAGE;
+  };
+
   const submit = (draft: string): string | undefined => {
     const plan = planDraft(draft);
     if (plan.kind === 'refused') return REJECT_MESSAGES[plan.reason];
+    const staleRefusal = refuseStaleScope(plan);
+    if (staleRefusal !== undefined) return staleRefusal;
     const send = evaluateChatSend({
       allowanceMicros: allowanceRef.current,
       nowMicros: BigInt(Date.now()) * 1000n,
