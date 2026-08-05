@@ -735,6 +735,52 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
 **ゴール**: 会話グループ単位でビデオ通話・画面共有ができ、
 **コミュニティが oVice を解約できる**。
 
+- **最初のタスク: RealtimeKit API スパイク（増分0）** ✅ **完了（2026-08-05）**:
+  再現用スクリプト `scripts/spike-realtimekit.sh`（冪等 — アプリは名前で
+  再利用。削除せず残す: トークンローテーションや障害調査で「API がこの形で
+  通ること」を最短で再確認する道具）で全ステップを実測。検証内容:
+  ①**認証モデル**: RealtimeKit は Dyte 型の独立キーではなく **Cloudflare API
+  （`/accounts/{account_id}/realtime/kit/...`）＋ Realtime Admin 権限付き
+  アカウント API トークン**に統合済み（シークレット `REALTIMEKIT_API_TOKEN`
+  ＝トークン `kaede-realtimekit-worker`・無期限。増分①で Worker の
+  ランタイムシークレットになる）。レスポンスは Cloudflare 標準の `result`
+  エンベロープではなく**トップレベル `{success, data}`**（アプリ作成のみ
+  `data.app`）。Realtime 権限のない旧トークンは最初のアプリ一覧で認証エラー
+  （ネガティブ確認済み）。アプリ「kaede」は作成済みで、作成レスポンスには
+  アプリ単位の `access_token` も返るが、以降の全 API がアカウントトークンで
+  通るため Worker はアカウントトークン 1 本で足りる
+  ②**既定プリセット**: アプリ作成と同時に **9 種が自動生成**される
+  （`group_call_{guest,host,participant}`・livestream 系 3・webinar 系 2・
+  `recorder_preset_v2`）。`group_call_participant` は view_type=GROUP_CALL・
+  映像/音声/画面共有 ALLOWED・**can_record=false**・待合室 SKIP・映像 HD
+  24fps／画面共有 HD 5fps・最大映像ストリーム 9。`group_call_host` は
+  can_record=true ＋ kick/pin/spotlight/他者のメディア停止。まず既定
+  プリセットのまま進み（メンバー＝host 相当・ゲスト＝participant の
+  使い分けを含め増分①で判断）、権限を絞りたくなったら専用プリセットを
+  API で作る
+  ③**参加トークンの寿命**: Add Participant のレスポンス `data.token` が
+  参加トークン（JWT。claims は orgId/meetingId/participantId/presetId/
+  iat/exp のみ）で、寿命は **2400 時間＝100 日**（実測）。Clerk の 60 秒
+  トークンのような「切れる前に再発行し続ける」配線は不要で、**join の
+  たびに Worker で発行して使い捨てる**設計で十分（長寿命ゆえ、トークンを
+  SpacetimeDB の公開行や localStorage に永続化しないことが設計制約になる）。
+  `custom_participant_id` に kaede 側の ID を渡せる
+  ④**リフレッシュ**: Refresh Participant Token API（POST
+  `participants/{id}/token`）で participant を作り直さずに再発行できることを
+  実測（期限切れ時の回復経路として存在確認 — ③の寿命なら常用しない）
+  ⑤**Webhook**: アプリ単位の登録→一覧→削除 API を実測。利用可能イベントは
+  9 種（meeting.started / meeting.ended / meeting.participantJoined /
+  meeting.participantLeft / meeting.chatSynced / recording.statusUpdate /
+  livestreaming.statusUpdate / meeting.transcript / meeting.summary）。
+  署名は RSA-SHA256（`rtk-signature` ヘッダ＋ well-known 公開鍵）。受信の
+  実地確認は Worker を持つ増分以降で行う
+  ⑥**料金・録画（ドキュメント調査）**: 現在ベータで無償、GA 後は AV
+  $0.002/参加者分・音声のみ $0.0005/分・録画エクスポート $0.010/分
+  （VISION の試算どおり）。録画は Start Recording に `storage_config`
+  （type=cloudflare、R2 の認証情報）を渡すと **R2 へ直接アップロード**でき、
+  「Webhook→ダウンロード→R2」の中継より単純になる見込み（RealtimeKit 側
+  バケットの保持は 7 日・最大 24h・無人 60 秒で自動停止）。アカウントの
+  R2 有効化は完了済み（バケット一覧 API が success を返すことを実測）
 - `CallProvider` アダプタの設計（Cloudflare RealtimeKit への直接依存を
   1 モジュールに閉じ込める。LiveKit 等への差し替え口を確保）
 - 小さなサーバー API の新設（**Cloudflare Workers**）: RealtimeKit の参加トークン
