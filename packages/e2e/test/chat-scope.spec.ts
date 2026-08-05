@@ -287,3 +287,59 @@ test('オープンな会話グループの発言は非メンバーにも届く',
     await resetConversations();
   }
 });
+
+/**
+ * The submit-time half of the selector's honesty (PR #58 の残指摘): a draft
+ * typed while 会話グループ was picked must NOT be silently re-scoped to
+ * 全体 when the group disappears before Enter — for a closed conversation
+ * that would be a confidentiality leak. The submit refuses and keeps the
+ * draft; only the NEXT, deliberate send goes where the control visibly
+ * says.
+ */
+test('下書き中に会話グループが消えた送信は拒否され、全体へ再スコープされない', async ({
+  browser,
+}) => {
+  await resetConversations();
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await enterWorld(page);
+
+    const nonce = Date.now().toString(36);
+    const groupName = `内緒${nonce.slice(-4)}`;
+    await page.getByLabel('立ち話の名前').fill(groupName);
+    await page.getByLabel('コソコソ話す').check();
+    await page.getByRole('button', { name: 'ここで立ち話' }).click();
+    await expect
+      .poll(() => localZone(page), { timeout: 15_000 })
+      .toBe(huddleLabel(groupName, true));
+
+    // Pick the group scope and type the draft — but do not send yet.
+    await pickScope(page, groupName);
+    const secret = `送ってはいけない話 ${nonce}`;
+    await page.getByLabel('チャット入力').fill(secret);
+
+    // The huddle disbands under the draft (leaving a solo huddle deletes
+    // it), and the group scope leaves the offered list.
+    await page.getByRole('button', { name: '抜ける' }).click();
+    await expect(page.getByRole('radio', { name: groupName, exact: true })).toHaveCount(0, {
+      timeout: 15_000,
+    });
+
+    // Enter now must refuse — not fall back to 全体 — and keep the draft.
+    await page.getByLabel('チャット入力').press('Enter');
+    await expect(page.getByText('選択していた送信先が無くなった')).toBeVisible();
+    await expect(page.getByLabel('チャット入力')).toHaveValue(secret);
+
+    // A delivery marker proves the send path still flows after the refusal
+    // (the pick snapped to the visible 全体), and the secret reached nobody
+    // — not even the sender's own log.
+    const marker = `送信できる話 ${nonce}`;
+    await sendChat(page, marker);
+    await expect(page.getByRole('log')).toContainText(marker, { timeout: 10_000 });
+    await expectUnseen(page, secret);
+  } finally {
+    await context.close();
+    await resetConversations();
+  }
+});

@@ -43,6 +43,9 @@ const RATE_LIMITED_MESSAGE = '送信が速すぎます。少し待ってから�
 
 const SEND_REFUSED_MESSAGE = '送信できませんでした。少し待ってからもう一度お試しください';
 
+const SCOPE_LOST_MESSAGE =
+  '選択していた送信先が無くなったため送信していません。送信先を確認してください';
+
 const panelStyle: CSSProperties = {
   position: 'absolute',
   bottom: 12,
@@ -347,7 +350,9 @@ export function ChatPanel({
   // the offered list on every render (fallbackChatScope): the offered list
   // changes underfoot — walking out of a zone, a huddle disbanding — and
   // the reconciliation is what keeps the control off a scope the send would
-  // refuse without an effect chasing the change.
+  // refuse without an effect chasing the change. The reconciled value is for
+  // RENDERING only; a submit whose pick went stale refuses instead of
+  // sending under the fallback (see `submit`).
   const [picked, setPicked] = useState<ChatScope>(CHAT_SCOPE_SPACE);
   const scope = fallbackChatScope(
     picked,
@@ -373,6 +378,18 @@ export function ChatPanel({
   const disabled = postingDisabled(connected, ownName);
 
   const submit = (draft: string): string | undefined => {
+    // The pick going stale means the offered list moved while the draft was
+    // being typed (walking out of the group, the huddle disbanding).
+    // Dispatching the reconciled fallback here would silently re-scope the
+    // message to 全体 — for a CLOSED conversation, a confidentiality leak —
+    // so the submit refuses and keeps the draft (the resolveChatRoute rule
+    // that a message whose destination moved must fail loudly, applied one
+    // layer earlier). Snapping the pick to the rendered fallback makes the
+    // refusal one-shot: the NEXT submit goes where the control visibly says.
+    if (scope !== picked) {
+      setPicked(scope);
+      return SCOPE_LOST_MESSAGE;
+    }
     const plan = planDraft(draft);
     if (plan.kind === 'refused') return REJECT_MESSAGES[plan.reason];
     const send = evaluateChatSend({
