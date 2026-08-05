@@ -617,6 +617,17 @@ export const chatSpaceVisibility = spacetimedb.clientVisibilityFilter.sql(
   `SELECT * FROM chat_message WHERE scope = '${CHAT_SCOPE_SPACE}'`,
 );
 
+// The map scope is an ATTENTION boundary, not a confidentiality one, and
+// this filter deliberately says so: it hides nothing, and what keeps a
+// client from holding another map's chatter is its subscription
+// (subscribeMapRows). Same reading as everything else map-scoped — `player`
+// rows carry no filter either, so any client may already subscribe to
+// another map's positions, and the zones, huddles and occupancy rows are
+// space-wide public by design. The read-privacy rule in this space is the
+// CLOSED conversation group, which the two joins below enforce server-side.
+// Binding this filter to the sender's own player.map_id would not fit
+// anyway: `target` is a u64 and `player.map_id` a u32, so the join columns
+// have different types (a 2026-08-05 assessment of a review finding).
 export const chatMapVisibility = spacetimedb.clientVisibilityFilter.sql(
   `SELECT * FROM chat_message WHERE scope = '${CHAT_SCOPE_MAP}'`,
 );

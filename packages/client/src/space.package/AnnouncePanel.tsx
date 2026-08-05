@@ -41,10 +41,15 @@ export function AnnouncePanel({ onSendAnnouncement }: { onSendAnnouncement(text:
     setPending(verdict.ok ? verdict.text : undefined);
   };
 
+  // Only the confirmation step closes; the draft STAYS in the input (the
+  // rename form's clearOnSubmit: false rule). A send is fire-and-forget —
+  // its success signal is the announcement appearing in the chat log — so
+  // clearing here would throw the text away on the failures that produce no
+  // line at all (a disconnect racing the click, a server refusal), leaving
+  // the admin nothing to retry with.
   const send = () => {
     if (pending !== undefined) onSendAnnouncement(pending);
     setPending(undefined);
-    setDraft('');
   };
 
   return (

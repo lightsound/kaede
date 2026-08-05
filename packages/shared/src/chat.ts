@@ -99,7 +99,13 @@ export const CHAT_BUBBLE_DURATION_MS = 6_000;
 /** 全体: everyone in the space, whatever map or group they are in. */
 export const CHAT_SCOPE_SPACE = 'space';
 
-/** マップ: everyone whose player row is on the same map. */
+/**
+ * マップ: the people looking at the same map. An attention boundary, not a
+ * privacy one — the map-scoped subscription is what narrows it, exactly as
+ * it narrows the player rows (see chatMapVisibility in the server's
+ * tables.ts). Anything that must be unreadable from outside is a CLOSED
+ * conversation group.
+ */
 export const CHAT_SCOPE_MAP = 'map';
 
 /** 会話グループ: a conversation_group row (zone or huddle, kind-agnostic). */
