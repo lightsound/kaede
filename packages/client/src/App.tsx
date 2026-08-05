@@ -4,9 +4,11 @@ import { type CSSProperties, useContext, useEffect, useRef, useState } from 'rea
 import { AuthSessionContext } from './auth.package';
 import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
+import { HuddleControl } from './huddle.package';
 import {
   type ChatLog,
   type ConnectionStatus,
+  type HuddleView,
   type Net,
   planChatDraftOffline,
   type SpaceView,
@@ -83,6 +85,9 @@ export function App() {
   // The meeting-room zones (every map), published by the net stack on every
   // conversation_group change — the admin panel's zone section renders it.
   const [zones, setZones] = useState<ZoneAdminView[]>([]);
+  // The huddle control's answer (own huddle / joinable huddle / neither),
+  // published deduplicated by the net stack (ROADMAP Phase 3 増分③).
+  const [huddle, setHuddle] = useState<HuddleView>({ own: undefined, joinable: undefined });
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -112,6 +117,7 @@ export function App() {
         onChatRefused: () => setChatSendRefused(true),
         onOwnStatus: setOwnStatus,
         onZones: setZones,
+        onHuddle: setHuddle,
         // The DM → browser-notification pipeline: the notifier decides
         // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
         // so no state rides this hook.
@@ -162,6 +168,16 @@ export function App() {
         status={ownStatus}
         onSetAvailability={(availability) => netRef.current?.setAvailability(availability)}
         onSetStatusText={(text) => netRef.current?.setStatusText(text)}
+      />
+      <HuddleControl
+        connected={connected}
+        ownName={ownName}
+        view={huddle}
+        actions={{
+          onCreateHuddle: (spec) => netRef.current?.createHuddle(spec),
+          onJoinHuddle: (groupId) => netRef.current?.joinHuddle(groupId),
+          onLeaveHuddle: () => netRef.current?.leaveHuddle(),
+        }}
       />
       <AdminSection
         connected={connected}

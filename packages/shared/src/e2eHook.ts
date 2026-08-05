@@ -24,6 +24,17 @@ export interface E2EWorldSnapshot {
   remotePlayers: E2EPlayerSnapshot[];
   /** The meeting-room zones rendered on the current map (ROADMAP Phase 3 増分②). */
   zones: E2EZoneSnapshot[];
+  /**
+   * The huddles rendered on the current map this frame (ROADMAP Phase 3
+   * 増分③): the composed canvas label (huddleLabel in zone.ts — the 🤫
+   * marker rides it), the closed flag, and how many member sprites
+   * anchored the circle — the huddle spec's evidence that the circle
+   * follows the avatars actually present. An inline shape rather than a
+   * named sibling of E2EZoneSnapshot: another field-for-field interface
+   * here would extend this file's run of declarations into a Type-2 clone
+   * of types.ts (fallow's semantic detector — the AGENTS.md gotcha).
+   */
+  huddles: { label: string; closed: boolean; members: number }[];
 }
 
 /**

@@ -38,10 +38,13 @@ import AnnounceIdleSuspendReducer from "./announce_idle_suspend_reducer";
 import ApplyForMembershipReducer from "./apply_for_membership_reducer";
 import ApproveMemberReducer from "./approve_member_reducer";
 import BanMemberReducer from "./ban_member_reducer";
+import CreateHuddleReducer from "./create_huddle_reducer";
 import CreateZoneReducer from "./create_zone_reducer";
 import DeleteZoneReducer from "./delete_zone_reducer";
 import EnterPortalReducer from "./enter_portal_reducer";
 import JoinReducer from "./join_reducer";
+import JoinHuddleReducer from "./join_huddle_reducer";
+import LeaveHuddleReducer from "./leave_huddle_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
@@ -206,10 +209,13 @@ const reducersSchema = __reducers(
   __reducerSchema("apply_for_membership", ApplyForMembershipReducer),
   __reducerSchema("approve_member", ApproveMemberReducer),
   __reducerSchema("ban_member", BanMemberReducer),
+  __reducerSchema("create_huddle", CreateHuddleReducer),
   __reducerSchema("create_zone", CreateZoneReducer),
   __reducerSchema("delete_zone", DeleteZoneReducer),
   __reducerSchema("enter_portal", EnterPortalReducer),
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("join_huddle", JoinHuddleReducer),
+  __reducerSchema("leave_huddle", LeaveHuddleReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),

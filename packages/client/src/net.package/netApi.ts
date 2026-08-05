@@ -150,6 +150,19 @@ export interface NetApi {
   updateZone(spec: { zoneId: bigint; name: string; closed: boolean; w: number; h: number }): void;
   moveZone(zoneId: bigint): void;
   deleteZone(zoneId: bigint): void;
+  /**
+   * The huddle actions (ROADMAP Phase 3 増分③), open to everyone in the
+   * world: found a huddle where the sender stands (the founding position
+   * comes from the sender's authoritative row server-side — the create_zone
+   * rule), join the one the control offered (the server re-rules the
+   * proximity), leave the one the membership names. Success arrives as
+   * conversation_group / group_member row events (the circle, the tags and
+   * the control all re-project); failures only log, and the unchanged view
+   * is the visible outcome.
+   */
+  createHuddle(spec: { name: string; closed: boolean }): void;
+  joinHuddle(groupId: bigint): void;
+  leaveHuddle(): void;
 }
 
 /** What forwarding user actions needs from the lifecycle owner (sync.ts). */
@@ -259,5 +272,14 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     ),
     moveZone: forward('move_zone', (c, zoneId: bigint) => c.reducers.moveZone({ zoneId })),
     deleteZone: forward('delete_zone', (c, zoneId: bigint) => c.reducers.deleteZone({ zoneId })),
+    createHuddle: forward(
+      'create_huddle',
+      (c, { name, closed }: { name: string; closed: boolean }) =>
+        c.reducers.createHuddle({ name, closed }),
+    ),
+    leaveHuddle() {
+      callReducer('leave_huddle', (c) => c.reducers.leaveHuddle({}));
+    },
+    joinHuddle: forward('join_huddle', (c, groupId: bigint) => c.reducers.joinHuddle({ groupId })),
   };
 }
