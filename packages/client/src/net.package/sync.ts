@@ -46,7 +46,7 @@ import { wireReactions } from './reactionFeed';
 import { createRemoteViews } from './remoteView';
 import type { RowOf } from './rows';
 import { cachedStatusView, wireStatuses } from './statusFeed';
-import { cachedZoneTag, wireZones, type ZoneAdminView } from './zoneFeed';
+import { cachedZoneTag, type HuddleView, wireZones, type ZoneAdminView } from './zoneFeed';
 
 export type { ConnectionStatus } from './lifecycle';
 
@@ -159,6 +159,12 @@ export interface NetHooks {
    * what the admin panel's zone section renders (ROADMAP Phase 3 増分②).
    */
   onZones(zones: ZoneAdminView[]): void;
+  /**
+   * Every change of the huddle control's answer (own huddle / joinable
+   * huddle / neither — ROADMAP Phase 3 増分③), deduplicated by value in
+   * the feed so the row-event cadence stays out of React.
+   */
+  onHuddle(view: HuddleView): void;
 }
 
 /**
@@ -548,9 +554,11 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       isStale: stale,
       currentMapId: () => currentMapId,
       setMapZones: (zones) => gameApp.setZones(zones),
+      setMapHuddles: (huddles) => gameApp.setHuddles(huddles),
       applyOwnZone: (tag) => gameApp.setLocalZone(tag),
       applyRemoteZone: (idHex, tag) => remoteViews.setZone(idHex, tag),
       onZones: hooks.onZones,
+      onHuddle: hooks.onHuddle,
     });
 
     /**

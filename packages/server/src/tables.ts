@@ -363,28 +363,37 @@ export const spacetimedb = schema({
       sentAt: t.timestamp(),
     },
   ),
-  // 会話グループ (ROADMAP Phase 3 増分② / VISION の統一抽象): one row per
-  // conversation group. `kind` discriminates the group's nature — 'zone'
-  // (this increment: the admin-placed meeting-room zone, whose placement
-  // lives in mapId + x/y/w/h) — and 増分③'s 立ち話グループ arrives as
-  // kind='huddle' rows on this SAME table (an additive row vocabulary, no
-  // schema change; a huddle's position derives from its members' avatars,
-  // so the placement columns simply stay unused). 増分④'s chat scopes then
-  // reference `id` as their target regardless of kind, which is the whole
-  // point of unifying: one table to scope on, one membership table to
-  // filter visibility with.
+  // 会話グループ (ROADMAP Phase 3 増分②③ / VISION の統一抽象): one row per
+  // conversation group. `kind` discriminates the group's nature:
+  // - 'zone' (増分②): the admin-placed meeting-room zone, whose placement
+  //   lives in mapId + x/y/w/h.
+  // - 'huddle' (増分③): the ad-hoc 立ち話グループ anyone founds on the
+  //   spot — exactly the additive row vocabulary this table planned for
+  //   (no schema change). A huddle's position derives from its members'
+  //   avatars, so x/y/w/h stay 0 and unused; `mapId` is its FOUNDING map,
+  //   invariant for the row's life (teleporting off it is leaving — the
+  //   keepsHuddleMembership rule), and its rows live exactly as long as
+  //   they have members: every membership-removal path deletes a huddle
+  //   row that hits zero members (cleanupEmptyHuddle in world.ts), so no
+  //   retention sweep is needed and one identity can keep at most one
+  //   huddle alive.
+  // 増分④'s chat scopes then reference `id` as their target regardless of
+  // kind, which is the whole point of unifying: one table to scope on, one
+  // membership table to filter visibility with.
   //
   // `closed` is the オープン/クローズド setting (VISION): whether the
   // group's conversation is visible to non-members. In this increment it
-  // only changes the rendering (the 🔒 label); the chat invisibility it
-  // promises is 増分④'s RLS work.
+  // only changes the rendering (the zone's 🔒 label; the huddle's 🤫
+  // 「コソコソ話している」 look); the chat invisibility it promises is
+  // 増分④'s RLS work.
   //
   // `mapId` is indexed: the server-side occupancy pass filters zones by the
   // moving player's map inside movement reducers, and 増分④'s map-scoped
   // subscriptions may filter on it (the ROADMAP AoI rule — filter columns
   // carry indexes). Kind is deliberately NOT a fenced enum column: builds
-  // narrow by exact match (GROUP_KIND_ZONE), so rows of a newer kind render
-  // as nothing rather than breaking (the availability-vocabulary rule).
+  // narrow by exact match (GROUP_KIND_ZONE / GROUP_KIND_HUDDLE), so rows of
+  // a newer kind render as nothing rather than breaking (the
+  // availability-vocabulary rule).
   //
   // No timestamp columns, deliberately: zone rows are admin-edited config
   // with no retention rule (bounded by ZONE_MAX, not by trimming), nothing
@@ -406,14 +415,20 @@ export const spacetimedb = schema({
       h: t.number(),
     },
   ),
-  // Who is in which conversation group (誰がどのゾーンに居るか) — the
-  // space-wide occupancy directory, public so every client renders the
-  // 📍 tag whatever map it is looking at (the player_name presence
+  // Who is in which conversation group (誰がどのゾーン/立ち話に居るか) —
+  // the space-wide occupancy directory, public so every client renders the
+  // occupancy tag whatever map it is looking at (the player_name presence
   // precedent). Keyed by identity, so "one conversation group at a time"
-  // is structural, not a rule someone must remember to enforce; the row is
-  // an upsert (enter/switch) or a delete (leave), written ONLY by the
-  // server-side occupancy pass (syncZoneOccupancy in world.ts) — clients
-  // never name their zone, so there is nothing to trust or rate-limit.
+  // is structural, not a rule someone must remember to enforce. Zone
+  // membership is written ONLY by the server-side occupancy pass
+  // (syncGroupOccupancy in world.ts) — clients never name their zone, so
+  // there is nothing to trust or rate-limit. Huddle membership (増分③) is
+  // written by the huddle reducers (an explicit join is the point of a
+  // 立ち話 — huddles.ts re-rules the geometry server-side and rate-limits
+  // with huddle_guard) plus the same occupancy pass for the walk-away
+  // auto-leave; while a membership names a huddle the pass never reassigns
+  // it to a zone (explicit intent outranks standing geometry — see
+  // syncGroupOccupancy).
   //
   // `groupId` carries a btree index for 増分④: the closed-conversation RLS
   // filter joins chat rows to this table on groupId with :sender bound to
@@ -511,6 +526,23 @@ export const spacetimedb = schema({
   // with the player rows (removePlayer).
   portalGuard: table(
     { name: 'portal_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
+    },
+  ),
+  // The huddle rate limit's token-bucket marker — chat_guard's shape, for
+  // create_huddle / join_huddle / leave_huddle (ROADMAP Phase 3 増分③).
+  // Every huddle call writes public rows broadcast to every subscriber
+  // (a group row and/or a membership row), and unlike the zone reducers
+  // these are open to everyone in the world, so they get the posting
+  // guard treatment. One bucket for all three: they are the same UI
+  // surface with no client-side mirror to drift from, and one bucket also
+  // caps a create/leave (or join/leave) ping-pong as a whole. Same
+  // lifecycle as the other lazy guards: created on first use, deleted
+  // with the player rows (removePlayer).
+  huddleGuard: table(
+    { name: 'huddle_guard' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),

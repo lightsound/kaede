@@ -26,31 +26,11 @@ import { spacetimedb } from './tables';
 import {
   type Ctx,
   chargeSendAllowance,
-  findAdmittedWorldRows,
+  findPostingSender,
   type SenderIdentity,
   type SendGuardTable,
   trimHistory,
-  type WorldRows,
 } from './world';
-
-/**
- * The shared preamble of every posting reducer (send_chat_message /
- * send_reaction): the sender's world rows, or undefined after a refusal.
- * The two refusal reasons split along the loud/silent rule documented on
- * sendChatMessage, and the verdict's contract (WorldRowsVerdict) is what
- * makes each branch safe: `not-in-world` wrote nothing, so it may throw;
- * `reclaimed` just deleted the sender's rows and must commit, so it stays
- * a logged return.
- */
-function findPostingSender(ctx: Ctx, reducerName: string): WorldRows | undefined {
-  const found = findAdmittedWorldRows(ctx);
-  if (found.ok) return found.rows;
-  if (found.reason === 'not-in-world') {
-    throw new SenderError(`${reducerName} refused (not-in-world)`);
-  }
-  console.warn(`${reducerName} dropped (reclaimed): sender=${ctx.sender.toHexString()}`);
-  return undefined;
-}
 
 /**
  * The shared preamble of the row-writing sends that need no sender rows

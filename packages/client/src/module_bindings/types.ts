@@ -80,6 +80,12 @@ export const GroupMember = __t.object("GroupMember", {
 });
 export type GroupMember = __Infer<typeof GroupMember>;
 
+export const HuddleGuard = __t.object("HuddleGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type HuddleGuard = __Infer<typeof HuddleGuard>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   x: __t.f64(),

@@ -33,6 +33,7 @@ import {
   visibleReactionEmoji,
 } from './bubble';
 import { cameraOffset } from './camera';
+import { createHuddleLayer, type HuddleRender } from './huddleLayer';
 import { createInput } from './input';
 import { mergeInputs } from './mergeInputs';
 import { createTouchControls } from './touchControls';
@@ -84,6 +85,13 @@ export interface GameApp {
    * the current map's zones and re-pushes on zone edits and map switches.
    */
   setZones(zones: readonly ZoneRender[]): void;
+  /**
+   * Replaces the rendered huddles (Phase 3 増分③ — the setZones sibling).
+   * The caller passes the current map's huddles with their member
+   * identities; positions resolve per frame from the members' sprites, so
+   * the circle follows the avatars between row events.
+   */
+  setHuddles(huddles: readonly HuddleRender[]): void;
   setLocalPlayerName(name: string): void;
   /**
    * Shows `status` (the composed line from statusLabel) under the local
@@ -244,6 +252,7 @@ function createE2EHook(
   currentTick: () => number,
   currentMapId: () => number,
   currentZones: () => readonly ZoneRender[],
+  currentHuddles: () => readonly { label: string; closed: boolean; members: number }[],
 ): E2EHook | undefined {
   if (!import.meta.env.DEV) return undefined;
   return {
@@ -253,6 +262,7 @@ function createE2EHook(
       local: playerSnapshot(local),
       remotePlayers: [...remotes.values()].map(playerSnapshot),
       zones: currentZones().map((zone) => ({ label: zone.label, closed: zone.closed })),
+      huddles: [...currentHuddles()],
     }),
   };
 }
@@ -335,8 +345,26 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   world.addChild(zoneLayer);
   let currentZones: readonly ZoneRender[] = [];
 
+  // The huddles (増分③): same layering rule as zones — behind the player
+  // views, whose sprites the circles follow per frame (see huddleLayer.ts).
+  const huddleLayerRoot = new Container();
+  world.addChild(huddleLayerRoot);
+
   const local = createPlayerView(world, 'You', LOCAL_COLOR);
   const remotes = new Map<string, PlayerView>();
+
+  /** The member sprites a huddle circle anchors on this frame. */
+  function huddleMemberPositions(huddle: HuddleRender): { x: number; y: number }[] {
+    const positions = [];
+    if (huddle.includesLocal) positions.push({ x: local.root.x, y: local.root.y });
+    for (const id of huddle.memberIds) {
+      const view = remotes.get(id);
+      if (view) positions.push({ x: view.root.x, y: view.root.y });
+    }
+    return positions;
+  }
+
+  const huddleLayer = createHuddleLayer(huddleLayerRoot, huddleMemberPositions);
 
   const input = createInput();
 
@@ -426,6 +454,9 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
     while (acc >= DT) simulateTick();
     renderLocal(ticker.deltaMS);
+    // After renderLocal and the remote upserts (onFrame above): the huddle
+    // circles anchor on where the sprites ARE this frame.
+    huddleLayer.renderFrame();
     expireOverheads(now);
   });
 
@@ -435,6 +466,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     () => tick,
     () => currentMap.id,
     () => currentZones,
+    () => huddleLayer.snapshot(),
   );
 
   /** Runs `act` on the remote player's view; a no-op while it has no sprite. */
@@ -462,6 +494,9 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     setZones(zones) {
       currentZones = zones;
       renderZoneLayer(zoneLayer, zones);
+    },
+    setHuddles(huddles) {
+      huddleLayer.set(huddles);
     },
     setLocalPlayerName(name) {
       local.label.text = name;

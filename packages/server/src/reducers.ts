@@ -39,8 +39,8 @@ import {
   spawnOrResume,
   sweepExpiredRows,
   sweepOrphanedSiblings,
+  syncGroupOccupancy,
   syncNameOnline,
-  syncZoneOccupancy,
   trimHistory,
   type WorldRows,
 } from './world';
@@ -410,11 +410,11 @@ function applyAcceptedBatch(
     updatedAt: ctx.timestamp,
   });
   syncNameOnline(ctx, nameRow, true);
-  // Zone occupancy follows the authoritative position (ROADMAP Phase 3
-  // 増分② — the server-side judgment; see zone.ts in @kaede/shared for
+  // Group occupancy follows the authoritative position (ROADMAP Phase 3
+  // 増分②③ — the server-side judgment; see zone.ts in @kaede/shared for
   // why not the portal pattern). The heartbeat branch above skips it: no
   // movement, no transition to rule on.
-  syncZoneOccupancy(ctx, ctx.sender, { x: s.x, y: s.y }, row.mapId);
+  syncGroupOccupancy(ctx, ctx.sender, { x: s.x, y: s.y }, row.mapId);
 }
 
 // Teleports the sender through a portal it is standing in (ROADMAP Phase 3
@@ -476,9 +476,11 @@ export const enterPortal = spacetimedb.reducer({ portalId: t.u32() }, (ctx, { po
   });
   syncNameOnline(ctx, nameRow, true);
   // A teleport moves the authoritative position like any movement: the
-  // occupancy pass leaves the origin map's zone and rules on the landing
-  // spot (an admin may well place a zone over a portal mouth).
-  syncZoneOccupancy(ctx, ctx.sender, verdict.target, verdict.target.mapId);
+  // occupancy pass leaves the origin map's zone — or huddle: a huddle
+  // lives on its founding map, so teleporting off it is leaving
+  // (keepsHuddleMembership) — and rules on the landing spot (an admin may
+  // well place a zone over a portal mouth).
+  syncGroupOccupancy(ctx, ctx.sender, verdict.target, verdict.target.mapId);
 });
 
 // Spawning is an explicit opt-in, not a connection side effect: observer
