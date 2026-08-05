@@ -8,7 +8,6 @@ import {
   type Facing,
   mapFor,
   PLAYER_HALF_H,
-  PLAYER_HALF_W,
   type PlayerState,
   type Portal,
   packInput,
@@ -18,8 +17,10 @@ import {
   stepPlayer,
   type WorldMap,
 } from '@kaede/shared';
-import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import type { Texture } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
+import avatarUrl from './avatar.png';
 import {
   type Bubble,
   createBubble,
@@ -48,9 +49,6 @@ const SOLID_COLOR = 0x3b4252;
 const PLATFORM_COLOR = 0x5e81ac; // one-way platforms: lighter than solid ground
 const ROPE_COLOR = 0xd8a657;
 const ROPE_WIDTH = 4;
-const LOCAL_COLOR = 0x88c0d0;
-const REMOTE_COLOR = 0xd08770;
-
 const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
 
 /**
@@ -149,7 +147,13 @@ export interface GameApp {
 
 interface PlayerView {
   root: Container;
-  body: Graphics;
+  /**
+   * The avatar visual, wrapped in a Container kept at unit scale so the
+   * facing flip stays `body.scale.x = facing` — the sprite inside carries
+   * the fit-to-size scale, and mixing the two on one node would make the
+   * flip erase the fit.
+   */
+  body: Container;
   label: Text;
   /** The status line under the avatar, hidden while the status is default (setUnderline). */
   status: Text;
@@ -183,12 +187,23 @@ function createUnderline(style: TextStyle, y: number): Text {
   return line;
 }
 
-/** A labelled rectangle sprite parented under the world container. */
-function createPlayerView(world: Container, name: string, color: number): PlayerView {
+/**
+ * A labelled avatar view parented under the world container. The visual is
+ * the minimal character sprite (Phase 4 の必達「最低限のアバター」— one
+ * AI-generated character, no dress-up), scaled to the physics AABB height
+ * and centered on it: the AABB stays the authority for collision and every
+ * overlay anchor, and the sprite is only how that box looks. Local and
+ * remote players share the one character — the name label and the camera
+ * (which follows the local player) are what tell people apart until the
+ * Phase 5 dress-up work.
+ */
+function createPlayerView(world: Container, name: string, texture: Texture): PlayerView {
   const root = new Container();
-  const body = new Graphics()
-    .rect(-PLAYER_HALF_W, -PLAYER_HALF_H, PLAYER_HALF_W * 2, PLAYER_HALF_H * 2)
-    .fill(color);
+  const body = new Container();
+  const sprite = new Sprite(texture);
+  sprite.anchor.set(0.5);
+  sprite.scale.set((PLAYER_HALF_H * 2) / texture.height);
+  body.addChild(sprite);
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
@@ -328,6 +343,11 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   await app.init({ width: VIEW_W, height: VIEW_H, background: BG_COLOR, antialias: false });
   host.appendChild(app.canvas);
 
+  // The one avatar texture every player view shares (bundled by Vite, so the
+  // hashed URL busts caches with the asset). Loaded before any view exists —
+  // createGameApp is already the async init path.
+  const avatarTexture: Texture = await Assets.load(avatarUrl);
+
   const world = new Container();
   app.stage.addChild(world);
   // The map being simulated AND rendered — swapped whole by setMap. The
@@ -350,7 +370,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const huddleLayerRoot = new Container();
   world.addChild(huddleLayerRoot);
 
-  const local = createPlayerView(world, 'You', LOCAL_COLOR);
+  const local = createPlayerView(world, 'You', avatarTexture);
   const remotes = new Map<string, PlayerView>();
 
   /** The member sprites a huddle circle anchors on this frame. */
@@ -543,7 +563,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     upsertRemotePlayer(id, label, x, y, facing) {
       let view = remotes.get(id);
       if (!view) {
-        view = createPlayerView(world, label.name, REMOTE_COLOR);
+        view = createPlayerView(world, label.name, avatarTexture);
         remotes.set(id, view);
       }
       view.label.text = label.name;
