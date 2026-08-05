@@ -211,6 +211,17 @@ interface JoinContext {
  */
 async function joinCall(ctx: JoinContext): Promise<void> {
   ctx.setPhase(() => ({ kind: 'joining' }));
+  // Snapshots can fire DURING the provider join (joining a call someone is
+  // already in emits participantJoined mid-handshake), i.e. before the
+  // session handle below exists — buffered until it does, so the phase
+  // updater never touches an uninitialized binding (a ReferenceError the
+  // first two-party manual test actually hit).
+  let live: CallSession | undefined;
+  let buffered: CallSnapshot | undefined;
+  const publishInCall = (session: CallSession, snapshot: CallSnapshot, groupId: bigint): void =>
+    ctx.setPhase((current) =>
+      current.kind === 'idle' ? current : { kind: 'in-call', groupId, session, snapshot },
+    );
   try {
     const ticket = await acquireCallTicket({
       ownGroupCall: () => ctx.net.ownGroupCall(),
@@ -221,18 +232,23 @@ async function joinCall(ctx: JoinContext): Promise<void> {
     });
     const session = await realtimeKitProvider.join({
       authToken: ticket.authToken,
-      onSnapshot: (snapshot) =>
-        ctx.setPhase((current) =>
-          current.kind === 'idle'
-            ? current
-            : { kind: 'in-call', groupId: ticket.groupId, session, snapshot },
-        ),
+      onSnapshot: (snapshot) => {
+        if (live === undefined) {
+          buffered = snapshot;
+          return;
+        }
+        publishInCall(live, snapshot, ticket.groupId);
+      },
       onEnded: () => {
         ctx.sessionRef.current = undefined;
         ctx.setPhase(() => ({ kind: 'idle' }));
       },
     });
+    live = session;
     ctx.sessionRef.current = session;
+    // The provider publishes at least once right after joining, so the
+    // buffer is filled by the time the handle lands.
+    if (buffered !== undefined) publishInCall(session, buffered, ticket.groupId);
   } catch (err) {
     console.error('call join failed', err);
     ctx.setPhase(() => ({ kind: 'idle', notice: '通話に参加できませんでした' }));
