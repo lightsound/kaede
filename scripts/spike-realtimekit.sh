@@ -61,7 +61,9 @@ step "2. アプリ ${APP_NAME} の再利用 or 作成"
 app_id=$(echo "$apps" | jq -r --arg n "$APP_NAME" '.data[]? // empty | select(.name == $n) | .id' | head -1)
 if [ -z "$app_id" ] || [ "$app_id" = "null" ]; then
   created=$(api POST /apps "{\"name\": \"${APP_NAME}\"}")
-  echo "$created" | jq .
+  # 作成レスポンスにはアプリ単位の access_token が含まれる。参加トークン同様に
+  # ログへ出さない(端末ログ・CI ログからの資格情報漏えい防止)。
+  echo "$created" | jq 'if .data.app.access_token then .data.app.access_token = "[伏せ字]" else . end'
   app_id=$(echo "$created" | jq -r '.data.app.id // empty')
 fi
 if [ -z "$app_id" ]; then
