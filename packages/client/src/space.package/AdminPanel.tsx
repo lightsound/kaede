@@ -2,15 +2,9 @@
 import type { MemberAction, MemberStatus } from '@kaede/shared';
 import type { CSSProperties } from 'react';
 import type { SpaceMemberView, ZoneAdminView } from '../net.package';
-import {
-  UI_BUTTON_BG,
-  UI_FONT,
-  UI_GOLD,
-  UI_GOLD_BORDER,
-  UI_PANEL_BG,
-  UI_TEXT_COLOR,
-} from '../theme';
+import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import { AnnouncePanel } from './AnnouncePanel';
+import { panelButtonStyle, panelHeadingStyle, panelRowStyle } from './panelChrome';
 import { type ZoneActions, ZonePanel } from './ZonePanel';
 
 const panelStyle: CSSProperties = {
@@ -28,35 +22,17 @@ const panelStyle: CSSProperties = {
   font: UI_FONT,
 };
 
-const headingStyle: CSSProperties = {
-  font: `bold ${UI_FONT}`,
-  color: UI_GOLD,
-  margin: '8px 0 4px',
-};
-
-const rowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
+/** A member row pushes its actions to the right edge, unlike a form row. */
+const memberRowStyle: CSSProperties = {
+  ...panelRowStyle,
   justifyContent: 'space-between',
-  gap: 6,
-  padding: '3px 0',
+  flexWrap: 'nowrap',
 };
 
 const nameStyle: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-};
-
-const buttonStyle: CSSProperties = {
-  padding: '2px 8px',
-  borderRadius: 6,
-  border: UI_GOLD_BORDER,
-  background: UI_BUTTON_BG,
-  color: UI_TEXT_COLOR,
-  font: 'inherit',
-  cursor: 'pointer',
-  flexShrink: 0,
 };
 
 /** One labelled member transition, as a section offers it. */
@@ -131,7 +107,7 @@ function MemberRow({
   onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
 }) {
   return (
-    <div style={rowStyle}>
+    <div style={memberRowStyle}>
       <span style={nameStyle}>
         {labelOf(member)}
         {member.role === 'admin' && <span style={{ opacity: 0.6 }}> (管理者)</span>}
@@ -141,7 +117,7 @@ function MemberRow({
           <button
             key={action}
             type="button"
-            style={buttonStyle}
+            style={panelButtonStyle}
             onClick={() => onMemberAction(action, member)}
           >
             {label}
@@ -183,9 +159,9 @@ export function AdminPanel({
 }) {
   return (
     <section style={panelStyle} aria-label="管理">
-      <div style={{ ...headingStyle, marginTop: 0 }}>管理</div>
+      <div style={{ ...panelHeadingStyle, marginTop: 0 }}>管理</div>
 
-      <label style={{ ...rowStyle, cursor: 'pointer' }}>
+      <label style={{ ...memberRowStyle, cursor: 'pointer' }}>
         <span>ゲスト入場を許可</span>
         <input
           type="checkbox"
@@ -199,7 +175,7 @@ export function AdminPanel({
         if (hideWhenEmpty && list.length === 0) return null;
         return (
           <div key={status}>
-            <div style={headingStyle}>
+            <div style={panelHeadingStyle}>
               {title} ({list.length})
             </div>
             {list.map((member) => (

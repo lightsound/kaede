@@ -11,6 +11,7 @@ import {
   chatOverflowIds,
   DEFAULT_MAP_ID,
   evaluateJoin,
+  evaluateSettingChange,
   GROUP_KIND_HUDDLE,
   guestsAllowedFrom,
   isExpiredRow,
@@ -39,6 +40,21 @@ export type SenderIdentity = Ctx['sender'];
 export function membershipOf(ctx: Ctx, identity: SenderIdentity): Membership | undefined {
   const row = ctx.db.spaceMember.identity.find(identity);
   return row === null ? undefined : asMembership(row);
+}
+
+/**
+ * Refuses the call unless the sender is an acting admin — the ONE admin
+ * gate behind every admin-only reducer (the space setting, the zone
+ * edits, the announcement), so none of them can drift on what "admin"
+ * means or on how the refusal reads. Loud and pre-write by construction:
+ * every caller runs it before touching a row. Lives here rather than in a
+ * reducer file for the chargeSendAllowance reason — the callers span
+ * three files that index.ts `export *`s, and the host refuses
+ * non-spacetime entry exports.
+ */
+export function requireAdmin(ctx: Ctx, reducerName: string): void {
+  const verdict = evaluateSettingChange({ actor: membershipOf(ctx, ctx.sender) });
+  if (!verdict.ok) throw new SenderError(`${reducerName} refused (${verdict.reason})`);
 }
 
 /** The guest-admission setting, read with the shared missing-row default. */

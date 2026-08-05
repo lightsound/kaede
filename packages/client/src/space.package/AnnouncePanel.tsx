@@ -1,43 +1,13 @@
 // fallow-ignore-file coverage-gaps -- a React form in the admin panel; needs a DOM, and no DOM test environment is configured. The authority is server-side (send_announcement over evaluateSettingChange / normalizeChatText, unit-tested in @kaede/shared)
 import { CHAT_TEXT_MAX_LENGTH, normalizeChatText } from '@kaede/shared';
-import { type CSSProperties, type FormEvent, useState } from 'react';
-import { UI_BUTTON_BG, UI_ERROR_COLOR, UI_GOLD, UI_GOLD_BORDER, UI_TEXT_COLOR } from '../theme';
-
-const headingStyle: CSSProperties = {
-  fontWeight: 'bold',
-  color: UI_GOLD,
-  margin: '8px 0 4px',
-};
-
-const rowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '3px 0',
-  flexWrap: 'wrap',
-};
-
-const inputStyle: CSSProperties = {
-  flex: '1 1 80px',
-  minWidth: 0,
-  padding: '2px 6px',
-  borderRadius: 6,
-  border: UI_GOLD_BORDER,
-  background: 'rgba(0, 0, 0, 0.4)',
-  color: UI_TEXT_COLOR,
-  font: 'inherit',
-};
-
-const buttonStyle: CSSProperties = {
-  padding: '2px 8px',
-  borderRadius: 6,
-  border: UI_GOLD_BORDER,
-  background: UI_BUTTON_BG,
-  color: UI_TEXT_COLOR,
-  font: 'inherit',
-  cursor: 'pointer',
-  flexShrink: 0,
-};
+import { type FormEvent, useState } from 'react';
+import {
+  panelButtonStyle,
+  panelErrorStyle,
+  panelHeadingStyle,
+  panelInputStyle,
+  panelRowStyle,
+} from './panelChrome';
 
 /**
  * What a refused draft says. One message for every reason, unlike the chat
@@ -67,12 +37,8 @@ export function AnnouncePanel({ onSendAnnouncement }: { onSendAnnouncement(text:
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const verdict = normalizeChatText(draft);
-    if (!verdict.ok) {
-      setError(DRAFT_ERROR);
-      return;
-    }
-    setError(undefined);
-    setPending(verdict.text);
+    setError(verdict.ok ? undefined : DRAFT_ERROR);
+    setPending(verdict.ok ? verdict.text : undefined);
   };
 
   const send = () => {
@@ -83,10 +49,10 @@ export function AnnouncePanel({ onSendAnnouncement }: { onSendAnnouncement(text:
 
   return (
     <div>
-      <div style={headingStyle}>全体アナウンス</div>
-      <form style={rowStyle} onSubmit={handleSubmit}>
+      <div style={panelHeadingStyle}>全体アナウンス</div>
+      <form style={panelRowStyle} onSubmit={handleSubmit}>
         <input
-          style={inputStyle}
+          style={panelInputStyle}
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
@@ -96,20 +62,18 @@ export function AnnouncePanel({ onSendAnnouncement }: { onSendAnnouncement(text:
           placeholder="全員に知らせる内容"
           aria-label="アナウンス入力"
         />
-        <button type="submit" style={buttonStyle}>
+        <button type="submit" style={panelButtonStyle}>
           確認
         </button>
-        {error !== undefined && (
-          <span style={{ color: UI_ERROR_COLOR, flexBasis: '100%' }}>{error}</span>
-        )}
+        {error !== undefined && <span style={panelErrorStyle}>{error}</span>}
       </form>
       {pending !== undefined && (
-        <div style={rowStyle}>
+        <div style={panelRowStyle}>
           <span style={{ flexBasis: '100%' }}>この内容を全員に送信します: 「{pending}」</span>
-          <button type="button" style={buttonStyle} onClick={send}>
+          <button type="button" style={panelButtonStyle} onClick={send}>
             送信する
           </button>
-          <button type="button" style={buttonStyle} onClick={() => setPending(undefined)}>
+          <button type="button" style={panelButtonStyle} onClick={() => setPending(undefined)}>
             やめる
           </button>
         </div>

@@ -75,11 +75,19 @@ function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
  */
 function chatTargetOf(c: DbConnection, scope: ChatScope): bigint | undefined {
   const identity = c.identity;
-  if (identity === undefined) return undefined;
-  return chatTargetFor(scope, {
+  return identity === undefined ? undefined : chatTargetFor(scope, senderContext(c, identity));
+}
+
+/**
+ * Where this connection stands, as the scope rules read it. Its own
+ * function so both it and chatTargetOf stay under the CRAP budget fallow
+ * enforces for uncovered code (the backfillAccountName precedent).
+ */
+function senderContext(c: DbConnection, identity: Identity) {
+  return {
     mapId: c.db.player.identity.find(identity)?.mapId ?? DEFAULT_MAP_ID,
     groupId: c.db.groupMember.identity.find(identity)?.groupId,
-  });
+  };
 }
 
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
@@ -304,9 +312,6 @@ export function createNetApi(deps: NetApiDeps): NetApi {
         deps.onChatRefused,
       );
     },
-    sendAnnouncement: forward('send_announcement', (c, text: string) =>
-      c.reducers.sendAnnouncement({ text }),
-    ),
     sendReaction: forward('send_reaction', (c, emoji: ReactionEmoji) =>
       c.reducers.sendReaction({ emoji }),
     ),
@@ -335,5 +340,8 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       callReducer('leave_huddle', (c) => c.reducers.leaveHuddle({}));
     },
     joinHuddle: forward('join_huddle', (c, groupId: bigint) => c.reducers.joinHuddle({ groupId })),
+    sendAnnouncement: forward('send_announcement', (c, text: string) =>
+      c.reducers.sendAnnouncement({ text }),
+    ),
   };
 }

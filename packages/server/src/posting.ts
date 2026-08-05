@@ -15,7 +15,6 @@ import {
   DM_HISTORY_MAX,
   evaluateChatSend,
   evaluateReactionSend,
-  evaluateSettingChange,
   evaluateStatusSend,
   isAvailability,
   isReactionEmoji,
@@ -32,7 +31,7 @@ import {
   type Ctx,
   chargeSendAllowance,
   findPostingSender,
-  membershipOf,
+  requireAdmin,
   type SenderIdentity,
   type SendGuardTable,
   trimHistory,
@@ -96,16 +95,35 @@ function admitGuardedSend(
 export const sendChatMessage = spacetimedb.reducer(
   { text: t.string(), scope: t.string(), target: t.u64() },
   (ctx, { text, scope, target }) => {
-    const found = findPostingSender(ctx, 'send_chat_message');
-    if (!found) return;
-    const verdict = normalizeChatText(text);
-    if (!verdict.ok) throw new SenderError(`send_chat_message refused (${verdict.reason})`);
-    const route = resolveChatRoute({ scope, target, context: chatContextOf(ctx, found.row) });
+    const draft = admitMessage(ctx, 'send_chat_message', text);
+    if (!draft) return;
+    const route = resolveChatRoute({ scope, target, context: chatContextOf(ctx, draft.rows.row) });
     if (!route.ok) throw new SenderError(`send_chat_message refused (${route.reason})`);
     chargeSendAllowance(ctx, ctx.db.chatGuard, evaluateChatSend, 'send_chat_message');
-    appendChatMessage(ctx, found.nameRow.name, verdict.text, route.scope, route.target, false);
+    appendChatMessage(ctx, draft.rows.nameRow.name, draft.text, route.scope, route.target, false);
   },
 );
+
+/**
+ * The preamble every message sender shares (chat, DM, announcement): the
+ * sender's world rows plus the validated body, or undefined after the
+ * silent reclaim refusal — in which case the caller must RETURN without
+ * writing (the WorldRowsVerdict contract; every loud refusal throws
+ * inside, all of them before any write). One function because the three
+ * senders' first lines were otherwise identical down to the tokens, which
+ * is what the clone gate exists to catch.
+ */
+function admitMessage(
+  ctx: Ctx,
+  reducerName: string,
+  text: string,
+): { rows: WorldRows; text: string } | undefined {
+  const found = findPostingSender(ctx, reducerName);
+  if (!found) return undefined;
+  const verdict = normalizeChatText(text);
+  if (!verdict.ok) throw new SenderError(`${reducerName} refused (${verdict.reason})`);
+  return { rows: found, text: verdict.text };
+}
 
 /**
  * Where the sender stands, for the scope rules: its authoritative map and
@@ -165,13 +183,10 @@ function appendChatMessage(
 // the reason the zone admin reducers have none: the action is admin-gated
 // and rare.
 export const sendAnnouncement = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
-  const found = findPostingSender(ctx, 'send_announcement');
-  if (!found) return;
-  const admin = evaluateSettingChange({ actor: membershipOf(ctx, ctx.sender) });
-  if (!admin.ok) throw new SenderError(`send_announcement refused (${admin.reason})`);
-  const verdict = normalizeChatText(text);
-  if (!verdict.ok) throw new SenderError(`send_announcement refused (${verdict.reason})`);
-  appendChatMessage(ctx, found.nameRow.name, verdict.text, CHAT_SCOPE_SPACE, 0n, true);
+  requireAdmin(ctx, 'send_announcement');
+  const draft = admitMessage(ctx, 'send_announcement', text);
+  if (!draft) return;
+  appendChatMessage(ctx, draft.rows.nameRow.name, draft.text, CHAT_SCOPE_SPACE, 0n, true);
 });
 
 /**
@@ -225,19 +240,17 @@ function resolveDmRecipientName(ctx: Ctx, recipient: SenderIdentity): string {
 export const sendDm = spacetimedb.reducer(
   { recipient: t.identity(), text: t.string() },
   (ctx, { recipient, text }) => {
-    const found = findPostingSender(ctx, 'send_dm');
-    if (!found) return;
-    const verdict = normalizeChatText(text);
-    if (!verdict.ok) throw new SenderError(`send_dm refused (${verdict.reason})`);
+    const draft = admitMessage(ctx, 'send_dm', text);
+    if (!draft) return;
     const recipientName = resolveDmRecipientName(ctx, recipient);
     chargeSendAllowance(ctx, ctx.db.chatGuard, evaluateChatSend, 'send_dm');
     ctx.db.dmMessage.insert({
       id: 0n, // 0 asks autoInc to assign the real id
       sender: ctx.sender,
       recipient,
-      senderName: found.nameRow.name,
+      senderName: draft.rows.nameRow.name,
       recipientName,
-      text: verdict.text,
+      text: draft.text,
       sentAt: ctx.timestamp,
     });
     trimHistory(ctx.db.dmMessage, DM_HISTORY_MAX);

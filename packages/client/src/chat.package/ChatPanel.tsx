@@ -162,18 +162,31 @@ const announcementLineStyle: CSSProperties = {
  * it is the one line that must not scroll past unnoticed.
  */
 function LogLine({ entry }: { entry: ChatEntryView }) {
-  const announcement = entry.kind === 'chat' && entry.announcement;
   return (
-    <div style={announcement ? announcementLineStyle : undefined}>
-      {entry.kind === 'dm' && <span style={dmMarkStyle}>[DM] </span>}
-      {entry.kind === 'chat' && entry.scopeTag !== undefined && (
-        <span style={scopeMarkStyle}>[{entry.scopeTag}] </span>
-      )}
+    <div style={entry.kind === 'chat' && entry.announcement ? announcementLineStyle : undefined}>
+      <LineMark entry={entry} />
       <span style={senderStyle(entry.own)}>{entry.senderName}</span>
-      {entry.kind === 'dm' && <span style={dmMarkStyle}> → {entry.recipientName}</span>}{' '}
-      {entry.text}
+      <DmRecipient entry={entry} /> {entry.text}
     </div>
   );
+}
+
+/**
+ * What a line leads with: [DM] for a private one, otherwise its scope
+ * marker. Split from LogLine (with DmRecipient below) to keep these
+ * uncovered arrows under the CRAP budget fallow enforces — the
+ * backfillAccountName precedent, applied to JSX.
+ */
+function LineMark({ entry }: { entry: ChatEntryView }) {
+  if (entry.kind === 'dm') return <span style={dmMarkStyle}>[DM] </span>;
+  if (entry.scopeTag === undefined) return null;
+  return <span style={scopeMarkStyle}>[{entry.scopeTag}] </span>;
+}
+
+/** The 宛先 a DM line ends its header with; nothing on a public line. */
+function DmRecipient({ entry }: { entry: ChatEntryView }) {
+  if (entry.kind !== 'dm') return null;
+  return <span style={dmMarkStyle}> → {entry.recipientName}</span>;
 }
 
 /**
@@ -258,6 +271,15 @@ function ReactionRow({
       ))}
     </div>
   );
+}
+
+/**
+ * The input's placeholder: the picked scope names the destination there
+ * too, because the eye is in the input while the message is typed, not on
+ * the highlighted pill above it.
+ */
+function placeholderFor(scopes: ChatScopeView, scope: ChatScope): string {
+  return `${scopes.find((option) => option.scope === scope)?.label ?? ''}に送信`;
 }
 
 /**
@@ -382,9 +404,7 @@ export function ChatPanel({
       <ScopeRow scopes={scopes} selected={scope} disabled={disabled} onSelect={setPicked} />
       <DraftForm
         disabled={disabled}
-        // The placeholder names the destination too: the highlighted pill
-        // says it, but the eye is in the input when the message is typed.
-        placeholder={`${scopes.find((o) => o.scope === scope)?.label ?? ''}に送信`}
+        placeholder={placeholderFor(scopes, scope)}
         ariaLabel="チャット入力"
         buttonLabel="送信"
         clearOnSubmit={true}

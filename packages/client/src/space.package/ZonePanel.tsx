@@ -10,13 +10,12 @@ import {
 import { type CSSProperties, type FormEvent, useState } from 'react';
 import type { ZoneAdminView } from '../net.package';
 import {
-  UI_BUTTON_BG,
-  UI_ERROR_COLOR,
-  UI_GOLD,
-  UI_GOLD_BORDER,
-  UI_GOLD_BORDER_SOFT,
-  UI_TEXT_COLOR,
-} from '../theme';
+  panelButtonStyle,
+  panelErrorStyle,
+  panelHeadingStyle,
+  panelInputStyle,
+  panelRowStyle,
+} from './panelChrome';
 
 /** The zone edits the panel dispatches (update_zone's payload, sans the id). */
 export interface ZoneEdit {
@@ -34,48 +33,11 @@ export interface ZoneActions {
   onDeleteZone(zoneId: bigint): void;
 }
 
-const headingStyle: CSSProperties = {
-  fontWeight: 'bold',
-  color: UI_GOLD,
-  margin: '8px 0 4px',
-};
-
-const rowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '3px 0',
-  flexWrap: 'wrap',
-};
-
-const inputStyle: CSSProperties = {
-  flex: '1 1 80px',
-  minWidth: 0,
-  padding: '2px 6px',
-  borderRadius: 6,
-  border: UI_GOLD_BORDER_SOFT,
-  background: 'rgba(0, 0, 0, 0.4)',
-  color: UI_TEXT_COLOR,
-  font: 'inherit',
-};
-
+/** The size fields are narrow and fixed, unlike the name field. */
 const sizeInputStyle: CSSProperties = {
-  ...inputStyle,
+  ...panelInputStyle,
   flex: '0 0 52px',
 };
-
-const buttonStyle: CSSProperties = {
-  padding: '2px 8px',
-  borderRadius: 6,
-  border: UI_GOLD_BORDER,
-  background: UI_BUTTON_BG,
-  color: UI_TEXT_COLOR,
-  font: 'inherit',
-  cursor: 'pointer',
-  flexShrink: 0,
-};
-
-const errorStyle: CSSProperties = { color: UI_ERROR_COLOR, flexBasis: '100%' };
 
 /** The user-facing wording of each zone-spec refusal (evaluateZoneSpec). */
 const SPEC_ERRORS: Record<ZoneSpecRejectReason, string> = {
@@ -107,7 +69,7 @@ function ZoneNameAndClosed({
   return (
     <>
       <input
-        style={inputStyle}
+        style={panelInputStyle}
         value={name}
         onChange={(e) => onName(e.target.value)}
         placeholder={placeholder}
@@ -145,7 +107,7 @@ function CreateZoneForm({ onCreateZone }: { onCreateZone: ZoneActions['onCreateZ
   };
 
   return (
-    <form style={rowStyle} onSubmit={handleSubmit}>
+    <form style={panelRowStyle} onSubmit={handleSubmit}>
       <ZoneNameAndClosed
         name={name}
         closed={closed}
@@ -157,10 +119,10 @@ function CreateZoneForm({ onCreateZone }: { onCreateZone: ZoneActions['onCreateZ
         }}
         onClosed={setClosed}
       />
-      <button type="submit" style={buttonStyle}>
+      <button type="submit" style={panelButtonStyle}>
         いまの場所に設置
       </button>
-      {error !== undefined && <span style={errorStyle}>{error}</span>}
+      {error !== undefined && <span style={panelErrorStyle}>{error}</span>}
     </form>
   );
 }
@@ -192,7 +154,7 @@ function ZoneRow({ zone, actions }: { zone: ZoneAdminView; actions: ZoneActions 
   };
 
   return (
-    <form style={rowStyle} onSubmit={handleSave} aria-label={`ゾーン ${zone.name}`}>
+    <form style={panelRowStyle} onSubmit={handleSave} aria-label={`ゾーン ${zone.name}`}>
       <span style={{ flexBasis: '100%', opacity: 0.7 }}>
         {zone.mapName}
         {zone.closed && '・クローズド'}
@@ -221,16 +183,16 @@ function ZoneRow({ zone, actions }: { zone: ZoneAdminView; actions: ZoneActions 
         aria-label="高さ"
         inputMode="numeric"
       />
-      <button type="submit" style={buttonStyle}>
+      <button type="submit" style={panelButtonStyle}>
         保存
       </button>
-      <button type="button" style={buttonStyle} onClick={() => actions.onMoveZone(zone.id)}>
+      <button type="button" style={panelButtonStyle} onClick={() => actions.onMoveZone(zone.id)}>
         ここへ移動
       </button>
-      <button type="button" style={buttonStyle} onClick={() => actions.onDeleteZone(zone.id)}>
+      <button type="button" style={panelButtonStyle} onClick={() => actions.onDeleteZone(zone.id)}>
         削除
       </button>
-      {error !== undefined && <span style={errorStyle}>{error}</span>}
+      {error !== undefined && <span style={panelErrorStyle}>{error}</span>}
     </form>
   );
 }
@@ -251,7 +213,7 @@ export function ZonePanel({
 }) {
   return (
     <div>
-      <div style={headingStyle}>ゾーン(会議室) ({zones.length})</div>
+      <div style={panelHeadingStyle}>ゾーン(会議室) ({zones.length})</div>
       <CreateZoneForm onCreateZone={actions.onCreateZone} />
       {zones.map((zone) => (
         <ZoneRow
