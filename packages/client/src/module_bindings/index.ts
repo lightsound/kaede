@@ -46,6 +46,7 @@ import JoinReducer from "./join_reducer";
 import JoinHuddleReducer from "./join_huddle_reducer";
 import LeaveHuddleReducer from "./leave_huddle_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
+import RegisterGroupCallReducer from "./register_group_call_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendAnnouncementReducer from "./send_announcement_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
@@ -65,6 +66,7 @@ import UpdateZoneReducer from "./update_zone_reducer";
 import ChatMessageRow from "./chat_message_table";
 import ConversationGroupRow from "./conversation_group_table";
 import DmMessageRow from "./dm_message_table";
+import GroupCallRow from "./group_call_table";
 import GroupMemberRow from "./group_member_table";
 import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
@@ -125,6 +127,17 @@ const tablesSchema = __schema({
       { name: 'dm_message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, DmMessageRow),
+  groupCall: __table({
+    name: 'group_call',
+    indexes: [
+      { accessor: 'groupId', name: 'group_call_group_id_idx_btree', algorithm: 'btree', columns: [
+        'groupId',
+      ] },
+    ],
+    constraints: [
+      { name: 'group_call_group_id_key', constraint: 'unique', columns: ['groupId'] },
+    ],
+  }, GroupCallRow),
   groupMember: __table({
     name: 'group_member',
     indexes: [
@@ -224,6 +237,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_huddle", JoinHuddleReducer),
   __reducerSchema("leave_huddle", LeaveHuddleReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
+  __reducerSchema("register_group_call", RegisterGroupCallReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_announcement", SendAnnouncementReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),

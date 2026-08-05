@@ -783,15 +783,98 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   R2 有効化は完了済み（バケット一覧 API が success を返すことを実測）
 - `CallProvider` アダプタの設計（Cloudflare RealtimeKit への直接依存を
   1 モジュールに閉じ込める。LiveKit 等への差し替え口を確保）
+  ✅ **実装済み（2026-08-05、増分①）**: プロバイダ中立の語彙は
+  `call.package/provider.ts`（CallProvider / CallSession / CallSnapshot —
+  join・leave・mic/camera・スナップショット購読のみ）で、ベンダー SDK
+  `@cloudflare/realtimekit` を import するのはクライアント全体で
+  `call.package/realtimekit.ts` の 1 ファイルだけ。サーバー側の対
+  （REST でミーティング作成・トークン発行）も `packages/worker/src/
+  realtimekit.ts` の 1 ファイルに閉じ、差し替えはこの 2 ファイル＋infra の
+  バインディングで完結する。メディアは**入室時 OFF**（カメラ・マイクは
+  明示操作で ON — 通話開始と同じ意図性の規則）
 - 小さなサーバー API の新設（**Cloudflare Workers**）: RealtimeKit の参加トークン
   発行・録画開始/停止はシークレットキーを要するためブラウザから直接呼べない
   （SpacetimeDB モジュールも外部 HTTP を呼べない）。VISION の「バックエンドは
   薄いステートレスなグルーのみ」原則に従う
+  ✅ **トークン発行 API まで実装済み（2026-08-05、増分①）**: Worker
+  `kaede-call`（`packages/worker`、Alchemy の `CallApi` で IaC 化・wrangler の
+  逃げ道 `infra/wrangler-call.jsonc`）。エンドポイントは POST 2 本
+  （ミーティング作成 / 参加トークン発行）だけで、**状態を持たない** —
+  どのグループにどのミーティングが紐づくかは SpacetimeDB の `group_call` 行が
+  真実源。設計の要点:
+  ①**認可の分担**: Worker は「スペースのサインイン済みメンバーであること」を
+  Clerk JWT（SpacetimeDB 接続と同じ `spacetimedb` テンプレート — issuer と
+  aud `kaede-spacetimedb` を jose の JWKS 検証で確認）だけ検証し、**グループの
+  権威には一切ならない**。どのグループの通話に入れるかは group_call 行の
+  可視性（メンバー限定 RLS）が握り、行が読めた者だけが meeting id
+  （＝参加ケイパビリティ）を Worker に提示できる。クローズドな立ち話の
+  通話が非メンバーに漏れない根拠は RLS 一本で、Worker が SpacetimeDB を
+  読む経路は作らない（読む=Worker がオーナートークン級のシークレットを
+  持つことになり「薄いグルー」から外れる）
+  ②**ゲストは増分①では通話不可**（スコープカット）: ゲストは Clerk
+  セッションを持たないため Worker が 401 で拒否し、UI も通話ボタンを
+  出さない。`register_group_call` も**承認済みメンバー限定** — 登録は
+  「プロバイダがこの meeting id を発行した」という主張で、Worker が
+  トークンを発行し得る者（=メンバー）しか誠実にできない。ゲストにも
+  許すと、形だけ正しい死んだ id を書いてグループの通話を（グループが
+  死ぬまで）固められてしまう（レビュー指摘への対応）。**製品方針は
+  ゲストも承認済みメンバーと同じく通話開始・参加・画面共有ができること**
+  （oVice の「ゲスト招待して通話」）。後続増分で SpacetimeDB 発行の
+  ゲストトークン（issuer auth.spacetimedb.com）を同じ JWKS 方式で
+  Worker が検証する経路を足す
+  ③**シークレットの置き場所の実測（Alchemy の罠）**: `Config.redacted` で
+  Worker バインディングにすると **Alchemy のステート（prod は git
+  コミット対象）に平文で書かれる**ことを dev ステージで実測（README の
+  注意書きどおり）。よって REALTIMEKIT_API_TOKEN は Alchemy に通さず、
+  CI デプロイジョブが Alchemy デプロイ後に `wrangler secret put` で毎回
+  同期する。**Alchemy のスクリプト再アップロードが帯域外の secret_text
+  バインディングを保持する**ことも同じ dev ステージで実測済み
+  （デプロイ履歴で Upload → Secret Change → Upload を経て secret list に
+  残ることを確認）。GitHub Actions シークレット `REALTIMEKIT_API_TOKEN`
+  は登録済み（未設定だとデプロイジョブが fail-fast）
+  ④録画開始/停止 API・Webhook 受信・R2 アーカイブは後続増分
 - 録画ファイルの R2 アーカイブ（録画完了 Webhook → R2 保存 → アプリから
   ダウンロード、の流れを設計）
 - 会話グループ（会議室ゾーン/立ち話）単位の通話。ボタンで開始・参加する
   意図的なフロー（近接ボイスはやらない）
+  ✅ **映像・音声まで実装済み（2026-08-05、増分①。画面共有・録画・参加者
+  インジケータは後続増分）**: 会話グループに居るメンバーに通話ドック
+  （📞 ボタン）が出て、押すと参加する。設計の要点:
+  ①**スキーマは `group_call` 1 テーブル**（groupId PK → meetingId）。
+  groupId 主キーで「1 グループ 1 通話」が構造で固定（group_member の
+  identity PK の前例）。行の意味は「このグループにミーティングが
+  プロビジョニング済み」であり「通話中」ではない（誰が通話に居るかは
+  Webhook を持つ後続増分まで追わない — ミーティングは再利用可能な部屋で、
+  空の部屋への再入室はプロバイダの正常系）。行の寿命は**グループ行と同じ**
+  （delete_zone と立ち話の 0 人掃除が deleteGroupCall を同時実行 —
+  どの RLS JOIN にも当たらない孤児行は誰にも見えず掃除もできないため)。
+  タイムスタンプ列は持たない（E2E の SQL シードが偽造できない列は
+  持たない — conversation_group の前例）
+  ②**開始と参加は同じボタン**: 行が無ければ Worker でミーティングを作り
+  `register_group_call` で自分のグループに束縛してから、行の meeting id で
+  トークンを発行して入る。リデューサーはグループを**送信者の membership
+  から**解決し（クライアントはグループを名乗らない — create_zone の
+  placement 規則の適用）、meeting id の形（UUID — `isMeetingIdLike`、
+  shared の zone.ts に同居）を検証、登録済みなら loud に拒否。**2 人が
+  同時に開始する競合は敗者が勝者の行を読み直して参加**する
+  （`acquireCallTicket` — 単体テスト済み。敗者が作ったミーティングは
+  参照されないだけで害なし）。レートは専用バケット call_guard
+  ③**グループを離れると通話も終わる**: own membership の groupId を
+  発行する callFeed（dedupe 済み）を通話ドックが監視し、通話中の
+  グループと一致しなくなった瞬間に leave（歩き去り・別グループへの移動・
+  ワールド掃除のどれでも）。「会話グループ単位の通話」の単位性は
+  この auto-leave が担う
+  ④**E2E は wire 受信で固定**（`groupCallRowsReceived` — dm/groupChat の
+  前例）: メンバーには行（＝参加ケイパビリティ）が届き、非メンバーは
+  live もリロード後 seed も 0、参加すると届く正例、ゲストに通話ボタンが
+  出ないこと、を `group-call-visibility.spec.ts` が固定。**旧スキーマ DB
+  への再 publish もリハーサル済み**（main のモジュール → 行投入 →
+  本ブランチ publish → 受理・行存続・group_call 新設・書き込みを実測）。
+  WebRTC の実通話（2 ブラウザの映像・音声疎通）は CI では回せないため
+  手動テストで検証
 - 画面共有
+- **ゲストの通話開始・参加・画面共有**（承認済みメンバーと同等。増分①の
+  スコープカットを外す — Worker が SpacetimeDB ゲストトークンを検証）
 - **録画 ＋ ダウンロード**（YouTube 等への二次利用が実際のユース）。
   方式は **RealtimeKit クラウド録画で決定**（$0.010/分。月10時間録画で約$6）。
   サーバー側合成のため録画者のタブに依存せず、録り直せない録画で事故らない。

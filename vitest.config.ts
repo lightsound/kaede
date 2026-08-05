@@ -8,7 +8,7 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    projects: ['packages/shared', 'packages/client'],
+    projects: ['packages/shared', 'packages/client', 'packages/worker'],
     coverage: {
       provider: 'v8',
       reporter: ['json', 'text-summary'],

@@ -19,6 +19,12 @@ export const Account = __t.object("Account", {
 });
 export type Account = __Infer<typeof Account>;
 
+export const CallGuard = __t.object("CallGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type CallGuard = __Infer<typeof CallGuard>;
+
 export const ChatGuard = __t.object("ChatGuard", {
   identity: __t.identity(),
   allowanceMicros: __t.i64(),
@@ -76,6 +82,12 @@ export const DmMessage = __t.object("DmMessage", {
   sentAt: __t.timestamp(),
 });
 export type DmMessage = __Infer<typeof DmMessage>;
+
+export const GroupCall = __t.object("GroupCall", {
+  groupId: __t.u64(),
+  meetingId: __t.string(),
+});
+export type GroupCall = __Infer<typeof GroupCall>;
 
 export const GroupMember = __t.object("GroupMember", {
   identity: __t.identity(),

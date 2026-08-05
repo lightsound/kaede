@@ -106,6 +106,15 @@ export interface E2ENetStats {
    */
   groupChatRowsReceived: number;
   /**
+   * group_call rows handed to this client (subscription seed + insert
+   * events) — the groupChatRowsReceived idea pointed at the call registry
+   * (ROADMAP Phase 4 増分①). The row's meeting id is the JOIN CAPABILITY
+   * for the group's call, narrowed per connection by the members-only RLS
+   * filter: a non-member must sit at zero while a member counts up, which
+   * no DOM assertion could prove.
+   */
+  groupCallRowsReceived: number;
+  /**
    * DM rows this client DECIDED to notify for (shouldNotifyDm returned
    * true), counted before the Notification is constructed and regardless
    * of whether construction succeeds — an OS notification itself is

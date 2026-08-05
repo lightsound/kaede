@@ -12,6 +12,16 @@ spacetime.local.json
 # 個人情報を含む成果物なのでリポジトリには入れない — docs/backup-restore.md 参照。
 backups/
 
+# Alchemy が Worker エントリ(packages/worker)をバンドルするときに
+# パッケージ脇へ作る作業キャッシュ。ステートではないので共有しない。
+packages/*/.alchemy/
+
+# 通話 API Worker のローカル開発シークレット(README「通話 API Worker」)。
+infra/.dev.vars
+
+# wrangler dev の作業キャッシュ(通話 API Worker のローカル開発で生成される)。
+infra/.wrangler/
+
 # Alchemy のステート: 共有するのは prod ステージだけ(README 参照)。
 # それ以外のステージ(既定の dev_$USER を含む)・ログ・バージョンチェックの
 # キャッシュは個人環境の産物なので共有しない。

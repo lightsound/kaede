@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Workers runtime globals (Request/Response/fetch as workerd ships
+    // them). WebWorker DOM lib is NOT used: workers-types is the accurate
+    // surface and the two conflict.
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src", "test"]
+}

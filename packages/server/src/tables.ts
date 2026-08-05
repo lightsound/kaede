@@ -574,6 +574,57 @@ export const spacetimedb = schema({
       allowanceMicros: t.i64(),
     },
   ),
+  // A conversation group's video call (ROADMAP Phase 4 増分①): groupId →
+  // the call provider's meeting id, the reusable room every joining
+  // member's CallProvider dials. `groupId` as the PRIMARY KEY makes "one
+  // call per conversation group" structural (the group_member identity-PK
+  // precedent), and the PK's btree is the index the RLS join below selects
+  // on. The row means "a meeting is provisioned for this group", not "a
+  // call is live": nobody tracks who is inside the meeting yet (that is
+  // the recording/presence increment's webhook work), so the row lives as
+  // long as its GROUP does — delete_zone and cleanupEmptyHuddle delete it
+  // with the group row (deleteGroupCall in world.ts) — and re-joining an
+  // idle meeting is the provider's normal reuse, not a bug.
+  //
+  // The meeting id is the JOIN CAPABILITY: the token-minting Worker
+  // verifies the caller is a signed-in member of the SPACE (a Clerk JWT)
+  // but knows nothing about groups — SpacetimeDB is the only group
+  // authority, so which GROUP'S call a member may join is enforced
+  // entirely by who can read this row (the members-only RLS filter below,
+  // the dm_message thinking). A member who shares the id out of band can
+  // already share the call itself; that is the chat-history trust level,
+  // accepted. Registration is member-gated too: register_group_call
+  // (calls.ts) accepts only the sender's own group and a
+  // provider-shaped id (isMeetingIdLike in @kaede/shared).
+  //
+  // No timestamp columns, deliberately (the conversation_group rule):
+  // nothing rules on a registered-at, and columns the table does not have
+  // are columns the E2E seeding (`spacetimedb-cli sql` INSERT — which
+  // cannot express timestamps) does not need to fake. Like every realtime
+  // table: the single space's data, no tenant/org column (the scaling
+  // invariant).
+  groupCall: table(
+    { name: 'group_call', public: true },
+    {
+      groupId: t.u64().primaryKey(),
+      meetingId: t.string(),
+    },
+  ),
+  // The call-registration rate limit's token-bucket marker — chat_guard's
+  // shape, for register_group_call (ROADMAP Phase 4 増分①). Its own bucket
+  // for the standing reason (buckets shared across features drift from
+  // their client-side mirrors), and because a refused registration must
+  // not tax chat: the call flow retries by design (two members racing to
+  // register resolve through a refusal). Same lifecycle as the other lazy
+  // guards: created on first use, deleted with the player rows
+  // (removePlayer).
+  callGuard: table(
+    { name: 'call_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
+    },
+  ),
 });
 
 // Row-level security for dm_message: a connection is handed only the rows it
@@ -646,4 +697,22 @@ export const chatOpenGroupVisibility = spacetimedb.clientVisibilityFilter.sql(
 // member's row revokes the rows from their cache as deletes.
 export const chatGroupMemberVisibility = spacetimedb.clientVisibilityFilter.sql(
   `SELECT c.* FROM chat_message c JOIN group_member m ON c.target = m.group_id WHERE c.scope = '${CHAT_SCOPE_GROUP}' AND m.identity = :sender`,
+);
+
+// Row-level security for group_call (ROADMAP Phase 4 増分①): a group's
+// call row reaches its MEMBERS only — one filter, so it is the allow-list
+// entire (a row matching no filter reaches nobody, which here is the
+// point: the meeting id is the join capability, see the table comment).
+// Members-only even for OPEN groups, deliberately: an open group's chat
+// being readable by the room (chatOpenGroupVisibility) does not extend to
+// its call being JOINABLE by the room — joining the conversation
+// (walking into the zone, join_huddle) is the gate, exactly the
+// resolveChatRoute not-a-member rule on the send side. The join follows
+// the chatGroupMemberVisibility shape: ON-clause join (a WHERE-equality
+// join breaks every subscription on the table — the 増分④ spike), both
+// join columns indexed (group_call.group_id is the PK; group_member's
+// btree is 増分②'s). Membership is live: joining a group grants the row,
+// leaving revokes it as a delete (the 増分④ observation).
+export const groupCallVisibility = spacetimedb.clientVisibilityFilter.sql(
+  'SELECT c.* FROM group_call c JOIN group_member m ON c.group_id = m.group_id WHERE m.identity = :sender',
 );
