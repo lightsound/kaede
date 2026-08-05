@@ -9,14 +9,19 @@
 import {
   type Availability,
   CHAT_HISTORY_MAX,
+  CHAT_SCOPE_SPACE,
+  type ChatContext,
+  type ChatScope,
   DM_HISTORY_MAX,
   evaluateChatSend,
   evaluateReactionSend,
+  evaluateSettingChange,
   evaluateStatusSend,
   isAvailability,
   isReactionEmoji,
   normalizeChatText,
   normalizeStatusText,
+  resolveChatRoute,
   type SendAllowanceRequest,
   type SendAllowanceVerdict,
   statusViewOf,
@@ -27,9 +32,11 @@ import {
   type Ctx,
   chargeSendAllowance,
   findPostingSender,
+  membershipOf,
   type SenderIdentity,
   type SendGuardTable,
   trimHistory,
+  type WorldRows,
 } from './world';
 
 /**
@@ -86,20 +93,85 @@ function admitGuardedSend(
 // "no guests right now" lever, which cuts chat with the same flip. A
 // per-capability setting (chat / DM / reactions) can land later as
 // additive space_setting columns with defaults.
-export const sendChatMessage = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
-  const found = findPostingSender(ctx, 'send_chat_message');
-  if (!found) return;
-  const verdict = normalizeChatText(text);
-  if (!verdict.ok) throw new SenderError(`send_chat_message refused (${verdict.reason})`);
-  chargeSendAllowance(ctx, ctx.db.chatGuard, evaluateChatSend, 'send_chat_message');
+export const sendChatMessage = spacetimedb.reducer(
+  { text: t.string(), scope: t.string(), target: t.u64() },
+  (ctx, { text, scope, target }) => {
+    const found = findPostingSender(ctx, 'send_chat_message');
+    if (!found) return;
+    const verdict = normalizeChatText(text);
+    if (!verdict.ok) throw new SenderError(`send_chat_message refused (${verdict.reason})`);
+    const route = resolveChatRoute({ scope, target, context: chatContextOf(ctx, found.row) });
+    if (!route.ok) throw new SenderError(`send_chat_message refused (${route.reason})`);
+    chargeSendAllowance(ctx, ctx.db.chatGuard, evaluateChatSend, 'send_chat_message');
+    appendChatMessage(ctx, found.nameRow.name, verdict.text, route.scope, route.target, false);
+  },
+);
+
+/**
+ * Where the sender stands, for the scope rules: its authoritative map and
+ * the conversation group its membership names. Built from the server's own
+ * rows on every send — the whole reason a client cannot address a group it
+ * never joined (see resolveChatRoute in @kaede/shared).
+ */
+function chatContextOf(ctx: Ctx, row: WorldRows['row']): ChatContext {
+  const member = ctx.db.groupMember.identity.find(ctx.sender);
+  return { mapId: row.mapId, groupId: member === null ? undefined : member.groupId };
+}
+
+/**
+ * Appends one message to the chat history and trims it — the row write both
+ * senders share (send_chat_message and send_announcement), so the retention
+ * cap and the column defaults cannot drift between them. The cap stays ONE
+ * global CHAT_HISTORY_MAX across every scope (ROADMAP 増分④ の履歴の
+ * 決め打ち): the number bounds storage and entry egress for the table as a
+ * whole, which is what a per-scope cap would stop doing.
+ */
+function appendChatMessage(
+  ctx: Ctx,
+  senderName: string,
+  text: string,
+  scope: ChatScope,
+  target: bigint,
+  announcement: boolean,
+): void {
   ctx.db.chatMessage.insert({
     id: 0n, // 0 asks autoInc to assign the real id
     sender: ctx.sender,
-    senderName: found.nameRow.name,
-    text: verdict.text,
+    senderName,
+    text,
     sentAt: ctx.timestamp,
+    scope,
+    target,
+    announcement,
   });
   trimHistory(ctx.db.chatMessage, CHAT_HISTORY_MAX);
+}
+
+// Posts one space-wide admin announcement (ROADMAP Phase 3 増分④ 管理者の
+// 全体アナウンス): a 'space'-scoped message flagged `announcement`, so it
+// reaches everyone — other maps, and the members of a closed meeting alike
+// — and renders 強調. The admin check is evaluateSettingChange, the same
+// acting-admin rule set_guests_allowed and the zone reducers use, so
+// guests and ordinary members are refused server-side and the panel's
+// gating stays cosmetic. Presence in the world is required too, like every
+// posting reducer: the row snapshots the sender's display name, which only
+// a player row has.
+//
+// Deliberately NOT charged against chat_guard, unlike the DM: this send
+// leaves from the admin panel, not the chat input whose client-side mirror
+// (ChatPanel's allowanceRef) charges per submit — a bucket advanced behind
+// the mirror's back would turn honest chat sends into surprise refusals
+// (the reaction_guard reasoning). It gets no bucket of its own either, for
+// the reason the zone admin reducers have none: the action is admin-gated
+// and rare.
+export const sendAnnouncement = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+  const found = findPostingSender(ctx, 'send_announcement');
+  if (!found) return;
+  const admin = evaluateSettingChange({ actor: membershipOf(ctx, ctx.sender) });
+  if (!admin.ok) throw new SenderError(`send_announcement refused (${admin.reason})`);
+  const verdict = normalizeChatText(text);
+  if (!verdict.ok) throw new SenderError(`send_announcement refused (${verdict.reason})`);
+  appendChatMessage(ctx, found.nameRow.name, verdict.text, CHAT_SCOPE_SPACE, 0n, true);
 });
 
 /**

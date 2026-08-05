@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a SpacetimeDB schema declaration; validated by publishing the module, not by unit tests
-import { DEFAULT_MAP_ID } from '@kaede/shared';
+import { CHAT_SCOPE_GROUP, CHAT_SCOPE_MAP, CHAT_SCOPE_SPACE, DEFAULT_MAP_ID } from '@kaede/shared';
 import { schema, t, table } from 'spacetimedb/server';
 
 export const spacetimedb = schema({
@@ -216,6 +216,32 @@ export const spacetimedb = schema({
       senderName: t.string(),
       text: t.string(),
       sentAt: t.timestamp(),
+      // Which conversation this message belongs to (ROADMAP Phase 3 増分④),
+      // exactly the additive extension planned above: ChatScope in
+      // @kaede/shared ('space' | 'map' | 'group'), appended with the 'space'
+      // default so every pre-増分④ row reads as 全体 and no migration writes
+      // a single row. INDEXED because both the row-level-security filters
+      // below and the client's map-scoped subscription select on it, and
+      // subscription queries are re-evaluated per transaction (the
+      // player.mapId rule).
+      scope: t.string().index().default(CHAT_SCOPE_SPACE),
+      // What the scope points AT: the WorldMap id for 'map' (zero-extended
+      // to u64 — one column cannot be two widths), the conversation_group id
+      // for 'group', unused (0) for 'space'. One target column rather than
+      // one per kind: the scope discriminates, and a second nullable column
+      // would only add a way for the two to disagree. Indexed for the same
+      // filter reason as `scope`.
+      target: t.u64().index().default(0n),
+      // The admin announcement marker (ROADMAP Phase 3 増分④ 管理者の全体
+      // アナウンス): a space-scoped message rendered as 強調. Deliberately a
+      // FLAG rather than a fourth `scope` value, because an announcement is
+      // space-scoped in every respect that matters to delivery — the RLS
+      // allow-list, the subscription and the retention trim all treat it as
+      // one — and only its sender eligibility (admins) and its rendering
+      // differ. A scope value would have forked those three paths to say the
+      // same thing. Clients cannot set it: send_chat_message always writes
+      // false and only send_announcement (admin-checked) writes true.
+      announcement: t.bool().default(false),
     },
   ),
   // The chat rate limit's token-bucket marker — player_guard's shape, for
@@ -559,4 +585,54 @@ export const spacetimedb = schema({
 // Registered by being a module export (index.ts re-exports it).
 export const dmMessageVisibility = spacetimedb.clientVisibilityFilter.sql(
   'SELECT * FROM dm_message WHERE sender = :sender OR recipient = :sender',
+);
+
+// Row-level security for chat_message (ROADMAP Phase 3 増分④): the closed
+// conversation groups' messages reach their MEMBERS only. Registering any
+// filter on a table makes the filters an ALLOW-LIST — a row matching none of
+// them reaches nobody — so the space and map scopes need their own filters
+// even though they hide nothing; the closed-group JOIN alone would have
+// deleted every other message in the space the moment this shipped.
+//
+// Four filters rather than one OR: the union of a table's filters is what a
+// connection sees (the dm_message spike's fallback, needed here), and each
+// JOIN needs its own FROM clause anyway. Both joins carry an explicit ON
+// clause, and both join columns are indexed: with the same join written as a
+// WHERE equality the host rejects EVERY subscription on this table with
+// "Subscriptions require indexes on join columns" — including the plain
+// `scope = 'space'` one, which mentions no join at all. That failure is
+// invisible at publish time (the module uploads fine) and only surfaces as a
+// subscription error, so a filter change here needs the non-owner spike
+// (2026-08-05, packages/e2e chat-scope.spec.ts is its standing version).
+//
+// The closed flag is read LIVE off conversation_group rather than
+// snapshotted onto the message: flipping a zone or huddle to クローズド
+// hides its history immediately, and flipping back reveals it — which is
+// what "the group's setting" means to a member who toggles it mid-meeting.
+// The consequence, accepted: a deleted group (delete_zone, or a huddle
+// losing its last member) leaves its closed rows joinable to nothing, so
+// they become invisible to everyone and expire with the global retention
+// trim (ROADMAP 増分④ の履歴・orphan の決め打ち).
+export const chatSpaceVisibility = spacetimedb.clientVisibilityFilter.sql(
+  `SELECT * FROM chat_message WHERE scope = '${CHAT_SCOPE_SPACE}'`,
+);
+
+export const chatMapVisibility = spacetimedb.clientVisibilityFilter.sql(
+  `SELECT * FROM chat_message WHERE scope = '${CHAT_SCOPE_MAP}'`,
+);
+
+// An OPEN group's conversation is visible to the room around it (VISION の
+// オープン/クローズド), member or not — the join only has to prove the
+// target group is open.
+export const chatOpenGroupVisibility = spacetimedb.clientVisibilityFilter.sql(
+  `SELECT c.* FROM chat_message c JOIN conversation_group g ON c.target = g.id WHERE c.scope = '${CHAT_SCOPE_GROUP}' AND g.closed = false`,
+);
+
+// A CLOSED group's conversation reaches its members only — the one filter
+// this increment exists for. group_member.groupId carries the btree index
+// 増分② put there for exactly this join (RLS filters are re-evaluated per
+// transaction). Membership is live too: the occupancy pass removing a
+// member's row revokes the rows from their cache as deletes.
+export const chatGroupMemberVisibility = spacetimedb.clientVisibilityFilter.sql(
+  `SELECT c.* FROM chat_message c JOIN group_member m ON c.target = m.group_id WHERE c.scope = '${CHAT_SCOPE_GROUP}' AND m.identity = :sender`,
 );

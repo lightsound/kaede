@@ -2,11 +2,20 @@ import { describe, expect, it } from 'vitest';
 import {
   CHAT_BURST_MESSAGES,
   CHAT_HISTORY_MAX,
+  CHAT_SCOPE_GROUP,
+  CHAT_SCOPE_MAP,
+  CHAT_SCOPE_SPACE,
   CHAT_SEND_COST_MICROS,
   CHAT_TEXT_MAX_LENGTH,
   chatOverflowIds,
+  chatScopeOptions,
+  chatScopeTag,
+  chatTargetFor,
   evaluateChatSend,
+  fallbackChatScope,
+  isChatScope,
   normalizeChatText,
+  resolveChatRoute,
 } from '../src';
 
 describe('normalizeChatText', () => {
@@ -146,5 +155,152 @@ describe('chatOverflowIds', () => {
   it('sorts as bigints, not as numbers or strings', () => {
     const big = 2n ** 60n;
     expect(chatOverflowIds([big + 1n, 2n, big], 2)).toEqual([2n]);
+  });
+});
+
+describe('isChatScope', () => {
+  it('accepts the three stored scopes and nothing else', () => {
+    expect(isChatScope(CHAT_SCOPE_SPACE)).toBe(true);
+    expect(isChatScope(CHAT_SCOPE_MAP)).toBe(true);
+    expect(isChatScope(CHAT_SCOPE_GROUP)).toBe(true);
+    expect(isChatScope('announce')).toBe(false);
+    expect(isChatScope('')).toBe(false);
+  });
+});
+
+describe('resolveChatRoute', () => {
+  const onMap = { mapId: 1, groupId: undefined };
+  const inGroup = { mapId: 1, groupId: 42n };
+
+  it('routes 全体 to target 0, whatever the sender addressed', () => {
+    expect(resolveChatRoute({ scope: CHAT_SCOPE_SPACE, target: 77n, context: inGroup })).toEqual({
+      ok: true,
+      scope: CHAT_SCOPE_SPACE,
+      target: 0n,
+    });
+  });
+
+  it('routes マップ to the sender own map, zero-extended', () => {
+    expect(resolveChatRoute({ scope: CHAT_SCOPE_MAP, target: 1n, context: onMap })).toEqual({
+      ok: true,
+      scope: CHAT_SCOPE_MAP,
+      target: 1n,
+    });
+  });
+
+  // The in-flight teleport: the draft was addressed to the map the sender
+  // was on, the row says otherwise. Refused rather than re-routed (the DM
+  // no-fallback rule).
+  it('refuses a map send addressed to a map the sender is not on', () => {
+    expect(resolveChatRoute({ scope: CHAT_SCOPE_MAP, target: 0n, context: onMap })).toEqual({
+      ok: false,
+      reason: 'wrong-map',
+    });
+  });
+
+  it('routes 会話グループ to the group the membership names', () => {
+    expect(resolveChatRoute({ scope: CHAT_SCOPE_GROUP, target: 42n, context: inGroup })).toEqual({
+      ok: true,
+      scope: CHAT_SCOPE_GROUP,
+      target: 42n,
+    });
+  });
+
+  // The impersonation this check exists for: a hostile client naming a
+  // group id it never joined, and the honest race of walking out of one.
+  it('refuses a group send naming another group, or any group while in none', () => {
+    expect(resolveChatRoute({ scope: CHAT_SCOPE_GROUP, target: 43n, context: inGroup })).toEqual({
+      ok: false,
+      reason: 'not-a-member',
+    });
+    expect(resolveChatRoute({ scope: CHAT_SCOPE_GROUP, target: 42n, context: onMap })).toEqual({
+      ok: false,
+      reason: 'not-a-member',
+    });
+  });
+
+  it('refuses a scope this build does not know', () => {
+    expect(resolveChatRoute({ scope: 'announce', target: 0n, context: inGroup })).toEqual({
+      ok: false,
+      reason: 'unknown-scope',
+    });
+  });
+});
+
+describe('chatScopeOptions / fallbackChatScope', () => {
+  it('offers 会話グループ only while a membership names one', () => {
+    expect(chatScopeOptions({ mapId: 0, groupId: undefined })).toEqual([
+      CHAT_SCOPE_SPACE,
+      CHAT_SCOPE_MAP,
+    ]);
+    expect(chatScopeOptions({ mapId: 0, groupId: 7n })).toEqual([
+      CHAT_SCOPE_SPACE,
+      CHAT_SCOPE_MAP,
+      CHAT_SCOPE_GROUP,
+    ]);
+  });
+
+  it('keeps a selection that is still offered', () => {
+    const offered = chatScopeOptions({ mapId: 0, groupId: 7n });
+    expect(fallbackChatScope(CHAT_SCOPE_GROUP, offered)).toBe(CHAT_SCOPE_GROUP);
+    expect(fallbackChatScope(CHAT_SCOPE_MAP, offered)).toBe(CHAT_SCOPE_MAP);
+  });
+
+  it('falls back to 全体 when the selection is gone or unknown', () => {
+    const offered = chatScopeOptions({ mapId: 0, groupId: undefined });
+    expect(fallbackChatScope(CHAT_SCOPE_GROUP, offered)).toBe(CHAT_SCOPE_SPACE);
+    expect(fallbackChatScope('announce', offered)).toBe(CHAT_SCOPE_SPACE);
+  });
+});
+
+describe('chatTargetFor', () => {
+  it('addresses 全体 with 0 and マップ with the zero-extended map id', () => {
+    expect(chatTargetFor(CHAT_SCOPE_SPACE, { mapId: 3, groupId: 7n })).toBe(0n);
+    expect(chatTargetFor(CHAT_SCOPE_MAP, { mapId: 3, groupId: undefined })).toBe(3n);
+  });
+
+  it('addresses 会話グループ with the membership group, and nothing while in none', () => {
+    expect(chatTargetFor(CHAT_SCOPE_GROUP, { mapId: 3, groupId: 7n })).toBe(7n);
+    expect(chatTargetFor(CHAT_SCOPE_GROUP, { mapId: 3, groupId: undefined })).toBeUndefined();
+  });
+
+  // The two halves of the pair must agree: whatever the sender addresses
+  // from a context, the server's verification of that same context accepts.
+  it('produces targets the routing rule accepts', () => {
+    const context = { mapId: 2, groupId: 9n };
+    for (const scope of chatScopeOptions(context)) {
+      const target = chatTargetFor(scope, context);
+      if (target === undefined) throw new Error('an offered scope must have a target');
+      expect(resolveChatRoute({ scope, target, context })).toEqual({ ok: true, scope, target });
+    }
+  });
+});
+
+describe('chatScopeTag', () => {
+  const tag = (over: Partial<Parameters<typeof chatScopeTag>[0]>) =>
+    chatScopeTag({
+      scope: CHAT_SCOPE_SPACE,
+      announcement: false,
+      mapName: '広場',
+      groupName: '会議室A',
+      ...over,
+    });
+
+  it('names each scope', () => {
+    expect(tag({})).toBe('全体');
+    expect(tag({ scope: CHAT_SCOPE_MAP })).toBe('広場');
+    expect(tag({ scope: CHAT_SCOPE_GROUP })).toBe('会議室A');
+  });
+
+  // The announcement marker outranks the scope it is stored under (space).
+  it('marks an announcement whatever its scope column says', () => {
+    expect(tag({ announcement: true })).toBe('アナウンス');
+  });
+
+  // A closed group deleted mid-history, or a map this build does not have.
+  it('falls back to a generic group label and drops an unknown map or scope', () => {
+    expect(tag({ scope: CHAT_SCOPE_GROUP, groupName: undefined })).toBe('会話グループ');
+    expect(tag({ scope: CHAT_SCOPE_MAP, mapName: undefined })).toBeUndefined();
+    expect(tag({ scope: 'huddle-only' })).toBeUndefined();
   });
 });
