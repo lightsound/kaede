@@ -378,6 +378,8 @@ export function ChatPanel({
   const disabled = postingDisabled(connected, ownName);
 
   const submit = (draft: string): string | undefined => {
+    const plan = planDraft(draft);
+    if (plan.kind === 'refused') return REJECT_MESSAGES[plan.reason];
     // The pick going stale means the offered list moved while the draft was
     // being typed (walking out of the group, the huddle disbanding).
     // Dispatching the reconciled fallback here would silently re-scope the
@@ -386,12 +388,12 @@ export function ChatPanel({
     // that a message whose destination moved must fail loudly, applied one
     // layer earlier). Snapping the pick to the rendered fallback makes the
     // refusal one-shot: the NEXT submit goes where the control visibly says.
-    if (scope !== picked) {
+    // Only a PUBLIC plan is gated: a DM addresses the recipient the plan
+    // resolved and ignores the scope selector (see Net.sendPlanned).
+    if (plan.kind === 'public' && scope !== picked) {
       setPicked(scope);
       return SCOPE_LOST_MESSAGE;
     }
-    const plan = planDraft(draft);
-    if (plan.kind === 'refused') return REJECT_MESSAGES[plan.reason];
     const send = evaluateChatSend({
       allowanceMicros: allowanceRef.current,
       nowMicros: BigInt(Date.now()) * 1000n,
