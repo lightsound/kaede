@@ -86,7 +86,6 @@ export type DmMessage = __Infer<typeof DmMessage>;
 export const GroupCall = __t.object("GroupCall", {
   groupId: __t.u64(),
   meetingId: __t.string(),
-  startedAt: __t.timestamp(),
 });
 export type GroupCall = __Infer<typeof GroupCall>;
 

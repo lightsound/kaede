@@ -597,15 +597,17 @@ export const spacetimedb = schema({
   // (calls.ts) accepts only the sender's own group and a
   // provider-shaped id (isMeetingIdLike in @kaede/shared).
   //
-  // `startedAt` is the registration timestamp, for the panel's ordering /
-  // future diagnostics; nothing rules on it. Like every realtime table:
-  // the single space's data, no tenant/org column (the scaling invariant).
+  // No timestamp columns, deliberately (the conversation_group rule):
+  // nothing rules on a registered-at, and columns the table does not have
+  // are columns the E2E seeding (`spacetimedb-cli sql` INSERT — which
+  // cannot express timestamps) does not need to fake. Like every realtime
+  // table: the single space's data, no tenant/org column (the scaling
+  // invariant).
   groupCall: table(
     { name: 'group_call', public: true },
     {
       groupId: t.u64().primaryKey(),
       meetingId: t.string(),
-      startedAt: t.timestamp(),
     },
   ),
   // The call-registration rate limit's token-bucket marker — chat_guard's

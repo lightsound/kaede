@@ -13,5 +13,4 @@ import {
 export default __t.row({
   groupId: __t.u64().primaryKey().name("group_id"),
   meetingId: __t.string().name("meeting_id"),
-  startedAt: __t.timestamp().name("started_at"),
 });

@@ -103,6 +103,7 @@ function installNetStats(): E2ENetStats | undefined {
     dmRowsReceived: 0,
     dmNotifyDecisions: 0,
     groupChatRowsReceived: 0,
+    groupCallRowsReceived: 0,
   };
   window.__kaedeE2ENet = stats;
   return stats;
@@ -594,6 +595,16 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // same own group_member row the scope feed reads, but as the raw
     // groupId — the call's identity, not a chat affordance (see callFeed.ts).
     wireOwnGroup(c, myIdentity, { isStale: stale, onOwnGroup: hooks.onOwnGroup });
+
+    // The RLS privacy probe for the call registry (the groupChatRowsReceived
+    // idea): how many group_call rows — join capabilities — this connection
+    // was actually handed. Insert events only; the seed is counted by the
+    // cache enumeration below, so a reloaded client still reports what the
+    // seed delivered.
+    for (const _row of c.db.groupCall.iter()) bumpStat('groupCallRowsReceived');
+    c.db.groupCall.onInsert(() => {
+      if (!stale()) bumpStat('groupCallRowsReceived');
+    });
 
     /**
      * Enters the world once admission says so: resume the surviving own row

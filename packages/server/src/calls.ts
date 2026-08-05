@@ -69,10 +69,6 @@ export const registerGroupCall = spacetimedb.reducer(
       (request) => evaluateSendAllowance(request, CALL_SEND_COST_MICROS, CALL_BURST_SENDS),
       'register_group_call',
     );
-    ctx.db.groupCall.insert({
-      groupId,
-      meetingId,
-      startedAt: ctx.timestamp,
-    });
+    ctx.db.groupCall.insert({ groupId, meetingId });
   },
 );
