@@ -64,6 +64,21 @@ describe('acquireCallTicket', () => {
     expect(deps.calls).toEqual([]);
   });
 
+  it('登録中にグループを移っていたら古いラベルで参加せず失敗する', async () => {
+    // 登録は成功する(サーバーは移動後のグループへ束縛した)が、チケットの
+    // groupId が読み時点のグループを指したままでは auto-leave の監視が
+    // 嘘をつくため、参加せずに失敗する(ユーザーはいまの場所から再試行)。
+    let groupId = GROUP;
+    const deps = makeDeps({
+      ownGroupCall: () => ({ groupId, meetingId: undefined }),
+      registerGroupCall: () => {
+        groupId = 9n; // 呼び出しが着地する前に別グループへ移った
+        return Promise.resolve();
+      },
+    });
+    await expect(acquireCallTicket(deps)).rejects.toThrow('left the group mid-registration');
+  });
+
   it('競合でもなくグループも変わっていたら元の拒否を伝える', async () => {
     let first = true;
     const deps = makeDeps({

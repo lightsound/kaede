@@ -67,6 +67,16 @@ export async function acquireCallTicket(deps: CallFlowDeps): Promise<CallTicket>
     const provisioned = await deps.provisionMeeting();
     try {
       await deps.registerGroupCall(provisioned);
+      // The reducer bound the meeting to the sender's CURRENT group. If the
+      // membership moved between the read above and the registration
+      // landing (walked into another zone mid-flow), the row belongs to
+      // the new group and this ticket's groupId would lie to the
+      // auto-leave watch — refuse instead of joining under a stale label
+      // (a review finding); the user retries from where they now stand.
+      const current = deps.ownGroupCall();
+      if (current === undefined || current.groupId !== own.groupId) {
+        throw new Error('call flow: left the group mid-registration');
+      }
       meetingId = provisioned;
     } catch (err) {
       meetingId = await meetingAfterLostRace(deps, own.groupId);

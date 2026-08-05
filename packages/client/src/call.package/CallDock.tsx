@@ -173,10 +173,13 @@ type CallPhase =
 
 /**
  * Whether the dock renders nothing: disconnected or a guest (the Worker
- * would refuse the token anyway), or out of every conversation group with
- * no call to show — an ongoing call stays rendered through the leave
- * round-trip (the auto-leave effect ends it). Split from the component to
- * keep both under the CRAP budget.
+ * would refuse the token anyway), or out of every conversation group. An
+ * ONGOING call always renders — the WebRTC session is independent of the
+ * SpacetimeDB connection, so a reconnect blip must not hide a live
+ * mic/camera with no way to leave it (the session outliving its UI was a
+ * review finding); sign-out needs no case here because the auth remount
+ * unmounts the dock, whose cleanup leaves the call. Split from the
+ * component to keep both under the CRAP budget.
  */
 function dockHidden(
   connected: boolean,
@@ -184,7 +187,8 @@ function dockHidden(
   ownGroupId: bigint | undefined,
   phase: CallPhase,
 ): boolean {
-  return !connected || !signedIn || (ownGroupId === undefined && phase.kind !== 'in-call');
+  if (phase.kind === 'in-call') return false;
+  return !connected || !signedIn || ownGroupId === undefined;
 }
 
 /** What the dock calls on the net facade (the HuddleActions shape). */
@@ -200,6 +204,8 @@ interface JoinContext {
   ownName: string | undefined;
   setPhase: (update: (current: CallPhase) => CallPhase) => void;
   sessionRef: { current: CallSession | undefined };
+  /** The in-flight latch: a double-click must not start two pipelines. */
+  joiningRef: { current: boolean };
 }
 
 /**
@@ -210,6 +216,11 @@ interface JoinContext {
  * every exit path (own leave, kick, meeting end).
  */
 async function joinCall(ctx: JoinContext): Promise<void> {
+  // The latch, ref-based because two clicks can land before React renders
+  // the joining phase (a review finding): the second becomes a no-op
+  // instead of a parallel pipeline whose session nothing would track.
+  if (ctx.joiningRef.current) return;
+  ctx.joiningRef.current = true;
   ctx.setPhase(() => ({ kind: 'joining' }));
   // Snapshots can fire DURING the provider join (joining a call someone is
   // already in emits participantJoined mid-handshake), i.e. before the
@@ -252,6 +263,8 @@ async function joinCall(ctx: JoinContext): Promise<void> {
   } catch (err) {
     console.error('call join failed', err);
     ctx.setPhase(() => ({ kind: 'idle', notice: '通話に参加できませんでした' }));
+  } finally {
+    ctx.joiningRef.current = false;
   }
 }
 
@@ -285,6 +298,8 @@ export function CallDock({
   const [phase, setPhase] = useState<CallPhase>({ kind: 'idle' });
   // The live session for the unmount cleanup — state would be stale there.
   const sessionRef = useRef<CallSession>(undefined);
+  // See JoinContext.joiningRef.
+  const joiningRef = useRef(false);
 
   // The auto-leave watch: a call is the GROUP's, so the session ends the
   // moment the membership stops naming its group (walked away, switched
@@ -313,7 +328,7 @@ export function CallDock({
   return (
     <IdlePanel
       notice={phase.notice}
-      onJoin={() => void joinCall({ net, getToken, ownName, setPhase, sessionRef })}
+      onJoin={() => void joinCall({ net, getToken, ownName, setPhase, sessionRef, joiningRef })}
     />
   );
 }

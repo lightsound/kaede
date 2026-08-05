@@ -64,7 +64,15 @@ export const realtimeKitProvider: CallProvider = {
     // dock resets through one signal whether the user left, was kicked, or
     // the meeting ended.
     meeting.self.on('roomLeft', onEnded);
-    await meeting.join();
+    try {
+      await meeting.join();
+    } catch (err) {
+      // A failed join must not leave the initialized client (listeners,
+      // acquired devices) running with no session handle to release it
+      // (a review finding); leave() is the SDK's teardown.
+      await meeting.leave().catch(() => {});
+      throw err;
+    }
     publish();
     return {
       setMic: (on) => (on ? meeting.self.enableAudio() : meeting.self.disableAudio()),

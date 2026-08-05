@@ -18,17 +18,20 @@ import {
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, chargeSendAllowance, findPostingSender } from './world';
+import { type Ctx, chargeSendAllowance, findPostingSender, membershipOf } from './world';
 
 // Registers the sender's conversation group's call: binds the meeting the
 // Worker just provisioned to the group the sender is IN — the group is
 // never named by the client (the create_zone placement rule applied to
 // membership: the row addresses what the server knows about the sender,
 // not what the sender claims). Eligibility is the posting preamble (in the
-// world + admission re-check) plus holding a group membership; guests can
-// register like they can huddle — the Worker is what requires a signed-in
-// member, and it requires one for MINTING, which a registered row alone
-// does not grant.
+// world + admission re-check) plus holding a group membership, plus being
+// an APPROVED MEMBER — unlike huddling, deliberately: a registration is a
+// claim that the provider issued this meeting id, which only someone the
+// Worker will mint for (a signed-in member) can honestly make. A guest
+// could otherwise write a well-formed-but-dead id and wedge the group's
+// call until the group dies (guests cannot join calls in this increment
+// anyway — the Worker refuses them).
 //
 // Refusals follow the posting loud/silent rule (everything throws before
 // any write). `already-registered` is the expected two-members-race
@@ -58,6 +61,11 @@ export const registerGroupCall = spacetimedb.reducer(
   { meetingId: t.string() },
   (ctx, { meetingId }) => {
     if (!findPostingSender(ctx, 'register_group_call')) return;
+    // The members-only gate (see the header comment): guests pass the
+    // posting preamble but must not bind meeting ids they can never mint.
+    if (membershipOf(ctx, ctx.sender)?.status !== 'approved') {
+      throw new SenderError('register_group_call refused (members-only)');
+    }
     const groupId = vetCallRegistration(ctx, meetingId);
     // The token bucket (the huddle numbers — see call_guard in tables.ts).
     // The evaluator stays an inline arrow rather than a shared wrapper, for

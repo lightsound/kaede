@@ -357,8 +357,16 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
 
 - **ローカル開発**は Alchemy を通さず `wrangler dev` で動かします。
   `infra/.dev.vars`（gitignore 済み — wrangler は設定ファイルの隣の
-  `.dev.vars` を読む）に `REALTIMEKIT_API_TOKEN` と開発 Clerk インスタンスの
-  `CLERK_ISSUER` を書き:
+  `.dev.vars` を読み、同名の vars を上書きする）に **4 つとも**書くこと —
+  `wrangler-call.jsonc` の vars は本番値なので、上書きしないと CORS が
+  localhost を拒否し、ミーティングも本番アプリに作られてしまいます:
+
+  ```ini
+  REALTIMEKIT_API_TOKEN=<Realtime Admin トークン>
+  REALTIMEKIT_APP_ID=<ローカル開発用アプリ kaede-dev の ID>
+  CLERK_ISSUER=https://<開発インスタンス>.clerk.accounts.dev
+  ALLOWED_ORIGINS=http://localhost:5173
+  ```
 
   ```sh
   cd infra && pnpm exec wrangler dev --config wrangler-call.jsonc --port 8787
