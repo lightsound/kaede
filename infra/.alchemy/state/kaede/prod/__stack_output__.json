@@ -1,3 +1,4 @@
 {
-  "url": "https://kaede.town"
+  "url": "https://kaede.town",
+  "callApiUrl": "https://kaede-call.kaede-751.workers.dev"
 }
