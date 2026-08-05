@@ -58,11 +58,11 @@ if [ "$(echo "$apps" | jq -r '.success')" != "true" ]; then
 fi
 
 step "2. アプリ ${APP_NAME} の再利用 or 作成"
-app_id=$(echo "$apps" | jq -r --arg n "$APP_NAME" '.result.data[]? // empty | select(.name == $n) | .id' | head -1)
+app_id=$(echo "$apps" | jq -r --arg n "$APP_NAME" '.data[]? // empty | select(.name == $n) | .id' | head -1)
 if [ -z "$app_id" ] || [ "$app_id" = "null" ]; then
   created=$(api POST /apps "{\"name\": \"${APP_NAME}\"}")
   echo "$created" | jq .
-  app_id=$(echo "$created" | jq -r '.result.data.id // .result.id')
+  app_id=$(echo "$created" | jq -r '.data.app.id // empty')
 fi
 echo "app_id=${app_id}"
 
@@ -72,16 +72,16 @@ api GET "/${app_id}/presets" | jq .
 step "4. ミーティング作成"
 meeting=$(api POST "/${app_id}/meetings" '{"title": "spike 会議"}')
 echo "$meeting" | jq .
-meeting_id=$(echo "$meeting" | jq -r '.result.data.id // .result.id')
+meeting_id=$(echo "$meeting" | jq -r '.data.id // empty')
 echo "meeting_id=${meeting_id}"
 
 step "5. 参加トークン発行 (Add Participant)"
 preset_name="${PRESET_NAME:-group_call_participant}"
 participant=$(api POST "/${app_id}/meetings/${meeting_id}/participants" \
   "{\"name\": \"スパイク参加者\", \"preset_name\": \"${preset_name}\", \"custom_participant_id\": \"spike-account-1\"}")
-echo "$participant" | jq '.result.data.token = (if .result.data.token then "[取得済み・後段で解析]" else null end) // .'
-token=$(echo "$participant" | jq -r '.result.data.token // empty')
-participant_id=$(echo "$participant" | jq -r '.result.data.id // empty')
+echo "$participant" | jq 'if .data.token then .data.token = "[取得済み・後段で解析]" else . end'
+token=$(echo "$participant" | jq -r '.data.token // empty')
+participant_id=$(echo "$participant" | jq -r '.data.id // empty')
 
 step "6. トークンの形式と有効期限"
 if [ -n "$token" ]; then
@@ -96,7 +96,7 @@ fi
 step "7. トークンリフレッシュ API"
 if [ -n "$participant_id" ]; then
   api POST "/${app_id}/meetings/${meeting_id}/participants/${participant_id}/token" \
-    | jq '.result.data.token = (if .result.data.token then "[再発行された]" else null end) // .'
+    | jq 'if .data.token then .data.token = "[再発行された]" else . end'
 fi
 
 step "8. Webhook 登録 API (登録 → 一覧 → 削除)"
@@ -107,8 +107,8 @@ webhook=$(api POST "/${app_id}/webhooks" '{
   "enabled": false
 }')
 echo "$webhook" | jq .
-webhook_id=$(echo "$webhook" | jq -r '.result.data.id // .result.id // empty')
-api GET "/${app_id}/webhooks/all" | jq '.result | if type == "object" then {events: .events} else . end' 2>/dev/null || true
+webhook_id=$(echo "$webhook" | jq -r '.data.id // empty')
+api GET "/${app_id}/webhooks/all" | jq '.data | if type == "object" then {events: .events} else . end' 2>/dev/null || true
 if [ -n "$webhook_id" ]; then
   api DELETE "/${app_id}/webhooks/${webhook_id}" | jq -c .
 fi
