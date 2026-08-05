@@ -31,6 +31,9 @@ export const ChatMessage = __t.object("ChatMessage", {
   senderName: __t.string(),
   text: __t.string(),
   sentAt: __t.timestamp(),
+  scope: __t.string(),
+  target: __t.u64(),
+  announcement: __t.bool(),
 });
 export type ChatMessage = __Infer<typeof ChatMessage>;
 

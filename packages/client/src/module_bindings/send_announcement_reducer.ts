@@ -12,6 +12,4 @@ import {
 
 export default {
   text: __t.string(),
-  scope: __t.string(),
-  target: __t.u64(),
 };
