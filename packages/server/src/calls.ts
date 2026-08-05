@@ -1,8 +1,8 @@
 // fallow-ignore-file coverage-gaps -- a reducer only runs inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (meeting-id shape, rate limit) are delegated to isMeetingIdLike / evaluateSendAllowance in @kaede/shared and unit-tested there
 
-// The group-call registration reducer (ROADMAP Phase 4 増分①). The call
-// flow splits authority in two: the WORKER (packages/worker) talks to the
-// call provider — it provisions meetings and mints participant tokens,
+// The group-call registration reducer (ROADMAP Phase 4 増分①〜②). The
+// call flow splits authority in two: the WORKER (packages/worker) talks to
+// the call provider — it provisions meetings and mints participant tokens,
 // because those need the provider secret — while THIS module remains the
 // only group authority: which conversation group has which meeting is a
 // group_call row, written here after the standing membership checks, and
@@ -18,23 +18,28 @@ import {
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, chargeSendAllowance, findPostingSender, membershipOf } from './world';
+import { type Ctx, chargeSendAllowance, findPostingSender } from './world';
 
 // Registers the sender's conversation group's call: binds the meeting the
 // Worker just provisioned to the group the sender is IN — the group is
 // never named by the client (the create_zone placement rule applied to
 // membership: the row addresses what the server knows about the sender,
 // not what the sender claims). Eligibility is the posting preamble (in the
-// world + admission re-check) plus holding a group membership, plus being
-// an APPROVED MEMBER — unlike huddling, deliberately: a registration is a
-// claim that the provider issued this meeting id, which only someone the
-// Worker will mint for (a signed-in member) can honestly make. A guest
-// could otherwise write a well-formed-but-dead id and wedge the group's
-// call until the group dies (guests cannot join calls in this increment
-// anyway — the Worker refuses them).
+// world + admission re-check) plus holding a group membership — GUESTS
+// INCLUDED since 増分② (the huddle rule): a registration is a claim that
+// the provider issued this meeting id, which only someone the Worker will
+// mint for can honestly make, and the Worker now mints for every in-world
+// identity (a member's Clerk JWT or a guest's host-issued token). 増分①
+// gated this to approved members because guests could not mint at all —
+// every guest registration would have been a well-formed-but-dead id
+// wedging the group's call (a review finding); that premise is what 増分②
+// lifts, not the vetting. DELIBERATE dead-id vandalism stays possible for
+// anyone in-world — the chat-spam trust level, bounded by the same levers
+// (call_guard below; guests_allowed kicks guests out of the posting
+// preamble entirely).
 //
 // Refusals follow the posting loud/silent rule (everything throws before
-// any write). `already-registered` is the expected two-members-race
+// any write). `already-registered` is the expected two-senders-race
 // outcome: the loser's provisioned meeting is simply never referenced
 // (the provider holds idle meetings at no cost), and the loser joins the
 // row that won — the client handles the refusal by re-reading the row.
@@ -61,11 +66,6 @@ export const registerGroupCall = spacetimedb.reducer(
   { meetingId: t.string() },
   (ctx, { meetingId }) => {
     if (!findPostingSender(ctx, 'register_group_call')) return;
-    // The members-only gate (see the header comment): guests pass the
-    // posting preamble but must not bind meeting ids they can never mint.
-    if (membershipOf(ctx, ctx.sender)?.status !== 'approved') {
-      throw new SenderError('register_group_call refused (members-only)');
-    }
     const groupId = vetCallRegistration(ctx, meetingId);
     // The token bucket (the huddle numbers — see call_guard in tables.ts).
     // The evaluator stays an inline arrow rather than a shared wrapper, for

@@ -68,6 +68,16 @@ const videoStyle: CSSProperties = {
   objectFit: 'cover',
 };
 
+// Screen shares render wider and letterboxed (contain, not cover): a
+// shared document's edges are the content, unlike a camera's headroom.
+const screenStyle: CSSProperties = {
+  width: 360,
+  height: 202,
+  borderRadius: 6,
+  background: '#000',
+  objectFit: 'contain',
+};
+
 /** Attaches a live MediaStreamTrack to a media element (or detaches it). */
 function useTrack(ref: { current: HTMLMediaElement | null }, track: MediaStreamTrack | undefined) {
   useEffect(() => {
@@ -115,38 +125,83 @@ function VideoTile({ tile }: { tile: CallTile }) {
   );
 }
 
-/** The ongoing call: everyone's tiles plus the local media controls. */
+/** One ongoing screen share: the shared video plus its tab audio if any. */
+function ScreenTile({ tile }: { tile: CallTile }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useTrack(videoRef, tile.screenTrack);
+  useTrack(audioRef, tile.screenAudioTrack);
+  return (
+    <div style={{ ...tileStyle, width: 360 }}>
+      {/* Muted by contract: a share's audio (a shared tab's sound) plays on
+          the sibling element, which the provider only fills for remotes. */}
+      <video ref={videoRef} style={screenStyle} autoPlay playsInline muted />
+      {/* biome-ignore lint/a11y/useMediaCaption: ライブ通話音声にキャプションは存在しない(文字起こしは将来の増分) */}
+      <audio ref={audioRef} autoPlay />
+      <span>🖥️ {tile.isSelf ? `${tile.name}(自分)` : tile.name}</span>
+    </div>
+  );
+}
+
+/** The local media controls row — split from InCallPanel (the CRAP budget). */
+function CallControls({ session, snapshot }: { session: CallSession; snapshot: CallSnapshot }) {
+  return (
+    <div style={rowStyle}>
+      <button
+        type="button"
+        style={buttonStyle}
+        onClick={blurringClick(() => void session.setMic(!snapshot.micOn).catch(() => {}))}
+      >
+        {snapshot.micOn ? '🎤 ミュート' : '🎤 オン'}
+      </button>
+      <button
+        type="button"
+        style={buttonStyle}
+        onClick={blurringClick(() => void session.setCamera(!snapshot.cameraOn).catch(() => {}))}
+      >
+        {snapshot.cameraOn ? '📷 オフ' : '📷 オン'}
+      </button>
+      <button
+        type="button"
+        style={buttonStyle}
+        onClick={blurringClick(
+          // A cancelled share picker rejects — swallowed like every other
+          // media refusal; the browser's own stop-share bar also lands
+          // here as a provider-side update, not through this toggle.
+          () => void session.setScreenShare(!snapshot.screenShareOn).catch(() => {}),
+        )}
+      >
+        {snapshot.screenShareOn ? '🖥️ 共有停止' : '🖥️ 画面共有'}
+      </button>
+      <button
+        type="button"
+        style={buttonStyle}
+        onClick={blurringClick(() => void session.leave().catch(() => {}))}
+      >
+        退出
+      </button>
+    </div>
+  );
+}
+
+/** The ongoing call: shared screens, everyone's tiles, the media controls. */
 function InCallPanel({ session, snapshot }: { session: CallSession; snapshot: CallSnapshot }) {
+  const sharing = snapshot.tiles.filter((tile) => tile.screenTrack !== undefined);
   return (
     <div style={panelStyle}>
+      {sharing.length > 0 && (
+        <div style={rowStyle}>
+          {sharing.map((tile) => (
+            <ScreenTile key={tile.key} tile={tile} />
+          ))}
+        </div>
+      )}
       <div style={rowStyle}>
         {snapshot.tiles.map((tile) => (
           <VideoTile key={tile.key} tile={tile} />
         ))}
       </div>
-      <div style={rowStyle}>
-        <button
-          type="button"
-          style={buttonStyle}
-          onClick={blurringClick(() => void session.setMic(!snapshot.micOn).catch(() => {}))}
-        >
-          {snapshot.micOn ? '🎤 ミュート' : '🎤 オン'}
-        </button>
-        <button
-          type="button"
-          style={buttonStyle}
-          onClick={blurringClick(() => void session.setCamera(!snapshot.cameraOn).catch(() => {}))}
-        >
-          {snapshot.cameraOn ? '📷 オフ' : '📷 オン'}
-        </button>
-        <button
-          type="button"
-          style={buttonStyle}
-          onClick={blurringClick(() => void session.leave().catch(() => {}))}
-        >
-          退出
-        </button>
-      </div>
+      <CallControls session={session} snapshot={snapshot} />
     </div>
   );
 }
@@ -172,23 +227,19 @@ type CallPhase =
   | { kind: 'in-call'; groupId: bigint; session: CallSession; snapshot: CallSnapshot };
 
 /**
- * Whether the dock renders nothing: disconnected or a guest (the Worker
- * would refuse the token anyway), or out of every conversation group. An
- * ONGOING call always renders — the WebRTC session is independent of the
- * SpacetimeDB connection, so a reconnect blip must not hide a live
- * mic/camera with no way to leave it (the session outliving its UI was a
- * review finding); sign-out needs no case here because the auth remount
- * unmounts the dock, whose cleanup leaves the call. Split from the
- * component to keep both under the CRAP budget.
+ * Whether the dock renders nothing: disconnected, or out of every
+ * conversation group. Guests are offered the dock like members (増分② —
+ * the Worker verifies their host-issued token). An ONGOING call always
+ * renders — the WebRTC session is independent of the SpacetimeDB
+ * connection, so a reconnect blip must not hide a live mic/camera with no
+ * way to leave it (the session outliving its UI was a review finding);
+ * sign-out needs no case here because the auth remount unmounts the dock,
+ * whose cleanup leaves the call. Split from the component to keep both
+ * under the CRAP budget.
  */
-function dockHidden(
-  connected: boolean,
-  signedIn: boolean,
-  ownGroupId: bigint | undefined,
-  phase: CallPhase,
-): boolean {
+function dockHidden(connected: boolean, ownGroupId: bigint | undefined, phase: CallPhase): boolean {
   if (phase.kind === 'in-call') return false;
-  return !connected || !signedIn || ownGroupId === undefined;
+  return !connected || ownGroupId === undefined;
 }
 
 /** What the dock calls on the net facade (the HuddleActions shape). */
@@ -269,25 +320,24 @@ async function joinCall(ctx: JoinContext): Promise<void> {
 }
 
 /**
- * The call dock (ROADMAP Phase 4 増分①): joins the conversation group's
- * call — provisioning and registering its meeting when it has none — and
- * renders the ongoing call's tiles and media toggles. Offered to
- * signed-in MEMBERS in a conversation group only: the token Worker
- * refuses guests (the 増分① scope cut), and outside a group there is no
- * call to join. Leaving the group in any way (walking off, switching,
- * getting swept) ends the participation: the auto-leave effect below
- * watches the own-group signal.
+ * The call dock (ROADMAP Phase 4 増分①〜②): joins the conversation
+ * group's call — provisioning and registering its meeting when it has
+ * none — and renders the ongoing call's tiles, shared screens and media
+ * toggles. Offered to everyone in a conversation group, guests included
+ * (増分② — the api layer falls back to the connection's host-issued
+ * token, which the Worker verifies); outside a group there is no call to
+ * join. Leaving the group in any way (walking off, switching, getting
+ * swept) ends the participation: the auto-leave effect below watches the
+ * own-group signal.
  */
 export function CallDock({
   connected,
-  signedIn,
   ownGroupId,
   ownName,
   getToken,
   net,
 }: {
   connected: boolean;
-  signedIn: boolean;
   /** The own-group signal (NetHooks.onOwnGroup). */
   ownGroupId: bigint | undefined;
   /** The authoritative display name — what the call tile shows the others. */
@@ -320,7 +370,7 @@ export function CallDock({
     [],
   );
 
-  if (dockHidden(connected, signedIn, ownGroupId, phase)) return null;
+  if (dockHidden(connected, ownGroupId, phase)) return null;
   if (phase.kind === 'joining') return <div style={panelStyle}>📞 通話に接続中…</div>;
   if (phase.kind === 'in-call') {
     return <InCallPanel session={phase.session} snapshot={phase.snapshot} />;

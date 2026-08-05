@@ -184,7 +184,6 @@ export function App() {
       />
       <CallDock
         connected={connected}
-        signedIn={session.signedIn}
         ownGroupId={ownGroupId}
         ownName={ownName}
         getToken={session.getToken}

@@ -820,8 +820,9 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   死ぬまで）固められてしまう（レビュー指摘への対応）。**製品方針は
   ゲストも承認済みメンバーと同じく通話開始・参加・画面共有ができること**
   （oVice の「ゲスト招待して通話」）。後続増分で SpacetimeDB 発行の
-  ゲストトークン（issuer auth.spacetimedb.com）を同じ JWKS 方式で
-  Worker が検証する経路を足す
+  ゲストトークンを Worker が検証する経路を足す
+  → ✅ **このスコープカットは増分②で解除済み（2026-08-05）** — 下の
+  「ゲストの通話開始・参加・画面共有」参照
   ③**シークレットの置き場所の実測（Alchemy の罠）**: `Config.redacted` で
   Worker バインディングにすると **Alchemy のステート（prod は git
   コミット対象）に平文で書かれる**ことを dev ステージで実測（README の
@@ -837,9 +838,9 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   ダウンロード、の流れを設計）
 - 会話グループ（会議室ゾーン/立ち話）単位の通話。ボタンで開始・参加する
   意図的なフロー（近接ボイスはやらない）
-  ✅ **映像・音声まで実装済み（2026-08-05、増分①。画面共有・録画・参加者
-  インジケータは後続増分）**: 会話グループに居るメンバーに通話ドック
-  （📞 ボタン）が出て、押すと参加する。設計の要点:
+  ✅ **映像・音声まで実装済み（2026-08-05、増分①。画面共有とゲスト開放は
+  増分②で実装済み、録画・参加者インジケータは後続増分）**: 会話グループに
+  居る全員に通話ドック（📞 ボタン）が出て、押すと参加する。設計の要点:
   ①**スキーマは `group_call` 1 テーブル**（groupId PK → meetingId）。
   groupId 主キーで「1 グループ 1 通話」が構造で固定（group_member の
   identity PK の前例）。行の意味は「このグループにミーティングが
@@ -866,15 +867,79 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   この auto-leave が担う
   ④**E2E は wire 受信で固定**（`groupCallRowsReceived` — dm/groupChat の
   前例）: メンバーには行（＝参加ケイパビリティ）が届き、非メンバーは
-  live もリロード後 seed も 0、参加すると届く正例、ゲストに通話ボタンが
-  出ないこと、を `group-call-visibility.spec.ts` が固定。**旧スキーマ DB
+  live もリロード後 seed も 0、参加すると届く正例、ゲストへの通話ボタンの
+  提示（増分②で「出ない」から反転）、を `group-call-visibility.spec.ts`
+  が固定。**旧スキーマ DB
   への再 publish もリハーサル済み**（main のモジュール → 行投入 →
   本ブランチ publish → 受理・行存続・group_call 新設・書き込みを実測）。
   WebRTC の実通話（2 ブラウザの映像・音声疎通）は CI では回せないため
   手動テストで検証
 - 画面共有
+  ✅ **実装済み（2026-08-05、増分②）**: 通話ドックに共有ボタンが付き、
+  共有中の画面は全参加者のドックに大きめのタイル（letterbox — カメラと
+  違い端まで内容なので contain）で映る。設計の要点:
+  ①**CallProvider 語彙の拡張だけで実現**: CallTile に screenTrack /
+  screenAudioTrack、CallSnapshot に screenShareOn、CallSession に
+  setScreenShare を追加し、ベンダー SDK を import するのは
+  realtimekit.ts 1 ファイルのまま（VISION の閉じ込め条件を維持）。
+  ブラウザ自身の「共有を停止」バーも SDK の screenShareUpdate として
+  届くので、ドックのトグルと同じ再投影で片付く
+  ②**プリセット変更なし**: 既定 `group_call_participant` が画面共有
+  ALLOWED（HD 5fps — 増分0 実測）。メンバー=host 相当の使い分けは
+  **録画増分まで先送り** — host が participant に足すのは can_record と
+  kick/pin/他者メディア停止で、いま必要な差分は録画だけ。全メンバーに
+  kick を配る理由が生まれてから分ける
+  ③自分の共有の**音声は再生しない**（共有タブの音は元タブで鳴っている —
+  自分のマイクを再生しない規則の延長）。映像は「全員に何が見えているか」の
+  確認として自分にも映す。ウィンドウ共有など音声トラックの無い共有は
+  映像のみ（SDK の型は常在だが実行時は欠け得るため undefined に正規化）
+  ④実 WebRTC は CI で回せないため、2 ブラウザの手動テスト
+  （フェイクメディア）で送受信を実証（増分①の規約）
 - **ゲストの通話開始・参加・画面共有**（承認済みメンバーと同等。増分①の
   スコープカットを外す — Worker が SpacetimeDB ゲストトークンを検証）
+  ✅ **実装済み（2026-08-05、増分②）**: ゲストにも通話ドックが出て、
+  開始・参加・画面共有がメンバーと同等にできる（oVice の「ゲスト招待して
+  通話」）。設計の要点:
+  ①**Worker の検証経路**: トークンの未検証 `iss` で検証器を選ぶだけ選び
+  （callerKindOf — 各検証器は自分の信頼アンカーで全クレームを再検証する
+  ため、issuer 詐称は間違った拒否を買うだけ）、メンバーは従来の Clerk
+  JWKS、ゲストは **SpacetimeDB ホスト発行トークンの署名検証**。実測
+  （2026-08-05）: Maincloud がトークンレス接続に発行する実トークンは
+  `iss: "localhost"`・ES256・`aud: ["spacetimedb"]`・**`exp: null`**で、
+  ROADMAP が 2026-08 に本番ログで観測した issuer
+  `https://auth.spacetimedb.com` から変わっていた（module の
+  guestIssuers と同様、Worker も両 issuer を受理）。JWKS 文書は
+  ホストに無く、検証鍵は `{SPACETIME_HOST_URL}/v1/identity/public-key`
+  の SPKI PEM（新バインディング — 本番は Maincloud、ローカルは
+  .dev.vars で localhost:3000）。`exp: null` は jose の既定クレーム検証が
+  不正として弾くため、署名検証（compactVerify）+単体テスト済みの手動
+  クレーム検証（issuer 集合・audience・exp は null=無期限/未来のみ受理）に
+  分割。subject は `hex_identity`（= module の player 行と同じ Identity
+  hex — Clerk subject の規則のゲスト版）を custom_participant_id に記録
+  ②**ゲストの資格情報は接続の再開トークンを流用**: ゲスト接続時に
+  ホストが発行し sessionStorage に保存されるセッショントークン
+  （kaede.spacetime.token）を call API の bearer にする
+  （net.package の storedSessionToken）。「API を呼べる」と「このタブの
+  ゲスト identity を持つ」が同一の事実になり、新しい資格情報の発行・
+  保管を増やさない。ドックの signedIn ゲートは撤去（グループに居る
+  接続済みクライアント全員に出る）
+  ③**register_group_call のメンバー限定を撤去** — 増分①が守った毒
+  （形だけ正しい死んだ id でグループの通話を固める）の前提ごと解消:
+  ゲートの根拠は「Worker がトークンを発行し得る者しか誠実に登録
+  できない」で、Worker がゲストにも発行する今、in-world の全 identity が
+  「発行し得る者」になった。**故意の死 id 破壊は従来もメンバーに可能**
+  だった水準（チャットスパムと同じ信頼レベル）に揃い、レバーも同じ
+  （call_guard のレート制限、guests_allowed の即時キック=投稿資格ごと
+  封じる）。スキーマ変更なし（reducer の資格判定のみ）なので旧スキーマ
+  DB への再 publish は自明に互換
+  ④**ゲスト開放で Worker が守るものの再定義**: ホストの identity 発行は
+  無認証（POST /v1/identity）なので、ゲスト経路の検証は「本人確認」では
+  なく「うちのホストと握手した者」の確認。それで足りる理由は、どの
+  グループの通話に入れるか（meeting id）が引き続き group_call 行の
+  メンバー限定 RLS で守られているから — Worker は増分①から一貫して
+  グループの権威ではない。E2E `group-call-visibility.spec.ts` の
+  「ゲストに通話ボタンが出ない」固定は仕様変更として反転済み
+  （RLS の検証は不変）
 - **録画 ＋ ダウンロード**（YouTube 等への二次利用が実際のユース）。
   方式は **RealtimeKit クラウド録画で決定**（$0.010/分。月10時間録画で約$6）。
   サーバー側合成のため録画者のタブに依存せず、録り直せない録画で事故らない。
