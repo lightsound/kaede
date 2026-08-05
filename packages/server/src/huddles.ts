@@ -31,6 +31,7 @@ import {
   findPostingSender,
   otherHuddleMemberPositions,
   type SenderIdentity,
+  syncGroupOccupancy,
   type WorldRows,
 } from './world';
 
@@ -163,9 +164,13 @@ function requireOwnHuddleId(ctx: Ctx): bigint {
 
 // Leaves the sender's huddle (the explicit 抜ける button — the walk-away
 // auto-leave is syncGroupOccupancy's). A leave that empties the huddle
-// deletes the group row (cleanupEmptyHuddle). Refusals follow the posting
-// loud/silent rule; leaving while in no huddle throws so a stale client
-// hears it rather than believing it left something.
+// deletes the group row (cleanupEmptyHuddle). The occupancy pass then
+// re-rules the sender in the same transaction: a member who huddled while
+// standing inside a meeting-room zone returns to that zone NOW, not on
+// their next movement — a quiescent player sends nothing the movement
+// pass could rule on. Refusals follow the posting loud/silent rule;
+// leaving while in no huddle throws so a stale client hears it rather
+// than believing it left something.
 export const leaveHuddle = spacetimedb.reducer((ctx) => {
   const found = findPostingSender(ctx, 'leave_huddle');
   if (!found) return;
@@ -173,4 +178,5 @@ export const leaveHuddle = spacetimedb.reducer((ctx) => {
   chargeSendAllowance(ctx, ctx.db.huddleGuard, evaluateHuddleSend, 'leave_huddle');
   ctx.db.groupMember.identity.delete(ctx.sender);
   cleanupEmptyHuddle(ctx, huddleId);
+  syncGroupOccupancy(ctx, ctx.sender, { x: found.row.x, y: found.row.y }, found.row.mapId);
 });
