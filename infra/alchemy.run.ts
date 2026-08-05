@@ -17,12 +17,15 @@
 // 設定は Windows の cmd.exe でも動くよう cross-env 経由にしている。
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
+import * as Config from 'effect/Config';
 import * as Effect from 'effect/Effect';
 
 // アカウント「Kaede」の ID(シークレットではない公開識別子)。API トークンと
 // 違い環境変数で配る必要がないため、ここに固定して deploy コマンドの前提を
-// 減らす。別アカウントに向けたいときは環境変数が優先される。
-process.env.CLOUDFLARE_ACCOUNT_ID ??= '751c8a59858c9c04a8e722df7330444d';
+// 減らす。別アカウントに向けたいときは環境変数が優先される。通話 API Worker の
+// バインディングも同じ値を参照する(下の CallApi)。
+const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID ?? '751c8a59858c9c04a8e722df7330444d';
+process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT_ID;
 
 /** 依存なしの安定ハッシュ(FNV-1a 32bit、16進8桁)。スラッグの一意化サフィックス用。 */
 const fnv1a = (input: string): string => {
@@ -106,6 +109,39 @@ export default Alchemy.Stack(
       ...(stage === 'prod' ? { domain: 'kaede.town' } : {}),
     });
 
-    return { url: client.url };
+    // 通話 API Worker(ROADMAP Phase 4 増分①): RealtimeKit のミーティング
+    // 作成・参加トークン発行だけを行う薄いグルー(VISION のバックエンド
+    // 原則)。コードは packages/worker(アプリコード — Alchemy を知らない)。
+    // クライアント Worker とは分離した別 Worker にする: 静的アセット配信の
+    // 構成(assets-only + wrangler.jsonc の逃げ道)を触らずに済み、障害・
+    // デプロイの影響半径も交わらない。CORS は Worker 側で ALLOWED_ORIGINS を
+    // 完全一致で検査する。ローカル開発は Alchemy を通さず wrangler dev +
+    // .dev.vars(README「通話 API Worker」)。
+    const callApi = yield* Cloudflare.Worker('CallApi', {
+      name: stage === 'prod' ? 'kaede-call' : `kaede-call-${workerNameSlug(stage)}`,
+      main: '../packages/worker/src/index.ts',
+      compatibility: { date: '2026-08-01' },
+      env: {
+        // デプロイ実行環境の環境変数から解決され secret_text として
+        // バインドされる(CI は GitHub シークレット REALTIMEKIT_API_TOKEN を
+        // 渡す — ci.yml のデプロイジョブ)。欠けているとデプロイ自体が
+        // 失敗する(fail-fast: 空シークレットの Worker が黙って 502 を
+        // 返し続けるより早く気づける)。
+        REALTIMEKIT_API_TOKEN: Config.redacted('REALTIMEKIT_API_TOKEN'),
+        // RealtimeKit アプリ「kaede」(増分0 スパイクが名前で冪等作成した
+        // もの)の ID。シークレットではない公開識別子(アカウント ID と
+        // 同格)なので平文バインドでよい。
+        REALTIMEKIT_APP_ID: '84053947-0a8e-4b23-840a-a47731b7310b',
+        CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID,
+        // メンバー確認に使う Clerk 発行者。本番 issuer 固定(サーバー側の
+        // CONNECTION_POLICY と同じ値 — ずらさないこと)。開発インスタンスの
+        // issuer はローカル wrangler dev の .dev.vars だけが知る。
+        CLERK_ISSUER: 'https://clerk.kaede.town',
+        CLERK_AUDIENCE: 'kaede-spacetimedb',
+        ALLOWED_ORIGINS: 'https://kaede.town,https://kaede.kaede-751.workers.dev',
+      },
+    });
+
+    return { url: client.url, callApiUrl: callApi.url };
   }),
 );

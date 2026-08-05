@@ -280,9 +280,14 @@ jobs:
       # - POSTHOG_API_KEY (phx_) + POSTHOG_PROJECT_ID: enable the sourcemap
       #   upload plugin (ADR §8.4). Deliberately ONLY here — uploading from
       #   PR builds would pollute the project's symbol sets.
+      # REALTIMEKIT_API_TOKEN is the Realtime-Admin account API token the
+      # call Worker (kaede-call) holds as its runtime secret; Alchemy reads
+      # it here at deploy time (Config.redacted in infra/alchemy.run.ts) and
+      # fails the deploy if it is missing.
       - name: Deploy client (Alchemy)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           POSTHOG_ANALYTICS_API_KEY: ${{ secrets.POSTHOG_ANALYTICS_API_KEY }}
           POSTHOG_ANALYTICS_HOST: https://us.posthog.com
