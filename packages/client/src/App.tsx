@@ -11,6 +11,7 @@ import {
   planChatDraftOffline,
   type SpaceView,
   startNet,
+  type ZoneAdminView,
 } from './net.package';
 import { dmNotifier } from './notify.package';
 import { RenameControl } from './profile.package';
@@ -79,6 +80,9 @@ export function App() {
   // stack on session entry and every own player_status change. Never
   // undefined: a missing row IS the default status.
   const [ownStatus, setOwnStatus] = useState<StatusView>(DEFAULT_STATUS);
+  // The meeting-room zones (every map), published by the net stack on every
+  // conversation_group change — the admin panel's zone section renders it.
+  const [zones, setZones] = useState<ZoneAdminView[]>([]);
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -107,6 +111,7 @@ export function App() {
         onChat: setChatLog,
         onChatRefused: () => setChatSendRefused(true),
         onOwnStatus: setOwnStatus,
+        onZones: setZones,
         // The DM → browser-notification pipeline: the notifier decides
         // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
         // so no state rides this hook.
@@ -161,6 +166,13 @@ export function App() {
       <AdminSection
         connected={connected}
         space={space}
+        zones={zones}
+        zoneActions={{
+          onCreateZone: (spec) => netRef.current?.createZone(spec),
+          onUpdateZone: (zoneId, edit) => netRef.current?.updateZone({ zoneId, ...edit }),
+          onMoveZone: (zoneId) => netRef.current?.moveZone(zoneId),
+          onDeleteZone: (zoneId) => netRef.current?.deleteZone(zoneId),
+        }}
         onMemberAction={(action, member) => netRef.current?.memberAction(action, member.identity)}
         onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
       />

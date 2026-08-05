@@ -36,6 +36,7 @@ import { cameraOffset } from './camera';
 import { createInput } from './input';
 import { mergeInputs } from './mergeInputs';
 import { createTouchControls } from './touchControls';
+import { renderZoneLayer, type ZoneRender } from './zoneLayer';
 
 const VIEW_W = 1280;
 const VIEW_H = 720;
@@ -53,14 +54,17 @@ const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sa
 
 /**
  * The per-player display attributes rendered alongside the pose: the name
- * label and the status line under the avatar (`undefined` while default).
- * One object rather than adjacent positional strings so a swapped call
- * site cannot compile (the NetHooks precedent), and so the Phase 5 avatar
- * attributes (pose, gear) land as fields instead of a seventh parameter.
+ * label, the status line under the avatar, and the zone occupancy tag
+ * under that (each `undefined` while default/none). One object rather
+ * than adjacent positional strings so a swapped call site cannot compile
+ * (the NetHooks precedent), and so the Phase 5 avatar attributes (pose,
+ * gear) land as fields instead of an eighth parameter.
  */
 export interface PlayerLabel {
   name: string;
   status: string | undefined;
+  /** The composed occupancy tag (zoneTagLabel in @kaede/shared), or undefined. */
+  zone: string | undefined;
 }
 
 export interface GameApp {
@@ -69,9 +73,17 @@ export interface GameApp {
    * Swaps the rendered geometry AND the local physics to `map` (Phase 3
    * 複数マップ). Idempotent for the current map. Remote sprites are the
    * caller's business (clearRemotePlayers): which players belong on which
-   * map is subscription knowledge, not scene knowledge.
+   * map is subscription knowledge, not scene knowledge. The zone layer is
+   * the caller's business too (setZones): which zones sit on which map is
+   * subscription knowledge, exactly like players.
    */
   setMap(map: WorldMap): void;
+  /**
+   * Replaces the rendered meeting-room zones (Phase 3 増分② — runtime rows,
+   * not map geometry, so a separate call from setMap). The caller passes
+   * the current map's zones and re-pushes on zone edits and map switches.
+   */
+  setZones(zones: readonly ZoneRender[]): void;
   setLocalPlayerName(name: string): void;
   /**
    * Shows `status` (the composed line from statusLabel) under the local
@@ -79,6 +91,12 @@ export interface GameApp {
    * state, not a timed overhead — it stays until the next call.
    */
   setLocalStatus(status: string | undefined): void;
+  /**
+   * Shows the zone occupancy tag (the composed zoneTagLabel) under the
+   * local avatar's status line, or hides it when undefined. Persistent
+   * state like the status — it stays until the next call.
+   */
+  setLocalZone(zone: string | undefined): void;
   /**
    * Begin stepping the local simulation from `state` at `tick`. Until this is
    * called the ticker renders the scene but never steps physics or fires
@@ -125,8 +143,10 @@ interface PlayerView {
   root: Container;
   body: Graphics;
   label: Text;
-  /** The status line under the avatar, hidden while the status is default (setViewStatus). */
+  /** The status line under the avatar, hidden while the status is default (setUnderline). */
   status: Text;
+  /** The zone occupancy tag under the status line, hidden while in no zone (setUnderline). */
+  zone: Text;
   /** The speech bubble, hidden until this player chats (showBubble). */
   bubble: Bubble;
   /** The emoji reaction, hidden until this player reacts (showReaction). */
@@ -139,13 +159,20 @@ interface PlayerView {
 // persistent line there would collide with both.
 const STATUS_STYLE = new TextStyle({ fill: 0xb8c2d9, fontSize: 11, fontFamily: 'sans-serif' });
 
-/** The status line's Text, parked under the avatar and hidden until a status arrives. */
-function createStatusText(): Text {
-  const status = new Text({ text: '', style: STATUS_STYLE });
-  status.anchor.set(0.5, 0);
-  status.y = PLAYER_HALF_H + 4;
-  status.visible = false;
-  return status;
+// The zone occupancy tag (ROADMAP Phase 3 増分②): the status line's twin,
+// one slot further down so the two persistent lines never collide.
+const ZONE_TAG_STYLE = new TextStyle({ fill: 0x9ccfd8, fontSize: 11, fontFamily: 'sans-serif' });
+
+/**
+ * One persistent under-avatar line (the status at PLAYER_HALF_H+4, the
+ * zone tag at +20), parked at `y` and hidden until a value arrives.
+ */
+function createUnderline(style: TextStyle, y: number): Text {
+  const line = new Text({ text: '', style });
+  line.anchor.set(0.5, 0);
+  line.y = y;
+  line.visible = false;
+  return line;
 }
 
 /** A labelled rectangle sprite parented under the world container. */
@@ -157,22 +184,24 @@ function createPlayerView(world: Container, name: string, color: number): Player
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
-  const status = createStatusText();
+  const status = createUnderline(STATUS_STYLE, PLAYER_HALF_H + 4);
+  const zone = createUnderline(ZONE_TAG_STYLE, PLAYER_HALF_H + 20);
   const bubble = createBubble();
   const reaction = createReactionBadge();
-  root.addChild(body, label, status, bubble.root, reaction.root);
+  root.addChild(body, label, status, zone, bubble.root, reaction.root);
   world.addChild(root);
-  return { root, body, label, status, bubble, reaction };
+  return { root, body, label, status, zone, bubble, reaction };
 }
 
 /**
- * Applies a composed status line (statusLabel in @kaede/shared, undefined
- * while default) to one view. Unlike the transient overheads there is no
- * timer: a status is state, visible until the next row event replaces it.
+ * Applies one composed persistent line (statusLabel / zoneTagLabel in
+ * @kaede/shared, undefined while default) to its Text. Unlike the
+ * transient overheads there is no timer: both lines are state, visible
+ * until the next row event replaces them.
  */
-function setViewStatus(view: PlayerView, status: string | undefined): void {
-  view.status.visible = status !== undefined;
-  view.status.text = status ?? '';
+function setUnderline(line: Text, value: string | undefined): void {
+  line.visible = value !== undefined;
+  line.text = value ?? '';
 }
 
 /**
@@ -188,7 +217,18 @@ function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
   if (bubble !== undefined) snap.bubble = bubble;
   const reaction = visibleReactionEmoji(view.reaction);
   if (reaction !== undefined) snap.reaction = reaction;
+  return withUnderlineSnapshots(view, snap);
+}
+
+/**
+ * Folds the persistent under-avatar lines (status, zone tag) into one
+ * snapshot. Split from playerSnapshot to keep both uncovered functions
+ * under the CRAP budget fallow enforces (the reason playerSnapshot avoids
+ * conditional spreads, continued).
+ */
+function withUnderlineSnapshots(view: PlayerView, snap: E2EPlayerSnapshot): E2EPlayerSnapshot {
   if (view.status.visible) snap.status = view.status.text;
+  if (view.zone.visible) snap.zone = view.zone.text;
   return snap;
 }
 
@@ -203,6 +243,7 @@ function createE2EHook(
   remotes: Map<string, PlayerView>,
   currentTick: () => number,
   currentMapId: () => number,
+  currentZones: () => readonly ZoneRender[],
 ): E2EHook | undefined {
   if (!import.meta.env.DEV) return undefined;
   return {
@@ -211,6 +252,7 @@ function createE2EHook(
       mapId: currentMapId(),
       local: playerSnapshot(local),
       remotePlayers: [...remotes.values()].map(playerSnapshot),
+      zones: currentZones().map((zone) => ({ label: zone.label, closed: zone.closed })),
     }),
   };
 }
@@ -284,6 +326,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   let currentMap: WorldMap = mapFor(DEFAULT_MAP_ID);
   let mapLayer = buildMapLayer(currentMap);
   world.addChild(mapLayer);
+
+  // The meeting-room zones (runtime rows, unlike the code-defined map):
+  // one persistent container between the map layer and the player views,
+  // whose CONTENTS setZones replaces — so the layer's z-position survives
+  // setMap's re-add of the map layer at index 0.
+  const zoneLayer = new Container();
+  world.addChild(zoneLayer);
+  let currentZones: readonly ZoneRender[] = [];
 
   const local = createPlayerView(world, 'You', LOCAL_COLOR);
   const remotes = new Map<string, PlayerView>();
@@ -384,6 +434,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     remotes,
     () => tick,
     () => currentMap.id,
+    () => currentZones,
   );
 
   /** Runs `act` on the remote player's view; a no-op while it has no sprite. */
@@ -408,11 +459,18 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       mapLayer = buildMapLayer(map);
       world.addChildAt(mapLayer, 0);
     },
+    setZones(zones) {
+      currentZones = zones;
+      renderZoneLayer(zoneLayer, zones);
+    },
     setLocalPlayerName(name) {
       local.label.text = name;
     },
     setLocalStatus(status) {
-      setViewStatus(local, status);
+      setUnderline(local.status, status);
+    },
+    setLocalZone(zone) {
+      setUnderline(local.zone, zone);
     },
     start(state, t) {
       prev = curr = state;
@@ -454,7 +512,8 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
         remotes.set(id, view);
       }
       view.label.text = label.name;
-      setViewStatus(view, label.status);
+      setUnderline(view.status, label.status);
+      setUnderline(view.zone, label.zone);
       view.root.position.set(x, y);
       // Flip only the body; flipping the root would mirror the name label.
       view.body.scale.x = facing;

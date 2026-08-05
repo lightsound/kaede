@@ -136,6 +136,20 @@ export interface NetApi {
    */
   setAvailability(availability: Availability): void;
   setStatusText(text: string): void;
+  /**
+   * The zone admin actions (ROADMAP Phase 3 増分②), for the admin panel's
+   * zone section — the memberAction rule applies: the server re-checks
+   * that the sender is an acting admin, the panel's gating is cosmetic.
+   * Placement coordinates never ride these calls: create and move center
+   * the zone on the SENDER's authoritative row server-side. Success
+   * arrives as conversation_group / group_member row events (the zone
+   * layer, the tags and the panel list all re-project); failures only
+   * log, and the unchanged view is the visible outcome.
+   */
+  createZone(spec: { name: string; closed: boolean }): void;
+  updateZone(spec: { zoneId: bigint; name: string; closed: boolean; w: number; h: number }): void;
+  moveZone(zoneId: bigint): void;
+  deleteZone(zoneId: bigint): void;
 }
 
 /** What forwarding user actions needs from the lifecycle owner (sync.ts). */
@@ -235,5 +249,15 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     setStatusText: forward('set_status_text', (c, text: string) =>
       c.reducers.setStatusText({ text }),
     ),
+    createZone: forward('create_zone', (c, spec: { name: string; closed: boolean }) =>
+      c.reducers.createZone(spec),
+    ),
+    updateZone: forward(
+      'update_zone',
+      (c, spec: { zoneId: bigint; name: string; closed: boolean; w: number; h: number }) =>
+        c.reducers.updateZone(spec),
+    ),
+    moveZone: forward('move_zone', (c, zoneId: bigint) => c.reducers.moveZone({ zoneId })),
+    deleteZone: forward('delete_zone', (c, zoneId: bigint) => c.reducers.deleteZone({ zoneId })),
   };
 }

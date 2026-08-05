@@ -9,6 +9,7 @@ import {
 } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
+import { onAnyRowEvent } from './rowEvents';
 import type { RowOf } from './rows';
 
 /** The generated space_member row type (all columns). */
@@ -113,12 +114,8 @@ export function wireAdmission(
     if (hooks.isStale()) return;
     reevaluate();
   };
-  c.db.spaceMember.onInsert(rerun);
-  c.db.spaceMember.onUpdate(rerun);
-  c.db.spaceMember.onDelete(rerun);
-  c.db.spaceSetting.onInsert(rerun);
-  c.db.spaceSetting.onUpdate(rerun);
-  c.db.spaceSetting.onDelete(rerun);
+  onAnyRowEvent(c.db.spaceMember, rerun);
+  onAnyRowEvent(c.db.spaceSetting, rerun);
 
   return { reevaluate };
 }

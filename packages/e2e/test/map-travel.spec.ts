@@ -1,38 +1,15 @@
 // fallow-ignore-file coverage-gaps -- Playwright E2E spec; drives real browsers against a live SpacetimeDB host, outside unit coverage
 import { MAPS, MOVE_SPEED } from '@kaede/shared';
 import { expect, type Page, test } from '@playwright/test';
-import { enterWorld, sendChat, snapshot } from './helpers';
+import { enterWorld, localX, sendChat, snapshot, walkWhile } from './helpers';
 
 const remoteCount = async (page: Page) => (await snapshot(page)).remotePlayers.length;
 const remoteX = async (page: Page) => (await snapshot(page)).remotePlayers[0]?.x;
-const localX = async (page: Page) => (await snapshot(page)).local.x;
 const mapId = async (page: Page) => (await snapshot(page)).mapId;
 
 // The plaza→meeting-floor portal, straight from the shared map definition
 // so the spec cannot drift from the world it tests.
 const PORTAL_RECT = MAPS[0].portals[0].rect;
-
-/**
- * Holds a horizontal key until the local prediction satisfies `done`, then
- * releases. The key is held until the position actually passes (not for a
- * fixed duration), so a low-FPS CI renderer — where MAX_FRAME caps how much
- * simulation each frame may advance — only makes the walk take longer,
- * never fail. Tight poll intervals keep the release overshoot small.
- */
-async function walkWhile(
-  page: Page,
-  key: 'ArrowLeft' | 'ArrowRight',
-  done: (x: number) => boolean,
-): Promise<void> {
-  await page.keyboard.down(key);
-  try {
-    await expect
-      .poll(async () => done(await localX(page)), { timeout: 60_000, intervals: [50] })
-      .toBe(true);
-  } finally {
-    await page.keyboard.up(key);
-  }
-}
 
 /**
  * Walks the player into the portal's trigger column and stops there. The

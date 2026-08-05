@@ -99,6 +99,17 @@ export function createRemoteViews() {
     if (view) view.label = { ...view.label, status };
   }
 
+  /**
+   * Updates an existing view's zone occupancy tag (a group_member row
+   * changed without the hot row moving — e.g. an admin edited the zone
+   * under a standing player). Skipped like setName while the view does not
+   * exist: the next record() call supplies the current tag anyway.
+   */
+  function setZone(idHex: string, zone: string | undefined): void {
+    const view = views.get(idHex);
+    if (view) view.label = { ...view.label, zone };
+  }
+
   function remove(idHex: string): void {
     views.delete(idHex);
   }
@@ -143,7 +154,7 @@ export function createRemoteViews() {
     }
   }
 
-  return { record, setName, setStatus, remove, clear, renderFrame };
+  return { record, setName, setStatus, setZone, remove, clear, renderFrame };
 }
 
 /** Euclidean distance between two points. */

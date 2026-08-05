@@ -13,8 +13,13 @@ Do not add gameplay features (combat, mobs, XP); that direction was abandoned (P
 
 `kaede` is a single-product pnpm monorepo (a MapleStory-style 2D virtual office). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `test:e2e`, `lint`, `lint:imports`, `analyze`).
 
-### SpacetimeDB CLI binary name
-The pinned CLI (`v2.7.1`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`. If the binary is missing on a fresh VM, reinstall it:
+### SpacetimeDB CLI binary name and version
+The pinned CLI (`v2.7.1`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`.
+
+**Check `spacetimedb-cli --version` before publishing or generating**: fresh VMs
+have shipped with 2.7.0 preinstalled, and generating bindings with it drifts
+from the committed ones, which fails CI's drift check. If the binary is missing
+or not 2.7.1, reinstall it:
 
 ```sh
 curl -sSfL -o /tmp/spacetime.tar.gz "https://github.com/clockworklabs/SpacetimeDB/releases/download/v2.7.1/spacetime-x86_64-unknown-linux-gnu.tar.gz"
@@ -49,6 +54,21 @@ coverage-gaps` header failed only the CI `fallow health` step). Every new file
 that cannot be unit-tested (reducers, live-connection wiring, DOM components,
 Playwright specs) needs that header with a reason naming where the testable
 logic lives.
+
+Two more fallow quirks to know about (both bit Phase 3 work):
+
+- The type-coupling check has an evidence cap of **40 edges**; past it the
+  proof degrades to "partial" and only the `fallow health` step fails. New
+  shared modules whose public signatures reference types from other files add
+  edges, so prefer co-locating rules with the types they consume (増分① folded
+  the portal rules into `map.ts` for this reason; the repo sat at exactly 40
+  edges after 増分②, so the next added edge likely trips it).
+- The semantic clone detector can flag consecutive interface/props
+  declarations as Type-2 clones (comments are ignored; real code between them
+  breaks the match). It also counts near-identical uncovered functions —
+  `fallow health` flags uncovered functions whose cyclomatic complexity
+  reaches 5 (CRAP 30), so keep reducer/DOM helpers small and split branches
+  out (the `backfillAccountName` precedent).
 
 ### Internal package boundaries
 ImportLint enforces directory-level encapsulation inside each workspace; fallow continues to

@@ -53,15 +53,23 @@ describe('createRemoteViews', () => {
     return { x, y: 0, vx, vy: 0, facing: 1, updatedAtMs };
   }
 
-  /** The display attributes record() expects; status defaults to "none". */
-  function label(name: string, status?: string) {
-    return { name, status };
+  /** The display attributes record() expects; status and zone default to "none". */
+  function label(name: string, status?: string, zone?: string) {
+    return { name, status, zone };
   }
 
   /** Collect draw() calls for one renderFrame. */
   function render(views: ReturnType<typeof createRemoteViews>, nowMs: number) {
-    const drawn: { id: string; status: string | undefined; x: number; y: number }[] = [];
-    views.renderFrame(nowMs, (id, l, x, y) => drawn.push({ id, status: l.status, x, y }));
+    const drawn: {
+      id: string;
+      status: string | undefined;
+      zone: string | undefined;
+      x: number;
+      y: number;
+    }[] = [];
+    views.renderFrame(nowMs, (id, l, x, y) =>
+      drawn.push({ id, status: l.status, zone: l.zone, x, y }),
+    );
     return drawn;
   }
 
@@ -102,6 +110,19 @@ describe('createRemoteViews', () => {
     expect(render(views, 260)[0].status).toBeUndefined();
     // A view that does not exist is skipped, not created (the setName rule).
     views.setStatus('ghost', '🟡 離席');
+    expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
+  });
+
+  it('carries the recorded zone tag into draw() and follows setZone updates', () => {
+    const views = createRemoteViews();
+    views.record('a', label('A', undefined, '📍 会議室A'), row(0, 0), 40);
+    expect(render(views, 240)[0].zone).toBe('📍 会議室A');
+    views.setZone('a', '📍 会議室B');
+    expect(render(views, 250)[0].zone).toBe('📍 会議室B');
+    views.setZone('a', undefined);
+    expect(render(views, 260)[0].zone).toBeUndefined();
+    // A view that does not exist is skipped, not created (the setName rule).
+    views.setZone('ghost', '📍 会議室A');
     expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
   });
 

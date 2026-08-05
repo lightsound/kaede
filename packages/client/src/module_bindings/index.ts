@@ -38,8 +38,11 @@ import AnnounceIdleSuspendReducer from "./announce_idle_suspend_reducer";
 import ApplyForMembershipReducer from "./apply_for_membership_reducer";
 import ApproveMemberReducer from "./approve_member_reducer";
 import BanMemberReducer from "./ban_member_reducer";
+import CreateZoneReducer from "./create_zone_reducer";
+import DeleteZoneReducer from "./delete_zone_reducer";
 import EnterPortalReducer from "./enter_portal_reducer";
 import JoinReducer from "./join_reducer";
+import MoveZoneReducer from "./move_zone_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
 import SendDmReducer from "./send_dm_reducer";
@@ -50,12 +53,15 @@ import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
 import SetStatusTextReducer from "./set_status_text_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
 import UnbanMemberReducer from "./unban_member_reducer";
+import UpdateZoneReducer from "./update_zone_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
 import ChatMessageRow from "./chat_message_table";
+import ConversationGroupRow from "./conversation_group_table";
 import DmMessageRow from "./dm_message_table";
+import GroupMemberRow from "./group_member_table";
 import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
 import PlayerStatusRow from "./player_status_table";
@@ -78,6 +84,20 @@ const tablesSchema = __schema({
       { name: 'chat_message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ChatMessageRow),
+  conversationGroup: __table({
+    name: 'conversation_group',
+    indexes: [
+      { accessor: 'id', name: 'conversation_group_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'mapId', name: 'conversation_group_map_id_idx_btree', algorithm: 'btree', columns: [
+        'mapId',
+      ] },
+    ],
+    constraints: [
+      { name: 'conversation_group_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ConversationGroupRow),
   dmMessage: __table({
     name: 'dm_message',
     indexes: [
@@ -95,6 +115,20 @@ const tablesSchema = __schema({
       { name: 'dm_message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, DmMessageRow),
+  groupMember: __table({
+    name: 'group_member',
+    indexes: [
+      { accessor: 'groupId', name: 'group_member_group_id_idx_btree', algorithm: 'btree', columns: [
+        'groupId',
+      ] },
+      { accessor: 'identity', name: 'group_member_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'group_member_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, GroupMemberRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -172,8 +206,11 @@ const reducersSchema = __reducers(
   __reducerSchema("apply_for_membership", ApplyForMembershipReducer),
   __reducerSchema("approve_member", ApproveMemberReducer),
   __reducerSchema("ban_member", BanMemberReducer),
+  __reducerSchema("create_zone", CreateZoneReducer),
+  __reducerSchema("delete_zone", DeleteZoneReducer),
   __reducerSchema("enter_portal", EnterPortalReducer),
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("move_zone", MoveZoneReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),
   __reducerSchema("send_dm", SendDmReducer),
@@ -184,6 +221,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_status_text", SetStatusTextReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
   __reducerSchema("unban_member", UnbanMemberReducer),
+  __reducerSchema("update_zone", UpdateZoneReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
