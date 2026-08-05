@@ -47,6 +47,7 @@ import JoinHuddleReducer from "./join_huddle_reducer";
 import LeaveHuddleReducer from "./leave_huddle_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
+import SendAnnouncementReducer from "./send_announcement_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
 import SendDmReducer from "./send_dm_reducer";
 import SendReactionReducer from "./send_reaction_reducer";
@@ -81,6 +82,12 @@ const tablesSchema = __schema({
     indexes: [
       { accessor: 'id', name: 'chat_message_id_idx_btree', algorithm: 'btree', columns: [
         'id',
+      ] },
+      { accessor: 'scope', name: 'chat_message_scope_idx_btree', algorithm: 'btree', columns: [
+        'scope',
+      ] },
+      { accessor: 'target', name: 'chat_message_target_idx_btree', algorithm: 'btree', columns: [
+        'target',
       ] },
     ],
     constraints: [
@@ -218,6 +225,7 @@ const reducersSchema = __reducers(
   __reducerSchema("leave_huddle", LeaveHuddleReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
+  __reducerSchema("send_announcement", SendAnnouncementReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),
   __reducerSchema("send_dm", SendDmReducer),
   __reducerSchema("send_reaction", SendReactionReducer),

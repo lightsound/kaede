@@ -15,7 +15,6 @@ import {
   evaluatePortalSend,
   evaluatePortalUse,
   evaluateRename,
-  evaluateSettingChange,
   initialMembership,
   isQuiescent,
   type MemberAction,
@@ -35,6 +34,7 @@ import {
   guestsAllowed,
   membershipOf,
   removePlayer,
+  requireAdmin,
   type SenderIdentity,
   spawnOrResume,
   sweepExpiredRows,
@@ -706,10 +706,7 @@ function sweepGuestPlayers(ctx: Ctx): void {
 // may as well mean never. The kicked clients see the setting row flip and
 // show the refusal notice instead of auto-rejoining.
 export const setGuestsAllowed = spacetimedb.reducer({ allowed: t.bool() }, (ctx, { allowed }) => {
-  const verdict = evaluateSettingChange({ actor: membershipOf(ctx, ctx.sender) });
-  if (!verdict.ok) {
-    throw new SenderError(`set_guests_allowed refused (${verdict.reason})`);
-  }
+  requireAdmin(ctx, 'set_guests_allowed');
   upsertGuestsAllowed(ctx, allowed);
   if (!allowed) sweepGuestPlayers(ctx);
 });

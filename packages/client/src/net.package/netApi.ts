@@ -10,7 +10,10 @@
 import {
   type Availability,
   type ChatDraftPlan,
+  type ChatScope,
+  chatTargetFor,
   collectDmCandidates,
+  DEFAULT_MAP_ID,
   type DmCandidate,
   type MemberAction,
   type PlannedSend,
@@ -54,6 +57,37 @@ function dmCandidatesOf(c: DbConnection): readonly DmCandidate[] {
       key: row.identity.toHexString(),
     })),
   );
+}
+
+/**
+ * The `target` column one scoped send addresses, read from the subscribed
+ * cache at SUBMIT time (ROADMAP Phase 3 増分④) — the own player row's map
+ * and the own group_member row's group, the same two rows the server builds
+ * its context from. Undefined when the scope has no target here (会話
+ * グループ while in none), which the caller turns into a refusal rather
+ * than a send to somewhere else: the panel offers only scopes the selector
+ * feed says exist, so this is the racing case (walking out of a zone
+ * between the draft and the submit).
+ *
+ * Resolving here rather than in the panel is the DM candidate-resolution
+ * precedent: the message addresses what the sender was looking at, and the
+ * server re-verifies it against its own rows (resolveChatRoute).
+ */
+function chatTargetOf(c: DbConnection, scope: ChatScope): bigint | undefined {
+  const identity = c.identity;
+  return identity === undefined ? undefined : chatTargetFor(scope, senderContext(c, identity));
+}
+
+/**
+ * Where this connection stands, as the scope rules read it. Its own
+ * function so both it and chatTargetOf stay under the CRAP budget fallow
+ * enforces for uncovered code (the backfillAccountName precedent).
+ */
+function senderContext(c: DbConnection, identity: Identity) {
+  return {
+    mapId: c.db.player.identity.find(identity)?.mapId ?? DEFAULT_MAP_ID,
+    groupId: c.db.groupMember.identity.find(identity)?.groupId,
+  };
 }
 
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
@@ -106,17 +140,32 @@ export interface NetApi {
    */
   planChatSend(draft: string): ChatDraftPlan;
   /**
-   * Sends one accepted plan: send_chat_message for the public kind, send_dm
-   * (to the identity the plan resolved) for the DM kind — the one place
-   * that dispatches on the plan's kind. Success arrives as a chat_message /
-   * dm_message row event; the log line (and, for public messages, the
-   * speech bubble) comes from it, so the sender sees exactly what the
-   * receivers received. Failures (a disconnect racing the submit, a server
+   * Sends one accepted plan: send_chat_message under `scope` for the public
+   * kind, send_dm (to the identity the plan resolved) for the DM kind — the
+   * one place that dispatches on the plan's kind. `scope` is the selector's
+   * choice (全体 / このマップ / いまの会話グループ); what it addresses is
+   * resolved here from the subscribed cache (chatTargetOf) and re-verified
+   * server-side. A DM ignores it — an @mention is outside the scopes by
+   * design (its own table, its own privacy rule).
+   *
+   * Success arrives as a chat_message / dm_message row event; the log line
+   * (and, for public messages, the speech bubble) comes from it, so the
+   * sender sees exactly what the receivers received. Failures (a disconnect
+   * racing the submit, a scope that stopped existing mid-draft, a server
    * refusal) log AND report through onRefused: the panel clears the draft
    * optimistically, so unlike the other reducers a dropped call has no
    * visible "nothing changed" signal to fall back on.
    */
-  sendPlanned(plan: PlannedSend): void;
+  sendPlanned(plan: PlannedSend, scope: ChatScope): void;
+  /**
+   * Posts one space-wide admin announcement (send_announcement — ROADMAP
+   * Phase 3 増分④). The memberAction rule applies: the server re-checks
+   * that the sender is an acting admin, so the panel's gating is cosmetic.
+   * Success arrives as a chat_message row event like any other line;
+   * failures only log, and the announcement simply not appearing in the
+   * log is the visible outcome.
+   */
+  sendAnnouncement(text: string): void;
   /**
    * Posts one palette-emoji reaction (send_reaction). Success arrives as a
    * reaction row event — the badge over the sender's avatar comes from it,
@@ -234,7 +283,7 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       const c = deps.conn();
       return c ? planChatDraft(draft, dmCandidatesOf(c)) : planChatDraftOffline(draft);
     },
-    sendPlanned(plan) {
+    sendPlanned(plan, scope) {
       if (plan.kind === 'dm') {
         callReducer(
           'send_dm',
@@ -249,7 +298,17 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       }
       callReducer(
         'send_chat_message',
-        (c) => c.reducers.sendChatMessage({ text: plan.text }),
+        (c) => {
+          const target = chatTargetOf(c, scope);
+          // The selector offered a scope that stopped existing between the
+          // draft and the submit. Refused rather than re-scoped, so the
+          // message never lands somewhere its author did not pick (the DM
+          // no-fallback rule); the panel's notice tells the sender.
+          if (target === undefined) {
+            return Promise.reject(new Error(`no target for the ${scope} scope`));
+          }
+          return c.reducers.sendChatMessage({ text: plan.text, scope, target });
+        },
         deps.onChatRefused,
       );
     },
@@ -281,5 +340,8 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       callReducer('leave_huddle', (c) => c.reducers.leaveHuddle({}));
     },
     joinHuddle: forward('join_huddle', (c, groupId: bigint) => c.reducers.joinHuddle({ groupId })),
+    sendAnnouncement: forward('send_announcement', (c, text: string) =>
+      c.reducers.sendAnnouncement({ text }),
+    ),
   };
 }

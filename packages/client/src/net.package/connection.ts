@@ -1,5 +1,5 @@
 // fallow-ignore-file coverage-gaps -- opens a SpacetimeDB WebSocket; needs a running host, not a unit test
-import { DEFAULT_MAP_ID } from '@kaede/shared';
+import { CHAT_SCOPE_GROUP, CHAT_SCOPE_MAP, CHAT_SCOPE_SPACE, DEFAULT_MAP_ID } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import { DbConnection, type SubscriptionHandle, tables } from '../module_bindings';
 
@@ -28,23 +28,31 @@ export interface Connected {
   myIdentity: Identity;
   /** Its hex form, pre-computed once: the map key for remote-player views. */
   myIdHex: string;
-  /** The map the player subscription is scoped to: the own row's map, or the default. */
+  /** The map the map-scoped subscription covers: the own row's map, or the default. */
   mapId: number;
-  /** The map-scoped player subscription; the session swaps it on every portal move. */
+  /** The map-scoped subscription (players + chat); the session swaps it on every portal move. */
   mapSub: SubscriptionHandle;
 }
 
 /**
- * Subscribes to the hot player rows of ONE map (Phase 3 AoI 購読絞り込み —
- * see the ROADMAP entry for the adoption reasoning). This is the query the
- * session swaps on a portal move: subscribe the destination map, then
- * unsubscribe the origin (subscription overlap is refcounted client-side,
- * so the own row — also covered by the identity query below — never
- * flickers). The mapId column is indexed server-side, which the ROADMAP
- * AoI rule makes non-negotiable: subscription queries are re-evaluated
- * per transaction.
+ * Subscribes to everything scoped to ONE map: the hot player rows (Phase 3
+ * AoI 購読絞り込み) and the map-scoped chat messages (増分④ — the same
+ * mechanism, as the AoI entry predicted). This is the query set the session
+ * swaps on a portal move: subscribe the destination map, then unsubscribe
+ * the origin (subscription overlap is refcounted client-side, so the own
+ * row — also covered by the identity query below — never flickers). Both
+ * filter columns are indexed server-side, which the ROADMAP AoI rule makes
+ * non-negotiable: subscription queries are re-evaluated per transaction.
+ *
+ * Leaving a map therefore DELETES its chat lines from the cache, and the
+ * panel drops them (the retention-trim path) — an accepted consequence,
+ * fixed by the E2E spec: a client-side buffer that kept them would be
+ * pretending to hold rows the space no longer hands it.
+ *
+ * The chat query is raw SQL, not the typed builder: `target` is a u64, and
+ * the builder's filter values are `string | number | boolean` only.
  */
-export function subscribeMapPlayers(
+export function subscribeMapRows(
   conn: DbConnection,
   mapId: number,
   onApplied: () => void,
@@ -52,7 +60,10 @@ export function subscribeMapPlayers(
   return conn
     .subscriptionBuilder()
     .onApplied(onApplied)
-    .subscribe(tables.player.where((p) => p.mapId.eq(mapId)));
+    .subscribe([
+      tables.player.where((p) => p.mapId.eq(mapId)),
+      `SELECT * FROM chat_message WHERE scope = '${CHAT_SCOPE_MAP}' AND target = ${mapId}`,
+    ]);
 }
 
 /**
@@ -119,11 +130,17 @@ export async function connect(
         // the presence directory (player_name, now carrying `online` — the
         // DM mention candidates read it), everything admission is decided
         // from (the member directory and the space settings), and the
-        // conversation tables (the chat history, the DM history and the
-        // current reactions). dm_message is subscribed whole like every
-        // table here, but its row-level-security filter means the seed and
-        // events carry only THIS identity's own conversations (see
-        // tables.ts in the server). Reactions are subscribed for their row
+        // conversation tables (the space-wide and group chat history, the
+        // DM history and the current reactions).
+        //
+        // The chat history arrives as two scope-filtered queries rather
+        // than the whole table (増分④): the 'map' rows ride the map-scoped
+        // subscription below, so a client holds only the maps' chatter it
+        // can see. 'group' rows are subscribed whole and narrowed by
+        // row-level security instead — which groups a client may read is a
+        // membership question no subscription WHERE could ask (see
+        // tables.ts in the server), exactly as dm_message's filter already
+        // narrows the DM history subscribed here. Reactions are subscribed for their row
         // EVENTS only; the seed never displays (see reactionFeed.ts).
         // Statuses are the opposite: the seed IS the display (a status is
         // state, restored on entry — see sync.ts). The conversation groups
@@ -134,7 +151,7 @@ export async function connect(
         // map-scoped.
         //
         // The OTHER players' hot rows are deliberately NOT here: they are
-        // map-scoped (subscribeMapPlayers — the Phase 3 AoI 絞り込み), and
+        // map-scoped (subscribeMapRows — the Phase 3 AoI 絞り込み), and
         // which map to scope to is only knowable once the own row has
         // seeded, hence the second, dependent subscribe below. A fresh
         // identity has no row and starts on the default map.
@@ -142,7 +159,7 @@ export async function connect(
           .subscriptionBuilder()
           .onApplied(() => {
             const mapId = conn.db.player.identity.find(identity)?.mapId ?? DEFAULT_MAP_ID;
-            const mapSub = subscribeMapPlayers(conn, mapId, () =>
+            const mapSub = subscribeMapRows(conn, mapId, () =>
               resolve({
                 conn,
                 myIdentity: identity,
@@ -157,7 +174,8 @@ export async function connect(
             tables.playerName,
             tables.spaceMember,
             tables.spaceSetting,
-            tables.chatMessage,
+            tables.chatMessage.where((c) => c.scope.eq(CHAT_SCOPE_SPACE)),
+            tables.chatMessage.where((c) => c.scope.eq(CHAT_SCOPE_GROUP)),
             tables.dmMessage,
             tables.reaction,
             tables.playerStatus,

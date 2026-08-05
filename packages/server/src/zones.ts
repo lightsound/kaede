@@ -12,7 +12,6 @@
 // cause is bounded by the map's population.
 import {
   clampZoneRect,
-  evaluateSettingChange,
   evaluateZoneSpec,
   GROUP_KIND_ZONE,
   mapFor,
@@ -22,13 +21,7 @@ import {
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, membershipOf, recomputeZoneOccupancyOnMap } from './world';
-
-/** Refuses the call unless the sender is an acting admin (the set_guests_allowed rule). */
-function requireAdmin(ctx: Ctx, reducerName: string): void {
-  const verdict = evaluateSettingChange({ actor: membershipOf(ctx, ctx.sender) });
-  if (!verdict.ok) throw new SenderError(`${reducerName} refused (${verdict.reason})`);
-}
+import { type Ctx, recomputeZoneOccupancyOnMap, requireAdmin } from './world';
 
 /** The zone-kind group row `zoneId` names, or a loud refusal. */
 function requireZone(ctx: Ctx, zoneId: bigint, reducerName: string) {

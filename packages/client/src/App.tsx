@@ -7,6 +7,7 @@ import { createGameApp, type GameApp } from './game.package';
 import { HuddleControl } from './huddle.package';
 import {
   type ChatLog,
+  type ChatScopeView,
   type ConnectionStatus,
   type HuddleView,
   type Net,
@@ -88,6 +89,11 @@ export function App() {
   // The huddle control's answer (own huddle / joinable huddle / neither),
   // published deduplicated by the net stack (ROADMAP Phase 3 増分③).
   const [huddle, setHuddle] = useState<HuddleView>({ own: undefined, joinable: undefined });
+  // Which chat scopes a send may address right now (全体 / このマップ /
+  // いまの会話グループ), published deduplicated by the net stack (ROADMAP
+  // Phase 3 増分④). Empty until the first session reports; the panel is
+  // disabled until then anyway.
+  const [chatScopes, setChatScopes] = useState<ChatScopeView>([]);
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -118,6 +124,7 @@ export function App() {
         onOwnStatus: setOwnStatus,
         onZones: setZones,
         onHuddle: setHuddle,
+        onChatScopes: setChatScopes,
         // The DM → browser-notification pipeline: the notifier decides
         // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
         // so no state rides this hook.
@@ -191,19 +198,21 @@ export function App() {
         }}
         onMemberAction={(action, member) => netRef.current?.memberAction(action, member.identity)}
         onGuestsAllowedChange={(allowed) => netRef.current?.setGuestsAllowed(allowed)}
+        onSendAnnouncement={(text) => netRef.current?.sendAnnouncement(text)}
       />
       <ChatPanel
         connected={connected}
         ownName={ownName}
         log={chatLog}
+        scopes={chatScopes}
         sendRefused={chatSendRefused}
         // The netRef-less fallback (mount not finished — the panel is
         // disabled then anyway) delegates to the same no-session rule
         // Net.planChatSend applies, so the rule has one home.
         planDraft={(draft) => netRef.current?.planChatSend(draft) ?? planChatDraftOffline(draft)}
-        onSendPlan={(plan) => {
+        onSendPlan={(plan, scope) => {
           setChatSendRefused(false);
-          netRef.current?.sendPlanned(plan);
+          netRef.current?.sendPlanned(plan, scope);
         }}
         onSendReaction={(emoji) => netRef.current?.sendReaction(emoji)}
       />

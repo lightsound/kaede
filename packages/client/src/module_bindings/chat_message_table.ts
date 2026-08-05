@@ -16,4 +16,7 @@ export default __t.row({
   senderName: __t.string().name("sender_name"),
   text: __t.string(),
   sentAt: __t.timestamp().name("sent_at"),
+  scope: __t.string(),
+  target: __t.u64(),
+  announcement: __t.bool(),
 });

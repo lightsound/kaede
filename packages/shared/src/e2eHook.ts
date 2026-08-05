@@ -95,6 +95,17 @@ export interface E2ENetStats {
   /** dm_message rows handed to this client (subscription seed + insert events). */
   dmRowsReceived: number;
   /**
+   * GROUP-scoped chat_message rows handed to this client (seed + insert
+   * events) — the dmRowsReceived idea pointed at the conversation groups
+   * (ROADMAP Phase 3 増分④). Only the group scope is counted because it is
+   * the only one row-level security narrows per connection: a non-member of
+   * a CLOSED group must sit at zero while a member counts up, which no DOM
+   * assertion could prove (a display filter would hide a delivered row).
+   * Space and map rows are excluded so that zero stays meaningful — a third
+   * party legitimately receives plenty of those.
+   */
+  groupChatRowsReceived: number;
+  /**
    * DM rows this client DECIDED to notify for (shouldNotifyDm returned
    * true), counted before the Notification is constructed and regardless
    * of whether construction succeeds — an OS notification itself is
