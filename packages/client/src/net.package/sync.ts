@@ -18,6 +18,7 @@ import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { captureEvent } from '../telemetry.package';
 import { type SpaceView, wireAdmission } from './admission';
+import { wireOwnGroup } from './callFeed';
 import { createChatFeed } from './chatFeed';
 import type { ChatLog } from './chatLog';
 import { type ChatScopeView, wireChatScopes } from './chatScopeFeed';
@@ -175,6 +176,13 @@ export interface NetHooks {
    * scope the server would refuse is never offered.
    */
   onChatScopes(view: ChatScopeView): void;
+  /**
+   * Every change of which conversation group this client is in (seeded on
+   * session entry, deduplicated by value — ROADMAP Phase 4 増分①). The
+   * call dock offers 通話 from it and auto-leaves the call when it stops
+   * naming the call's group.
+   */
+  onOwnGroup(groupId: bigint | undefined): void;
 }
 
 /**
@@ -581,6 +589,11 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // zone feed: the answer is about the chat panel, not about the zone
     // layer, and this file is long enough (see chatScopeFeed.ts).
     wireChatScopes(c, myIdentity, { isStale: stale, onChatScopes: hooks.onChatScopes });
+
+    // The own-group signal for the call dock (ROADMAP Phase 4 増分①): the
+    // same own group_member row the scope feed reads, but as the raw
+    // groupId — the call's identity, not a chat affordance (see callFeed.ts).
+    wireOwnGroup(c, myIdentity, { isStale: stale, onOwnGroup: hooks.onOwnGroup });
 
     /**
      * Enters the world once admission says so: resume the surviving own row

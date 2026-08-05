@@ -2,6 +2,7 @@
 import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@kaede/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
+import { CallDock } from './call.package';
 import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
 import { HuddleControl } from './huddle.package';
@@ -94,6 +95,10 @@ export function App() {
   // Phase 3 増分④). Empty until the first session reports; the panel is
   // disabled until then anyway.
   const [chatScopes, setChatScopes] = useState<ChatScopeView>([]);
+  // The conversation group this client is in (or undefined), published
+  // deduplicated by the net stack (ROADMAP Phase 4 増分①) — the call
+  // dock's offer and its auto-leave watch both ride it.
+  const [ownGroupId, setOwnGroupId] = useState<bigint>();
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -125,6 +130,7 @@ export function App() {
         onZones: setZones,
         onHuddle: setHuddle,
         onChatScopes: setChatScopes,
+        onOwnGroup: setOwnGroupId,
         // The DM → browser-notification pipeline: the notifier decides
         // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
         // so no state rides this hook.
@@ -175,6 +181,19 @@ export function App() {
         status={ownStatus}
         onSetAvailability={(availability) => netRef.current?.setAvailability(availability)}
         onSetStatusText={(text) => netRef.current?.setStatusText(text)}
+      />
+      <CallDock
+        connected={connected}
+        signedIn={session.signedIn}
+        ownGroupId={ownGroupId}
+        ownName={ownName}
+        getToken={session.getToken}
+        net={{
+          ownGroupCall: () => netRef.current?.ownGroupCall(),
+          registerGroupCall: (meetingId) =>
+            netRef.current?.registerGroupCall(meetingId) ??
+            Promise.reject(new Error('SpacetimeDB: not connected')),
+        }}
       />
       <HuddleControl
         connected={connected}

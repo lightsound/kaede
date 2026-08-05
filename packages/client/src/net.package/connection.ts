@@ -181,6 +181,11 @@ export async function connect(
             tables.playerStatus,
             tables.conversationGroup,
             tables.groupMember,
+            // The group-call registry (Phase 4 増分①): whole-table like the
+            // groups themselves, but row-level security narrows it to the
+            // groups this client is a member of — the meeting id it carries
+            // is the join capability (see group_call in the server).
+            tables.groupCall,
           ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping

@@ -90,6 +90,24 @@ function senderContext(c: DbConnection, identity: Identity) {
   };
 }
 
+/**
+ * The own membership's group and its registered call, read from the
+ * subscribed cache (NetApi.ownGroupCall's live half — split out to keep
+ * both uncovered functions under the CRAP budget, the senderContext
+ * precedent).
+ */
+function ownGroupCallOf(
+  c: DbConnection,
+): { groupId: bigint; meetingId: string | undefined } | undefined {
+  const identity = c.identity;
+  const member = identity === undefined ? null : c.db.groupMember.identity.find(identity);
+  if (member === null) return undefined;
+  return {
+    groupId: member.groupId,
+    meetingId: c.db.groupCall.groupId.find(member.groupId)?.meetingId,
+  };
+}
+
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
 const MEMBER_ACTION_CALLS: Record<
   MemberAction,
@@ -212,6 +230,23 @@ export interface NetApi {
   createHuddle(spec: { name: string; closed: boolean }): void;
   joinHuddle(groupId: bigint): void;
   leaveHuddle(): void;
+  /**
+   * Where a call join would land RIGHT NOW, read from the subscribed cache
+   * at click time (the chatTargetOf submit-time precedent): the own
+   * membership's group and, if one is registered, its meeting id — the
+   * group_call row is RLS-narrowed to groups this client is in, so a
+   * readable meeting id is by construction one it may join. Undefined
+   * while disconnected or in no group.
+   */
+  ownGroupCall(): { groupId: bigint; meetingId: string | undefined } | undefined;
+  /**
+   * Binds a provisioned meeting to the sender's group (register_group_call).
+   * Unlike the fire-and-forget methods this returns the reducer's promise:
+   * the call flow (call.package) must know whether the registration won —
+   * a refusal usually means another member registered first, and the flow
+   * recovers by re-reading ownGroupCall (see acquireCallTicket).
+   */
+  registerGroupCall(meetingId: string): Promise<void>;
 }
 
 /** What forwarding user actions needs from the lifecycle owner (sync.ts). */
@@ -343,5 +378,14 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     sendAnnouncement: forward('send_announcement', (c, text: string) =>
       c.reducers.sendAnnouncement({ text }),
     ),
+    ownGroupCall() {
+      const c = deps.conn();
+      return c === undefined ? undefined : ownGroupCallOf(c);
+    },
+    registerGroupCall(meetingId) {
+      const c = deps.conn();
+      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
+      return c.reducers.registerGroupCall({ meetingId }).then(() => undefined);
+    },
   };
 }
