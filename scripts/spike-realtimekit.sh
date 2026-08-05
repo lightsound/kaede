@@ -64,6 +64,10 @@ if [ -z "$app_id" ] || [ "$app_id" = "null" ]; then
   echo "$created" | jq .
   app_id=$(echo "$created" | jq -r '.data.app.id // empty')
 fi
+if [ -z "$app_id" ]; then
+  echo "アプリ ID が取得できない (再利用も作成も失敗 — 上のレスポンスを確認)。以降は //presets のような壊れた URL を叩くだけなのでここで終了" >&2
+  exit 1
+fi
 echo "app_id=${app_id}"
 
 step "3. プリセット一覧 (既定プリセットの有無と内容)"
@@ -73,6 +77,10 @@ step "4. ミーティング作成"
 meeting=$(api POST "/${app_id}/meetings" '{"title": "spike 会議"}')
 echo "$meeting" | jq .
 meeting_id=$(echo "$meeting" | jq -r '.data.id // empty')
+if [ -z "$meeting_id" ]; then
+  echo "ミーティング ID が取得できない (上のレスポンスを確認)。ここで終了" >&2
+  exit 1
+fi
 echo "meeting_id=${meeting_id}"
 
 step "5. 参加トークン発行 (Add Participant)"
