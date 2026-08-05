@@ -7,7 +7,16 @@ import {
 } from '../src/net.package/chatLog';
 
 function chat(id: bigint, sentAtMicros = id * 10n, text = `msg-${id}`): ChatEntryView {
-  return { kind: 'chat', id, sentAtMicros, senderName: '楓', text, own: false };
+  return {
+    kind: 'chat',
+    id,
+    sentAtMicros,
+    senderName: '楓',
+    text,
+    own: false,
+    scopeTag: '全体',
+    announcement: false,
+  };
 }
 
 function dm(id: bigint, sentAtMicros = id * 10n, text = `dm-${id}`): ChatEntryView {

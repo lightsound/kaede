@@ -1,5 +1,6 @@
 // fallow-ignore-file coverage-gaps -- wires a live SpacetimeDB connection to the game loop; needs a running host. The admission rules it acts on are pure and unit-tested in @kaede/shared (see admission.ts)
 import {
+  CHAT_SCOPE_GROUP,
   DEFAULT_MAP_ID,
   type DmRowEvent,
   decidePortalCall,
@@ -19,11 +20,12 @@ import { captureEvent } from '../telemetry.package';
 import { type SpaceView, wireAdmission } from './admission';
 import { createChatFeed } from './chatFeed';
 import type { ChatLog } from './chatLog';
+import { type ChatScopeView, wireChatScopes } from './chatScopeFeed';
 import {
   type AuthTokenGetter,
   type Connected,
   connect,
-  subscribeMapPlayers,
+  subscribeMapRows,
   target,
 } from './connection';
 import { createHeartbeat } from './heartbeat';
@@ -99,6 +101,7 @@ function installNetStats(): E2ENetStats | undefined {
     heartbeatsSent: 0,
     dmRowsReceived: 0,
     dmNotifyDecisions: 0,
+    groupChatRowsReceived: 0,
   };
   window.__kaedeE2ENet = stats;
   return stats;
@@ -165,6 +168,13 @@ export interface NetHooks {
    * the feed so the row-event cadence stays out of React.
    */
   onHuddle(view: HuddleView): void;
+  /**
+   * Every change of the chat scopes this client may send under (全体 /
+   * このマップ / いまの会話グループ — ROADMAP Phase 3 増分④), deduplicated
+   * by value in the feed. The selector renders exactly this list, so a
+   * scope the server would refuse is never offered.
+   */
+  onChatScopes(view: ChatScopeView): void;
 }
 
 /**
@@ -215,7 +225,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   };
 
   // The map the live session is scoped to: which player rows are subscribed
-  // (subscribeMapPlayers), which geometry the prediction replays on, and
+  // (subscribeMapRows), which geometry the prediction replays on, and
   // which map GameApp renders. Session state, but held here (like `conn`
   // and `prediction`) because the tick callback below — registered once,
   // outside any session — reads it for portal-intent detection. Updated by
@@ -452,10 +462,13 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
      * teleporting). Everything map-scoped restarts: the prediction (its
      * geometry is per-map), the rendered scene, the remote views (the
      * destination's population arrives with the swapped subscription), and
-     * the player subscription itself — the destination map is subscribed
-     * BEFORE the origin is dropped, so there is no window with neither
-     * (the own row, covered by the identity query throughout, never
-     * flickers either way — subscription overlap is refcounted).
+     * the map-scoped subscription itself — the destination map is
+     * subscribed BEFORE the origin is dropped, so there is no window with
+     * neither (the own row, covered by the identity query throughout,
+     * never flickers either way — subscription overlap is refcounted).
+     * Since 増分④ that subscription also carries the map-scoped chat
+     * (subscribeMapRows), so the origin map's lines leave the log with its
+     * players — the accepted consequence of scoping the history.
      */
     const switchMap = (row: PlayerRow): void => {
       currentMapId = row.mapId;
@@ -471,7 +484,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       zoneFeed.refresh();
       handleOwnRow(row);
       const outgoing = mapSub;
-      mapSub = subscribeMapPlayers(c, row.mapId, () => {
+      mapSub = subscribeMapRows(c, row.mapId, () => {
         // The destination's rows just landed as insert events (recordRemote
         // picked them up). A stale session's socket is gone or superseded,
         // and its handles die with the connection — only a live session
@@ -561,6 +574,14 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       onHuddle: hooks.onHuddle,
     });
 
+    // The chat scope selector (ROADMAP Phase 3 増分④): which scopes this
+    // client may address from where it stands — the zone feed's shape, over
+    // the same rows (the own player row's map, the own membership) plus the
+    // group rows' names. Its own feed rather than another branch of the
+    // zone feed: the answer is about the chat panel, not about the zone
+    // layer, and this file is long enough (see chatScopeFeed.ts).
+    wireChatScopes(c, myIdentity, { isStale: stale, onChatScopes: hooks.onChatScopes });
+
     /**
      * Enters the world once admission says so: resume the surviving own row
      * (a reload / blip within the retention window), or ask the server to
@@ -608,6 +629,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       onDmRow: (event) => {
         bumpStat('dmRowsReceived');
         hooks.onDmRow(event);
+      },
+      onChatRow: (scope) => {
+        if (scope === CHAT_SCOPE_GROUP) bumpStat('groupChatRowsReceived');
       },
     });
 

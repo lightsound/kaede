@@ -33,6 +33,15 @@ export interface ChatEntryBase {
 /** One public chat message as the UI renders it. */
 export interface PublicChatEntry extends ChatEntryBase {
   readonly kind: 'chat';
+  /**
+   * The line's scope marker (全体 / the map's name / the group's name /
+   * アナウンス — chatScopeTag in @kaede/shared), composed when the row is
+   * taken in. Undefined for a scope this build does not know, which renders
+   * as a plain line rather than claiming a scope it cannot name.
+   */
+  readonly scopeTag: string | undefined;
+  /** True for an admin announcement — the 強調 rendering (ROADMAP 増分④). */
+  readonly announcement: boolean;
 }
 
 /** One DM as the UI renders it — only its sender and recipient ever hold one. */

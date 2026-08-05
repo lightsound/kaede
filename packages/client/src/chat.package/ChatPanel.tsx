@@ -1,17 +1,21 @@
 // fallow-ignore-file coverage-gaps -- a React chat panel; needs a DOM, and no DOM test environment is configured. The validation and rate rules it relies on are normalizeChatText / evaluateChatSend, unit-tested in @kaede/shared
 import {
+  CHAT_SCOPE_SPACE,
   CHAT_TEXT_MAX_LENGTH,
   type ChatDraftPlan,
   type ChatDraftRejectReason,
+  type ChatScope,
   evaluateChatSend,
+  fallbackChatScope,
   type PlannedSend,
   REACTION_EMOJIS,
   type ReactionEmoji,
 } from '@kaede/shared';
-import { type CSSProperties, useEffect, useRef } from 'react';
-import { type ChatEntryView, type ChatLog, chatEntryKey } from '../net.package';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { type ChatEntryView, type ChatLog, type ChatScopeView, chatEntryKey } from '../net.package';
 import { NotificationControl } from '../notify.package';
 import {
+  UI_BUTTON_BG,
   UI_DM_COLOR,
   UI_ERROR_COLOR,
   UI_FONT,
@@ -76,6 +80,43 @@ const reactionRowStyle: CSSProperties = {
   gap: 4,
 };
 
+const scopeRowStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 4,
+  margin: 0,
+  padding: 0,
+  border: 'none',
+};
+
+const scopeLegendStyle: CSSProperties = {
+  float: 'left', // a legend is a block box; floating keeps the row on one line
+  padding: '0 4px 0 0',
+  opacity: 0.7,
+};
+
+const scopeButtonStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 2,
+  padding: '2px 8px',
+  borderRadius: 999,
+  border: UI_GOLD_BORDER_SOFT,
+  background: 'transparent',
+  color: UI_TEXT_COLOR,
+  font: 'inherit',
+  cursor: 'pointer',
+};
+
+/** The picked scope, filled so "where this goes" is readable at a glance. */
+const scopeSelectedStyle: CSSProperties = {
+  ...scopeButtonStyle,
+  border: UI_GOLD_BORDER,
+  background: UI_BUTTON_BG,
+  color: UI_GOLD,
+};
+
 const reactionButtonStyle: CSSProperties = {
   flex: '1 1 0',
   padding: '2px 0',
@@ -96,21 +137,89 @@ const dmMarkStyle: CSSProperties = {
   fontWeight: 'bold',
 };
 
+const scopeMarkStyle: CSSProperties = {
+  opacity: 0.7,
+};
+
+const announcementLineStyle: CSSProperties = {
+  padding: '2px 4px',
+  borderRadius: 4,
+  border: UI_GOLD_BORDER_SOFT,
+  color: UI_GOLD,
+};
+
 /**
  * One log line. A DM line is marked apart from room chatter — the [DM] tag
  * and the → 宛先 in the DM accent color — because the log holds both and a
  * private line must never read as something the room saw. Only the sender
  * and the recipient ever hold the row (row-level security), so no
  * receiver-side filtering happens here.
+ *
+ * A public line carries its scope marker (ROADMAP Phase 3 増分④) for the
+ * same reason: one log now merges 全体, this map's and the current group's
+ * conversations, and a line whose audience is invisible reads as if it went
+ * to everyone. An admin announcement is the marker plus the gold frame —
+ * it is the one line that must not scroll past unnoticed.
  */
 function LogLine({ entry }: { entry: ChatEntryView }) {
+  const announcement = entry.kind === 'chat' && entry.announcement;
   return (
-    <div>
+    <div style={announcement ? announcementLineStyle : undefined}>
       {entry.kind === 'dm' && <span style={dmMarkStyle}>[DM] </span>}
+      {entry.kind === 'chat' && entry.scopeTag !== undefined && (
+        <span style={scopeMarkStyle}>[{entry.scopeTag}] </span>
+      )}
       <span style={senderStyle(entry.own)}>{entry.senderName}</span>
       {entry.kind === 'dm' && <span style={dmMarkStyle}> → {entry.recipientName}</span>}{' '}
       {entry.text}
     </div>
+  );
+}
+
+/**
+ * The send-scope selector (送信先スコープ切替): a radio group naming exactly
+ * what a send would reach — 全体, this map, or the conversation group the
+ * sender is in. The list comes from the net stack (which scopes exist is a
+ * question about the authoritative rows), so a scope the server would
+ * refuse is never offered and the 会話グループ choice simply disappears
+ * when the sender walks out.
+ *
+ * Real radio inputs inside labels, not styled buttons: the group's
+ * semantics come free (and the specs can ask for a radio by its label).
+ * Each change blurs the input for the reason the palette rows use
+ * blurringClick — a focused control eats the arrow keys the avatar walks
+ * with.
+ */
+function ScopeRow({
+  scopes,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  scopes: ChatScopeView;
+  selected: ChatScope;
+  disabled: boolean;
+  onSelect: (scope: ChatScope) => void;
+}) {
+  return (
+    <fieldset style={scopeRowStyle}>
+      <legend style={scopeLegendStyle}>送信先</legend>
+      {scopes.map((option) => (
+        <label
+          key={option.scope}
+          style={option.scope === selected ? scopeSelectedStyle : scopeButtonStyle}
+        >
+          <input
+            type="radio"
+            name="chat-scope"
+            checked={option.scope === selected}
+            disabled={disabled}
+            onChange={blurringClick(() => onSelect(option.scope))}
+          />
+          {option.label}
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
@@ -175,6 +284,7 @@ export function ChatPanel({
   connected,
   ownName,
   log,
+  scopes,
   sendRefused,
   planDraft,
   onSendPlan,
@@ -185,6 +295,8 @@ export function ChatPanel({
   ownName: string | undefined;
   /** The subscribed chat+DM history, ascending by send order. */
   log: ChatLog;
+  /** The scopes a send may address right now, widest first (see ScopeRow). */
+  scopes: ChatScopeView;
   /**
    * True after a send was dropped or refused server-side (e.g. the
    * per-identity rate bucket shared with another tab, or a DM recipient
@@ -194,8 +306,8 @@ export function ChatPanel({
   sendRefused: boolean;
   /** Classifies one draft (public / DM / refused) — see Net.planChatSend. */
   planDraft: (draft: string) => ChatDraftPlan;
-  /** Dispatches one accepted plan (public message or DM) — see Net.sendPlanned. */
-  onSendPlan: (plan: PlannedSend) => void;
+  /** Dispatches one accepted plan under the picked scope — see Net.sendPlanned. */
+  onSendPlan: (plan: PlannedSend, scope: ChatScope) => void;
   /** Sends one palette-emoji reaction (fire-and-forget; see ReactionRow). */
   onSendReaction: (emoji: ReactionEmoji) => void;
 }) {
@@ -209,6 +321,16 @@ export function ChatPanel({
   // ahead — it is a UX aid, and the server verdict stays the authority.
   const chargedFromRef = useRef<bigint>(undefined);
   const logRef = useRef<HTMLDivElement>(null);
+  // What the next send addresses. Held as a raw pick and reconciled against
+  // the offered list on every render (fallbackChatScope): the offered list
+  // changes underfoot — walking out of a zone, a huddle disbanding — and
+  // the reconciliation is what keeps the control off a scope the send would
+  // refuse without an effect chasing the change.
+  const [picked, setPicked] = useState<ChatScope>(CHAT_SCOPE_SPACE);
+  const scope = fallbackChatScope(
+    picked,
+    scopes.map((option) => option.scope),
+  );
 
   // Keep the newest line in view. Scrolling on every log change also covers
   // the initial seed after (re)connecting.
@@ -238,7 +360,7 @@ export function ChatPanel({
     if (!send.ok) return RATE_LIMITED_MESSAGE;
     chargedFromRef.current = allowanceRef.current;
     allowanceRef.current = send.allowanceMicros;
-    onSendPlan(plan);
+    onSendPlan(plan, scope);
     return undefined;
   };
 
@@ -257,9 +379,12 @@ export function ChatPanel({
         </div>
       )}
       <ReactionRow disabled={disabled} onSendReaction={onSendReaction} />
+      <ScopeRow scopes={scopes} selected={scope} disabled={disabled} onSelect={setPicked} />
       <DraftForm
         disabled={disabled}
-        placeholder="メッセージを送信"
+        // The placeholder names the destination too: the highlighted pill
+        // says it, but the eye is in the input when the message is typed.
+        placeholder={`${scopes.find((o) => o.scope === scope)?.label ?? ''}に送信`}
         ariaLabel="チャット入力"
         buttonLabel="送信"
         clearOnSubmit={true}

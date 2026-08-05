@@ -10,6 +10,7 @@ import {
   UI_PANEL_BG,
   UI_TEXT_COLOR,
 } from '../theme';
+import { AnnouncePanel } from './AnnouncePanel';
 import { type ZoneActions, ZonePanel } from './ZonePanel';
 
 const panelStyle: CSSProperties = {
@@ -167,6 +168,7 @@ export function AdminPanel({
   zoneActions,
   onMemberAction,
   onGuestsAllowedChange,
+  onSendAnnouncement,
 }: {
   /** The whole member directory, oldest application first (see SpaceView.members). */
   members: SpaceMemberView[];
@@ -176,6 +178,8 @@ export function AdminPanel({
   zoneActions: ZoneActions;
   onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
+  /** Posts one space-wide announcement (see AnnouncePanel / Net.sendAnnouncement). */
+  onSendAnnouncement: (text: string) => void;
 }) {
   return (
     <section style={panelStyle} aria-label="管理">
@@ -211,6 +215,8 @@ export function AdminPanel({
       })}
 
       <ZonePanel zones={zones} actions={zoneActions} />
+
+      <AnnouncePanel onSendAnnouncement={onSendAnnouncement} />
     </section>
   );
 }

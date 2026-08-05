@@ -17,6 +17,7 @@ export function AdminSection({
   zoneActions,
   onMemberAction,
   onGuestsAllowedChange,
+  onSendAnnouncement,
 }: {
   connected: boolean;
   space: SpaceView | undefined;
@@ -24,6 +25,7 @@ export function AdminSection({
   zoneActions: ZoneActions;
   onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
+  onSendAnnouncement: (text: string) => void;
 }) {
   if (!connected || space === undefined || !isActingAdmin(space.self)) return null;
   return (
@@ -34,6 +36,7 @@ export function AdminSection({
       zoneActions={zoneActions}
       onMemberAction={onMemberAction}
       onGuestsAllowedChange={onGuestsAllowedChange}
+      onSendAnnouncement={onSendAnnouncement}
     />
   );
 }
