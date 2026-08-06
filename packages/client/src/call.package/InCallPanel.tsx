@@ -15,9 +15,12 @@ import {
   RtkUiProvider,
 } from '@cloudflare/realtimekit-react-ui';
 import { type CSSProperties, useEffect } from 'react';
-import type { AuthTokenGetter } from '../net.package';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
-import { RecordingToggle } from './RecordingToggle';
+import {
+  type RecordingControlProps,
+  type RecordingStarted,
+  RecordingToggle,
+} from './RecordingToggle';
 import type { Meeting } from './realtimekit';
 
 // The prebuilt in-call UI (ROADMAP Phase 4 増分③〜④). These imports are
@@ -111,12 +114,6 @@ const dockLanguage = makeRtkLanguage({
   'recording.error.stop': '録画を停止できませんでした',
 });
 
-/** What the panel reports when a recording appears on the meeting. */
-export interface RecordingStarted {
-  recordingId: string;
-  startedAtMs: bigint;
-}
-
 /** True when the UI Kit state means a recording is opening or live. */
 function isActiveRecordingState(state: string): boolean {
   return state === 'STARTING' || state === 'RECORDING';
@@ -162,14 +159,7 @@ export function InCallPanel({
   getToken,
   canRecord,
   onRecordingStarted,
-}: {
-  meeting: Meeting;
-  meetingId: string;
-  getToken: AuthTokenGetter;
-  /** Approved members only — guests never see the recording control. */
-  canRecord: boolean;
-  onRecordingStarted?: (event: RecordingStarted) => void;
-}) {
+}: RecordingControlProps) {
   useEffect(() => {
     if (onRecordingStarted === undefined) return;
     // Dedup so STARTING→RECORDING does not double-register the same id.

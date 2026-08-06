@@ -15,41 +15,80 @@ export type CallRoute =
   | { kind: 'downloadRecording'; recordingId: string }
   | { kind: 'webhook' };
 
-function meetingSegment(
+/**
+ * Extracts a single path segment between `prefix` and `suffix` without
+ * RegExp (fallow security flags dynamic RegExp as a ReDoS candidate; the
+ * segment is then vetted by `accept`).
+ */
+function vettedSegment(
   method: string,
   pathname: string,
   want: string,
+  prefix: string,
   suffix: string,
+  accept: (id: string) => boolean,
 ): string | undefined {
   if (method !== want) return undefined;
-  const match = new RegExp(`^/calls/meetings/([^/]+)/${suffix}$`).exec(pathname);
-  const id = match?.[1];
-  return id !== undefined && isMeetingIdLike(id) ? id : undefined;
+  if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) return undefined;
+  const id = pathname.slice(prefix.length, pathname.length - suffix.length);
+  if (id === '' || id.includes('/')) return undefined;
+  return accept(id) ? id : undefined;
 }
 
-function recordingSegment(
-  method: string,
-  pathname: string,
-  want: string,
-  suffix: string,
-): string | undefined {
-  if (method !== want) return undefined;
-  const match = new RegExp(`^/calls/recordings/([^/]+)/${suffix}$`).exec(pathname);
-  const id = match?.[1];
-  return id !== undefined && isRecordingIdLike(id) ? id : undefined;
-}
+type SegmentRoute = Exclude<CallRoute, { kind: 'provision' } | { kind: 'webhook' }>;
+
+/** One path pattern → CallRoute builder (table keeps matchCallRoute under CRAP / clone budget). */
+const SEGMENT_ROUTES: ReadonlyArray<{
+  method: string;
+  prefix: string;
+  suffix: string;
+  accept: (id: string) => boolean;
+  toRoute: (id: string) => SegmentRoute;
+}> = [
+  {
+    method: 'POST',
+    prefix: '/calls/meetings/',
+    suffix: '/participants',
+    accept: isMeetingIdLike,
+    toRoute: (id) => ({ kind: 'mint', meetingId: id }),
+  },
+  {
+    method: 'POST',
+    prefix: '/calls/meetings/',
+    suffix: '/recordings',
+    accept: isMeetingIdLike,
+    toRoute: (id) => ({ kind: 'startRecording', meetingId: id }),
+  },
+  {
+    method: 'POST',
+    prefix: '/calls/recordings/',
+    suffix: '/stop',
+    accept: isRecordingIdLike,
+    toRoute: (id) => ({ kind: 'stopRecording', recordingId: id }),
+  },
+  {
+    method: 'GET',
+    prefix: '/calls/recordings/',
+    suffix: '/download',
+    accept: isRecordingIdLike,
+    toRoute: (id) => ({ kind: 'downloadRecording', recordingId: id }),
+  },
+];
 
 /** Resolves one call-API route, or undefined when this Worker does not serve it. */
 export function matchCallRoute(method: string, pathname: string): CallRoute | undefined {
   if (method === 'POST' && pathname === '/webhooks/realtimekit') return { kind: 'webhook' };
   if (method === 'POST' && pathname === '/calls/meetings') return { kind: 'provision' };
-  const mintId = meetingSegment(method, pathname, 'POST', 'participants');
-  if (mintId !== undefined) return { kind: 'mint', meetingId: mintId };
-  const startId = meetingSegment(method, pathname, 'POST', 'recordings');
-  if (startId !== undefined) return { kind: 'startRecording', meetingId: startId };
-  const stopId = recordingSegment(method, pathname, 'POST', 'stop');
-  if (stopId !== undefined) return { kind: 'stopRecording', recordingId: stopId };
-  const downloadId = recordingSegment(method, pathname, 'GET', 'download');
-  if (downloadId !== undefined) return { kind: 'downloadRecording', recordingId: downloadId };
+  for (const entry of SEGMENT_ROUTES) {
+    const id = vettedSegment(
+      method,
+      pathname,
+      entry.method,
+      entry.prefix,
+      entry.suffix,
+      entry.accept,
+    );
+    if (id !== undefined) return entry.toRoute(id);
+  }
   return undefined;
 }

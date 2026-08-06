@@ -14,6 +14,21 @@ import type { Meeting } from './realtimekit';
 
 type RecordingState = Meeting['recording']['recordingState'];
 
+/** What the panel reports when a recording appears on the meeting. */
+export interface RecordingStarted {
+  recordingId: string;
+  startedAtMs: bigint;
+}
+
+/** Props shared with InCallPanel's recording wiring (one type — avoids Type-2 props clones). */
+export interface RecordingControlProps {
+  meeting: Meeting;
+  meetingId: string;
+  getToken: AuthTokenGetter;
+  canRecord: boolean;
+  onRecordingStarted?: (event: RecordingStarted) => void;
+}
+
 const buttonStyle: CSSProperties = {
   padding: '2px 8px',
   borderRadius: 6,
@@ -78,19 +93,8 @@ async function startAndReport(
  * (guests — Worker would 403 anyway; the host preset's can_record is the
  * other half of the same rule).
  */
-export function RecordingToggle({
-  meeting,
-  meetingId,
-  getToken,
-  canRecord,
-  onRecordingStarted,
-}: {
-  meeting: Meeting;
-  meetingId: string;
-  getToken: AuthTokenGetter;
-  canRecord: boolean;
-  onRecordingStarted?: (event: { recordingId: string; startedAtMs: bigint }) => void;
-}) {
+export function RecordingToggle(props: RecordingControlProps) {
+  const { meeting, meetingId, getToken, canRecord, onRecordingStarted } = props;
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<RecordingState>(meeting.recording.recordingState);
 

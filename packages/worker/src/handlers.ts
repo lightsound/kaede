@@ -137,6 +137,7 @@ async function putDownloadUrlInR2(
   downloadUrl: string,
 ): Promise<string> {
   try {
+    // fallow-ignore-next-line security-sink -- downloadUrl is from a signature-verified RealtimeKit recording.statusUpdate webhook (verifyRtkSignature), not browser input
     const download = await fetch(downloadUrl);
     if (!download.ok || download.body === null) {
       console.error('recording download fallback failed', download.status);
