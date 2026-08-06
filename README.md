@@ -398,8 +398,10 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   参加・画面共有をメンバーと同等にできます。
 
 - **録画（ROADMAP Phase 4 増分④）**: 録画の開始/停止・一覧・ダウンロードは
-  **承認済みメンバー限定**です（Worker がメンバーの Clerk JWT だけに録画
-  ルートを開ける — ゲストの bearer は 403）。録画ファイルは Start Recording の
+  **承認済みメンバー限定**です（Worker が Clerk 経路だけに録画ルートを
+  開け — ゲストの bearer は 403 — UI とラベル reducer が承認状態を重ねて
+  検査する。Worker 単体はサインインまでしか検証できない — 受け入れた緩さの
+  全文は ROADMAP 増分④ 設計①）。録画ファイルは Start Recording の
   `storage_config` で R2 バケット（本番 `kaede-recordings`）へ直接
   アップロードされ、完了の真実源はバケット自体（一覧は Worker が S3 API で
   読む）。メタデータ（どの会議・誰が開始）は SpacetimeDB の `call_recording`

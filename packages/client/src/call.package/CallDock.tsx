@@ -171,12 +171,12 @@ async function joinCall(ctx: JoinContext): Promise<void> {
  * rule). Split from the component to stay under the CRAP budget.
  */
 function recordingHandlersFor(
-  signedIn: boolean,
+  member: boolean,
   getToken: AuthTokenGetter,
   meetingId: string,
   net: CallDockNet,
 ): RecordingHandlers | undefined {
-  if (!signedIn) return undefined;
+  if (!member) return undefined;
   return {
     start: async () => {
       const fileName = await startCallRecording(getToken, meetingId);
@@ -199,7 +199,7 @@ function recordingHandlersFor(
  */
 export function CallDock({
   connected,
-  signedIn,
+  member,
   ownGroupId,
   ownName,
   getToken,
@@ -207,11 +207,16 @@ export function CallDock({
 }: {
   connected: boolean;
   /**
-   * Whether this client is signed in — the recording control is offered
-   * to members only (増分④ 設計①). Cosmetic here: the Worker's member
-   * gate is the authority, and it 403s a guest bearer either way.
+   * Whether this client is an APPROVED member — the recording control is
+   * offered to approved members only (増分④ 設計①), not merely to
+   * signed-in identities: a signed-in-but-unapproved user walks under the
+   * guest rules and must get the guest treatment here (surfaced by the
+   * 増分④ manual test — log_group_recording refuses non-approved
+   * senders, so a signedIn gate would offer a toggle whose label write
+   * is refused). Cosmetic like every UI gate: the Worker 403s guest
+   * bearers, and the label reducer re-checks membership server-side.
    */
-  signedIn: boolean;
+  member: boolean;
   /** The own-group signal (NetHooks.onOwnGroup). */
   ownGroupId: bigint | undefined;
   /** The authoritative display name — what the call tile shows the others. */
@@ -254,7 +259,7 @@ export function CallDock({
       <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
         <InCallPanel
           meeting={phase.meeting}
-          recording={recordingHandlersFor(signedIn, getToken, phase.meetingId, net)}
+          recording={recordingHandlersFor(member, getToken, phase.meetingId, net)}
         />
       </Suspense>
     );

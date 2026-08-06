@@ -61,16 +61,23 @@ function promptFor(signedIn: boolean, space: SpaceView | undefined) {
 }
 
 /**
- * Whether the 録画一覧 renders: connected, signed in and approved — the
- * cosmetic mount gate (増分④; the Worker's member check is the
- * authority). Split from the component to keep App under the CRAP budget.
+ * Whether this client is a signed-in APPROVED member — what the recording
+ * surfaces gate on (増分④ 設計①: 録画はメンバー限定。サインイン済みでも
+ * 未承認ならゲスト扱い). Cosmetic gates only; the Worker and the label
+ * reducer re-check server-side. Split from the component to keep App
+ * under the CRAP budget.
  */
+function approvedMember(signedIn: boolean, space: SpaceView | undefined): boolean {
+  return signedIn && space?.self?.status === 'approved';
+}
+
+/** The 録画一覧's mount gate: connected AND an approved member. */
 function recordingsDockVisible(
   connected: boolean,
   signedIn: boolean,
   space: SpaceView | undefined,
 ): boolean {
-  return connected && signedIn && space?.self?.status === 'approved';
+  return connected && approvedMember(signedIn, space);
 }
 
 /**
@@ -236,7 +243,7 @@ export function App() {
       />
       <CallDock
         connected={connected}
-        signedIn={session.signedIn}
+        member={approvedMember(session.signedIn, space)}
         ownGroupId={calls.ownGroupId}
         ownName={ownName}
         getToken={session.getToken}

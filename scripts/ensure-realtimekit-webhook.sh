@@ -30,14 +30,19 @@ api() {
   fi
 }
 
-existing=$(api GET "/${APP_ID}/webhooks/all")
+# GET /webhooks が登録済み一覧(/webhooks/all は利用可能イベントの語彙なので別物)。
+# 未登録のアプリは success=false + "Webhook not found" を返す — 空一覧として扱う。
+existing=$(api GET "/${APP_ID}/webhooks")
 if [ "$(echo "$existing" | jq -r '.success')" != "true" ]; then
-  echo "Webhook 一覧の取得に失敗: $existing" >&2
-  exit 1
+  message=$(echo "$existing" | jq -r '.error.message // empty')
+  if [ "$message" != "Webhook not found" ]; then
+    echo "Webhook 一覧の取得に失敗: $existing" >&2
+    exit 1
+  fi
 fi
 
 match=$(echo "$existing" | jq -r --arg url "$WEBHOOK_URL" \
-  '[.data[]? // empty | select(.url == $url)] | length')
+  '[.data? // empty | if type == "array" then .[] else . end | select(.url == $url)] | length')
 if [ "$match" -gt 0 ]; then
   echo "登録済み: ${WEBHOOK_URL} (${match} 件) — 何もしない"
   exit 0
