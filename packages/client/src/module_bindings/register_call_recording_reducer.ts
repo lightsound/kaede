@@ -13,5 +13,4 @@ import {
 export default {
   recordingId: __t.string(),
   meetingId: __t.string(),
-  startedAtMs: __t.u64(),
 };

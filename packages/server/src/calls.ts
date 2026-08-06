@@ -147,15 +147,17 @@ function trimCallRecordings(ctx: Ctx): void {
  * Member-side insert of a recording catalog row. Called from the client
  * when a recording starts (UI Kit toggle or Worker start — both surface a
  * recording id). Idempotent on recordingId: a second register of the same
- * id is a no-op (webhook may race ahead and insert first).
+ * id is a no-op (webhook may race ahead and insert first). startedAtMs is
+ * stamped from the SERVER clock (ctx.timestamp) — a client wall clock
+ * would skew list ordering and displayed times until the webhook's
+ * provider startedTime replaces it.
  */
 export const registerCallRecording = spacetimedb.reducer(
   {
     recordingId: t.string(),
     meetingId: t.string(),
-    startedAtMs: t.u64(),
   },
-  (ctx, { recordingId, meetingId, startedAtMs }) => {
+  (ctx, { recordingId, meetingId }) => {
     if (!findPostingSender(ctx, 'register_call_recording')) return;
     const groupId = vetRecordingRegistration(ctx, recordingId, meetingId);
     if (ctx.db.callRecording.recordingId.find(recordingId) !== null) return;
@@ -166,7 +168,7 @@ export const registerCallRecording = spacetimedb.reducer(
       status: RECORDING_STATUS_RECORDING,
       objectKey: '',
       outputFileName: '',
-      startedAtMs,
+      startedAtMs: ctx.timestamp.toMillis(),
       durationSecs: 0,
       spaceFlag: 0,
     });

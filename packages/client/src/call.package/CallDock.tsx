@@ -97,13 +97,10 @@ export interface CallDockNet {
   registerGroupCall(meetingId: string): Promise<void>;
   /**
    * Catalog insert when a recording starts (増分④). Fire-and-forget from
-   * the UI Kit listener — failures log inside the net facade.
+   * the UI Kit listener — failures log inside the net facade. The row's
+   * startedAtMs is stamped server-side (ctx.timestamp).
    */
-  registerCallRecording(args: {
-    recordingId: string;
-    meetingId: string;
-    startedAtMs: bigint;
-  }): void;
+  registerCallRecording(args: { recordingId: string; meetingId: string }): void;
 }
 
 /** Everything the join sequence below needs from the mounted dock. */
@@ -167,10 +164,9 @@ async function joinCall(ctx: JoinContext): Promise<void> {
 function recordingStartedHandler(
   net: CallDockNet,
   meetingId: string | undefined,
-): ((event: { recordingId: string; startedAtMs: bigint }) => void) | undefined {
+): ((event: { recordingId: string }) => void) | undefined {
   if (meetingId === undefined) return undefined;
-  return ({ recordingId, startedAtMs }) =>
-    net.registerCallRecording({ recordingId, meetingId, startedAtMs });
+  return ({ recordingId }) => net.registerCallRecording({ recordingId, meetingId });
 }
 
 /** Lazy UI Kit panel for an ongoing call. Split from CallDock for CRAP. */

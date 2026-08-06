@@ -17,7 +17,6 @@ type RecordingState = Meeting['recording']['recordingState'];
 /** What the panel reports when a recording appears on the meeting. */
 export interface RecordingStarted {
   recordingId: string;
-  startedAtMs: bigint;
 }
 
 /** Props shared with InCallPanel's recording wiring (one type — avoids Type-2 props clones). */
@@ -79,13 +78,10 @@ async function stopActiveRecording(meeting: Meeting, getToken: AuthTokenGetter):
 async function startAndReport(
   getToken: AuthTokenGetter,
   meetingId: string,
-  onRecordingStarted?: (event: { recordingId: string; startedAtMs: bigint }) => void,
+  onRecordingStarted?: (event: { recordingId: string }) => void,
 ): Promise<void> {
   const recordingId = await startCallRecording(getToken, meetingId);
-  onRecordingStarted?.({
-    recordingId,
-    startedAtMs: BigInt(Date.now()),
-  });
+  onRecordingStarted?.({ recordingId });
 }
 
 /**

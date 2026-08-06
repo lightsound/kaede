@@ -137,10 +137,7 @@ function reportActiveRecordings(
   for (const row of meeting.recording.recordings) {
     if (!shouldReportRecording(row, seen)) continue;
     seen.add(row.id);
-    onRecordingStarted({
-      recordingId: row.id,
-      startedAtMs: BigInt(Date.now()),
-    });
+    onRecordingStarted({ recordingId: row.id });
   }
 }
 

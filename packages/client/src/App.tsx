@@ -94,11 +94,8 @@ function callDockNetOf(netRef: { current: Net | undefined }) {
     registerGroupCall: (meetingId: string) =>
       netRef.current?.registerGroupCall(meetingId) ??
       Promise.reject(new Error('SpacetimeDB: not connected')),
-    registerCallRecording: (args: {
-      recordingId: string;
-      meetingId: string;
-      startedAtMs: bigint;
-    }) => netRef.current?.registerCallRecording(args),
+    registerCallRecording: (args: { recordingId: string; meetingId: string }) =>
+      netRef.current?.registerCallRecording(args),
   };
 }
 
