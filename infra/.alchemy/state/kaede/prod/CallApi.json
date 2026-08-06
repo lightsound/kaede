@@ -16,7 +16,8 @@
       "CLERK_ISSUER": "https://clerk.kaede.town",
       "CLERK_AUDIENCE": "kaede-spacetimedb",
       "SPACETIME_HOST_URL": "https://maincloud.spacetimedb.com",
-      "ALLOWED_ORIGINS": "https://kaede.town,https://kaede.kaede-751.workers.dev"
+      "ALLOWED_ORIGINS": "https://kaede.town,https://kaede.kaede-751.workers.dev",
+      "RECORDINGS_BUCKET": "kaede-recordings"
     },
     "isExternal": true
   },
@@ -38,8 +39,8 @@
     "routes": [],
     "crons": [],
     "hash": {
-      "bundle": "ba69bddd368168cd9e176284bf4e7eb7dc3255d205257970ed4972609aaff3b5",
-      "metadata": "faff263ab86caf6a65c64b554c7311edd591018fb2fb72fb437f5e7ec7f3daab"
+      "bundle": "88a571dc690e2dcb24330858eae39e6bd83963a7b209a33a0c7b2a7088e03ecb",
+      "metadata": "2bc0843ec884bfb7f87e96f9a63bd262534fae9688eca989141e2ad74d9f35cb"
     }
   },
   "bindings": [
@@ -99,6 +100,18 @@
             "type": "plain_text",
             "name": "REALTIMEKIT_APP_ID",
             "text": "84053947-0a8e-4b23-840a-a47731b7310b"
+          }
+        ]
+      }
+    },
+    {
+      "sid": "RECORDINGS_BUCKET",
+      "data": {
+        "bindings": [
+          {
+            "type": "plain_text",
+            "name": "RECORDINGS_BUCKET",
+            "text": "kaede-recordings"
           }
         ]
       }

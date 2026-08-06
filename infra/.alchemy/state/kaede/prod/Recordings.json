@@ -1,0 +1,50 @@
+{
+  "status": "created",
+  "fqn": "Recordings",
+  "logicalId": "Recordings",
+  "instanceId": "27cf8939a78bbdec2982405075f7ca85",
+  "resourceType": "Cloudflare.R2.Bucket",
+  "props": {
+    "name": "kaede-recordings",
+    "lifecycleRules": [
+      {
+        "id": "abort-stale-multipart-uploads",
+        "abortMultipartUploadsTransition": {
+          "condition": {
+            "type": "Age",
+            "maxAge": 604800
+          }
+        }
+      }
+    ]
+  },
+  "attr": {
+    "bucketName": "kaede-recordings",
+    "storageClass": "Standard",
+    "jurisdiction": "default",
+    "location": "wnam",
+    "accountId": "751c8a59858c9c04a8e722df7330444d",
+    "domains": [],
+    "lifecycleRules": [
+      {
+        "id": "abort-stale-multipart-uploads",
+        "enabled": true,
+        "prefix": "",
+        "abortMultipartUploadsTransition": {
+          "condition": {
+            "type": "Age",
+            "maxAge": 604800
+          }
+        }
+      }
+    ],
+    "cors": []
+  },
+  "bindings": [],
+  "providerVersion": 0,
+  "downstream": [
+    "CallApi"
+  ],
+  "removalPolicy": "destroy",
+  "providerMode": "live"
+}
