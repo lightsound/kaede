@@ -799,8 +799,10 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   置き換える。採用理由と閉じ込め緩和の決定は VISION 技術方針表・決定ログ
   2026-08-06）
   ✅ **実装済み（2026-08-06、増分③）**: 通話中 UI は
-  `@cloudflare/realtimekit-react-ui`＋`@cloudflare/realtimekit-react`
-  （core と同じ 2.0.1 に厳密ピン留め — ベータ採用の流儀）のプリビルド部品:
+  `@cloudflare/realtimekit-react-ui`（core と同じ 2.0.1 に厳密ピン留め —
+  ベータ採用の流儀。`-react` パッケージのフック群は使わない — init は
+  従来どおり realtimekit.ts が直接行い、meeting は RtkUiProvider に渡す
+  だけなので依存に持たない）のプリビルド部品:
   参加者タイル/グリッドと画面共有ビューは RtkGrid（共有中は mixed grid へ
   自動切替 — 自前の ScreenTile/VideoTile を置き換え）、コントロールバーは
   RtkMic/Camera/ScreenShareToggle＋RtkSettingsToggle＋RtkLeaveButton、

@@ -56,9 +56,6 @@ importers:
       '@cloudflare/realtimekit':
         specifier: 2.0.1
         version: 2.0.1
-      '@cloudflare/realtimekit-react':
-        specifier: 2.0.1
-        version: 2.0.1(react@19.2.8)
       '@cloudflare/realtimekit-react-ui':
         specifier: 2.0.1
         version: 2.0.1
@@ -361,11 +358,6 @@ packages:
 
   '@cloudflare/realtimekit-react-ui@2.0.1':
     resolution: {integrity: sha512-G0lU6VxCDfFfo4z6NPfYvgctefr5yce7xgUyDQY66pDWlESSJqRCJr4EKqSg0zA2JswuYDjp36S6Ya8SBwyHpQ==}
-
-  '@cloudflare/realtimekit-react@2.0.1':
-    resolution: {integrity: sha512-z5BL32ABEppwxofq7meV0enFyPa7XL3X3oyb2hcI9PE0WPx1VMVM7GdDjpBjF/r6Ff0LpFA64vlyzeto0/8Pew==}
-    peerDependencies:
-      react: '>=16.8.6'
 
   '@cloudflare/realtimekit-ui@2.0.1':
     resolution: {integrity: sha512-F1Px1LJwpIw50QG76e2ViYjOv3utzd5wkoScRLqeMj7ZS8GtdX+vMVfG1+5jfvc9Ha/Qujauwsb13fam+7bfSg==}
@@ -3486,11 +3478,6 @@ snapshots:
   '@cloudflare/realtimekit-react-ui@2.0.1':
     dependencies:
       '@cloudflare/realtimekit-ui': 2.0.1
-
-  '@cloudflare/realtimekit-react@2.0.1(react@19.2.8)':
-    dependencies:
-      '@cloudflare/realtimekit': 2.0.1
-      react: 19.2.8
 
   '@cloudflare/realtimekit-ui@2.0.1':
     dependencies:
