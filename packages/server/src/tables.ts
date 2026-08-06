@@ -626,6 +626,46 @@ export const spacetimedb = schema({
       allowanceMicros: t.i64(),
     },
   ),
+  // A cloud recording's LABEL row (ROADMAP Phase 4 増分④): who recorded
+  // which conversation group, when, into which R2 object. Deliberately not
+  // the recording's state machine — the truth about a finished recording is
+  // the object existing in the R2 bucket (the Worker's listing serves the
+  // 一覧/DL UI), and this row only labels that listing with the human facts
+  // the bucket cannot hold (the group's name, the starter, Japanese
+  // intact). A row whose object never appears (recording ERRORED
+  // provider-side) is a harmless orphan label; an object whose row was
+  // trimmed lists date-only. Written by log_group_recording (calls.ts)
+  // right after the Worker's start call succeeds — the starter CLIENT
+  // writes it, but both names are resolved server-side from the sender's
+  // authoritative rows (the create_zone placement rule applied to labels);
+  // the only client-claimed value is fileName, shape-checked against the
+  // provider's naming (isRecordingFileNameLike in @kaede/shared).
+  //
+  // `fileName` is the R2 object's basename — fixed at start time by the
+  // provider (the Start Recording response's output_file_name, live-probed
+  // 2026-08-06) — and is the exact join key between this table and the
+  // bucket listing. `groupName` and `starterName` are snapshots (the
+  // chat_message senderName rule: the history outlives both the group row
+  // and the player rows). Kept to RECORDING_HISTORY_MAX rows by the writer
+  // (the trimHistory pattern) and deliberately NOT deleted by removePlayer:
+  // recording history outlives the player rows (the dm_message rule).
+  //
+  // Public with NO RLS filter, an explicit decision (the chat_message
+  // read-gate precedent): these rows are metadata every in-world connection
+  // may see, while the capability they label — downloading the file — is
+  // enforced by the Worker's members-only gate. A members-only filter is
+  // not expressible anyway: call_recording and space_member share no
+  // column, so the filter SQL subset has no ON equality to join them on.
+  callRecording: table(
+    { name: 'call_recording', public: true },
+    {
+      id: t.u64().primaryKey().autoInc(),
+      fileName: t.string(),
+      groupName: t.string(),
+      starterName: t.string(),
+      startedAt: t.timestamp(),
+    },
+  ),
 });
 
 // Row-level security for dm_message: a connection is handed only the rows it

@@ -2,7 +2,7 @@
 import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@kaede/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
-import { CallDock } from './call.package';
+import { CallDock, RecordingsDock } from './call.package';
 import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
 import { HuddleControl } from './huddle.package';
@@ -13,6 +13,7 @@ import {
   type HuddleView,
   type Net,
   planChatDraftOffline,
+  type RecordingLabelView,
   type SpaceView,
   startNet,
   type ZoneAdminView,
@@ -59,6 +60,62 @@ function promptFor(signedIn: boolean, space: SpaceView | undefined) {
   });
 }
 
+/**
+ * Whether this client is a signed-in APPROVED member — what the recording
+ * surfaces gate on (増分④ 設計①: 録画はメンバー限定。サインイン済みでも
+ * 未承認ならゲスト扱い). Cosmetic gates only; the Worker and the label
+ * reducer re-check server-side. Split from the component to keep App
+ * under the CRAP budget.
+ */
+function approvedMember(signedIn: boolean, space: SpaceView | undefined): boolean {
+  return signedIn && space?.self?.status === 'approved';
+}
+
+/** The 録画一覧's mount gate: connected AND an approved member. */
+function recordingsDockVisible(
+  connected: boolean,
+  signedIn: boolean,
+  space: SpaceView | undefined,
+): boolean {
+  return connected && approvedMember(signedIn, space);
+}
+
+/**
+ * The call dock's net adapter over the (possibly not-yet-mounted) net
+ * stack — split from App's JSX to keep App under the cognitive budget.
+ */
+function callDockNetOf(netRef: { current: Net | undefined }) {
+  return {
+    ownGroupCall: () => netRef.current?.ownGroupCall(),
+    registerGroupCall: (meetingId: string) =>
+      netRef.current?.registerGroupCall(meetingId) ??
+      Promise.reject(new Error('SpacetimeDB: not connected')),
+    logGroupRecording: (fileName: string) => netRef.current?.logGroupRecording(fileName),
+  };
+}
+
+/**
+ * The chat panel's draft planner over the same possibly-absent net stack
+ * (the callDockNetOf shape): the netRef-less fallback (mount not finished
+ * — the panel is disabled then anyway) delegates to the same no-session
+ * rule Net.planChatSend applies, so the rule has one home.
+ */
+function chatDraftPlannerOf(netRef: { current: Net | undefined }) {
+  return (draft: string) => netRef.current?.planChatSend(draft) ?? planChatDraftOffline(draft);
+}
+
+/**
+ * The call-related views the net stack publishes (ROADMAP Phase 4):
+ * which conversation group this client is in (増分① — the call dock's
+ * offer and auto-leave watch ride it) and the recording label rows
+ * (増分④ — the 録画一覧 decorates the Worker's R2 listing with them).
+ */
+function useCallViews() {
+  const [ownGroupId, setOwnGroupId] = useState<bigint>();
+  const [recordings, setRecordings] = useState<RecordingLabelView[]>([]);
+  return { ownGroupId, setOwnGroupId, recordings, setRecordings };
+}
+
 export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
@@ -95,10 +152,9 @@ export function App() {
   // Phase 3 増分④). Empty until the first session reports; the panel is
   // disabled until then anyway.
   const [chatScopes, setChatScopes] = useState<ChatScopeView>([]);
-  // The conversation group this client is in (or undefined), published
-  // deduplicated by the net stack (ROADMAP Phase 4 増分①) — the call
-  // dock's offer and its auto-leave watch both ride it.
-  const [ownGroupId, setOwnGroupId] = useState<bigint>();
+  // The call-related views (own group + recording labels), bundled in one
+  // custom hook to keep App under the cognitive budget.
+  const calls = useCallViews();
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -130,7 +186,8 @@ export function App() {
         onZones: setZones,
         onHuddle: setHuddle,
         onChatScopes: setChatScopes,
-        onOwnGroup: setOwnGroupId,
+        onOwnGroup: calls.setOwnGroupId,
+        onRecordings: calls.setRecordings,
         // The DM → browser-notification pipeline: the notifier decides
         // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
         // so no state rides this hook.
@@ -144,7 +201,9 @@ export function App() {
       netRef.current = undefined;
       game?.destroy();
     };
-  }, [session]);
+    // The two setters are useState setters bundled by useCallViews —
+    // identity-stable, listed to satisfy the exhaustive-deps lint.
+  }, [session, calls.setOwnGroupId, calls.setRecordings]);
 
   // The admission notice and the admin panel gate themselves on `connected`:
   // while disconnected the subscribed rows are stale, so the connection
@@ -184,15 +243,16 @@ export function App() {
       />
       <CallDock
         connected={connected}
-        ownGroupId={ownGroupId}
+        member={approvedMember(session.signedIn, space)}
+        ownGroupId={calls.ownGroupId}
         ownName={ownName}
         getToken={session.getToken}
-        net={{
-          ownGroupCall: () => netRef.current?.ownGroupCall(),
-          registerGroupCall: (meetingId) =>
-            netRef.current?.registerGroupCall(meetingId) ??
-            Promise.reject(new Error('SpacetimeDB: not connected')),
-        }}
+        net={callDockNetOf(netRef)}
+      />
+      <RecordingsDock
+        visible={recordingsDockVisible(connected, session.signedIn, space)}
+        getToken={session.getToken}
+        labels={calls.recordings}
       />
       <HuddleControl
         connected={connected}
@@ -224,10 +284,7 @@ export function App() {
         log={chatLog}
         scopes={chatScopes}
         sendRefused={chatSendRefused}
-        // The netRef-less fallback (mount not finished — the panel is
-        // disabled then anyway) delegates to the same no-session rule
-        // Net.planChatSend applies, so the rule has one home.
-        planDraft={(draft) => netRef.current?.planChatSend(draft) ?? planChatDraftOffline(draft)}
+        planDraft={chatDraftPlannerOf(netRef)}
         onSendPlan={(plan, scope) => {
           setChatSendRefused(false);
           netRef.current?.sendPlanned(plan, scope);

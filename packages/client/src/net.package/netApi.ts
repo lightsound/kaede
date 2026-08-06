@@ -247,6 +247,14 @@ export interface NetApi {
    * recovers by re-reading ownGroupCall (see acquireCallTicket).
    */
   registerGroupCall(meetingId: string): Promise<void>;
+  /**
+   * Labels the recording the sender just started (log_group_recording —
+   * ROADMAP Phase 4 増分④): the provider-named file, with the group and
+   * starter names resolved server-side. Fire-and-forget deliberately: a
+   * lost label degrades that recording's 一覧 entry to date-only, never
+   * blocks the recording itself.
+   */
+  logGroupRecording(fileName: string): void;
 }
 
 /** What forwarding user actions needs from the lifecycle owner (sync.ts). */
@@ -387,5 +395,8 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
       return c.reducers.registerGroupCall({ meetingId }).then(() => undefined);
     },
+    logGroupRecording: forward('log_group_recording', (c, fileName: string) =>
+      c.reducers.logGroupRecording({ fileName }),
+    ),
   };
 }

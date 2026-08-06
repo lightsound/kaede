@@ -290,15 +290,26 @@ jobs:
           POSTHOG_PROJECT_ID: '540373'
         run: CI=true pnpm --filter @kaede/infra deploy:prod --yes
 
-      # The call Worker's runtime secret (the Realtime-Admin account API
-      # token), synced out-of-band with wrangler on every deploy.
-      # Deliberately NOT an Alchemy binding: Alchemy writes Redacted values
-      # into its state files in PLAINTEXT, and the prod state is committed
-      # to git (measured 2026-08-05 on a dev stage — see the CallApi env
-      # comment in infra/alchemy.run.ts). Runs after the Alchemy deploy so
-      # the Worker exists on the very first run; Alchemy's later script
-      # uploads preserve out-of-band secret_text bindings (also measured).
-      - name: Sync call Worker secret (wrangler)
+      # The call Worker's runtime secrets, synced out-of-band with wrangler
+      # on every deploy. Deliberately NOT Alchemy bindings: Alchemy writes
+      # Redacted values into its state files in PLAINTEXT, and the prod
+      # state is committed to git (measured 2026-08-05 on a dev stage — see
+      # the CallApi env comment in infra/alchemy.run.ts). Runs after the
+      # Alchemy deploy so the Worker exists on the very first run;
+      # Alchemy's later script uploads preserve out-of-band secret_text
+      # bindings (also measured).
+      #
+      # - REALTIMEKIT_API_TOKEN: the Realtime-Admin account API token.
+      # - R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY (増分④): the S3
+      #   credentials the recording start hands the provider
+      #   (storage_config) and presigned downloads are minted from. R2's
+      #   S3 credentials ARE an R2-permitted API token in another form
+      #   (access key = token id, secret = SHA-256 of the token value —
+      #   live-verified 2026-08-06), so they are DERIVED here from the
+      #   deploy token instead of adding GitHub secrets. Hardening path:
+      #   swap in a bucket-scoped R2 token's pair, no code change. The
+      #   preflight fails loudly if the deploy token lost its R2 grant.
+      - name: Sync call Worker secrets (wrangler)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 751c8a59858c9c04a8e722df7330444d
@@ -310,6 +321,22 @@ jobs:
           fi
           printf '%s' "$REALTIMEKIT_API_TOKEN" \
             | pnpm --filter @kaede/infra exec wrangler secret put REALTIMEKIT_API_TOKEN --name kaede-call
+          r2_probe=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
+          if [ "$(printf '%s' "$r2_probe" | jq -r '.success')" != "true" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN has no R2 grant; recordings cannot upload or download. Add Workers R2 Storage read/write to the token (or point R2_* at a bucket-scoped token)."
+            exit 1
+          fi
+          token_id=$(curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" | jq -r '.result.id // empty')
+          if [ -z "$token_id" ]; then
+            echo "::error::/user/tokens/verify returned no token id; refusing to sync an empty R2_ACCESS_KEY_ID."
+            exit 1
+          fi
+          printf '%s' "$token_id" \
+            | pnpm --filter @kaede/infra exec wrangler secret put R2_ACCESS_KEY_ID --name kaede-call
+          printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1 | tr -d '\n' \
+            | pnpm --filter @kaede/infra exec wrangler secret put R2_SECRET_ACCESS_KEY --name kaede-call
 
       # Alchemy keeps its state in files that are committed to git (README
       # 「Alchemy のステート管理」), and a deploy rewrites them, so push the

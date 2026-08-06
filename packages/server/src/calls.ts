@@ -1,6 +1,7 @@
-// fallow-ignore-file coverage-gaps -- a reducer only runs inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (meeting-id shape, rate limit) are delegated to isMeetingIdLike / evaluateSendAllowance in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- a reducer only runs inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (meeting-id shape, recording file-name shape, rate limit) are delegated to isMeetingIdLike / isRecordingFileNameLike / evaluateSendAllowance in @kaede/shared and unit-tested there
 
-// The group-call registration reducer (ROADMAP Phase 4 増分①〜②). The
+// The group-call reducers (ROADMAP Phase 4 増分①〜②・④): registering a
+// group's meeting, and labeling its recordings (log_group_recording). The
 // call flow splits authority in two: the WORKER (packages/worker) talks to
 // the call provider — it provisions meetings and mints participant tokens,
 // because those need the provider secret — while THIS module remains the
@@ -15,10 +16,19 @@ import {
   CALL_SEND_COST_MICROS,
   evaluateSendAllowance,
   isMeetingIdLike,
+  isRecordingFileNameLike,
+  RECORDING_HISTORY_MAX,
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
-import { type Ctx, chargeSendAllowance, findPostingSender } from './world';
+import {
+  type Ctx,
+  chargeSendAllowance,
+  findPostingSender,
+  membershipOf,
+  trimHistory,
+  type WorldRows,
+} from './world';
 
 // Registers the sender's conversation group's call: binds the meeting the
 // Worker just provisioned to the group the sender is IN — the group is
@@ -71,12 +81,88 @@ export const registerGroupCall = spacetimedb.reducer(
     // The evaluator stays an inline arrow rather than a shared wrapper, for
     // the standing reason: a shared wrapper's signature would push the
     // type-coupling evidence past its cap (the evaluateHuddleSend rationale).
-    chargeSendAllowance(
-      ctx,
-      ctx.db.callGuard,
-      (request) => evaluateSendAllowance(request, CALL_SEND_COST_MICROS, CALL_BURST_SENDS),
-      'register_group_call',
-    );
+    chargeCallAllowance(ctx, 'register_group_call');
     ctx.db.groupCall.insert({ groupId, meetingId });
+  },
+);
+
+/**
+ * Charges one call-flow send against call_guard — shared by
+ * register_group_call and log_group_recording, which are the same UI
+ * flow's low-frequency operations with no client-side mirror to drift
+ * from (the one reason every other feature gets a bucket of its own).
+ * The evaluator stays an inline arrow for the standing type-coupling
+ * reason (see registerGroupCall).
+ */
+function chargeCallAllowance(ctx: Ctx, reducerName: string): void {
+  chargeSendAllowance(
+    ctx,
+    ctx.db.callGuard,
+    (request) => evaluateSendAllowance(request, CALL_SEND_COST_MICROS, CALL_BURST_SENDS),
+    reducerName,
+  );
+}
+
+/**
+ * Vets one recording label: an approved-member sender (mirroring the
+ * Worker's gate — recording start is members-only, so only a member ever
+ * has a fileName to log; a guest reaching this reducer is a hand-rolled
+ * client) and a provider-shaped file name. Every refusal is loud and
+ * pre-write (the vetCallRegistration shape); the group half lives in
+ * recordingGroupName so both stay under the CRAP budget.
+ */
+function vetRecordingLog(ctx: Ctx, fileName: string): void {
+  if (membershipOf(ctx, ctx.sender)?.status !== 'approved') {
+    throw new SenderError('log_group_recording refused (not-a-member)');
+  }
+  if (!isRecordingFileNameLike(fileName)) {
+    throw new SenderError('log_group_recording refused (invalid-file-name)');
+  }
+}
+
+/** The sender's group's display name to snapshot, or a loud refusal. */
+function recordingGroupName(ctx: Ctx): string {
+  const member = ctx.db.groupMember.identity.find(ctx.sender);
+  if (member === null) throw new SenderError('log_group_recording refused (not-in-a-group)');
+  const group = ctx.db.conversationGroup.id.find(member.groupId);
+  if (group === null) throw new SenderError('log_group_recording refused (group-gone)');
+  return group.name;
+}
+
+/**
+ * Writes the label row and trims the history — split from the reducer to
+ * keep both uncovered functions under the CRAP budget (the
+ * vetCallRegistration precedent).
+ */
+function appendRecordingLabel(ctx: Ctx, rows: WorldRows, fileName: string, groupName: string) {
+  ctx.db.callRecording.insert({
+    id: 0n, // 0 asks autoInc to assign the real id
+    fileName,
+    groupName,
+    starterName: rows.nameRow.name,
+    startedAt: ctx.timestamp,
+  });
+  trimHistory(ctx.db.callRecording, RECORDING_HISTORY_MAX);
+}
+
+// Labels the recording the sender just started: one call_recording row —
+// the human-readable side of the R2 listing (see the table comment in
+// tables.ts for the whole design: the row is a LABEL, the R2 object is the
+// truth). Both names are resolved from the server's own rows — the group's
+// name from the membership the sender holds, the starter's from its
+// player_name row — so the client claims nothing but the provider-shaped
+// fileName (the register_group_call vetting philosophy). Called by the
+// starter's client right after the Worker's start call succeeds; a lost
+// label (rate refusal, disconnect) degrades that recording's listing to
+// date-only, never blocks the recording itself.
+export const logGroupRecording = spacetimedb.reducer(
+  { fileName: t.string() },
+  (ctx, { fileName }) => {
+    const rows = findPostingSender(ctx, 'log_group_recording');
+    if (!rows) return;
+    vetRecordingLog(ctx, fileName);
+    const groupName = recordingGroupName(ctx);
+    chargeCallAllowance(ctx, 'log_group_recording');
+    appendRecordingLabel(ctx, rows, fileName, groupName);
   },
 );

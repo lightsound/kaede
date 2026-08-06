@@ -25,6 +25,15 @@ export const CallGuard = __t.object("CallGuard", {
 });
 export type CallGuard = __Infer<typeof CallGuard>;
 
+export const CallRecording = __t.object("CallRecording", {
+  id: __t.u64(),
+  fileName: __t.string(),
+  groupName: __t.string(),
+  starterName: __t.string(),
+  startedAt: __t.timestamp(),
+});
+export type CallRecording = __Infer<typeof CallRecording>;
+
 export const ChatGuard = __t.object("ChatGuard", {
   identity: __t.identity(),
   allowanceMicros: __t.i64(),

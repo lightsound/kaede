@@ -10,8 +10,9 @@ import {
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
-import { mintCallToken, provisionMeeting } from './api';
+import { mintCallToken, provisionMeeting, startCallRecording, stopCallRecording } from './api';
 import { acquireCallTicket } from './flow';
+import type { RecordingHandlers } from './InCallPanel';
 import { dialMeeting, type Meeting } from './realtimekit';
 
 // The UI Kit (hls.js, @floating-ui, hark, lodash-es, …) lives only in
@@ -73,7 +74,7 @@ function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () 
 type CallPhase =
   | { kind: 'idle'; notice?: string }
   | { kind: 'joining' }
-  | { kind: 'in-call'; groupId: bigint; meeting: Meeting };
+  | { kind: 'in-call'; groupId: bigint; meetingId: string; meeting: Meeting };
 
 /**
  * Whether the dock renders nothing: disconnected, or out of every
@@ -95,6 +96,8 @@ function dockHidden(connected: boolean, ownGroupId: bigint | undefined, phase: C
 export interface CallDockNet {
   ownGroupCall(): { groupId: bigint; meetingId: string | undefined } | undefined;
   registerGroupCall(meetingId: string): Promise<void>;
+  /** NetApi.logGroupRecording — the fire-and-forget label write (増分④). */
+  logGroupRecording(fileName: string): void;
 }
 
 /** Everything the join sequence below needs from the mounted dock. */
@@ -145,13 +148,42 @@ async function joinCall(ctx: JoinContext): Promise<void> {
     });
     if (ended) return;
     ctx.meetingRef.current = meeting;
-    ctx.setPhase(() => ({ kind: 'in-call', groupId: ticket.groupId, meeting }));
+    ctx.setPhase(() => ({
+      kind: 'in-call',
+      groupId: ticket.groupId,
+      meetingId: ticket.meetingId,
+      meeting,
+    }));
   } catch (err) {
     console.error('call join failed', err);
     ctx.setPhase(() => ({ kind: 'idle', notice: '通話に参加できませんでした' }));
   } finally {
     ctx.joiningRef.current = false;
   }
+}
+
+/**
+ * The member-only recording control the in-call panel renders (増分④), or
+ * undefined for guests: start asks the Worker (which holds the provider
+ * secret and the R2 credentials) and then logs the label row the 録画一覧
+ * decorates itself with; stop asks the Worker to look the active
+ * recording up — no recording id is kept client-side (the stateless
+ * rule). Split from the component to stay under the CRAP budget.
+ */
+function recordingHandlersFor(
+  member: boolean,
+  getToken: AuthTokenGetter,
+  meetingId: string,
+  net: CallDockNet,
+): RecordingHandlers | undefined {
+  if (!member) return undefined;
+  return {
+    start: async () => {
+      const fileName = await startCallRecording(getToken, meetingId);
+      net.logGroupRecording(fileName);
+    },
+    stop: () => stopCallRecording(getToken, meetingId),
+  };
 }
 
 /**
@@ -167,12 +199,24 @@ async function joinCall(ctx: JoinContext): Promise<void> {
  */
 export function CallDock({
   connected,
+  member,
   ownGroupId,
   ownName,
   getToken,
   net,
 }: {
   connected: boolean;
+  /**
+   * Whether this client is an APPROVED member — the recording control is
+   * offered to approved members only (増分④ 設計①), not merely to
+   * signed-in identities: a signed-in-but-unapproved user walks under the
+   * guest rules and must get the guest treatment here (surfaced by the
+   * 増分④ manual test — log_group_recording refuses non-approved
+   * senders, so a signedIn gate would offer a toggle whose label write
+   * is refused). Cosmetic like every UI gate: the Worker 403s guest
+   * bearers, and the label reducer re-checks membership server-side.
+   */
+  member: boolean;
   /** The own-group signal (NetHooks.onOwnGroup). */
   ownGroupId: bigint | undefined;
   /** The authoritative display name — what the call tile shows the others. */
@@ -213,7 +257,10 @@ export function CallDock({
     // third transient.
     return (
       <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
-        <InCallPanel meeting={phase.meeting} />
+        <InCallPanel
+          meeting={phase.meeting}
+          recording={recordingHandlersFor(member, getToken, phase.meetingId, net)}
+        />
       </Suspense>
     );
   }

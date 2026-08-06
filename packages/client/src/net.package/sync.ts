@@ -46,6 +46,7 @@ import {
 import { createNetApi, type NetApi } from './netApi';
 import { createPrediction } from './prediction';
 import { wireReactions } from './reactionFeed';
+import { type RecordingLabelView, wireRecordings } from './recordingFeed';
 import { createRemoteViews } from './remoteView';
 import type { RowOf } from './rows';
 import { cachedStatusView, wireStatuses } from './statusFeed';
@@ -184,6 +185,12 @@ export interface NetHooks {
    * naming the call's group.
    */
   onOwnGroup(groupId: bigint | undefined): void;
+  /**
+   * Every call_recording change, as the whole label list (newest first —
+   * ROADMAP Phase 4 増分④). The 録画一覧 decorates the Worker's R2
+   * listing with these; the rows themselves carry no download capability.
+   */
+  onRecordings(labels: RecordingLabelView[]): void;
 }
 
 /**
@@ -595,6 +602,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // same own group_member row the scope feed reads, but as the raw
     // groupId — the call's identity, not a chat affordance (see callFeed.ts).
     wireOwnGroup(c, myIdentity, { isStale: stale, onOwnGroup: hooks.onOwnGroup });
+
+    // The recording labels for the 録画一覧 (ROADMAP Phase 4 増分④).
+    wireRecordings(c, { isStale: stale, onRecordings: hooks.onRecordings });
 
     // The RLS privacy probe for the call registry (the groupChatRowsReceived
     // idea): how many group_call rows — join capabilities — this connection

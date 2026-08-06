@@ -990,10 +990,136 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   方式は **RealtimeKit クラウド録画で決定**（$0.010/分。月10時間録画で約$6）。
   サーバー側合成のため録画者のタブに依存せず、録り直せない録画で事故らない。
   ベータ→GA の課金開始時期と録画ファイルの保存期間・取り出し方法は実装時に再確認
+  ✅ **実装済み（2026-08-06、増分④ — 独立 PR）**: 通話中のメンバーが録画を
+  開始/停止でき、参加者全員（ゲスト含む）に録画中インジケータが出て、完了した
+  録画はアプリの録画一覧からダウンロードできる。課金は再確認済み
+  （2026-08-06 時点もベータ無償のまま。GA 後は録画 $0.010/分＋月 100 分の
+  無料枠 — 公式 Pricing）。設計の要点:
+  ①**権限**: 開始/停止は**承認済みメンバー限定**（ゲスト不可）。録画は会話の
+  永続コピーを作る操作（同意・保管・課金を伴う）で、chat 系の「in-world なら
+  可」より一段重く扱う。強制の分担は増分①の枠内: Worker は録画ルートを
+  **Clerk 経路だけ**に開け（ゲストのホスト発行トークンは 403）、UI の
+  録画トグル・録画一覧は **approved メンバーだけ**に出し（サインイン済みでも
+  未承認ならゲスト扱い — 2 ブラウザ手動テストで signedIn ゲートの不整合を
+  発見して修正）、ラベル reducer（log_group_recording）も approved を
+  サーバー側で要求する。**受け入れた緩さ（明示）**: Worker が検証できるのは
+  「本スペースの Clerk インスタンスでサインインした者」までで、承認状態は
+  SpacetimeDB だけが知る（Worker は SpacetimeDB を読まない — 増分①の分担）。
+  つまり承認前のサインイン済みユーザーが Worker API を直接叩けば録画の
+  開始/停止・一覧・DL は通る — チャット履歴の読みゲート（接続さえあれば
+  読める、chat_message コメントの受け入れ済み判断）と同じ水準の MVP の
+  緩さとして受け入れ、締める必要が出たら「reducer が承認済みメンバーへ
+  発行するケイパビリティを Worker が検証する」将来増分で閉じる（webhook の
+  relay identity と同じ道具立てになるため、その増分でセットで検討 —
+  再発条件・設計方向・実施トリガーは下の**増分⑤候補**に記載）。
+  一覧・DL は**承認済みメンバー全員**（開始者限定にしない: 実ユースは録画を
+  別メンバーが YouTube へ上げる二次利用で、開始者が先に退出しても残りが
+  止められる必要もある）。「通話参加者だけに絞る」案は参加履歴の権威追跡
+  （webhook participantJoined の永続化）を要するため MVP では採らない
+  ②**プリセットの決着（増分②の先送り分）**: 全員 `group_call_participant`
+  のまま確定し、メンバー＝`group_call_host` は**不採用**。can_record が
+  有効化するのはクライアント SDK 直の `meeting.recording.start()` だが、
+  これは `storage_config` を運べない（SDK 型で確認 — 引数は
+  allowMultiple のみ）ため R2 直送（増分0 スパイク⑥）と両立しない。録画の
+  権威はプリセットではなく Worker の member 検証に置く。帰結として UI Kit の
+  RtkRecordingToggle（can_record=false では何も描画しない — 実装確認）は
+  使わず、トグルは call.package 内の自前ボタンが Worker API を呼ぶ。
+  インジケータは **RtkRecordingIndicator をそのまま使う**（recordingUpdate は
+  サーバー側開始でも全参加者の room socket に配信される — 手動テストで実証）
+  ③**R2 直送（ライブスパイク実測 2026-08-06）**: Start Recording に
+  `storage_config`（type=cloudflare、S3 資格情報）を渡すと録画は自前
+  バケットへ直接アップロードされる（INVOKED→UPLOADED→R2 実在まで実測。
+  空会議でも録画は始まり、無人 60 秒で自動停止・アップロードされる）。
+  オブジェクトキーは `recordings/{meetingId}_{epochMs}.mp4` で、**basename は
+  開始レスポンスの `output_file_name` として開始時点に確定**する —
+  メタデータ行との正確な結合キーになる。バケット `kaede-recordings` は
+  Alchemy で IaC 化。**Worker バインディングは張らない**: 録画の R2 経路は
+  storage_config（書き込み）・一覧（ListObjectsV2）・DL（presign）の 3 本とも
+  S3 資格情報を要し、バインディングはどれも代替できない（presign 不可）。
+  S3 一本にすると経路が 1 系統になり、ローカル手動テストも .dev.vars だけで
+  実バケットに向く（バインディングは wrangler dev のローカルシミュレーション
+  に閉じ、実バケットを読めない）。S3 資格情報は R2 権限付き API トークンから
+  導出（access key = トークン ID、secret = トークン値の SHA-256 — 実測）し、
+  CI デプロイジョブが既存の `CLOUDFLARE_API_TOKEN` から導出して
+  `wrangler secret put` で帯域外同期（Alchemy state に平文を残さない —
+  REALTIMEKIT_API_TOKEN の前例。新しい GitHub シークレットは不要。バケット
+  スコープの専用トークンへの差し替えはシークレット値の入れ替えだけででき、
+  コード変更不要の硬化パス）。前提: CLOUDFLARE_API_TOKEN に R2 権限
+  （バケット一覧・S3 PUT で実測 2026-08-06 — README の「R2 権限がない」
+  記述は当時のもの）
+  ④**メタデータの真実源**: 薄い公開テーブル `call_recording`（id・fileName・
+  groupName・starterName・startedAt）。開始者クライアントが Worker start
+  成功後に `log_group_recording(fileName)` で書き、**ラベルはサーバーが
+  権威行から解決**（グループ名は sender の membership が名指す
+  conversation_group、開始者名は player_name — create_zone の placement
+  規則をラベルに適用。クライアントが名乗るのは fileName だけで、形は
+  isRecordingFileNameLike で検証）。書き込み資格は録画と同じくメンバー限定＋
+  call_guard 共用（同じ通話フローの低頻度操作で、クライアント側ミラーが
+  無いため drift の懸念がない）。**状態列は持たない**: 完了（=DL 可能）の
+  真実は R2 に実在するオブジェクトで、一覧 UI は Worker の R2 一覧を起点に
+  この行をラベルとして JOIN する（行が無い・トリムされたオブジェクトは
+  日付だけで並ぶ — 劣化はラベルのみ）。寿命は挿入時トリム
+  RECORDING_HISTORY_MAX=200（chat の前例）で **removePlayer には載せない**
+  （履歴は player 行より長生きする — dm_message の前例）。**RLS は
+  張らない**（chat_message の読みゲート前例: 行は in-world 全接続に見える
+  メタデータで、ファイルへの到達能力は Worker の member ゲートが握る。
+  member 限定 RLS は call_recording と space_member に JOIN の共有列が無く、
+  filter SQL サブセットでは書けない）
+  ⑤**Webhook（recording.statusUpdate）**: Worker が `rtk-signature` を
+  well-known 公開鍵（RSASSA-PKCS1-v1_5 + SHA-256、raw body に対して検証 —
+  再シリアライズ禁止）で検証して Workers Logs に記録する — ERRORED
+  （ファイルが永遠に現れない録画）の運用可視性が目的。**リデューサー中継は
+  この増分では見送り**: 中継には module が信頼する relay identity（Worker の
+  SpacetimeDB 資格情報の発行・配布・ピン留め）の設計が必要で、録画の完了
+  真実は R2 一覧で足りる。VISION が予定する Webhook 中継（課金・Clerk
+  ユーザー削除）の増分で relay 設計とセットで導入する。登録は
+  `scripts/ensure-realtimekit-webhook.sh`（冪等 — 一覧して無ければ作成）
+  ⑥**Worker のルート**: 開始 POST /calls/meetings/{id}/recordings・停止
+  POST …/recordings/stop（アクティブ録画を provider に照会して
+  PUT {action:'stop'} — Worker はここでも状態を持たない）・一覧
+  GET /calls/recordings・DL GET /calls/recordings/{file}/download-url
+  （10 分の presigned URL を返し、ブラウザは R2 から直接ストリーム DL）。
+  認可の分担は増分①のまま: Worker はグループの権威にならない（meeting id の
+  ケイパビリティは group_call 行の RLS）。録画ルートだけ member 限定
+  ⑦実 WebRTC/録画は CI で回せないため、2 ブラウザ手動テスト（フェイク
+  メディア）で「開始→両ブラウザにインジケータ→停止→一覧→DL」と負例
+  （ゲストに録画トグル・録画一覧が出ない）を実証（増分①〜③の規約）
+- **Worker⇄SpacetimeDB の信頼アンカー（増分⑤候補・未実装 — 増分④で顕在化、
+  2026-08-06 記載）**: 「Worker は SpacetimeDB を読まない/書かない」という
+  増分①の分担は、同根の欠落を 2 つ作る — ①Worker が**承認状態を検証できない**
+  （録画一覧/DL がサインインだけで通る — 増分④ 設計①の受け入れた緩さ、
+  Security レビューが HIGH 指摘）②Worker が**信頼される送信者として書けない**
+  （Webhook→リデューサー中継の見送り — 増分④ 設計⑤）。この欠落は「メンバー
+  資格の意味」が Worker 境界を跨ぐ機能のたびに再発する。既知の再発予定:
+  課金 Webhook 中継（Clerk Billing — VISION）、Clerk ユーザー削除 Webhook
+  （Phase 6）、R2 を使う添付/アバターアップロード系、Phase 6 の SaaS
+  コントロールプレーン。**再発しない側**: 「RLS で守られた行にケイパビリティ
+  値を載せ、クライアントが提示する」パターン（group_call の meeting id —
+  増分①）で表現できる認可は現分担のままでよい（録画の開始/停止はこれで
+  守られている）。
+  設計の方向（実装時にライブ検証）: 環境ごとに 1 度設営する相互信頼アンカー
+  （共有鍵 or 鍵対）で両方向を一気に閉じる —
+  ①module→Worker: 承認済みメンバーだけが reducer から得られる**短命の署名付き
+  ケイパビリティ**を Worker が鍵で検証（SpacetimeDB を読まないまま承認を強制。
+  クローズド PR #65 のサービスシークレット方式はこの一般解の局所版）
+  ②Worker→module: Worker の relay identity（ホスト発行トークン）を module が
+  ピン留めし、Webhook 中継リデューサーの送信者検証にする。
+  **実施タイミング（日付ではなくトリガー）**: 遅くとも
+  (a) **kaede.town の URL をコミュニティへ共有する前**（録画一覧/DL の緩さが
+  実リスク化する境界 — ゲート①②「実ユーザー投入前に必ず閉じる」規律の
+  録画版。Phase 4 完了＝移行マイルストーンなので、実質は増分④の次の
+  独立 PR が最安）
+  (b) **最初の Webhook 中継増分（課金 or Clerk 削除）と同時**
+  のどちらか早い方
 - 通話コストの実測とプラン判断（VISION の試算では RealtimeKit
   $0.002/参加者分 ≒ 月$20〜30想定）
 - 録画の透明性: **録画中インジケータを通話参加者全員に表示**する（同意の前提）。
   録画ファイルへのアクセス権（誰が一覧・DL できるか）もここで設計する
+  ✅ **実装済み（2026-08-06、増分④）**: インジケータは UI Kit の
+  RtkRecordingIndicator で通話参加者**全員**（ゲスト含む）に表示される —
+  録画状態は room socket の recordingUpdate で全参加者に配信されるため、
+  誰が開始しても隠れない。アクセス権は増分④の設計①のとおり
+  （開始/停止・一覧・DL とも承認済みメンバー、ゲスト不可）
 - **最低限のアバター（並行アートワークストリーム由来・移行までの必達）**
   ✅ **投入済み（2026-08-05）**: 色付き矩形を廃止し、AI 生成の簡易キャラ 1 種
   （チビ頭身・白シャツの1枚絵）を全プレイヤーに適用。設計の要点:

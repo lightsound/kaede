@@ -54,6 +54,14 @@ const workerNameSlug = (stage: string): string => {
   return slug === '' ? suffix : `${slug}-${suffix}`;
 };
 
+/**
+ * リソース名のステージ規約: prod は素の名前、それ以外は `-<stage>` を付ける。
+ * 固定名にするとステートが分かれていても全ステージが同じ本番リソースを
+ * 取り合える(下の Worker 名コメント参照)ため、全リソースで同じ規約を通す。
+ */
+const stagedName = (stage: string, prodName: string): string =>
+  stage === 'prod' ? prodName : `${prodName}-${workerNameSlug(stage)}`;
+
 export default Alchemy.Stack(
   'kaede',
   {
@@ -83,7 +91,7 @@ export default Alchemy.Stack(
       // 上書き・削除できてしまう。Worker 名に使えるのは英小文字・数字・
       // ハイフンのみで、既定ステージ dev_$USER は $USER 由来の任意文字
       // (ドット等)を含み得るため、使えない文字はまとめて - に潰す。
-      name: stage === 'prod' ? 'kaede' : `kaede-${workerNameSlug(stage)}`,
+      name: stagedName(stage, 'kaede'),
       // ビルドはリポジトリルートで実行する(infra/ からの相対)。
       cwd: '..',
       command: 'pnpm --filter @kaede/client build',
@@ -108,20 +116,43 @@ export default Alchemy.Stack(
       ...(stage === 'prod' ? { domain: 'kaede.town' } : {}),
     });
 
-    // 通話 API Worker(ROADMAP Phase 4 増分①): RealtimeKit のミーティング
-    // 作成・参加トークン発行だけを行う薄いグルー(VISION のバックエンド
-    // 原則)。コードは packages/worker(アプリコード — Alchemy を知らない)。
+    // 録画ファイルの置き場所(ROADMAP Phase 4 増分④): RealtimeKit の
+    // クラウド録画が storage_config で直接アップロードしてくる R2 バケット。
+    // Worker バインディングは意図的に張らない — 録画の R2 経路(直送・一覧・
+    // presigned DL)は 3 本とも S3 資格情報を要し、バインディングはどれも
+    // 代替できない(presign 不可)ため、経路を S3 一本(packages/worker/src/
+    // r2.ts)に統一している。S3 資格情報自体は REALTIMEKIT_API_TOKEN と同じ
+    // 帯域外シークレット(下の CallApi env コメント)。録画はコミュニティの
+    // 資産なので削除ライフサイクルは置かず、失敗したマルチパートアップロード
+    // の破片だけ 7 日で掃除する。
+    const recordings = yield* Cloudflare.R2.Bucket('Recordings', {
+      name: stagedName(stage, 'kaede-recordings'),
+      lifecycleRules: [
+        {
+          id: 'abort-stale-multipart-uploads',
+          abortMultipartUploadsTransition: {
+            condition: { type: 'Age', maxAge: 7 * 24 * 3600 },
+          },
+        },
+      ],
+    });
+
+    // 通話 API Worker(ROADMAP Phase 4 増分①・④): RealtimeKit のミーティング
+    // 作成・参加トークン発行と、録画の開始/停止・一覧・presigned DL だけを
+    // 行う薄いグルー(VISION のバックエンド原則)。コードは
+    // packages/worker(アプリコード — Alchemy を知らない)。
     // クライアント Worker とは分離した別 Worker にする: 静的アセット配信の
     // 構成(assets-only + wrangler.jsonc の逃げ道)を触らずに済み、障害・
     // デプロイの影響半径も交わらない。CORS は Worker 側で ALLOWED_ORIGINS を
     // 完全一致で検査する。ローカル開発は Alchemy を通さず wrangler dev +
     // .dev.vars(README「通話 API Worker」)。
     const callApi = yield* Cloudflare.Worker('CallApi', {
-      name: stage === 'prod' ? 'kaede-call' : `kaede-call-${workerNameSlug(stage)}`,
+      name: stagedName(stage, 'kaede-call'),
       main: '../packages/worker/src/index.ts',
       compatibility: { date: '2026-08-01' },
       env: {
-        // シークレット REALTIMEKIT_API_TOKEN は意図的にここに無い:
+        // シークレット REALTIMEKIT_API_TOKEN・R2_ACCESS_KEY_ID・
+        // R2_SECRET_ACCESS_KEY は意図的にここに無い:
         // Alchemy のステート(git コミット対象 — README「Alchemy の
         // ステート管理」の注意書き)は Redacted 値も平文で保存することを
         // 実測済み(2026-08-05、dev ステージで確認)。シークレットは
@@ -147,6 +178,9 @@ export default Alchemy.Stack(
         // 「通話 API Worker」)。
         SPACETIME_HOST_URL: 'https://maincloud.spacetimedb.com',
         ALLOWED_ORIGINS: 'https://kaede.town,https://kaede.kaede-751.workers.dev',
+        // 録画バケット名(公開識別子)。リソース出力を参照することで
+        // 「バケットが先・Worker が後」の依存が型で立つ。
+        RECORDINGS_BUCKET: recordings.bucketName,
       },
     });
 

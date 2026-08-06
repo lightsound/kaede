@@ -4,12 +4,18 @@ import {
   bearerTokenFrom,
   callerKindOf,
   guestSubjectFrom,
+  parseBucketListing,
   participantNameFrom,
+  RECORDINGS_PREFIX,
+  recordingObjectKey,
   routeCallRequest,
+  routeIsMemberOnly,
+  summarizeRecordingEvent,
   unverifiedIssuerOf,
 } from '../src/rules';
 
 const MEETING_ID = 'bbb8280d-7d30-430b-a3a0-78802ed5617c';
+const FILE_NAME = `${MEETING_ID}_1785992667838.mp4`;
 
 describe('routeCallRequest', () => {
   it('POST /calls/meetings はミーティング作成', () => {
@@ -25,10 +31,113 @@ describe('routeCallRequest', () => {
     expect(routeCallRequest('POST', '/calls/meetings//participants')).toBeUndefined();
   });
 
-  it('POST 以外・知らないパスはルーティングしない', () => {
+  it('録画の開始/停止ルート(UUID 形式のみ)', () => {
+    expect(routeCallRequest('POST', `/calls/meetings/${MEETING_ID}/recordings`)).toEqual({
+      kind: 'record-start',
+      meetingId: MEETING_ID,
+    });
+    expect(routeCallRequest('POST', `/calls/meetings/${MEETING_ID}/recordings/stop`)).toEqual({
+      kind: 'record-stop',
+      meetingId: MEETING_ID,
+    });
+    expect(routeCallRequest('POST', '/calls/meetings/not-a-uuid/recordings')).toBeUndefined();
+    expect(routeCallRequest('GET', `/calls/meetings/${MEETING_ID}/recordings`)).toBeUndefined();
+  });
+
+  it('録画の一覧/DL ルート(ファイル名はプロバイダ命名形のみ)', () => {
+    expect(routeCallRequest('GET', '/calls/recordings')).toEqual({ kind: 'recordings-list' });
+    expect(routeCallRequest('GET', `/calls/recordings/${FILE_NAME}/download-url`)).toEqual({
+      kind: 'recording-download',
+      fileName: FILE_NAME,
+    });
+    expect(routeCallRequest('GET', '/calls/recordings/evil.txt/download-url')).toBeUndefined();
+    expect(
+      routeCallRequest('GET', '/calls/recordings/..%2Fsecret.mp4/download-url'),
+    ).toBeUndefined();
+    expect(routeCallRequest('POST', '/calls/recordings')).toBeUndefined();
+  });
+
+  it('POST/GET 以外・知らないパスはルーティングしない', () => {
     expect(routeCallRequest('GET', '/calls/meetings')).toBeUndefined();
+    expect(routeCallRequest('PUT', '/calls/recordings')).toBeUndefined();
     expect(routeCallRequest('POST', '/calls')).toBeUndefined();
     expect(routeCallRequest('POST', `/calls/meetings/${MEETING_ID}`)).toBeUndefined();
+  });
+});
+
+describe('routeIsMemberOnly', () => {
+  it('録画系ルートだけがメンバー限定(通話系はゲストも通る — 増分②)', () => {
+    expect(routeIsMemberOnly({ kind: 'provision' })).toBe(false);
+    expect(routeIsMemberOnly({ kind: 'mint', meetingId: MEETING_ID })).toBe(false);
+    expect(routeIsMemberOnly({ kind: 'record-start', meetingId: MEETING_ID })).toBe(true);
+    expect(routeIsMemberOnly({ kind: 'record-stop', meetingId: MEETING_ID })).toBe(true);
+    expect(routeIsMemberOnly({ kind: 'recordings-list' })).toBe(true);
+    expect(routeIsMemberOnly({ kind: 'recording-download', fileName: FILE_NAME })).toBe(true);
+  });
+});
+
+describe('recordingObjectKey', () => {
+  it('recordings プレフィックス配下のキーを組む', () => {
+    expect(RECORDINGS_PREFIX).toBe('recordings');
+    expect(recordingObjectKey(FILE_NAME)).toBe(`${RECORDINGS_PREFIX}/${FILE_NAME}`);
+  });
+});
+
+describe('parseBucketListing', () => {
+  // The live ListObjectsV2 shape (2026-08-06 spike, abbreviated).
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>kaede-recordings</Name><Contents><Key>recordings/${FILE_NAME}</Key><Size>159134</Size><LastModified>2026-08-06T05:05:35.226Z</LastModified><ETag>&quot;31a8&quot;</ETag></Contents><Contents><Key>spike.txt</Key><Size>11</Size><LastModified>2026-08-06T05:02:18.315Z</LastModified></Contents><Contents><Key>recordings/not-a-recording.bin</Key><Size>5</Size><LastModified>2026-08-06T05:02:18.315Z</LastModified></Contents></ListBucketResult>`;
+
+  it('recordings/ 配下のプロバイダ命名オブジェクトだけを返す', () => {
+    expect(parseBucketListing(xml)).toEqual([
+      { fileName: FILE_NAME, size: 159134, uploadedAt: '2026-08-06T05:05:35.226Z' },
+    ]);
+  });
+
+  it('空・壊れた XML は空配列', () => {
+    expect(parseBucketListing('')).toEqual([]);
+    expect(parseBucketListing('<ListBucketResult></ListBucketResult>')).toEqual([]);
+    expect(parseBucketListing('<Contents><Key>recordings/x.mp4</Key></Contents>')).toEqual([]);
+  });
+});
+
+describe('summarizeRecordingEvent', () => {
+  it('recording.statusUpdate をダウンロード URL 抜きで要約する', () => {
+    const payload = {
+      event: 'recording.statusUpdate',
+      recording: {
+        id: 'rec-1',
+        status: 'UPLOADED',
+        outputFileName: FILE_NAME,
+        downloadUrl: 'https://example.com/secret-download',
+        errMessage: null,
+      },
+    };
+    const summary = summarizeRecordingEvent(payload);
+    expect(summary).toEqual({
+      event: 'recording.statusUpdate',
+      recordingId: 'rec-1',
+      status: 'UPLOADED',
+      fileName: FILE_NAME,
+      error: '',
+    });
+    expect(JSON.stringify(summary)).not.toContain('secret-download');
+  });
+
+  it('イベント形でない body は null', () => {
+    expect(summarizeRecordingEvent(null)).toBeNull();
+    expect(summarizeRecordingEvent('x')).toBeNull();
+    expect(summarizeRecordingEvent({})).toBeNull();
+    expect(summarizeRecordingEvent({ event: 42 })).toBeNull();
+  });
+
+  it('recording の無いイベント(meeting.started 等)も event 名は要約できる', () => {
+    expect(summarizeRecordingEvent({ event: 'meeting.started' })).toEqual({
+      event: 'meeting.started',
+      recordingId: '',
+      status: '',
+      fileName: '',
+      error: '',
+    });
   });
 });
 

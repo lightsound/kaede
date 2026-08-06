@@ -32,13 +32,18 @@ describe('acquireCallTicket', () => {
   it('登録済みミーティングがあれば作成せずトークン発行だけ行う', async () => {
     const deps = makeDeps();
     const ticket = await acquireCallTicket(deps);
-    expect(ticket).toEqual({ groupId: GROUP, authToken: `token-for-${REGISTERED}` });
+    expect(ticket).toEqual({
+      groupId: GROUP,
+      meetingId: REGISTERED,
+      authToken: `token-for-${REGISTERED}`,
+    });
     expect(deps.calls).toEqual([`mint:${REGISTERED}`]);
   });
 
   it('未登録なら作成→登録→発行の順で進む(通話開始)', async () => {
     const deps = makeDeps({ ownGroupCall: () => ({ groupId: GROUP, meetingId: undefined }) });
     const ticket = await acquireCallTicket(deps);
+    expect(ticket.meetingId).toBe(PROVISIONED);
     expect(ticket.authToken).toBe(`token-for-${PROVISIONED}`);
     expect(deps.calls).toEqual(['provision', `register:${PROVISIONED}`, `mint:${PROVISIONED}`]);
   });

@@ -45,6 +45,7 @@ import EnterPortalReducer from "./enter_portal_reducer";
 import JoinReducer from "./join_reducer";
 import JoinHuddleReducer from "./join_huddle_reducer";
 import LeaveHuddleReducer from "./leave_huddle_reducer";
+import LogGroupRecordingReducer from "./log_group_recording_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
 import RegisterGroupCallReducer from "./register_group_call_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
@@ -63,6 +64,7 @@ import UpdateZoneReducer from "./update_zone_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import CallRecordingRow from "./call_recording_table";
 import ChatMessageRow from "./chat_message_table";
 import ConversationGroupRow from "./conversation_group_table";
 import DmMessageRow from "./dm_message_table";
@@ -79,6 +81,17 @@ import SpaceSettingRow from "./space_setting_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  callRecording: __table({
+    name: 'call_recording',
+    indexes: [
+      { accessor: 'id', name: 'call_recording_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'call_recording_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CallRecordingRow),
   chatMessage: __table({
     name: 'chat_message',
     indexes: [
@@ -236,6 +249,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join", JoinReducer),
   __reducerSchema("join_huddle", JoinHuddleReducer),
   __reducerSchema("leave_huddle", LeaveHuddleReducer),
+  __reducerSchema("log_group_recording", LogGroupRecordingReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
   __reducerSchema("register_group_call", RegisterGroupCallReducer),
   __reducerSchema("reject_member", RejectMemberReducer),

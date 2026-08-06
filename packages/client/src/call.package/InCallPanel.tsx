@@ -9,12 +9,21 @@ import {
   RtkLeaveButton,
   RtkMicToggle,
   RtkParticipantsAudio,
+  RtkRecordingIndicator,
   RtkScreenShareToggle,
   RtkSettingsToggle,
   RtkUiProvider,
 } from '@cloudflare/realtimekit-react-ui';
-import type { CSSProperties } from 'react';
-import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
+import { type CSSProperties, useEffect, useState } from 'react';
+import {
+  UI_BUTTON_BG,
+  UI_ERROR_COLOR,
+  UI_FONT,
+  UI_GOLD_BORDER,
+  UI_PANEL_BG,
+  UI_TEXT_COLOR,
+} from '../theme';
+import { blurringClick } from '../ui.package';
 import type { Meeting } from './realtimekit';
 
 // The prebuilt in-call UI (ROADMAP Phase 4 増分③). These imports are legal
@@ -95,19 +104,129 @@ const dockLanguage = makeRtkLanguage({
   'audio_playback.title': '音声を再生',
   'audio_playback.description': 'ブラウザの自動再生制限のため、クリックで通話音声を有効にします。',
   audio_playback: '音声を有効にする',
+  // The recording indicator (増分④ — the transparency rule: every
+  // participant sees it, whoever started the recording).
+  'recording.label': '録画中',
+  'recording.indicator': 'この通話は録画されています',
 });
+
+/** What the recording toggle calls — CallDock binds these to the Worker API. */
+export interface RecordingHandlers {
+  /** Starts the recording and logs its label row; rejects on refusal. */
+  start(): Promise<void>;
+  /** Stops the active recording; resolves even when none is active. */
+  stop(): Promise<void>;
+}
+
+const recordButtonStyle: CSSProperties = {
+  padding: '2px 8px',
+  borderRadius: 6,
+  border: UI_GOLD_BORDER,
+  background: UI_BUTTON_BG,
+  color: UI_TEXT_COLOR,
+  font: 'inherit',
+  cursor: 'pointer',
+  flexShrink: 0,
+};
+
+/**
+ * The provider-side recording state this client currently observes.
+ * Subscribed exactly like the UI Kit's own recording parts (the
+ * recordingUpdate room event), so it reflects every start/stop whoever
+ * caused it — our Worker, another member, the unattended auto-stop.
+ */
+function useRecordingState(meeting: Meeting): string {
+  const [state, setState] = useState<string>(meeting.recording.recordingState);
+  useEffect(() => {
+    setState(meeting.recording.recordingState);
+    const listener = (next: string) => setState(next);
+    meeting.recording.addListener('recordingUpdate', listener);
+    return () => {
+      meeting.recording.removeListener('recordingUpdate', listener);
+    };
+  }, [meeting]);
+  return state;
+}
+
+/** The provider states collapsed to what the toggle rules on. */
+type RecordingPhase = 'idle' | 'recording' | 'transitional';
+
+function recordingPhaseOf(state: string): RecordingPhase {
+  if (state === 'RECORDING' || state === 'PAUSED') return 'recording';
+  return state === 'IDLE' ? 'idle' : 'transitional';
+}
+
+/** The button's face for one phase (disabled while anything is in flight). */
+function toggleFace(phase: RecordingPhase, busy: boolean): { label: string; disabled: boolean } {
+  return {
+    label: phase === 'recording' ? '⏹ 録画停止' : '⏺ 録画開始',
+    disabled: busy || phase === 'transitional',
+  };
+}
+
+/**
+ * The recording toggle (増分④) — deliberately NOT the UI Kit's
+ * RtkRecordingToggle: that component renders only under a can_record
+ * preset and dials the provider from the CLIENT, which cannot carry the
+ * storage_config that sends the file to our R2 bucket. This button asks
+ * our Worker instead (members only — CallDock offers it to signed-in
+ * members, and the Worker 403s anyone else); what it SHOWS still comes
+ * from the same room state the indicator renders. The helpers above are
+ * split out to keep every uncovered function under the CRAP budget.
+ */
+function RecordingToggle({ meeting, handlers }: { meeting: Meeting; handlers: RecordingHandlers }) {
+  const phase = recordingPhaseOf(useRecordingState(meeting));
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const face = toggleFace(phase, busy);
+  const toggle = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      await (phase === 'recording' ? handlers.stop() : handlers.start());
+    } catch (err) {
+      console.error('recording toggle failed', err);
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        style={recordButtonStyle}
+        disabled={face.disabled}
+        onClick={blurringClick(() => void toggle())}
+      >
+        {face.label}
+      </button>
+      {failed && <span style={{ color: UI_ERROR_COLOR }}>録画の操作に失敗しました</span>}
+    </>
+  );
+}
 
 /**
  * The ongoing call, assembled from the UI Kit's parts: the participant
  * grid (which also lays out shared screens), the control bar toggles, the
  * remote audio sink, and the dialog manager (device settings and the
  * leave confirmation render through it). RtkUiProvider syncs the meeting
- * and the toggles' state into every Rtk child.
+ * and the toggles' state into every Rtk child. The recording indicator
+ * renders for EVERYONE (the 増分④ transparency rule); the recording
+ * toggle only when the dock handed handlers (signed-in members).
  */
-export function InCallPanel({ meeting }: { meeting: Meeting }) {
+export function InCallPanel({
+  meeting,
+  recording,
+}: {
+  meeting: Meeting;
+  /** The member-only recording control, or undefined for guests. */
+  recording: RecordingHandlers | undefined;
+}) {
   return (
     <div style={inCallStyle}>
       <RtkUiProvider meeting={meeting} t={dockLanguage}>
+        <RtkRecordingIndicator meeting={meeting} />
         <div style={stageStyle}>
           <RtkGrid style={{ width: '100%', height: '100%' }} />
         </div>
@@ -116,6 +235,7 @@ export function InCallPanel({ meeting }: { meeting: Meeting }) {
           <RtkCameraToggle size="sm" />
           <RtkScreenShareToggle size="sm" />
           <RtkSettingsToggle size="sm" />
+          {recording !== undefined && <RecordingToggle meeting={meeting} handlers={recording} />}
           <RtkLeaveButton size="sm" />
         </div>
         <RtkParticipantsAudio />
