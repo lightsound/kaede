@@ -156,12 +156,11 @@ async function joinCall(ctx: JoinContext): Promise<void> {
  * undefined for guests. Since 増分⑥ both handlers name only the ticket's
  * GROUP: the module resolves the meeting from its own group_call row and
  * writes the label row itself, so the dock keeps no meeting id and no
- * label write. The group must come from the ticket, not the live
- * membership: in the auto-leave window (walked away, teardown pending)
- * the membership already names elsewhere, and a control clicked there
- * must still address the call the session is on. The gate is cosmetic
- * like every UI gate — the procedures re-check approved membership
- * server-side.
+ * label write. The ticket's group is the module's consistency check —
+ * a control clicked in the auto-leave window (walked away, teardown
+ * pending, membership already elsewhere) refuses loudly instead of
+ * addressing the NEW group's call. The gate is cosmetic like every UI
+ * gate — the procedures re-check approved membership server-side.
  */
 function recordingHandlersFor(
   member: boolean,

@@ -227,12 +227,13 @@ export interface NetApi {
    * Starts / stops the cloud recording of the ticket-named group's call
    * (start_group_recording / stop_group_recording — 承認済みメンバー
    * 限定, enforced server-side; the dock's member gate is cosmetic).
-   * `groupId` is the join ticket's group, so the control stays bound to
-   * the call the WebRTC session is on even when the live membership has
-   * already moved elsewhere; the module resolves the meeting from its
-   * own group_call row and writes the label row itself. Both reject on
-   * refusal; a stop with nothing to stop resolves (the benign race —
-   * auto-stop, another member stopped first).
+   * `groupId` is the join ticket's group — a consistency check the
+   * module verifies against the sender's live membership, so a control
+   * clicked in the auto-leave window (membership already moved) refuses
+   * instead of addressing the new group's call; the module resolves the
+   * meeting from its own group_call row and writes the label row itself.
+   * Both reject on refusal; a stop with nothing to stop resolves (the
+   * benign race — auto-stop, another member stopped first).
    */
   startGroupRecording(groupId: bigint): Promise<void>;
   stopGroupRecording(groupId: bigint): Promise<void>;

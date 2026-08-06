@@ -217,14 +217,16 @@ function recordingCallOf(tx: Ctx, procedureName: string, groupId: bigint) {
  * The recording controls' charge transaction: the posting preamble PLUS
  * the approved-member gate (録画は承認済みメンバー限定 — 増分④ 設計①),
  * the registered call of the group the CLIENT's in-call ticket named,
- * and the charge. The group comes from the ticket rather than the
- * sender's group_member row because membership can move on (walking off
- * mid-call) before the WebRTC teardown finishes, and a control clicked
- * in that window must still address the call the session is on — never
- * the new group's call. The authority stays the approved-member gate,
- * exactly the retired Worker's contract (it took the meeting id from
- * the client under the same gate). Undefined marks the reclaimed sender
- * (the joinSetupIn contract).
+ * and the charge. The ticket's groupId is a CONSISTENCY CHECK, not an
+ * authority transfer: the sender's live membership must still name that
+ * group, or the call is refused — so a control clicked in the auto-leave
+ * window (walked off mid-call, WebRTC teardown pending, membership
+ * already elsewhere) refuses loudly instead of silently addressing the
+ * NEW group's call (a Bugbot finding), while a guessed groupId for a
+ * group the sender is not in buys nothing (group ids are sequential and
+ * guessable, unlike the retired Worker's meeting-id capability — naming
+ * alone must not open another conversation's recording controls).
+ * Undefined marks the reclaimed sender (the joinSetupIn contract).
  */
 function recordingControlSetupIn(
   tx: Ctx,
@@ -234,6 +236,10 @@ function recordingControlSetupIn(
   const rows = findPostingSender(tx, procedureName);
   if (!rows) return undefined;
   requireApprovedMember(tx, procedureName);
+  const member = tx.db.groupMember.identity.find(tx.sender);
+  if (member === null || member.groupId !== groupId) {
+    throw new SenderError(`${procedureName} refused (not-in-that-group)`);
+  }
   const call = recordingCallOf(tx, procedureName, groupId);
   const cfg = callConfigOf(tx, procedureName);
   chargeCallAllowance(tx, procedureName);
