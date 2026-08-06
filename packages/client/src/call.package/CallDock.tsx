@@ -229,19 +229,22 @@ async function joinCall(ctx: JoinContext): Promise<void> {
       mintToken: (meetingId) => mintCallToken(ctx.getToken, meetingId, ctx.ownName ?? ''),
       delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     });
+    // onEnded can beat the lines after the dial (kicked mid-handshake):
+    // the dead meeting must not repopulate the ref — the unmount
+    // cleanup's and the next join's only teardown handle — nor overwrite
+    // the idle phase with its in-call panel.
+    let ended = false;
     const meeting = await dialMeeting({
       authToken: ticket.authToken,
       onEnded: () => {
+        ended = true;
         ctx.meetingRef.current = undefined;
         ctx.setPhase(() => ({ kind: 'idle' }));
       },
     });
+    if (ended) return;
     ctx.meetingRef.current = meeting;
-    // onEnded can beat this line (kicked mid-handshake): an idle phase
-    // must not be overwritten with a dead meeting's in-call panel.
-    ctx.setPhase((current) =>
-      current.kind === 'idle' ? current : { kind: 'in-call', groupId: ticket.groupId, meeting },
-    );
+    ctx.setPhase(() => ({ kind: 'in-call', groupId: ticket.groupId, meeting }));
   } catch (err) {
     console.error('call join failed', err);
     ctx.setPhase(() => ({ kind: 'idle', notice: '通話に参加できませんでした' }));
