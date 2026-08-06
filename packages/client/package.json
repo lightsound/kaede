@@ -12,6 +12,7 @@
   "dependencies": {
     "@clerk/react": "^6.12.9",
     "@cloudflare/realtimekit": "2.0.1",
+    "@cloudflare/realtimekit-react-ui": "2.0.1",
     "@kaede/shared": "workspace:*",
     "pixi.js": "^8.19.0",
     "posthog-js": "^1.410.4",

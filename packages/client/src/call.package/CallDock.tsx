@@ -1,5 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a React control over the call flow and live media tracks; needs a DOM and WebRTC, and no DOM test environment is configured. The sequencing rules live in flow.ts (unit-tested); the provider seam is provider.ts
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+// fallow-ignore-file coverage-gaps -- a React control over the call flow; needs a DOM and WebRTC, and no DOM test environment is configured. The sequencing rules live in flow.ts (unit-tested); the UI Kit panel is InCallPanel.tsx (lazy-loaded)
+import { type CSSProperties, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { AuthTokenGetter } from '../net.package';
 import {
   UI_BUTTON_BG,
@@ -12,8 +12,11 @@ import {
 import { blurringClick } from '../ui.package';
 import { mintCallToken, provisionMeeting } from './api';
 import { acquireCallTicket } from './flow';
-import type { CallSession, CallSnapshot, CallTile } from './provider';
-import { realtimeKitProvider } from './realtimekit';
+import { dialMeeting, type Meeting } from './realtimekit';
+
+// The UI Kit (hls.js, @floating-ui, hark, lodash-es, …) lives only in
+// InCallPanel — lazy so idle players never download it (a review finding).
+const InCallPanel = lazy(() => import('./InCallPanel').then((m) => ({ default: m.InCallPanel })));
 
 // Stacked above the huddle control in the profile corner (bottom-left):
 // a call is something you do from the conversation group you stand in,
@@ -52,160 +55,6 @@ const buttonStyle: CSSProperties = {
   flexShrink: 0,
 };
 
-const tileStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 2,
-  width: 120,
-};
-
-const videoStyle: CSSProperties = {
-  width: 120,
-  height: 90,
-  borderRadius: 6,
-  background: '#000',
-  objectFit: 'cover',
-};
-
-// Screen shares render wider and letterboxed (contain, not cover): a
-// shared document's edges are the content, unlike a camera's headroom.
-const screenStyle: CSSProperties = {
-  width: 360,
-  height: 202,
-  borderRadius: 6,
-  background: '#000',
-  objectFit: 'contain',
-};
-
-/** Attaches a live MediaStreamTrack to a media element (or detaches it). */
-function useTrack(ref: { current: HTMLMediaElement | null }, track: MediaStreamTrack | undefined) {
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    if (track === undefined) {
-      element.srcObject = null;
-      return;
-    }
-    element.srcObject = new MediaStream([track]);
-    element.play().catch(() => {
-      // Autoplay refusals self-heal: the user is already interacting with
-      // the dock (they clicked to join), and the next toggle re-plays.
-    });
-    return () => {
-      element.srcObject = null;
-    };
-  }, [ref, track]);
-}
-
-function VideoTile({ tile }: { tile: CallTile }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  useTrack(videoRef, tile.videoTrack);
-  useTrack(audioRef, tile.audioTrack);
-  return (
-    <div style={tileStyle}>
-      {tile.videoTrack !== undefined ? (
-        // The self preview is muted by contract (its audio never plays);
-        // remote tiles carry audio on the sibling element below.
-        <video ref={videoRef} style={videoStyle} autoPlay playsInline muted />
-      ) : (
-        <div
-          style={{ ...videoStyle, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          📷 オフ
-        </div>
-      )}
-      {!tile.isSelf && (
-        // biome-ignore lint/a11y/useMediaCaption: ライブ通話音声にキャプションは存在しない(文字起こしは将来の増分)
-        <audio ref={audioRef} autoPlay />
-      )}
-      <span>{tile.isSelf ? `${tile.name}(自分)` : tile.name}</span>
-    </div>
-  );
-}
-
-/** One ongoing screen share: the shared video plus its tab audio if any. */
-function ScreenTile({ tile }: { tile: CallTile }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  useTrack(videoRef, tile.screenTrack);
-  useTrack(audioRef, tile.screenAudioTrack);
-  return (
-    <div style={{ ...tileStyle, width: 360 }}>
-      {/* Muted by contract: a share's audio (a shared tab's sound) plays on
-          the sibling element, which the provider only fills for remotes. */}
-      <video ref={videoRef} style={screenStyle} autoPlay playsInline muted />
-      {/* biome-ignore lint/a11y/useMediaCaption: ライブ通話音声にキャプションは存在しない(文字起こしは将来の増分) */}
-      <audio ref={audioRef} autoPlay />
-      <span>🖥️ {tile.isSelf ? `${tile.name}(自分)` : tile.name}</span>
-    </div>
-  );
-}
-
-/** The local media controls row — split from InCallPanel (the CRAP budget). */
-function CallControls({ session, snapshot }: { session: CallSession; snapshot: CallSnapshot }) {
-  return (
-    <div style={rowStyle}>
-      <button
-        type="button"
-        style={buttonStyle}
-        onClick={blurringClick(() => void session.setMic(!snapshot.micOn).catch(() => {}))}
-      >
-        {snapshot.micOn ? '🎤 ミュート' : '🎤 オン'}
-      </button>
-      <button
-        type="button"
-        style={buttonStyle}
-        onClick={blurringClick(() => void session.setCamera(!snapshot.cameraOn).catch(() => {}))}
-      >
-        {snapshot.cameraOn ? '📷 オフ' : '📷 オン'}
-      </button>
-      <button
-        type="button"
-        style={buttonStyle}
-        onClick={blurringClick(
-          // A cancelled share picker rejects — swallowed like every other
-          // media refusal; the browser's own stop-share bar also lands
-          // here as a provider-side update, not through this toggle.
-          () => void session.setScreenShare(!snapshot.screenShareOn).catch(() => {}),
-        )}
-      >
-        {snapshot.screenShareOn ? '🖥️ 共有停止' : '🖥️ 画面共有'}
-      </button>
-      <button
-        type="button"
-        style={buttonStyle}
-        onClick={blurringClick(() => void session.leave().catch(() => {}))}
-      >
-        退出
-      </button>
-    </div>
-  );
-}
-
-/** The ongoing call: shared screens, everyone's tiles, the media controls. */
-function InCallPanel({ session, snapshot }: { session: CallSession; snapshot: CallSnapshot }) {
-  const sharing = snapshot.tiles.filter((tile) => tile.screenTrack !== undefined);
-  return (
-    <div style={panelStyle}>
-      {sharing.length > 0 && (
-        <div style={rowStyle}>
-          {sharing.map((tile) => (
-            <ScreenTile key={tile.key} tile={tile} />
-          ))}
-        </div>
-      )}
-      <div style={rowStyle}>
-        {snapshot.tiles.map((tile) => (
-          <VideoTile key={tile.key} tile={tile} />
-        ))}
-      </div>
-      <CallControls session={session} snapshot={snapshot} />
-    </div>
-  );
-}
-
 /** The out-of-call offer: one button, plus the last failure if any. */
 function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () => void }) {
   return (
@@ -224,7 +73,7 @@ function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () 
 type CallPhase =
   | { kind: 'idle'; notice?: string }
   | { kind: 'joining' }
-  | { kind: 'in-call'; groupId: bigint; session: CallSession; snapshot: CallSnapshot };
+  | { kind: 'in-call'; groupId: bigint; meeting: Meeting };
 
 /**
  * Whether the dock renders nothing: disconnected, or out of every
@@ -254,36 +103,25 @@ interface JoinContext {
   getToken: AuthTokenGetter;
   ownName: string | undefined;
   setPhase: (update: (current: CallPhase) => CallPhase) => void;
-  sessionRef: { current: CallSession | undefined };
+  meetingRef: { current: Meeting | undefined };
   /** The in-flight latch: a double-click must not start two pipelines. */
   joiningRef: { current: boolean };
 }
 
 /**
  * The whole join sequence: acquire the ticket (flow.ts — provisioning and
- * registering the meeting when the group has none), dial the provider, and
- * publish every snapshot into the dock's phase. Failures land back in the
- * idle phase with a notice; the provider's onEnded resets the phase on
- * every exit path (own leave, kick, meeting end).
+ * registering the meeting when the group has none), dial in, and hand the
+ * live meeting to the in-call phase. Failures land back in the idle phase
+ * with a notice; the dial's onEnded resets the phase on every exit path
+ * (own leave, kick, meeting end).
  */
 async function joinCall(ctx: JoinContext): Promise<void> {
   // The latch, ref-based because two clicks can land before React renders
   // the joining phase (a review finding): the second becomes a no-op
-  // instead of a parallel pipeline whose session nothing would track.
+  // instead of a parallel pipeline whose meeting nothing would track.
   if (ctx.joiningRef.current) return;
   ctx.joiningRef.current = true;
   ctx.setPhase(() => ({ kind: 'joining' }));
-  // Snapshots can fire DURING the provider join (joining a call someone is
-  // already in emits participantJoined mid-handshake), i.e. before the
-  // session handle below exists — buffered until it does, so the phase
-  // updater never touches an uninitialized binding (a ReferenceError the
-  // first two-party manual test actually hit).
-  let live: CallSession | undefined;
-  let buffered: CallSnapshot | undefined;
-  const publishInCall = (session: CallSession, snapshot: CallSnapshot, groupId: bigint): void =>
-    ctx.setPhase((current) =>
-      current.kind === 'idle' ? current : { kind: 'in-call', groupId, session, snapshot },
-    );
   try {
     const ticket = await acquireCallTicket({
       ownGroupCall: () => ctx.net.ownGroupCall(),
@@ -292,25 +130,22 @@ async function joinCall(ctx: JoinContext): Promise<void> {
       mintToken: (meetingId) => mintCallToken(ctx.getToken, meetingId, ctx.ownName ?? ''),
       delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     });
-    const session = await realtimeKitProvider.join({
+    // onEnded can beat the lines after the dial (kicked mid-handshake):
+    // the dead meeting must not repopulate the ref — the unmount
+    // cleanup's and the next join's only teardown handle — nor overwrite
+    // the idle phase with its in-call panel.
+    let ended = false;
+    const meeting = await dialMeeting({
       authToken: ticket.authToken,
-      onSnapshot: (snapshot) => {
-        if (live === undefined) {
-          buffered = snapshot;
-          return;
-        }
-        publishInCall(live, snapshot, ticket.groupId);
-      },
       onEnded: () => {
-        ctx.sessionRef.current = undefined;
+        ended = true;
+        ctx.meetingRef.current = undefined;
         ctx.setPhase(() => ({ kind: 'idle' }));
       },
     });
-    live = session;
-    ctx.sessionRef.current = session;
-    // The provider publishes at least once right after joining, so the
-    // buffer is filled by the time the handle lands.
-    if (buffered !== undefined) publishInCall(session, buffered, ticket.groupId);
+    if (ended) return;
+    ctx.meetingRef.current = meeting;
+    ctx.setPhase(() => ({ kind: 'in-call', groupId: ticket.groupId, meeting }));
   } catch (err) {
     console.error('call join failed', err);
     ctx.setPhase(() => ({ kind: 'idle', notice: '通話に参加できませんでした' }));
@@ -320,15 +155,15 @@ async function joinCall(ctx: JoinContext): Promise<void> {
 }
 
 /**
- * The call dock (ROADMAP Phase 4 増分①〜②): joins the conversation
+ * The call dock (ROADMAP Phase 4 増分①〜③): joins the conversation
  * group's call — provisioning and registering its meeting when it has
- * none — and renders the ongoing call's tiles, shared screens and media
- * toggles. Offered to everyone in a conversation group, guests included
- * (増分② — the api layer falls back to the connection's host-issued
- * token, which the Worker verifies); outside a group there is no call to
- * join. Leaving the group in any way (walking off, switching, getting
- * swept) ends the participation: the auto-leave effect below watches the
- * own-group signal.
+ * none — and renders the ongoing call with the UI Kit's prebuilt parts
+ * (lazy InCallPanel). Offered to everyone in a conversation group, guests
+ * included (増分② — the api layer falls back to the connection's
+ * host-issued token, which the Worker verifies); outside a group there is
+ * no call to join. Leaving the group in any way (walking off, switching,
+ * getting swept) ends the participation: the auto-leave effect below
+ * watches the own-group signal.
  */
 export function CallDock({
   connected,
@@ -346,26 +181,26 @@ export function CallDock({
   net: CallDockNet;
 }) {
   const [phase, setPhase] = useState<CallPhase>({ kind: 'idle' });
-  // The live session for the unmount cleanup — state would be stale there.
-  const sessionRef = useRef<CallSession>(undefined);
+  // The live meeting for the unmount cleanup — state would be stale there.
+  const meetingRef = useRef<Meeting>(undefined);
   // See JoinContext.joiningRef.
   const joiningRef = useRef(false);
 
   // The auto-leave watch: a call is the GROUP's, so the session ends the
   // moment the membership stops naming its group (walked away, switched
-  // conversations, swept from the world). The provider fires onEnded on
+  // conversations, swept from the world). The dial's onEnded fires on
   // leave(), which resets the phase.
   useEffect(() => {
     if (phase.kind !== 'in-call') return;
-    if (ownGroupId !== phase.groupId) void phase.session.leave().catch(() => {});
+    if (ownGroupId !== phase.groupId) void phase.meeting.leave().catch(() => {});
   }, [phase, ownGroupId]);
 
   // Unmount cleanup (auth remount, App teardown): the WebRTC session
   // outlives no component. Ref-based so it never re-runs mid-call.
   useEffect(
     () => () => {
-      void sessionRef.current?.leave().catch(() => {});
-      sessionRef.current = undefined;
+      void meetingRef.current?.leave().catch(() => {});
+      meetingRef.current = undefined;
     },
     [],
   );
@@ -373,12 +208,19 @@ export function CallDock({
   if (dockHidden(connected, ownGroupId, phase)) return null;
   if (phase.kind === 'joining') return <div style={panelStyle}>📞 通話に接続中…</div>;
   if (phase.kind === 'in-call') {
-    return <InCallPanel session={phase.session} snapshot={phase.snapshot} />;
+    // Same copy as the joining phase — the chunk download is usually
+    // shorter than the dial, so reusing the string avoids inventing a
+    // third transient.
+    return (
+      <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
+        <InCallPanel meeting={phase.meeting} />
+      </Suspense>
+    );
   }
   return (
     <IdlePanel
       notice={phase.notice}
-      onJoin={() => void joinCall({ net, getToken, ownName, setPhase, sessionRef, joiningRef })}
+      onJoin={() => void joinCall({ net, getToken, ownName, setPhase, meetingRef, joiningRef })}
     />
   );
 }
