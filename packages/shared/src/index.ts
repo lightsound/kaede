@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './capability';
 export * from './chat';
 export * from './connectionEvent';
 export * from './constants';
