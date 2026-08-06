@@ -11,11 +11,13 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  identity: __t.identity().primaryKey(),
-  displayName: __t.option(__t.string()).name("display_name"),
+  recordingId: __t.string().primaryKey().name("recording_id"),
+  meetingId: __t.string().name("meeting_id"),
+  groupId: __t.u64().name("group_id"),
   status: __t.string(),
-  role: __t.string(),
-  requestedAt: __t.timestamp().name("requested_at"),
-  updatedAt: __t.timestamp().name("updated_at"),
+  objectKey: __t.string().name("object_key"),
+  outputFileName: __t.string().name("output_file_name"),
+  startedAtMs: __t.u64().name("started_at_ms"),
+  durationSecs: __t.u32().name("duration_secs"),
   spaceFlag: __t.u8().name("space_flag"),
 });

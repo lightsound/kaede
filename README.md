@@ -338,26 +338,45 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 ### 通話 API Worker（kaede-call）
 
 ビデオ通話（ROADMAP Phase 4）の RealtimeKit 呼び出しのうち、シークレットを要する
-**ミーティング作成・参加トークン発行**だけを行う Worker です（`packages/worker`）。
-CI の自動デプロイに含まれ、リソース定義は `infra/alchemy.run.ts` の `CallApi`、
-wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
+**ミーティング作成・参加トークン発行・録画 start/stop・Webhook 中継・R2 DL**
+を行う Worker です（`packages/worker`）。CI の自動デプロイに含まれ、リソース定義は
+`infra/alchemy.run.ts` の `CallApi` ＋ `Recordings`（R2）、wrangler の逃げ道は
+`infra/wrangler-call.jsonc` です。
 
-- **ランタイムシークレット `REALTIMEKIT_API_TOKEN`**（Realtime Admin 権限の
-  アカウント API トークン）は **Alchemy のバインディングにしていません** —
-  Alchemy のステート（prod は git コミット対象）は `Redacted` 値も平文で保存する
-  ことを実測済みのため（2026-08-05）。CI のデプロイジョブが Alchemy デプロイ後に
-  `wrangler secret put` で毎回同期します（GitHub Actions シークレット
-  `REALTIMEKIT_API_TOKEN` が必要）。Alchemy のスクリプト再アップロードは帯域外の
-  secret_text バインディングを保持します（同日実測）。手動で入れ直す場合:
+- **ランタイムシークレット**（`REALTIMEKIT_API_TOKEN` / `CALL_SERVICE_SECRET` /
+  `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`）は **Alchemy のバインディングに
+  していません** — Alchemy のステート（prod は git コミット対象）は `Redacted`
+  値も平文で保存することを実測済みのため（2026-08-05）。CI のデプロイジョブが
+  Alchemy デプロイ後に `wrangler secret put` で毎回同期します。手動で入れ直す場合:
 
   ```sh
   cd infra && printf '%s' "$REALTIMEKIT_API_TOKEN" | \
     pnpm exec wrangler secret put REALTIMEKIT_API_TOKEN --name kaede-call
+  # 録画 Webhook → SpacetimeDB 中継用（管理者 UI の set_call_service_secret と同じ値）
+  printf '%s' "$CALL_SERVICE_SECRET" | \
+    pnpm exec wrangler secret put CALL_SERVICE_SECRET --name kaede-call
+  # RealtimeKit storage_config 用の R2 S3 API トークン
+  printf '%s' "$R2_ACCESS_KEY_ID" | \
+    pnpm exec wrangler secret put R2_ACCESS_KEY_ID --name kaede-call
+  printf '%s' "$R2_SECRET_ACCESS_KEY" | \
+    pnpm exec wrangler secret put R2_SECRET_ACCESS_KEY --name kaede-call
+  ```
+
+  初回（または DB 再作成後）は、承認済み管理者がクライアントから
+  `set_call_service_secret` で同じ `CALL_SERVICE_SECRET` をモジュール側の
+  private テーブルへ書き込みます（Webhook 中継の照合相手）。
+
+  RealtimeKit アプリへ Webhook を登録する（本番 Worker URL）:
+
+  ```sh
+  # events に recording.statusUpdate を含め、url を
+  # https://kaede-call.kaede-751.workers.dev/webhooks/realtimekit にする
+  # （scripts/spike-realtimekit.sh の Webhook ステップを流用可）
   ```
 
 - **ローカル開発**は Alchemy を通さず `wrangler dev` で動かします。
   `infra/.dev.vars`（gitignore 済み — wrangler は設定ファイルの隣の
-  `.dev.vars` を読み、同名の vars を上書きする）に **5 つとも**書くこと —
+  `.dev.vars` を読み、同名の vars を上書きする）に書くこと —
   `wrangler-call.jsonc` の vars は本番値なので、上書きしないと CORS が
   localhost を拒否し、ミーティングも本番アプリに作られてしまいます:
 
@@ -366,7 +385,12 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   REALTIMEKIT_APP_ID=<ローカル開発用アプリ kaede-dev の ID>
   CLERK_ISSUER=https://<開発インスタンス>.clerk.accounts.dev
   SPACETIME_HOST_URL=http://localhost:3000
+  SPACETIME_DB_NAME=kaede
   ALLOWED_ORIGINS=http://localhost:5173
+  CALL_SERVICE_SECRET=<任意の長い乱数>
+  R2_ACCESS_KEY_ID=<R2 S3 互換アクセスキー>
+  R2_SECRET_ACCESS_KEY=<R2 S3 互換シークレット>
+  R2_BUCKET_NAME=kaede-recordings-preview
   ```
 
   ```sh
@@ -377,13 +401,15 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   （`VITE_CALL_API_URL` で上書き可能。本番ビルドの既定は
   `https://kaede-call.kaede-751.workers.dev`）。
 
-- 通話の**状態は SpacetimeDB が真実源**です: どのグループにどのミーティングが
-  紐づくかは `group_call` 行（メンバー限定 RLS）、Worker は「kaede の
+- 通話・録画の**状態は SpacetimeDB が真実源**です: どのグループにどの
+  ミーティングが紐づくかは `group_call` 行（メンバー限定 RLS）、録画カタログは
+  `call_recording`（承認済みメンバー限定 RLS）。Worker は「kaede の
   アイデンティティであること」だけを検証します — サインイン済みメンバーは
   Clerk JWT（JWKS 検証）、ゲストは SpacetimeDB ホスト発行のセッショントークン
   （`SPACETIME_HOST_URL` の `/v1/identity/public-key` に対する署名検証 —
-  増分②でメンバー限定を解除、ROADMAP Phase 4 参照）。ゲストも通話の開始・
-  参加・画面共有をメンバーと同等にできます。
+  増分②）。ゲストも通話の開始・参加・画面共有をメンバーと同等にできますが、
+  **録画の開始/停止・一覧/DL は承認済みメンバーのみ**（増分④）。参加
+  プリセットはメンバー＝`group_call_host`・ゲスト＝`group_call_participant`。
 
 ## CI
 

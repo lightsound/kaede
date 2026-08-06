@@ -3,6 +3,9 @@
 // CallApi と同じ Worker に同じ構成でデプロイする。乖離させないこと。
 // シークレットはファイルに書けないため別途:
 //   pnpm --filter @kaede/infra exec wrangler secret put REALTIMEKIT_API_TOKEN --config wrangler-call.jsonc
+//   pnpm --filter @kaede/infra exec wrangler secret put CALL_SERVICE_SECRET --config wrangler-call.jsonc
+//   pnpm --filter @kaede/infra exec wrangler secret put R2_ACCESS_KEY_ID --config wrangler-call.jsonc
+//   pnpm --filter @kaede/infra exec wrangler secret put R2_SECRET_ACCESS_KEY --config wrangler-call.jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "kaede-call",
@@ -16,6 +19,15 @@
     "CLERK_ISSUER": "https://clerk.kaede.town",
     "CLERK_AUDIENCE": "kaede-spacetimedb",
     "SPACETIME_HOST_URL": "https://maincloud.spacetimedb.com",
-    "ALLOWED_ORIGINS": "https://kaede.town,https://kaede.kaede-751.workers.dev"
-  }
+    "SPACETIME_DB_NAME": "kaede",
+    "ALLOWED_ORIGINS": "https://kaede.town,https://kaede.kaede-751.workers.dev",
+    "R2_BUCKET_NAME": "kaede-recordings"
+  },
+  "r2_buckets": [
+    {
+      "binding": "RECORDINGS",
+      "bucket_name": "kaede-recordings",
+      "preview_bucket_name": "kaede-recordings-preview"
+    }
+  ]
 }

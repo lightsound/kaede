@@ -2,11 +2,12 @@
 import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@kaede/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
-import { CallDock } from './call.package';
+import { CallDock, RecordingsPanel } from './call.package';
 import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
 import { HuddleControl } from './huddle.package';
 import {
+  type CallRecordingView,
   type ChatLog,
   type ChatScopeView,
   type ConnectionStatus,
@@ -99,6 +100,9 @@ export function App() {
   // deduplicated by the net stack (ROADMAP Phase 4 増分①) — the call
   // dock's offer and its auto-leave watch both ride it.
   const [ownGroupId, setOwnGroupId] = useState<bigint>();
+  // Recording catalog (ROADMAP Phase 4 増分④) — approved members only under
+  // RLS; guests keep the empty default.
+  const [recordings, setRecordings] = useState<CallRecordingView[]>([]);
   const session = useContext(AuthSessionContext);
   // The one handle on the net stack: created inside the effect, disposed by
   // its cleanup, read by the name form at submit time. A ref rather than
@@ -131,6 +135,7 @@ export function App() {
         onHuddle: setHuddle,
         onChatScopes: setChatScopes,
         onOwnGroup: setOwnGroupId,
+        onCallRecordings: setRecordings,
         // The DM → browser-notification pipeline: the notifier decides
         // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
         // so no state rides this hook.
@@ -192,8 +197,12 @@ export function App() {
           registerGroupCall: (meetingId) =>
             netRef.current?.registerGroupCall(meetingId) ??
             Promise.reject(new Error('SpacetimeDB: not connected')),
+          registerCallRecording: (args) => netRef.current?.registerCallRecording(args),
         }}
       />
+      {connected && self?.status === 'approved' && (
+        <RecordingsPanel recordings={recordings} getToken={session.getToken} />
+      )}
       <HuddleControl
         connected={connected}
         ownName={ownName}

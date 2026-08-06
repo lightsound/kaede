@@ -9,16 +9,18 @@ import {
   RtkLeaveButton,
   RtkMicToggle,
   RtkParticipantsAudio,
+  RtkRecordingIndicator,
+  RtkRecordingToggle,
   RtkScreenShareToggle,
   RtkSettingsToggle,
   RtkUiProvider,
 } from '@cloudflare/realtimekit-react-ui';
-import type { CSSProperties } from 'react';
+import { type CSSProperties, useEffect } from 'react';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import type { Meeting } from './realtimekit';
 
-// The prebuilt in-call UI (ROADMAP Phase 4 増分③). These imports are legal
-// INSIDE call.package only — the containment unit for the vendor
+// The prebuilt in-call UI (ROADMAP Phase 4 増分③〜④). These imports are
+// legal INSIDE call.package only — the containment unit for the vendor
 // dependency is this package (VISION 決定ログ 2026-08-06). Lazy-loaded
 // from CallDock so idle players never download the kit (hls.js,
 // @floating-ui, hark, lodash-es, …).
@@ -95,16 +97,64 @@ const dockLanguage = makeRtkLanguage({
   'audio_playback.title': '音声を再生',
   'audio_playback.description': 'ブラウザの自動再生制限のため、クリックで通話音声を有効にします。',
   audio_playback: '音声を有効にする',
+  'recording.label': '録画',
+  'recording.indicator': '録画中',
+  'recording.started': '録画を開始しました',
+  'recording.stopped': '録画を停止しました',
+  'recording.start': '録画開始',
+  'recording.stop': '録画停止',
+  'recording.starting': '録画を開始しています…',
+  'recording.stopping': '録画を停止しています…',
+  'recording.idle': '録画していません',
+  'recording.error.start': '録画を開始できませんでした',
+  'recording.error.stop': '録画を停止できませんでした',
 });
+
+/** What the panel reports when a recording appears on the meeting. */
+export interface RecordingStarted {
+  recordingId: string;
+  startedAtMs: bigint;
+}
 
 /**
  * The ongoing call, assembled from the UI Kit's parts: the participant
- * grid (which also lays out shared screens), the control bar toggles, the
- * remote audio sink, and the dialog manager (device settings and the
- * leave confirmation render through it). RtkUiProvider syncs the meeting
- * and the toggles' state into every Rtk child.
+ * grid (which also lays out shared screens), the control bar toggles
+ * (including recording — 増分④), the remote audio sink, and the dialog
+ * manager. RtkUiProvider syncs the meeting and the toggles' state into
+ * every Rtk child. `onRecordingStarted` feeds the SpacetimeDB catalog
+ * row (register_call_recording) so the list/DL UI has something to show
+ * before the webhook lands.
  */
-export function InCallPanel({ meeting }: { meeting: Meeting }) {
+export function InCallPanel({
+  meeting,
+  onRecordingStarted,
+}: {
+  meeting: Meeting;
+  onRecordingStarted?: (event: RecordingStarted) => void;
+}) {
+  useEffect(() => {
+    if (onRecordingStarted === undefined) return;
+    // Dedup so STARTING→RECORDING does not double-register the same id.
+    const seen = new Set<string>();
+    const report = (state: string) => {
+      if (state !== 'STARTING' && state !== 'RECORDING') return;
+      for (const row of meeting.recording.recordings) {
+        if (row.state !== 'STARTING' && row.state !== 'RECORDING') continue;
+        if (row.id === '' || seen.has(row.id)) continue;
+        seen.add(row.id);
+        onRecordingStarted({
+          recordingId: row.id,
+          startedAtMs: BigInt(Date.now()),
+        });
+      }
+    };
+    meeting.recording.addListener('recordingUpdate', report);
+    report(meeting.recording.recordingState);
+    return () => {
+      meeting.recording.removeListener('recordingUpdate', report);
+    };
+  }, [meeting, onRecordingStarted]);
+
   return (
     <div style={inCallStyle}>
       <RtkUiProvider meeting={meeting} t={dockLanguage}>
@@ -112,9 +162,11 @@ export function InCallPanel({ meeting }: { meeting: Meeting }) {
           <RtkGrid style={{ width: '100%', height: '100%' }} />
         </div>
         <div style={rowStyle}>
+          <RtkRecordingIndicator />
           <RtkMicToggle size="sm" />
           <RtkCameraToggle size="sm" />
           <RtkScreenShareToggle size="sm" />
+          <RtkRecordingToggle size="sm" />
           <RtkSettingsToggle size="sm" />
           <RtkLeaveButton size="sm" />
         </div>

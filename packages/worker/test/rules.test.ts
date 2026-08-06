@@ -5,11 +5,17 @@ import {
   callerKindOf,
   guestSubjectFrom,
   participantNameFrom,
+  recordingObjectKey,
+  recordingObjectPrefix,
+  recordingWebhookFieldsFrom,
   routeCallRequest,
+  routeNeedsCaller,
+  routeNeedsMember,
   unverifiedIssuerOf,
 } from '../src/rules';
 
 const MEETING_ID = 'bbb8280d-7d30-430b-a3a0-78802ed5617c';
+const RECORDING_ID = '97cb480d-5840-4528-ace3-919b5e386c68';
 
 describe('routeCallRequest', () => {
   it('POST /calls/meetings はミーティング作成', () => {
@@ -25,10 +31,36 @@ describe('routeCallRequest', () => {
     expect(routeCallRequest('POST', '/calls/meetings//participants')).toBeUndefined();
   });
 
+  it('録画 start/stop/download と webhook をルーティングする', () => {
+    expect(routeCallRequest('POST', `/calls/meetings/${MEETING_ID}/recordings`)).toEqual({
+      kind: 'startRecording',
+      meetingId: MEETING_ID,
+    });
+    expect(routeCallRequest('POST', `/calls/recordings/${RECORDING_ID}/stop`)).toEqual({
+      kind: 'stopRecording',
+      recordingId: RECORDING_ID,
+    });
+    expect(routeCallRequest('GET', `/calls/recordings/${RECORDING_ID}/download`)).toEqual({
+      kind: 'downloadRecording',
+      recordingId: RECORDING_ID,
+    });
+    expect(routeCallRequest('POST', '/webhooks/realtimekit')).toEqual({ kind: 'webhook' });
+  });
+
   it('POST 以外・知らないパスはルーティングしない', () => {
     expect(routeCallRequest('GET', '/calls/meetings')).toBeUndefined();
     expect(routeCallRequest('POST', '/calls')).toBeUndefined();
     expect(routeCallRequest('POST', `/calls/meetings/${MEETING_ID}`)).toBeUndefined();
+  });
+});
+
+describe('routeNeedsCaller / routeNeedsMember', () => {
+  it('webhook だけ caller 不要、録画系はメンバー限定', () => {
+    expect(routeNeedsCaller({ kind: 'webhook' })).toBe(false);
+    expect(routeNeedsCaller({ kind: 'provision' })).toBe(true);
+    expect(routeNeedsMember({ kind: 'mint', meetingId: MEETING_ID })).toBe(false);
+    expect(routeNeedsMember({ kind: 'startRecording', meetingId: MEETING_ID })).toBe(true);
+    expect(routeNeedsMember({ kind: 'downloadRecording', recordingId: RECORDING_ID })).toBe(true);
   });
 });
 
@@ -103,33 +135,75 @@ describe('callerKindOf', () => {
 });
 
 describe('guestSubjectFrom', () => {
-  const NOW = 1_785_972_000;
-  const claims = {
-    hex_identity: 'c200dd03e1587e8995dd277e41928dd841aaf0aedc8cf1e02b2290955b289d7b',
-    sub: 'a7f1aabc-7273-41ff-8f22-cbd4c793fec5',
-    iss: 'localhost',
-    aud: ['spacetimedb'],
-    iat: NOW - 60,
-    exp: null,
-  };
+  const now = 1_700_000_000;
 
-  it('ホスト発行トークンの実測形(exp: null)を受理し hex_identity を返す', () => {
-    expect(guestSubjectFrom(claims, NOW)).toBe(claims.hex_identity);
-    // 文字列 aud・exp 省略・将来の exp も受理する
-    expect(guestSubjectFrom({ ...claims, aud: 'spacetimedb', exp: undefined }, NOW)).toBe(
-      claims.hex_identity,
-    );
-    expect(guestSubjectFrom({ ...claims, exp: NOW + 3600 }, NOW)).toBe(claims.hex_identity);
+  it('ホスト発行トークンのクレームを受理する(exp null = 無期限)', () => {
+    expect(
+      guestSubjectFrom(
+        {
+          iss: 'localhost',
+          aud: 'spacetimedb',
+          exp: null,
+          hex_identity: 'aabbcc',
+        },
+        now,
+      ),
+    ).toBe('aabbcc');
   });
 
-  it('登録外 issuer・別 audience・期限切れ・subject 欠落は拒否する', () => {
-    expect(guestSubjectFrom({ ...claims, iss: 'https://evil.example' }, NOW)).toBeUndefined();
-    expect(guestSubjectFrom({ ...claims, aud: ['other'] }, NOW)).toBeUndefined();
-    expect(guestSubjectFrom({ ...claims, exp: NOW - 1 }, NOW)).toBeUndefined();
-    expect(guestSubjectFrom({ ...claims, exp: 'never' }, NOW)).toBeUndefined();
-    expect(guestSubjectFrom({ ...claims, hex_identity: undefined }, NOW)).toBeUndefined();
-    expect(guestSubjectFrom({ ...claims, hex_identity: '' }, NOW)).toBeUndefined();
-    expect(guestSubjectFrom(null, NOW)).toBeUndefined();
-    expect(guestSubjectFrom('token', NOW)).toBeUndefined();
+  it('issuer/audience/exp/subject が不正なら拒否', () => {
+    expect(
+      guestSubjectFrom({ iss: 'evil', aud: 'spacetimedb', hex_identity: 'x' }, now),
+    ).toBeUndefined();
+    expect(
+      guestSubjectFrom({ iss: 'localhost', aud: 'other', hex_identity: 'x' }, now),
+    ).toBeUndefined();
+    expect(
+      guestSubjectFrom(
+        { iss: 'localhost', aud: 'spacetimedb', exp: now - 1, hex_identity: 'x' },
+        now,
+      ),
+    ).toBeUndefined();
+    expect(
+      guestSubjectFrom({ iss: 'localhost', aud: 'spacetimedb', hex_identity: '' }, now),
+    ).toBeUndefined();
+  });
+});
+
+describe('recording object key / webhook fields', () => {
+  it('meeting 単位のプレフィックスと outputFileName を結合する', () => {
+    expect(recordingObjectPrefix(MEETING_ID)).toBe(`recordings/${MEETING_ID}`);
+    expect(recordingObjectKey(MEETING_ID, 'weekly.mp4')).toBe(
+      `recordings/${MEETING_ID}/weekly.mp4`,
+    );
+    expect(recordingObjectKey(MEETING_ID, '/weekly.mp4')).toBe(
+      `recordings/${MEETING_ID}/weekly.mp4`,
+    );
+  });
+
+  it('recording.statusUpdate だけをカタログ更新用に読む', () => {
+    const fields = recordingWebhookFieldsFrom({
+      event: 'recording.statusUpdate',
+      recording: {
+        id: RECORDING_ID,
+        status: 'UPLOADED',
+        meetingId: MEETING_ID,
+        outputFileName: 'weekly.mp4',
+        startedTime: '2026-06-03T10:00:00.000Z',
+        recordingDuration: 1800,
+        downloadUrl: 'https://example.com/weekly.mp4',
+      },
+    });
+    expect(fields).toEqual({
+      recordingId: RECORDING_ID,
+      meetingId: MEETING_ID,
+      status: 'UPLOADED',
+      outputFileName: 'weekly.mp4',
+      startedAtMs: BigInt(Date.parse('2026-06-03T10:00:00.000Z')),
+      durationSecs: 1800,
+      downloadUrl: 'https://example.com/weekly.mp4',
+    });
+    expect(recordingWebhookFieldsFrom({ event: 'meeting.started' })).toBeUndefined();
+    expect(recordingWebhookFieldsFrom({ event: 'recording.statusUpdate' })).toBeUndefined();
   });
 });

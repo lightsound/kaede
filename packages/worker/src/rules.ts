@@ -1,9 +1,9 @@
 // The pure rules of the call API Worker — routing, CORS origin matching,
-// participant naming, token dispatch and guest-claims vetting — split from
-// the fetch wiring (index.ts) so they are unit-testable (the @kaede/shared
-// convention applied inside this workspace: the wiring stays a thin
-// untestable shell).
-import { isMeetingIdLike, normalizeDisplayName } from '@kaede/shared';
+// participant naming, token dispatch, guest-claims vetting and webhook
+// payload shaping — split from the fetch wiring (index.ts) so they are
+// unit-testable (the @kaede/shared convention applied inside this
+// workspace: the wiring stays a thin untestable shell).
+import { isMeetingIdLike, isRecordingIdLike, normalizeDisplayName } from '@kaede/shared';
 import { decodeJwt } from 'jose';
 
 /**
@@ -14,24 +14,73 @@ import { decodeJwt } from 'jose';
  * - `mint`: issue a participant token for an existing meeting (the 参加
  *   half — knowing the meeting id IS the authorization to join, see the
  *   group_call table comment in the server).
+ * - `startRecording` / `stopRecording`: RealtimeKit cloud recording
+ *   control (増分④ — members only at the auth layer; storage_config is
+ *   attached by the provider half).
+ * - `downloadRecording`: stream an uploaded R2 object (members only).
+ * - `webhook`: RealtimeKit recording.statusUpdate (no Clerk/guest auth —
+ *   verified by rtk-signature instead).
  */
-export type CallRoute = { kind: 'provision' } | { kind: 'mint'; meetingId: string };
+export type CallRoute =
+  | { kind: 'provision' }
+  | { kind: 'mint'; meetingId: string }
+  | { kind: 'startRecording'; meetingId: string }
+  | { kind: 'stopRecording'; recordingId: string }
+  | { kind: 'downloadRecording'; recordingId: string }
+  | { kind: 'webhook' };
 
 /**
  * Routes one request, or undefined for anything this API does not serve.
- * POST-only: both operations create provider-side state. The meeting id
- * segment is vetted with the same shape rule the reducer applies
- * (isMeetingIdLike), so a malformed id 404s here instead of reaching the
+ * Meeting / recording id segments are vetted with the same UUID shape the
+ * reducers apply, so a malformed id 404s here instead of reaching the
  * provider as a mangled URL.
  */
 export function routeCallRequest(method: string, pathname: string): CallRoute | undefined {
-  if (method !== 'POST') return undefined;
-  if (pathname === '/calls/meetings') return { kind: 'provision' };
-  const match = /^\/calls\/meetings\/([^/]+)\/participants$/.exec(pathname);
-  if (match?.[1] !== undefined && isMeetingIdLike(match[1])) {
-    return { kind: 'mint', meetingId: match[1] };
+  if (method === 'POST' && pathname === '/webhooks/realtimekit') {
+    return { kind: 'webhook' };
+  }
+  if (method === 'POST' && pathname === '/calls/meetings') {
+    return { kind: 'provision' };
+  }
+  const mint = /^\/calls\/meetings\/([^/]+)\/participants$/.exec(pathname);
+  if (method === 'POST' && mint?.[1] !== undefined && isMeetingIdLike(mint[1])) {
+    return { kind: 'mint', meetingId: mint[1] };
+  }
+  const start = /^\/calls\/meetings\/([^/]+)\/recordings$/.exec(pathname);
+  if (method === 'POST' && start?.[1] !== undefined && isMeetingIdLike(start[1])) {
+    return { kind: 'startRecording', meetingId: start[1] };
+  }
+  const stop = /^\/calls\/recordings\/([^/]+)\/stop$/.exec(pathname);
+  if (method === 'POST' && stop?.[1] !== undefined && isRecordingIdLike(stop[1])) {
+    return { kind: 'stopRecording', recordingId: stop[1] };
+  }
+  const download = /^\/calls\/recordings\/([^/]+)\/download$/.exec(pathname);
+  if (method === 'GET' && download?.[1] !== undefined && isRecordingIdLike(download[1])) {
+    return { kind: 'downloadRecording', recordingId: download[1] };
   }
   return undefined;
+}
+
+/**
+ * Whether this route needs a verified kaede identity (Clerk or guest).
+ * The webhook is the exception: its trust anchor is rtk-signature.
+ */
+export function routeNeedsCaller(route: CallRoute): boolean {
+  return route.kind !== 'webhook';
+}
+
+/**
+ * Whether this route is restricted to signed-in members (no guests).
+ * Recording start/stop/download are the paid / archive surface — guests
+ * may join the call (増分②) but cannot open the recording catalog
+ * (ROADMAP 増分④).
+ */
+export function routeNeedsMember(route: CallRoute): boolean {
+  return (
+    route.kind === 'startRecording' ||
+    route.kind === 'stopRecording' ||
+    route.kind === 'downloadRecording'
+  );
 }
 
 /**
@@ -146,4 +195,85 @@ export function guestSubjectFrom(claims: unknown, nowSeconds: number): string | 
   if (exp !== null && (typeof exp !== 'number' || exp <= nowSeconds)) return undefined;
   const subject = record.hex_identity;
   return typeof subject === 'string' && subject !== '' ? subject : undefined;
+}
+
+/**
+ * The R2 object key prefix for one meeting's recordings. Start Recording
+ * passes this as storage_config.path so uploaded files land under a
+ * deterministic prefix the webhook can re-derive from meetingId +
+ * outputFileName.
+ */
+export function recordingObjectPrefix(meetingId: string): string {
+  return `recordings/${meetingId}`;
+}
+
+/** Joins the meeting prefix with a provider output file name. */
+export function recordingObjectKey(meetingId: string, outputFileName: string): string {
+  const name = outputFileName.replace(/^\/+/, '');
+  return `${recordingObjectPrefix(meetingId)}/${name}`;
+}
+
+/**
+ * Fields the webhook handler needs from a verified
+ * recording.statusUpdate body. Undefined when the payload is not that
+ * event or is missing required ids — the handler 204s those so RealtimeKit
+ * does not retry forever on events we deliberately ignore.
+ */
+export interface RecordingWebhookFields {
+  recordingId: string;
+  meetingId: string;
+  status: string;
+  outputFileName: string;
+  startedAtMs: bigint;
+  durationSecs: number;
+  downloadUrl: string;
+}
+
+function stringProp(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function millisFrom(raw: unknown): bigint {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return BigInt(Math.trunc(raw));
+  if (typeof raw === 'string' && raw !== '') {
+    const asNumber = Date.parse(raw);
+    if (Number.isFinite(asNumber)) return BigInt(asNumber);
+  }
+  return 0n;
+}
+
+/**
+ * Pulls the recording catalog fields out of a parsed webhook JSON body.
+ * Accepts only `recording.statusUpdate`; other events return undefined.
+ */
+export function recordingWebhookFieldsFrom(body: unknown): RecordingWebhookFields | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const root = body as Record<string, unknown>;
+  if (root.event !== 'recording.statusUpdate') return undefined;
+  const recording = root.recording;
+  if (typeof recording !== 'object' || recording === null) return undefined;
+  const rec = recording as Record<string, unknown>;
+  const recordingId = stringProp(rec, 'recordingId') || stringProp(rec, 'id');
+  const meetingId = stringProp(rec, 'meetingId');
+  const status = stringProp(rec, 'status');
+  if (!isRecordingIdLike(recordingId) || !isMeetingIdLike(meetingId) || status === '') {
+    return undefined;
+  }
+  const durationRaw = rec.recordingDuration;
+  const durationSecs =
+    typeof durationRaw === 'number' && Number.isFinite(durationRaw)
+      ? Math.max(0, Math.trunc(durationRaw))
+      : typeof durationRaw === 'string' && durationRaw !== ''
+        ? Math.max(0, Math.trunc(Number(durationRaw)) || 0)
+        : 0;
+  return {
+    recordingId,
+    meetingId,
+    status,
+    outputFileName: stringProp(rec, 'outputFileName'),
+    startedAtMs: millisFrom(rec.startedTime),
+    durationSecs,
+    downloadUrl: stringProp(rec, 'downloadUrl'),
+  };
 }

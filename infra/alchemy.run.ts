@@ -108,20 +108,31 @@ export default Alchemy.Stack(
       ...(stage === 'prod' ? { domain: 'kaede.town' } : {}),
     });
 
-    // 通話 API Worker(ROADMAP Phase 4 増分①): RealtimeKit のミーティング
-    // 作成・参加トークン発行だけを行う薄いグルー(VISION のバックエンド
-    // 原則)。コードは packages/worker(アプリコード — Alchemy を知らない)。
-    // クライアント Worker とは分離した別 Worker にする: 静的アセット配信の
-    // 構成(assets-only + wrangler.jsonc の逃げ道)を触らずに済み、障害・
-    // デプロイの影響半径も交わらない。CORS は Worker 側で ALLOWED_ORIGINS を
-    // 完全一致で検査する。ローカル開発は Alchemy を通さず wrangler dev +
-    // .dev.vars(README「通話 API Worker」)。
+    // 録画アーカイブ用 R2 バケット(ROADMAP Phase 4 増分④)。Stripe Projects
+    // の Cloudflare カタログに R2 は無いので Alchemy で定義する(VISION の
+    // 役割分担)。prod は固定名、それ以外はステージ由来 — CallApi と同じ
+    // スラッグ規則でステージ間の取り合いを防ぐ。
+    const recordingsBucketName =
+      stage === 'prod' ? 'kaede-recordings' : `kaede-recordings-${workerNameSlug(stage)}`;
+    const recordings = yield* Cloudflare.R2.Bucket('Recordings', {
+      name: recordingsBucketName,
+    });
+
+    // 通話 API Worker(ROADMAP Phase 4 増分①〜④): RealtimeKit のミーティング
+    // 作成・参加トークン発行・録画 start/stop・Webhook 中継・R2 DL を行う
+    // 薄いグルー(VISION のバックエンド原則)。コードは packages/worker
+    // (アプリコード — Alchemy を知らない)。クライアント Worker とは分離した
+    // 別 Worker にする: 静的アセット配信の構成(assets-only + wrangler.jsonc
+    // の逃げ道)を触らずに済み、障害・デプロイの影響半径も交わらない。CORS
+    // は Worker 側で ALLOWED_ORIGINS を完全一致で検査する。ローカル開発は
+    // Alchemy を通さず wrangler dev + .dev.vars(README「通話 API Worker」)。
     const callApi = yield* Cloudflare.Worker('CallApi', {
       name: stage === 'prod' ? 'kaede-call' : `kaede-call-${workerNameSlug(stage)}`,
       main: '../packages/worker/src/index.ts',
       compatibility: { date: '2026-08-01' },
       env: {
-        // シークレット REALTIMEKIT_API_TOKEN は意図的にここに無い:
+        // シークレット REALTIMEKIT_API_TOKEN / CALL_SERVICE_SECRET /
+        // R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY は意図的にここに無い:
         // Alchemy のステート(git コミット対象 — README「Alchemy の
         // ステート管理」の注意書き)は Redacted 値も平文で保存することを
         // 実測済み(2026-08-05、dev ステージで確認)。シークレットは
@@ -144,9 +155,15 @@ export default Alchemy.Stack(
         // ホストが発行するセッショントークンを、このホストの公開鍵
         // (/v1/identity/public-key)で署名検証する。本番は Maincloud 固定。
         // ローカルは .dev.vars が http://localhost:3000 を指す(README
-        // 「通話 API Worker」)。
+        // 「通話 API Worker」)。Webhook→リデューサー中継も同じホストへ
+        // 向ける(増分④)。
         SPACETIME_HOST_URL: 'https://maincloud.spacetimedb.com',
+        SPACETIME_DB_NAME: 'kaede',
         ALLOWED_ORIGINS: 'https://kaede.town,https://kaede.kaede-751.workers.dev',
+        // storage_config と DL が同じバケットを指すよう名前を平文バインド
+        // (シークレットではない)。R2 バインディング本体は下の RECORDINGS。
+        R2_BUCKET_NAME: recordingsBucketName,
+        RECORDINGS: recordings,
       },
     });
 

@@ -247,6 +247,21 @@ export interface NetApi {
    * recovers by re-reading ownGroupCall (see acquireCallTicket).
    */
   registerGroupCall(meetingId: string): Promise<void>;
+  /**
+   * Inserts a call_recording catalog row for a recording that just started
+   * (ROADMAP Phase 4 増分④). Approved members only — the reducer refuses
+   * guests. Fire-and-forget like the other posting reducers.
+   */
+  registerCallRecording(args: {
+    recordingId: string;
+    meetingId: string;
+    startedAtMs: bigint;
+  }): void;
+  /**
+   * Admin-only write of the Worker↔module service secret used by the
+   * recording webhook relay. One-time bootstrap / rotation.
+   */
+  setCallServiceSecret(secret: string): void;
 }
 
 /** What forwarding user actions needs from the lifecycle owner (sync.ts). */
@@ -387,5 +402,15 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
       return c.reducers.registerGroupCall({ meetingId }).then(() => undefined);
     },
+    registerCallRecording: forward(
+      'register_call_recording',
+      (
+        c,
+        args: { recordingId: string; meetingId: string; startedAtMs: bigint },
+      ) => c.reducers.registerCallRecording(args),
+    ),
+    setCallServiceSecret: forward('set_call_service_secret', (c, secret: string) =>
+      c.reducers.setCallServiceSecret({ secret }),
+    ),
   };
 }

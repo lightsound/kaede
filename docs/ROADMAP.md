@@ -990,10 +990,62 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   方式は **RealtimeKit クラウド録画で決定**（$0.010/分。月10時間録画で約$6）。
   サーバー側合成のため録画者のタブに依存せず、録り直せない録画で事故らない。
   ベータ→GA の課金開始時期と録画ファイルの保存期間・取り出し方法は実装時に再確認
+  ✅ **実装済み（2026-08-06、増分④ — 独立 PR）**: 会話グループの通話で
+  クラウド録画の開始/停止・録画中インジケータ・完了後の一覧/ダウンロードまで
+  通る。設計の要点（実装前に確定 — VISION 決定ログ 2026-08-06）:
+  ①**誰が開始/停止できるか**: **承認済みメンバーのみ**（ゲスト不可）。
+  根拠: 録画は $0.010/分の課金レバーで、oVice でもホスト/メンバー側の操作。
+  ゲストは通話・画面共有までは同等（増分②）だが can_record は渡さない。
+  実装は二層: Worker の start/stop は Clerk メンバー JWT のみ受理、参加
+  プリセットはメンバー＝`group_call_host`（can_record=true）・ゲスト＝
+  `group_call_participant`（can_record=false）なので UI Kit の
+  `RtkRecordingToggle` もゲストには出ない（増分②が先送りしたプリセット
+  分岐をここで決着。host が足す kick/pin/spotlight は今は許容 —
+  絞りたくなったら専用プリセットを API で作る）
+  ②**誰が一覧・DL できるか**: **承認済みメンバー全員**（開始者限定でも
+  管理者限定でも通話参加者限定でもない）。根拠: 録画は通話より長生きし、
+  コミュニティの二次利用（YouTube 等）が本ユースで、退室翌日に取れない
+  制約は使えない。ゲストの identity はタブ限りなので一覧対象外。
+  RLS は `space_member.status = 'approved'` の JOIN 1 本
+  ③**メタデータの真実源**: SpacetimeDB の公開テーブル `call_recording`
+  （recordingId PK・meetingId/groupId インデックス・status・objectKey・
+  outputFileName・startedAtMs・durationSecs）。Worker に DB は作らない
+  （VISION）。行の寿命は**グループに紐づけない**（delete_zone / 立ち話の
+  0 人掃除でも残す — アーカイブ）。保持はグローバル上限
+  `RECORDING_HISTORY_MAX`（50）で書き込み側が間引き。タイムスタンプは
+  u64 ミリ秒（E2E の SQL シードが偽造できる列だけ — conversation_group
+  の前例）。書き込み経路は2つ: (a) メンバーの
+  `register_call_recording`（通話中に recordingId を自分の group_call へ
+  束縛 — register_group_call と同じ membership 権威）(b) Webhook
+  `recording.statusUpdate` → Worker が `rtk-signature` 検証後、
+  サービスシークレット付きリデューサー `upsert_call_recording_status` で
+  status/objectKey/duration を更新（VISION の「Webhook→リデューサー中継」。
+  シークレットは private テーブル `call_service_secret` に置き、管理者の
+  `set_call_service_secret` で設定。Worker は帯域外 secret
+  `CALL_SERVICE_SECRET` を持つ — Alchemy state には載せない）
+  ④**R2**: Stripe Projects カタログに R2 は無いので Alchemy
+  （`infra/alchemy.run.ts`）でバケット `kaede-recordings` ＋ Worker
+  バインディング `RECORDINGS` を定義。Start Recording の
+  `storage_config`（type=cloudflare）で **R2 へ直接アップロード**
+  （スパイク⑥の単純経路。Webhook→ダウンロード→R2 中継は、Toggle 経路で
+  R2 に無いときだけのフォールバック）。`storage_config` 用の R2 S3
+  資格情報（`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`）とバケット名は
+  wrangler secret / vars — `Config.redacted` 禁止の前例（REALTIMEKIT_API_TOKEN）
+  を踏襲。DL は Worker が R2 バインディングからストリーム（署名付き URL
+  をブラウザに直接渡さない — 認可はメンバー JWT）
+  ⑤**クライアント**: `InCallPanel` に `RtkRecordingToggle` ＋
+  `RtkRecordingIndicator`（増分③の予告どおり。ベンダー import は
+  call.package 内のみ）。一覧/DL UI も call.package の `RecordingsPanel`
+  （SDK は使わない — Worker DL ＋ SpacetimeDB 購読だけ）
+  ⑥実 WebRTC/録画は CI 不可のため、2 ブラウザ手動テスト（フェイクメディア）
+  で開始→インジケータ全員表示→停止→一覧→DL と、ゲストにトグルが出ない
+  負例を実証
 - 通話コストの実測とプラン判断（VISION の試算では RealtimeKit
   $0.002/参加者分 ≒ 月$20〜30想定）
 - 録画の透明性: **録画中インジケータを通話参加者全員に表示**する（同意の前提）。
   録画ファイルへのアクセス権（誰が一覧・DL できるか）もここで設計する
+  ✅ **増分④で実装済み**（上の「録画 ＋ ダウンロード」— インジケータは
+  `RtkRecordingIndicator`、アクセス権は承認済みメンバー全員）
 - **最低限のアバター（並行アートワークストリーム由来・移行までの必達）**
   ✅ **投入済み（2026-08-05）**: 色付き矩形を廃止し、AI 生成の簡易キャラ 1 種
   （チビ頭身・白シャツの1枚絵）を全プレイヤーに適用。設計の要点:

@@ -578,6 +578,8 @@ function fileApplication(ctx: Ctx, accountName: string | undefined): Membership 
     ...initialMembership(ctx.db.spaceMember.count() === 0n),
     requestedAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
+    // Constant 0 — call_recording RLS equijoin key (tables.ts spaceFlag).
+    spaceFlag: 0,
   });
   return asMembership(inserted);
 }

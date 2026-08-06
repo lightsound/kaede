@@ -16,6 +16,7 @@ export * from './reducers';
 // chat_message filters are an allow-list, not four independent rules — see
 // their comment in tables.ts.
 export {
+  callRecordingVisibility,
   chatGroupMemberVisibility,
   chatMapVisibility,
   chatOpenGroupVisibility,

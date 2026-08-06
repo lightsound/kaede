@@ -25,6 +25,25 @@ export const CallGuard = __t.object("CallGuard", {
 });
 export type CallGuard = __Infer<typeof CallGuard>;
 
+export const CallRecording = __t.object("CallRecording", {
+  recordingId: __t.string(),
+  meetingId: __t.string(),
+  groupId: __t.u64(),
+  status: __t.string(),
+  objectKey: __t.string(),
+  outputFileName: __t.string(),
+  startedAtMs: __t.u64(),
+  durationSecs: __t.u32(),
+  spaceFlag: __t.u8(),
+});
+export type CallRecording = __Infer<typeof CallRecording>;
+
+export const CallServiceSecret = __t.object("CallServiceSecret", {
+  id: __t.u8(),
+  secret: __t.string(),
+});
+export type CallServiceSecret = __Infer<typeof CallServiceSecret>;
+
 export const ChatGuard = __t.object("ChatGuard", {
   identity: __t.identity(),
   allowanceMicros: __t.i64(),
@@ -163,6 +182,7 @@ export const SpaceMember = __t.object("SpaceMember", {
   role: __t.string(),
   requestedAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
+  spaceFlag: __t.u8(),
 });
 export type SpaceMember = __Infer<typeof SpaceMember>;
 

@@ -199,6 +199,9 @@ export async function connect(
             // groups this client is a member of — the meeting id it carries
             // is the join capability (see group_call in the server).
             tables.groupCall,
+            // Recording catalog (Phase 4 増分④): whole-table subscribe;
+            // RLS narrows it to approved space members (guests see none).
+            tables.callRecording,
           ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping

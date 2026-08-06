@@ -486,3 +486,70 @@ export function isMeetingIdLike(meetingId: string): boolean {
  */
 export const CALL_SEND_COST_MICROS = 1_000_000n;
 export const CALL_BURST_SENDS = 5;
+
+// ---------------------------------------------------------------------------
+// Call recordings (ROADMAP Phase 4 増分④)
+// ---------------------------------------------------------------------------
+
+/**
+ * Global cap on call_recording rows. Recordings outlive their conversation
+ * group (YouTube re-use), so group deletion must not cascade; the write
+ * path trims to this newest-N instead (chat_message's CHAT_HISTORY_MAX
+ * precedent). 50 × ~hour-long meetings is plenty for a small community and
+ * keeps the approved-members subscription bounded.
+ */
+export const RECORDING_HISTORY_MAX = 50;
+
+/** Lifecycle statuses mirrored from RealtimeKit's recording.statusUpdate. */
+export const RECORDING_STATUS_RECORDING = 'recording';
+export const RECORDING_STATUS_UPLOADING = 'uploading';
+export const RECORDING_STATUS_UPLOADED = 'uploaded';
+export const RECORDING_STATUS_ERRORED = 'errored';
+
+export type RecordingStatus =
+  | typeof RECORDING_STATUS_RECORDING
+  | typeof RECORDING_STATUS_UPLOADING
+  | typeof RECORDING_STATUS_UPLOADED
+  | typeof RECORDING_STATUS_ERRORED;
+
+const RECORDING_STATUSES: ReadonlySet<string> = new Set([
+  RECORDING_STATUS_RECORDING,
+  RECORDING_STATUS_UPLOADING,
+  RECORDING_STATUS_UPLOADED,
+  RECORDING_STATUS_ERRORED,
+]);
+
+/** Whether `status` is one of the four recording lifecycle values. */
+export function isRecordingStatus(status: string): status is RecordingStatus {
+  return RECORDING_STATUSES.has(status);
+}
+
+/**
+ * Maps a RealtimeKit webhook/API status (UPPER_SNAKE) onto our row
+ * vocabulary. Unknown values return undefined so the upsert can refuse
+ * rather than store a free-form string (the availability exact-match rule).
+ */
+export function recordingStatusFromProvider(raw: string): RecordingStatus | undefined {
+  switch (raw) {
+    case 'INVOKED':
+    case 'RECORDING':
+      return RECORDING_STATUS_RECORDING;
+    case 'UPLOADING':
+      return RECORDING_STATUS_UPLOADING;
+    case 'UPLOADED':
+      return RECORDING_STATUS_UPLOADED;
+    case 'ERRORED':
+      return RECORDING_STATUS_ERRORED;
+    default:
+      return isRecordingStatus(raw) ? raw : undefined;
+  }
+}
+
+/**
+ * Whether `recordingId` has the provider's id shape — same UUID rule as
+ * meeting ids (isMeetingIdLike). Kept as a named alias so call sites read
+ * as recording authority, not meeting authority.
+ */
+export function isRecordingIdLike(recordingId: string): boolean {
+  return isMeetingIdLike(recordingId);
+}

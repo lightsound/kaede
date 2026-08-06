@@ -46,6 +46,7 @@ import {
 import { createNetApi, type NetApi } from './netApi';
 import { createPrediction } from './prediction';
 import { wireReactions } from './reactionFeed';
+import { type CallRecordingView, wireCallRecordings } from './recordingFeed';
 import { createRemoteViews } from './remoteView';
 import type { RowOf } from './rows';
 import { cachedStatusView, wireStatuses } from './statusFeed';
@@ -164,6 +165,12 @@ export interface NetHooks {
    * what the admin panel's zone section renders (ROADMAP Phase 3 増分②).
    */
   onZones(zones: ZoneAdminView[]): void;
+  /**
+   * Every call_recording change (ROADMAP Phase 4 増分④), as the whole
+   * newest-first catalog this connection can see (approved members only
+   * under RLS — guests get []).
+   */
+  onCallRecordings(rows: CallRecordingView[]): void;
   /**
    * Every change of the huddle control's answer (own huddle / joinable
    * huddle / neither — ROADMAP Phase 3 増分③), deduplicated by value in
@@ -595,6 +602,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // same own group_member row the scope feed reads, but as the raw
     // groupId — the call's identity, not a chat affordance (see callFeed.ts).
     wireOwnGroup(c, myIdentity, { isStale: stale, onOwnGroup: hooks.onOwnGroup });
+
+    // Recording catalog (ROADMAP Phase 4 増分④): whole-table under
+    // approved-member RLS — guests' publish is the empty list.
+    wireCallRecordings(c, { isStale: stale, onCallRecordings: hooks.onCallRecordings });
 
     // The RLS privacy probe for the call registry (the groupChatRowsReceived
     // idea): how many group_call rows — join capabilities — this connection

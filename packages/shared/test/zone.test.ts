@@ -9,6 +9,11 @@ import {
   HUDDLE_LEAVE_DISTANCE,
   huddleLabel,
   isMeetingIdLike,
+  isRecordingIdLike,
+  isRecordingStatus,
+  recordingStatusFromProvider,
+  RECORDING_STATUS_RECORDING,
+  RECORDING_STATUS_UPLOADED,
   keepsHuddleMembership,
   normalizeHuddleName,
   resolveZoneOccupancy,
@@ -354,5 +359,28 @@ describe('isMeetingIdLike', () => {
     expect(isMeetingIdLike('BBB8280D-7D30-430B-A3A0-78802ED5617C')).toBe(false);
     expect(isMeetingIdLike('bbb8280d-7d30-430b-a3a0-78802ed5617c\n')).toBe(false);
     expect(isMeetingIdLike("'; DROP TABLE group_call; --")).toBe(false);
+  });
+});
+
+describe('recording id / status', () => {
+  it('recordingId は meetingId と同じ UUID 形', () => {
+    expect(isRecordingIdLike('97cb480d-5840-4528-ace3-919b5e386c68')).toBe(true);
+    expect(isRecordingIdLike('not-a-uuid')).toBe(false);
+  });
+
+  it('行の status 語彙は4値の完全一致', () => {
+    expect(isRecordingStatus(RECORDING_STATUS_RECORDING)).toBe(true);
+    expect(isRecordingStatus(RECORDING_STATUS_UPLOADED)).toBe(true);
+    expect(isRecordingStatus('RECORDING')).toBe(false);
+    expect(isRecordingStatus('done')).toBe(false);
+  });
+
+  it('プロバイダの UPPER_SNAKE を行語彙へ写す', () => {
+    expect(recordingStatusFromProvider('INVOKED')).toBe(RECORDING_STATUS_RECORDING);
+    expect(recordingStatusFromProvider('RECORDING')).toBe(RECORDING_STATUS_RECORDING);
+    expect(recordingStatusFromProvider('UPLOADING')).toBe('uploading');
+    expect(recordingStatusFromProvider('UPLOADED')).toBe(RECORDING_STATUS_UPLOADED);
+    expect(recordingStatusFromProvider('ERRORED')).toBe('errored');
+    expect(recordingStatusFromProvider('UNKNOWN')).toBeUndefined();
   });
 });

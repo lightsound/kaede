@@ -67,6 +67,13 @@ export const spacetimedb = schema({
       role: t.string(), // MemberRole in @kaede/shared: 'member' | 'admin'
       requestedAt: t.timestamp(), // when the (latest) application was filed
       updatedAt: t.timestamp(),
+      // Constant 0 for every row — the equijoin key call_recording's RLS
+      // needs (ROADMAP Phase 4 増分④). SpacetimeDB rejects
+      // `JOIN … ON m.identity = :sender` as a non-inner join; the filter
+      // must equijoin two table columns, then constrain :sender in WHERE
+      // (chatGroupMemberVisibility's shape). Additive default keeps old
+      // schema DBs re-publishable.
+      spaceFlag: t.u8().index().default(0),
     },
   ),
   // Space-wide settings (単一スペースのグローバル設定 — the prototype of the
@@ -608,7 +615,10 @@ export const spacetimedb = schema({
     { name: 'group_call', public: true },
     {
       groupId: t.u64().primaryKey(),
-      meetingId: t.string(),
+      // Indexed so the recording webhook upsert can resolve meeting → group
+      // without a full scan (ROADMAP Phase 4 増分④). Additive index on an
+      // existing column — compatible with re-publish onto old schema DBs.
+      meetingId: t.string().index(),
     },
   ),
   // The call-registration rate limit's token-bucket marker — chat_guard's
@@ -624,6 +634,44 @@ export const spacetimedb = schema({
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
+    },
+  ),
+  // Call recording metadata (ROADMAP Phase 4 増分④). The blob lives in R2;
+  // this row is the thin catalog SpacetimeDB holds so approved members can
+  // list/download without the Worker growing a DB (VISION). recordingId is
+  // the provider's id (PK). Rows OUTLIVE their conversation group — delete
+  // paths must not cascade (YouTube re-use the day after). Retention is the
+  // global RECORDING_HISTORY_MAX trim on write. No timestamp columns of the
+  // SpacetimeDB Timestamp type: startedAtMs is a u64 millis so E2E SQL
+  // seeds stay expressible (the group_call / conversation_group rule).
+  callRecording: table(
+    { name: 'call_recording', public: true },
+    {
+      recordingId: t.string().primaryKey(),
+      meetingId: t.string().index(),
+      groupId: t.u64().index(),
+      // RecordingStatus in @kaede/shared: recording | uploading | uploaded | errored
+      status: t.string(),
+      // R2 object key; empty until the upload lands (webhook upsert).
+      objectKey: t.string(),
+      outputFileName: t.string(),
+      startedAtMs: t.u64(),
+      durationSecs: t.u32(),
+      // Constant 0 — pairs with space_member.spaceFlag for the
+      // approved-members RLS equijoin (see callRecordingVisibility).
+      spaceFlag: t.u8().index().default(0),
+    },
+  ),
+  // Shared secret the call Worker presents when relaying
+  // recording.statusUpdate into upsert_call_recording_status. Private
+  // (never subscribed). One row (id 0); missing row ⇒ every service call
+  // refuses, so the admin must set_call_service_secret once per database
+  // (README「通話 API Worker」). Rotation is the same reducer.
+  callServiceSecret: table(
+    { name: 'call_service_secret' },
+    {
+      id: t.u8().primaryKey(),
+      secret: t.string(),
     },
   ),
 });
@@ -716,4 +764,18 @@ export const chatGroupMemberVisibility = spacetimedb.clientVisibilityFilter.sql(
 // leaving revokes it as a delete (the 増分④ observation).
 export const groupCallVisibility = spacetimedb.clientVisibilityFilter.sql(
   'SELECT c.* FROM group_call c JOIN group_member m ON c.group_id = m.group_id WHERE m.identity = :sender',
+);
+
+// Row-level security for call_recording (ROADMAP Phase 4 増分④): approved
+// space members see every recording in the space — not just groups they
+// currently sit in, and not guests. Recordings outlive membership in a
+// conversation group (the access-control decision in ROADMAP/VISION), so
+// the filter joins space_member rather than group_member. The equijoin is
+// on the constant space_flag (both sides default 0 / indexed) because
+// SpacetimeDB rejects `ON m.identity = :sender` as a non-inner join;
+// `:sender` and the approved status live in WHERE (chatGroupMemberVisibility's
+// shape). Guests (no space_member row) and pending/rejected/banned
+// identities match nothing and see nothing.
+export const callRecordingVisibility = spacetimedb.clientVisibilityFilter.sql(
+  "SELECT r.* FROM call_recording r JOIN space_member m ON r.space_flag = m.space_flag WHERE m.identity = :sender AND m.status = 'approved'",
 );

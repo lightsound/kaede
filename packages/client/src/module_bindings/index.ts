@@ -46,6 +46,7 @@ import JoinReducer from "./join_reducer";
 import JoinHuddleReducer from "./join_huddle_reducer";
 import LeaveHuddleReducer from "./leave_huddle_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
+import RegisterCallRecordingReducer from "./register_call_recording_reducer";
 import RegisterGroupCallReducer from "./register_group_call_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendAnnouncementReducer from "./send_announcement_reducer";
@@ -53,16 +54,19 @@ import SendChatMessageReducer from "./send_chat_message_reducer";
 import SendDmReducer from "./send_dm_reducer";
 import SendReactionReducer from "./send_reaction_reducer";
 import SetAvailabilityReducer from "./set_availability_reducer";
+import SetCallServiceSecretReducer from "./set_call_service_secret_reducer";
 import SetDisplayNameReducer from "./set_display_name_reducer";
 import SetGuestsAllowedReducer from "./set_guests_allowed_reducer";
 import SetStatusTextReducer from "./set_status_text_reducer";
 import SubmitInputsReducer from "./submit_inputs_reducer";
 import UnbanMemberReducer from "./unban_member_reducer";
 import UpdateZoneReducer from "./update_zone_reducer";
+import UpsertCallRecordingStatusReducer from "./upsert_call_recording_status_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import CallRecordingRow from "./call_recording_table";
 import ChatMessageRow from "./chat_message_table";
 import ConversationGroupRow from "./conversation_group_table";
 import DmMessageRow from "./dm_message_table";
@@ -79,6 +83,26 @@ import SpaceSettingRow from "./space_setting_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  callRecording: __table({
+    name: 'call_recording',
+    indexes: [
+      { accessor: 'groupId', name: 'call_recording_group_id_idx_btree', algorithm: 'btree', columns: [
+        'groupId',
+      ] },
+      { accessor: 'meetingId', name: 'call_recording_meeting_id_idx_btree', algorithm: 'btree', columns: [
+        'meetingId',
+      ] },
+      { accessor: 'recordingId', name: 'call_recording_recording_id_idx_btree', algorithm: 'btree', columns: [
+        'recordingId',
+      ] },
+      { accessor: 'spaceFlag', name: 'call_recording_space_flag_idx_btree', algorithm: 'btree', columns: [
+        'spaceFlag',
+      ] },
+    ],
+    constraints: [
+      { name: 'call_recording_recording_id_key', constraint: 'unique', columns: ['recordingId'] },
+    ],
+  }, CallRecordingRow),
   chatMessage: __table({
     name: 'chat_message',
     indexes: [
@@ -132,6 +156,9 @@ const tablesSchema = __schema({
     indexes: [
       { accessor: 'groupId', name: 'group_call_group_id_idx_btree', algorithm: 'btree', columns: [
         'groupId',
+      ] },
+      { accessor: 'meetingId', name: 'group_call_meeting_id_idx_btree', algorithm: 'btree', columns: [
+        'meetingId',
       ] },
     ],
     constraints: [
@@ -205,6 +232,9 @@ const tablesSchema = __schema({
       { accessor: 'identity', name: 'space_member_identity_idx_btree', algorithm: 'btree', columns: [
         'identity',
       ] },
+      { accessor: 'spaceFlag', name: 'space_member_space_flag_idx_btree', algorithm: 'btree', columns: [
+        'spaceFlag',
+      ] },
     ],
     constraints: [
       { name: 'space_member_identity_key', constraint: 'unique', columns: ['identity'] },
@@ -237,6 +267,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_huddle", JoinHuddleReducer),
   __reducerSchema("leave_huddle", LeaveHuddleReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
+  __reducerSchema("register_call_recording", RegisterCallRecordingReducer),
   __reducerSchema("register_group_call", RegisterGroupCallReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_announcement", SendAnnouncementReducer),
@@ -244,12 +275,14 @@ const reducersSchema = __reducers(
   __reducerSchema("send_dm", SendDmReducer),
   __reducerSchema("send_reaction", SendReactionReducer),
   __reducerSchema("set_availability", SetAvailabilityReducer),
+  __reducerSchema("set_call_service_secret", SetCallServiceSecretReducer),
   __reducerSchema("set_display_name", SetDisplayNameReducer),
   __reducerSchema("set_guests_allowed", SetGuestsAllowedReducer),
   __reducerSchema("set_status_text", SetStatusTextReducer),
   __reducerSchema("submit_inputs", SubmitInputsReducer),
   __reducerSchema("unban_member", UnbanMemberReducer),
   __reducerSchema("update_zone", UpdateZoneReducer),
+  __reducerSchema("upsert_call_recording_status", UpsertCallRecordingStatusReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

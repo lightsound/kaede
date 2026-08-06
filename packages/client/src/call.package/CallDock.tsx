@@ -95,6 +95,15 @@ function dockHidden(connected: boolean, ownGroupId: bigint | undefined, phase: C
 export interface CallDockNet {
   ownGroupCall(): { groupId: bigint; meetingId: string | undefined } | undefined;
   registerGroupCall(meetingId: string): Promise<void>;
+  /**
+   * Catalog insert when a recording starts (増分④). Fire-and-forget from
+   * the UI Kit listener — failures log inside the net facade.
+   */
+  registerCallRecording(args: {
+    recordingId: string;
+    meetingId: string;
+    startedAtMs: bigint;
+  }): void;
 }
 
 /** Everything the join sequence below needs from the mounted dock. */
@@ -211,9 +220,18 @@ export function CallDock({
     // Same copy as the joining phase — the chunk download is usually
     // shorter than the dial, so reusing the string avoids inventing a
     // third transient.
+    const meetingId = net.ownGroupCall()?.meetingId;
     return (
       <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
-        <InCallPanel meeting={phase.meeting} />
+        <InCallPanel
+          meeting={phase.meeting}
+          onRecordingStarted={
+            meetingId === undefined
+              ? undefined
+              : ({ recordingId, startedAtMs }) =>
+                  net.registerCallRecording({ recordingId, meetingId, startedAtMs })
+          }
+        />
       </Suspense>
     );
   }

@@ -60,3 +60,47 @@ export async function mintCallToken(
     'authToken',
   );
 }
+
+/**
+ * Asks the Worker to start a cloud recording with R2 storage_config
+ * (増分④). Members only — guests get 403. Returns the provider recording id.
+ */
+export async function startCallRecording(
+  getToken: AuthTokenGetter,
+  meetingId: string,
+): Promise<string> {
+  return stringField(
+    await post(getToken, `/calls/meetings/${meetingId}/recordings`, {}),
+    'recordingId',
+  );
+}
+
+/** Asks the Worker to stop an active recording (members only). */
+export async function stopCallRecording(
+  getToken: AuthTokenGetter,
+  recordingId: string,
+): Promise<void> {
+  await post(getToken, `/calls/recordings/${recordingId}/stop`, {});
+}
+
+/**
+ * Downloads one uploaded recording through the Worker (members only).
+ * `objectKey` is the R2 key from the call_recording row — the Worker
+ * streams the object after re-checking the member JWT.
+ */
+export async function downloadCallRecording(
+  getToken: AuthTokenGetter,
+  recordingId: string,
+  objectKey: string,
+): Promise<Blob> {
+  const token = (await getToken()) ?? storedSessionToken();
+  if (token === undefined) throw new Error('call API: no auth token');
+  const params = new URLSearchParams({ key: objectKey });
+  // fallow-ignore-next-line security-sink -- BASE_URL is build-time; recordingId is UUID-shaped at the reducer write
+  const response = await fetch(
+    `${BASE_URL}/calls/recordings/${recordingId}/download?${params}`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok) throw new Error(`call API: download failed (${response.status})`);
+  return response.blob();
+}
