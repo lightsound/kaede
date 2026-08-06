@@ -1,9 +1,10 @@
 // The pure rules of the call API Worker — routing, CORS origin matching,
-// participant naming, token dispatch and guest-claims vetting — split from
-// the fetch wiring (index.ts) so they are unit-testable (the @kaede/shared
-// convention applied inside this workspace: the wiring stays a thin
-// untestable shell).
-import { isMeetingIdLike, normalizeDisplayName } from '@kaede/shared';
+// participant naming, token dispatch, guest-claims vetting, and the
+// recording rules (member-only routes, the R2 listing parse, the webhook
+// event summary) — split from the fetch wiring (index.ts) so they are
+// unit-testable (the @kaede/shared convention applied inside this
+// workspace: the wiring stays a thin untestable shell).
+import { isMeetingIdLike, isRecordingFileNameLike, normalizeDisplayName } from '@kaede/shared';
 import { decodeJwt } from 'jose';
 
 /**
@@ -14,24 +15,147 @@ import { decodeJwt } from 'jose';
  * - `mint`: issue a participant token for an existing meeting (the 参加
  *   half — knowing the meeting id IS the authorization to join, see the
  *   group_call table comment in the server).
+ * - `record-start` / `record-stop`: cloud recording control (増分④ — the
+ *   provider secret AND the R2 upload credentials live here, so neither
+ *   can be a client call).
+ * - `recordings-list` / `recording-download`: the finished recordings in
+ *   the R2 bucket, and a short-lived presigned URL for one of them.
  */
-export type CallRoute = { kind: 'provision' } | { kind: 'mint'; meetingId: string };
+export type CallRoute =
+  | { kind: 'provision' }
+  | { kind: 'mint'; meetingId: string }
+  | { kind: 'record-start'; meetingId: string }
+  | { kind: 'record-stop'; meetingId: string }
+  | { kind: 'recordings-list' }
+  | { kind: 'recording-download'; fileName: string };
+
+/**
+ * Whether a route is offered to MEMBERS only (the 増分④ recording
+ * authority: 録画の開始/停止・一覧・DL は承認済みメンバー限定 — ROADMAP).
+ * The call routes stay open to guests (増分② — guests start, join and
+ * screen-share like members); everything recording is member-gated,
+ * enforced against the VERIFIED caller kind, so the UI's hidden toggles
+ * stay cosmetic.
+ */
+export function routeIsMemberOnly(route: CallRoute): boolean {
+  return route.kind !== 'provision' && route.kind !== 'mint';
+}
+
+/**
+ * The vetted meeting id of one `/calls/meetings/{id}/{tail}` path, or
+ * undefined when the path is not that shape. String slicing rather than a
+ * built regex: `tail` is always a literal, but a constructed RegExp reads
+ * as a ReDoS candidate to static analysis, and the id's own shape rule
+ * (isMeetingIdLike — which admits no slash) already does the vetting.
+ */
+function meetingSegment(pathname: string, tail: string): string | undefined {
+  const prefix = '/calls/meetings/';
+  const suffix = `/${tail}`;
+  if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) return undefined;
+  const id = pathname.slice(prefix.length, pathname.length - suffix.length);
+  return isMeetingIdLike(id) ? id : undefined;
+}
 
 /**
  * Routes one request, or undefined for anything this API does not serve.
- * POST-only: both operations create provider-side state. The meeting id
- * segment is vetted with the same shape rule the reducer applies
- * (isMeetingIdLike), so a malformed id 404s here instead of reaching the
- * provider as a mangled URL.
+ * Writes are POSTs; the recording reads (list, download URL) are GETs.
+ * The meeting-id and file-name segments are vetted with the same shape
+ * rules the reducers apply (isMeetingIdLike / isRecordingFileNameLike), so
+ * malformed input 404s here instead of reaching the provider as a mangled
+ * URL — and, for the file name, before it could ever name an R2 key
+ * outside the recordings prefix.
  */
 export function routeCallRequest(method: string, pathname: string): CallRoute | undefined {
+  if (method === 'GET') return routeRecordingRead(pathname);
   if (method !== 'POST') return undefined;
   if (pathname === '/calls/meetings') return { kind: 'provision' };
-  const match = /^\/calls\/meetings\/([^/]+)\/participants$/.exec(pathname);
-  if (match?.[1] !== undefined && isMeetingIdLike(match[1])) {
-    return { kind: 'mint', meetingId: match[1] };
+  const mint = meetingSegment(pathname, 'participants');
+  if (mint !== undefined) return { kind: 'mint', meetingId: mint };
+  const start = meetingSegment(pathname, 'recordings');
+  if (start !== undefined) return { kind: 'record-start', meetingId: start };
+  const stop = meetingSegment(pathname, 'recordings/stop');
+  if (stop !== undefined) return { kind: 'record-stop', meetingId: stop };
+  return undefined;
+}
+
+/** The GET half of the routing table — split to stay under the CRAP budget. */
+function routeRecordingRead(pathname: string): CallRoute | undefined {
+  if (pathname === '/calls/recordings') return { kind: 'recordings-list' };
+  const match = /^\/calls\/recordings\/([^/]+)\/download-url$/.exec(pathname);
+  if (match?.[1] !== undefined && isRecordingFileNameLike(match[1])) {
+    return { kind: 'recording-download', fileName: match[1] };
   }
   return undefined;
+}
+
+/**
+ * Where recordings live inside the bucket: the storage_config `path` the
+ * start call sends, the prefix the listing asks for, and the key prefix
+ * the download presigns under — one constant so they cannot drift.
+ */
+export const RECORDINGS_PREFIX = 'recordings';
+
+/** The full R2 object key of one recording (its provider-named basename). */
+export function recordingObjectKey(fileName: string): string {
+  return `${RECORDINGS_PREFIX}/${fileName}`;
+}
+
+/** One finished recording, as the list route reports it. */
+export interface RecordingObject {
+  /** The provider-named basename — the call_recording rows' join key. */
+  fileName: string;
+  /** Object size in bytes. */
+  size: number;
+  /** The R2 LastModified timestamp (ISO 8601) — when the upload landed. */
+  uploadedAt: string;
+}
+
+/**
+ * The recordings in one S3 ListObjectsV2 response (the XML S3 speaks —
+ * workerd has no DOMParser, and the three fields ride fixed tags inside
+ * each <Contents> block, so a scoped regex is the whole parser). Keys
+ * outside the recordings prefix or not shaped like a provider-named
+ * recording are skipped: the bucket may hold other objects, and the list
+ * only ever serves what the download route would accept.
+ */
+export function parseBucketListing(xml: string): RecordingObject[] {
+  const objects: RecordingObject[] = [];
+  for (const [, block] of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+    const key = /<Key>([^<]*)<\/Key>/.exec(block ?? '')?.[1];
+    const size = /<Size>(\d+)<\/Size>/.exec(block ?? '')?.[1];
+    const uploadedAt = /<LastModified>([^<]*)<\/LastModified>/.exec(block ?? '')?.[1];
+    if (key === undefined || size === undefined || uploadedAt === undefined) continue;
+    const fileName = key.startsWith(`${RECORDINGS_PREFIX}/`)
+      ? key.slice(RECORDINGS_PREFIX.length + 1)
+      : undefined;
+    if (fileName === undefined || !isRecordingFileNameLike(fileName)) continue;
+    objects.push({ fileName, size: Number(size), uploadedAt });
+  }
+  return objects;
+}
+
+/**
+ * The loggable summary of one webhook delivery (the payload shape the
+ * 増分0 spike and the provider docs fix: recording.statusUpdate carries a
+ * `recording` object). Pure so the interesting rule — never echo the
+ * whole payload, whose UPLOADED form carries download URLs — is testable;
+ * undefined for bodies that are not a recording event (logged as such).
+ */
+export function summarizeRecordingEvent(
+  body: unknown,
+): { event: string; recordingId: string; status: string; fileName: string; error: string } | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const record = body as Record<string, unknown>;
+  if (typeof record.event !== 'string') return null;
+  const recording = (record.recording ?? {}) as Record<string, unknown>;
+  const field = (value: unknown) => (typeof value === 'string' ? value : '');
+  return {
+    event: record.event,
+    recordingId: field(recording.id),
+    status: field(recording.status),
+    fileName: field(recording.outputFileName),
+    error: field(recording.errMessage),
+  };
 }
 
 /**

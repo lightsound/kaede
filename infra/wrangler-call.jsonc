@@ -1,7 +1,8 @@
 // 通話 API Worker (kaede-call) の wrangler 手動デプロイ用設定(Alchemy が
 // 使えないときの逃げ道 — wrangler.jsonc と同じ役割分担)。alchemy.run.ts の
 // CallApi と同じ Worker に同じ構成でデプロイする。乖離させないこと。
-// シークレットはファイルに書けないため別途:
+// シークレット(REALTIMEKIT_API_TOKEN / R2_ACCESS_KEY_ID /
+// R2_SECRET_ACCESS_KEY)はファイルに書けないため別途:
 //   pnpm --filter @kaede/infra exec wrangler secret put REALTIMEKIT_API_TOKEN --config wrangler-call.jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -16,6 +17,7 @@
     "CLERK_ISSUER": "https://clerk.kaede.town",
     "CLERK_AUDIENCE": "kaede-spacetimedb",
     "SPACETIME_HOST_URL": "https://maincloud.spacetimedb.com",
-    "ALLOWED_ORIGINS": "https://kaede.town,https://kaede.kaede-751.workers.dev"
+    "ALLOWED_ORIGINS": "https://kaede.town,https://kaede.kaede-751.workers.dev",
+    "RECORDINGS_BUCKET": "kaede-recordings"
   }
 }

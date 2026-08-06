@@ -199,6 +199,11 @@ export async function connect(
             // groups this client is a member of — the meeting id it carries
             // is the join capability (see group_call in the server).
             tables.groupCall,
+            // The recording labels (Phase 4 増分④): whole-table, small by
+            // construction (RECORDING_HISTORY_MAX) — the 録画一覧 decorates
+            // the Worker's R2 listing with them (see call_recording in the
+            // server for why these rows carry no download capability).
+            tables.callRecording,
           ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping

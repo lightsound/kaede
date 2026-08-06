@@ -309,9 +309,11 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    CI の自動デプロイはデプロイ後にステート差分を自動でコミット・push しますが、
    **手動で Alchemy デプロイした場合はステート差分を自分でコミット**してください
    （放置すると次の CI デプロイのステートコミットと混ざります）。
-   リモートストアを選ばなかった理由: R2 バックエンドは API トークンに R2 権限がなく使えず、
-   Durable Objects ベースの `Cloudflare.state()` も初回ブートストラップが Secrets Store の
-   書き込み権限を要求するため、Workers Scripts:Edit しか持たない現行トークンでは動きません。
+   リモートストアを選ばなかった理由（2026-08-02 時点）: R2 バックエンドは当時の API トークンに
+   R2 権限がなく使えず、Durable Objects ベースの `Cloudflare.state()` も初回ブートストラップが
+   Secrets Store の書き込み権限を要求するため動きませんでした。トークンにはその後 R2 権限が
+   付きました（録画バケットのため — 2026-08-06 実測）が、ステート戦略は据え置きです
+   （移行の利益がなく、シークレットを平文で書く性質はストアを変えても変わらないため）。
    個人用 dev ステージ（既定の `dev_$USER`）のステートは `.gitignore` で除外しています。
 
    > **注意**: Alchemy のステートには `Redacted` なシークレットも**平文で**書かれます。
@@ -338,17 +340,24 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 ### 通話 API Worker（kaede-call）
 
 ビデオ通話（ROADMAP Phase 4）の RealtimeKit 呼び出しのうち、シークレットを要する
-**ミーティング作成・参加トークン発行**だけを行う Worker です（`packages/worker`）。
-CI の自動デプロイに含まれ、リソース定義は `infra/alchemy.run.ts` の `CallApi`、
+**ミーティング作成・参加トークン発行・録画の開始/停止**と、録画ファイルの
+**一覧・ダウンロード URL 発行（R2）・Webhook 受信**を行う Worker です
+（`packages/worker`）。CI の自動デプロイに含まれ、リソース定義は
+`infra/alchemy.run.ts` の `CallApi`（録画バケットは `Recordings`）、
 wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
 
-- **ランタイムシークレット `REALTIMEKIT_API_TOKEN`**（Realtime Admin 権限の
-  アカウント API トークン）は **Alchemy のバインディングにしていません** —
+- **ランタイムシークレット**（`REALTIMEKIT_API_TOKEN`＝Realtime Admin 権限の
+  アカウント API トークン、`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`＝録画
+  バケットの S3 資格情報）は **Alchemy のバインディングにしていません** —
   Alchemy のステート（prod は git コミット対象）は `Redacted` 値も平文で保存する
   ことを実測済みのため（2026-08-05）。CI のデプロイジョブが Alchemy デプロイ後に
   `wrangler secret put` で毎回同期します（GitHub Actions シークレット
-  `REALTIMEKIT_API_TOKEN` が必要）。Alchemy のスクリプト再アップロードは帯域外の
-  secret_text バインディングを保持します（同日実測）。手動で入れ直す場合:
+  `REALTIMEKIT_API_TOKEN` が必要。R2 の対は **`CLOUDFLARE_API_TOKEN` から導出** —
+  R2 の S3 資格情報は「R2 権限付き API トークン」の別表現で、access key =
+  トークン ID・secret = トークン値の SHA-256。実測 2026-08-06。バケットスコープの
+  専用トークンに硬化する場合はシークレット値の差し替えだけで済みます）。
+  Alchemy のスクリプト再アップロードは帯域外の secret_text バインディングを
+  保持します（2026-08-05 実測）。手動で入れ直す場合:
 
   ```sh
   cd infra && printf '%s' "$REALTIMEKIT_API_TOKEN" | \
@@ -357,7 +366,7 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
 
 - **ローカル開発**は Alchemy を通さず `wrangler dev` で動かします。
   `infra/.dev.vars`（gitignore 済み — wrangler は設定ファイルの隣の
-  `.dev.vars` を読み、同名の vars を上書きする）に **5 つとも**書くこと —
+  `.dev.vars` を読み、同名の vars を上書きする）に **8 つとも**書くこと —
   `wrangler-call.jsonc` の vars は本番値なので、上書きしないと CORS が
   localhost を拒否し、ミーティングも本番アプリに作られてしまいます:
 
@@ -367,6 +376,9 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   CLERK_ISSUER=https://<開発インスタンス>.clerk.accounts.dev
   SPACETIME_HOST_URL=http://localhost:3000
   ALLOWED_ORIGINS=http://localhost:5173
+  RECORDINGS_BUCKET=<開発用の録画バケット名>
+  R2_ACCESS_KEY_ID=<R2 権限付きトークンの ID>
+  R2_SECRET_ACCESS_KEY=<同トークン値の SHA-256>
   ```
 
   ```sh
@@ -384,6 +396,17 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   （`SPACETIME_HOST_URL` の `/v1/identity/public-key` に対する署名検証 —
   増分②でメンバー限定を解除、ROADMAP Phase 4 参照）。ゲストも通話の開始・
   参加・画面共有をメンバーと同等にできます。
+
+- **録画（ROADMAP Phase 4 増分④）**: 録画の開始/停止・一覧・ダウンロードは
+  **承認済みメンバー限定**です（Worker がメンバーの Clerk JWT だけに録画
+  ルートを開ける — ゲストの bearer は 403）。録画ファイルは Start Recording の
+  `storage_config` で R2 バケット（本番 `kaede-recordings`）へ直接
+  アップロードされ、完了の真実源はバケット自体（一覧は Worker が S3 API で
+  読む）。メタデータ（どの会議・誰が開始）は SpacetimeDB の `call_recording`
+  行が持ちます。Webhook（`recording.statusUpdate`）は
+  `/webhooks/realtimekit` で受け、`rtk-signature` を well-known 公開鍵で
+  検証して Workers Logs へ記録します（ERRORED の運用可視性）。登録は冪等な
+  `scripts/ensure-realtimekit-webhook.sh` で行います（本番アプリは登録済み）。
 
 ## CI
 

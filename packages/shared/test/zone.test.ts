@@ -9,6 +9,7 @@ import {
   HUDDLE_LEAVE_DISTANCE,
   huddleLabel,
   isMeetingIdLike,
+  isRecordingFileNameLike,
   keepsHuddleMembership,
   normalizeHuddleName,
   resolveZoneOccupancy,
@@ -354,5 +355,29 @@ describe('isMeetingIdLike', () => {
     expect(isMeetingIdLike('BBB8280D-7D30-430B-A3A0-78802ED5617C')).toBe(false);
     expect(isMeetingIdLike('bbb8280d-7d30-430b-a3a0-78802ed5617c\n')).toBe(false);
     expect(isMeetingIdLike("'; DROP TABLE group_call; --")).toBe(false);
+  });
+});
+
+describe('isRecordingFileNameLike', () => {
+  // The live-probed shape (2026-08-06): {meetingId}_{epochMillis}.mp4.
+  const REAL = 'bbb18638-c246-472c-b79f-4840becd2eef_1785992667838.mp4';
+
+  it('プロバイダ命名の {meetingId}_{epochMs}.mp4 だけを受理する', () => {
+    expect(isRecordingFileNameLike(REAL)).toBe(true);
+    expect(isRecordingFileNameLike('')).toBe(false);
+    expect(isRecordingFileNameLike('bbb18638-c246-472c-b79f-4840becd2eef.mp4')).toBe(false);
+    expect(isRecordingFileNameLike('bbb18638-c246-472c-b79f-4840becd2eef_1785992667838')).toBe(
+      false,
+    );
+    expect(isRecordingFileNameLike(`${REAL}\n`)).toBe(false);
+  });
+
+  it('オブジェクトキーのプレフィックス脱出を表現できない', () => {
+    // The Worker builds `recordings/{fileName}` — a slash or dot segment in
+    // an accepted name would escape the prefix, so the shape rule is also
+    // the traversal guard.
+    expect(isRecordingFileNameLike(`../${REAL}`)).toBe(false);
+    expect(isRecordingFileNameLike(`recordings/${REAL}`)).toBe(false);
+    expect(isRecordingFileNameLike(`..%2F${REAL}`)).toBe(false);
   });
 });

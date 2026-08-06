@@ -136,6 +136,9 @@ importers:
       '@kaede/shared':
         specifier: workspace:*
         version: link:../shared
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
       jose:
         specifier: ^6.2.8
         version: 6.2.8

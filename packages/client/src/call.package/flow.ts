@@ -30,6 +30,8 @@ export interface CallFlowDeps {
 export interface CallTicket {
   /** The group whose call this is — the dock leaves when it stops being ours. */
   groupId: bigint;
+  /** The joined meeting — what the recording control addresses (増分④). */
+  meetingId: string;
   /** The minted participant token CallProvider.join dials with. */
   authToken: string;
 }
@@ -83,5 +85,5 @@ export async function acquireCallTicket(deps: CallFlowDeps): Promise<CallTicket>
       if (meetingId === undefined) throw err;
     }
   }
-  return { groupId: own.groupId, authToken: await deps.mintToken(meetingId) };
+  return { groupId: own.groupId, meetingId, authToken: await deps.mintToken(meetingId) };
 }

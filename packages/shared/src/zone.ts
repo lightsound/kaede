@@ -477,6 +477,34 @@ export function isMeetingIdLike(meetingId: string): boolean {
 }
 
 /**
+ * Whether `fileName` has the shape the provider names recording files —
+ * `{meetingId}_{epochMillis}.mp4`, fixed at start time as the Start
+ * Recording response's `output_file_name` (live-probed 2026-08-06, ROADMAP
+ * Phase 4 増分④). Two writes rule on it: log_group_recording accepts it
+ * into the call_recording row (the isMeetingIdLike reasoning — the stored
+ * value is the join key against the R2 listing, so garbage is refused at
+ * the write), and the Worker's download route accepts it into an R2 object
+ * key (where the shape rule is also what makes prefix escapes — slashes,
+ * dots — unrepresentable). The epoch width is lenient (10–17 digits)
+ * because nothing rules on its value, only on the overall shape.
+ */
+export function isRecordingFileNameLike(fileName: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d{10,17}\.mp4$/.test(
+    fileName,
+  );
+}
+
+/**
+ * How many call_recording rows the module retains (the CHAT_HISTORY_MAX
+ * shape: trimmed by the writer on every insert). These rows are LABELS for
+ * the R2 listing, not the recordings themselves — a trimmed row degrades
+ * its object to a date-only listing entry, deletes nothing — so the cap
+ * only bounds what every entering client downloads with the public table.
+ * 200 recordings is years of the community's meeting cadence.
+ */
+export const RECORDING_HISTORY_MAX = 200;
+
+/**
  * The call-registration token bucket's parameters (the huddle numbers, a
  * bucket of its own — register_group_call writes a public row broadcast to
  * the group's subscribers, and buckets shared across features drift from
