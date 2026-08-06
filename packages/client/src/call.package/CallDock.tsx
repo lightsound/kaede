@@ -94,8 +94,8 @@ export interface CallDockNet {
   /** NetApi.joinGroupCall — the whole 増分⑥ join procedure. */
   joinGroupCall(): Promise<{ groupId: bigint; authToken: string }>;
   /** NetApi.startGroupRecording / stopGroupRecording (増分④→⑥). */
-  startGroupRecording(): Promise<void>;
-  stopGroupRecording(): Promise<void>;
+  startGroupRecording(groupId: bigint): Promise<void>;
+  stopGroupRecording(groupId: bigint): Promise<void>;
 }
 
 /** Everything the join sequence below needs from the mounted dock. */
@@ -153,17 +153,25 @@ async function joinCall(ctx: JoinContext): Promise<void> {
 
 /**
  * The member-only recording control the in-call panel renders (増分④), or
- * undefined for guests. Since 増分⑥ both handlers are argument-less
- * procedures: the module resolves the meeting from the sender's own
- * membership and writes the label row itself, so the dock keeps no
- * meeting id and no label write. The gate is cosmetic like every UI gate
- * — the procedures re-check approved membership server-side.
+ * undefined for guests. Since 増分⑥ both handlers name only the ticket's
+ * GROUP: the module resolves the meeting from its own group_call row and
+ * writes the label row itself, so the dock keeps no meeting id and no
+ * label write. The group must come from the ticket, not the live
+ * membership: in the auto-leave window (walked away, teardown pending)
+ * the membership already names elsewhere, and a control clicked there
+ * must still address the call the session is on. The gate is cosmetic
+ * like every UI gate — the procedures re-check approved membership
+ * server-side.
  */
-function recordingHandlersFor(member: boolean, net: CallDockNet): RecordingHandlers | undefined {
+function recordingHandlersFor(
+  member: boolean,
+  groupId: bigint,
+  net: CallDockNet,
+): RecordingHandlers | undefined {
   if (!member) return undefined;
   return {
-    start: () => net.startGroupRecording(),
-    stop: () => net.stopGroupRecording(),
+    start: () => net.startGroupRecording(groupId),
+    stop: () => net.stopGroupRecording(groupId),
   };
 }
 
@@ -230,7 +238,10 @@ export function CallDock({
     // third transient.
     return (
       <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
-        <InCallPanel meeting={phase.meeting} recording={recordingHandlersFor(member, net)} />
+        <InCallPanel
+          meeting={phase.meeting}
+          recording={recordingHandlersFor(member, phase.groupId, net)}
+        />
       </Suspense>
     );
   }

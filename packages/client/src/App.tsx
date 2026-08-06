@@ -90,8 +90,10 @@ function callNetOf(netRef: { current: Net | undefined }) {
   const rejectUnmounted = () => Promise.reject(new Error('SpacetimeDB: not connected'));
   return {
     joinGroupCall: () => netRef.current?.joinGroupCall() ?? rejectUnmounted(),
-    startGroupRecording: () => netRef.current?.startGroupRecording() ?? rejectUnmounted(),
-    stopGroupRecording: () => netRef.current?.stopGroupRecording() ?? rejectUnmounted(),
+    startGroupRecording: (groupId: bigint) =>
+      netRef.current?.startGroupRecording(groupId) ?? rejectUnmounted(),
+    stopGroupRecording: (groupId: bigint) =>
+      netRef.current?.stopGroupRecording(groupId) ?? rejectUnmounted(),
     listRecordings: () => netRef.current?.listRecordings() ?? rejectUnmounted(),
     recordingDownloadUrl: (fileName: string) =>
       netRef.current?.recordingDownloadUrl(fileName) ?? rejectUnmounted(),

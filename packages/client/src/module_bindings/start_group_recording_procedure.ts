@@ -11,5 +11,6 @@ import {
 } from "spacetimedb";
 
 export const params = {
+  groupId: __t.u64(),
 };
 export const returnType = __t.string()

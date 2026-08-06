@@ -224,16 +224,18 @@ export interface NetApi {
    */
   joinGroupCall(): Promise<{ groupId: bigint; authToken: string }>;
   /**
-   * Starts / stops the cloud recording of the sender's group's call
+   * Starts / stops the cloud recording of the ticket-named group's call
    * (start_group_recording / stop_group_recording — 承認済みメンバー
    * 限定, enforced server-side; the dock's member gate is cosmetic).
-   * The meeting is resolved from the sender's membership and the label
-   * row is written server-side, so neither call carries an argument.
-   * Both reject on refusal; a stop with nothing to stop resolves (the
-   * benign race — auto-stop, another member stopped first).
+   * `groupId` is the join ticket's group, so the control stays bound to
+   * the call the WebRTC session is on even when the live membership has
+   * already moved elsewhere; the module resolves the meeting from its
+   * own group_call row and writes the label row itself. Both reject on
+   * refusal; a stop with nothing to stop resolves (the benign race —
+   * auto-stop, another member stopped first).
    */
-  startGroupRecording(): Promise<void>;
-  stopGroupRecording(): Promise<void>;
+  startGroupRecording(groupId: bigint): Promise<void>;
+  stopGroupRecording(groupId: bigint): Promise<void>;
   /**
    * The finished recordings in the bucket, newest first, and a
    * short-lived presigned download URL for one of them (list_recordings /
@@ -386,15 +388,15 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
       return c.procedures.joinGroupCall({});
     },
-    startGroupRecording() {
+    startGroupRecording(groupId) {
       const c = deps.conn();
       if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.procedures.startGroupRecording({}).then(() => undefined);
+      return c.procedures.startGroupRecording({ groupId }).then(() => undefined);
     },
-    stopGroupRecording() {
+    stopGroupRecording(groupId) {
       const c = deps.conn();
       if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.procedures.stopGroupRecording({}).then(() => undefined);
+      return c.procedures.stopGroupRecording({ groupId }).then(() => undefined);
     },
     listRecordings() {
       const c = deps.conn();

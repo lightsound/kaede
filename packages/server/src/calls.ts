@@ -216,16 +216,25 @@ function recordingCallOf(tx: Ctx, procedureName: string, groupId: bigint) {
 /**
  * The recording controls' charge transaction: the posting preamble PLUS
  * the approved-member gate (録画は承認済みメンバー限定 — 増分④ 設計①),
- * the sender's group's registered call, and the charge. Undefined marks
- * the reclaimed sender (the joinSetupIn contract).
+ * the registered call of the group the CLIENT's in-call ticket named,
+ * and the charge. The group comes from the ticket rather than the
+ * sender's group_member row because membership can move on (walking off
+ * mid-call) before the WebRTC teardown finishes, and a control clicked
+ * in that window must still address the call the session is on — never
+ * the new group's call. The authority stays the approved-member gate,
+ * exactly the retired Worker's contract (it took the meeting id from
+ * the client under the same gate). Undefined marks the reclaimed sender
+ * (the joinSetupIn contract).
  */
-function recordingControlSetupIn(tx: Ctx, procedureName: string): RecordingSetup | undefined {
+function recordingControlSetupIn(
+  tx: Ctx,
+  procedureName: string,
+  groupId: bigint,
+): RecordingSetup | undefined {
   const rows = findPostingSender(tx, procedureName);
   if (!rows) return undefined;
   requireApprovedMember(tx, procedureName);
-  const member = tx.db.groupMember.identity.find(tx.sender);
-  if (member === null) throw new SenderError(`${procedureName} refused (not-in-a-group)`);
-  const call = recordingCallOf(tx, procedureName, member.groupId);
+  const call = recordingCallOf(tx, procedureName, groupId);
   const cfg = callConfigOf(tx, procedureName);
   chargeCallAllowance(tx, procedureName);
   return { ...call, starterName: rows.nameRow.name, cfg };
@@ -249,31 +258,46 @@ function appendRecordingLabel(tx: Ctx, fileName: string, setup: RecordingSetup):
   trimHistory(tx.db.callRecording, RECORDING_HISTORY_MAX);
 }
 
-// Starts the cloud recording of the sender's group's call (増分④→⑥):
+// Starts the cloud recording of the ticket-named group's call (増分④→⑥):
 // the recording uploads straight to R2 (storage_config — the credentials
 // live in call_config and never leave the server), and the label row is
 // written by the result transaction. Returns the provider-fixed file
-// basename. A label lost to a crash between the HTTP and the result
-// transaction degrades that recording's listing to date-only, exactly the
-// 増分④ failure mode.
-export const startGroupRecording = spacetimedb.procedure(t.string(), (ctx) => {
-  const setup = ctx.withTx((tx) => recordingControlSetupIn(tx, 'start_group_recording'));
-  if (setup === undefined) throw new SenderError('start_group_recording refused (reclaimed)');
-  const fileName = startCloudRecording(ctx.http, setup.cfg, setup.meetingId);
-  ctx.withTx((tx) => appendRecordingLabel(tx, fileName, setup));
-  return fileName;
-});
+// basename. A lost label (a crash between the HTTP and the result
+// transaction, a failed label write) degrades that recording's listing to
+// date-only, exactly the 増分④ failure mode — never a start failure: the
+// provider is already recording by then, so rejecting would report a
+// failure over a running recording and invite a duplicate start (the old
+// fire-and-forget log_group_recording contract, carried over).
+export const startGroupRecording = spacetimedb.procedure(
+  { groupId: t.u64() },
+  t.string(),
+  (ctx, { groupId }) => {
+    const setup = ctx.withTx((tx) => recordingControlSetupIn(tx, 'start_group_recording', groupId));
+    if (setup === undefined) throw new SenderError('start_group_recording refused (reclaimed)');
+    const fileName = startCloudRecording(ctx.http, setup.cfg, setup.meetingId);
+    try {
+      ctx.withTx((tx) => appendRecordingLabel(tx, fileName, setup));
+    } catch (err) {
+      console.error('start_group_recording label write failed', fileName, err);
+    }
+    return fileName;
+  },
+);
 
-// Stops the active recording of the sender's group's call. False means
-// there was none — a benign race (the unattended auto-stop, another
+// Stops the active recording of the ticket-named group's call. False
+// means there was none — a benign race (the unattended auto-stop, another
 // member's stop), reported as an answer rather than a refusal: the
 // outcome the user asked for is true either way (the Worker's tolerated
 // 404, carried over).
-export const stopGroupRecording = spacetimedb.procedure(t.bool(), (ctx) => {
-  const setup = ctx.withTx((tx) => recordingControlSetupIn(tx, 'stop_group_recording'));
-  if (setup === undefined) throw new SenderError('stop_group_recording refused (reclaimed)');
-  return stopCloudRecording(ctx.http, setup.cfg, setup.meetingId) === 'stopped';
-});
+export const stopGroupRecording = spacetimedb.procedure(
+  { groupId: t.u64() },
+  t.bool(),
+  (ctx, { groupId }) => {
+    const setup = ctx.withTx((tx) => recordingControlSetupIn(tx, 'stop_group_recording', groupId));
+    if (setup === undefined) throw new SenderError('stop_group_recording refused (reclaimed)');
+    return stopCloudRecording(ctx.http, setup.cfg, setup.meetingId) === 'stopped';
+  },
+);
 
 /**
  * The recording reads' charge transaction: approved members only, like
