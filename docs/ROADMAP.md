@@ -792,6 +792,44 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   realtimekit.ts` の 1 ファイルに閉じ、差し替えはこの 2 ファイル＋infra の
   バインディングで完結する。メディアは**入室時 OFF**（カメラ・マイクは
   明示操作で ON — 通話開始と同じ意図性の規則）
+  → **増分③（2026-08-06）で UI Kit 本採用に伴い CallProvider スナップ
+  ショット抽象（provider.ts）は撤去**。閉じ込め単位は call.package
+  1 パッケージへ緩和（VISION 決定ログ）— 下の「UI Kit 本採用」参照
+- **RealtimeKit UI Kit の本採用**（通話中 UI をプリビルドコンポーネントで
+  置き換える。採用理由と閉じ込め緩和の決定は VISION 技術方針表・決定ログ
+  2026-08-06）
+  ✅ **実装済み（2026-08-06、増分③）**: 通話中 UI は
+  `@cloudflare/realtimekit-react-ui`＋`@cloudflare/realtimekit-react`
+  （core と同じ 2.0.1 に厳密ピン留め — ベータ採用の流儀）のプリビルド部品:
+  参加者タイル/グリッドと画面共有ビューは RtkGrid（共有中は mixed grid へ
+  自動切替 — 自前の ScreenTile/VideoTile を置き換え）、コントロールバーは
+  RtkMic/Camera/ScreenShareToggle＋RtkSettingsToggle＋RtkLeaveButton、
+  リモート音声は RtkParticipantsAudio（autoplay 拒否の回復 UI 込み）、
+  デバイス設定と退出確認のダイアログは RtkDialogManager。設計の要点:
+  ①**フルスクリーン RtkMeeting ではなく部品を組む**: kaede は 2D ワールドの
+  上に載るドック型 UI なので、RtkUiProvider（meeting を配下の Rtk 部品に
+  同期するプロバイダ）をドックのパネル内に置き、サイズはパネル側で固定
+  （520px・ステージ 300px）。セットアップ画面は出さない（メディア入室時
+  OFF の規則は Client.init の defaults で維持）
+  ②**閉じ込めの新しい単位は call.package 1 パッケージ**: UI Kit の import と
+  meeting オブジェクトの流通は `packages/client/src/call.package` の外に
+  漏らさない（境界は ImportLint）。realtimekit.ts は「init＋join して
+  meeting を返すダイヤルモジュール」に縮み、CallDock が meeting を直接
+  UI Kit に渡す。増分①の provider.ts（スナップショット語彙）は撤去 —
+  UI Kit が snapshot 投影・イベント購読・トグル状態の同期を全部担うため、
+  自前の抽象は「ベンダーの語彙をもう一度発明する」だけの層になった
+  ③**不変のもの**: ドックの出し分け（接続中＋会話グループ在籍、ゲスト
+  含む — dockHidden）、グループ離脱の自動退出（own-group 監視で leave）、
+  開始/参加のフロー（flow.ts の acquireCallTicket — 単体テストも不変）、
+  Worker のトークン経路、E2E の「📞 通話に参加」ボタン（参加前 UI は
+  自前のまま — group-call-visibility.spec.ts は無変更で通る）
+  ④UI Kit の可視文字列は `useLanguage` の部分辞書で日本語化（ベンダー
+  キーの辞書なので Paraglide には載せない — i18n 単一系統の対象は自前の
+  文字列）。録画増分では RtkRecordingIndicator・RtkRecordingToggle が
+  同じ部品箱から使える
+  ⑤実 WebRTC は CI で回せないため、2 ブラウザの手動テスト（フェイク
+  メディア）でメンバー/ゲストの通話・画面共有・デバイス設定・自動退出を
+  実証（増分①②の規約）
 - 小さなサーバー API の新設（**Cloudflare Workers**）: RealtimeKit の参加トークン
   発行・録画開始/停止はシークレットキーを要するためブラウザから直接呼べない
   （SpacetimeDB モジュールも外部 HTTP を呼べない）。VISION の「バックエンドは
@@ -1031,7 +1069,8 @@ Gather/oVice に対する明確な差別化。
 - 英語対応（Paraglide に en ロケールを追加。翻訳の自動化として
   **Lingo.dev CLI** をこのタイミングで評価 — VISION の i18n 行を参照）
 - モバイル対応
-- `CallProvider` のコスト構造見直し（RealtimeKit 継続 or LiveKit/セルフホスト移行）
+- 通話プロバイダのコスト構造見直し（RealtimeKit 継続 or LiveKit/セルフホスト移行。
+  乗り換えは call.package 1 パッケージの書き直し — VISION 決定ログ 2026-08-06）
 
 ---
 

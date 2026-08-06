@@ -1,119 +1,49 @@
-// fallow-ignore-file coverage-gaps -- the RealtimeKit implementation of CallProvider: a thin event-to-snapshot wrapper over the vendor SDK, which needs live WebRTC infrastructure, not a unit test
+// fallow-ignore-file coverage-gaps -- the dial half of the RealtimeKit seam: init + join over the vendor SDK, which needs live WebRTC infrastructure, not a unit test. The join orchestration around it is flow.ts (unit-tested)
 
-// THE RealtimeKit module (VISION: 直接依存を 1 モジュールに閉じ込める) —
-// the only file in the client that imports the vendor SDK. Everything it
-// hands out is the provider-neutral vocabulary of provider.ts; the server
-// counterpart (the other half of the provider seam) is
-// packages/worker/src/realtimekit.ts.
+// The Core-SDK half of the vendor seam. Since 増分③ (the UI Kit adoption)
+// the containment unit is the whole call.package, not this single file
+// (VISION 決定ログ 2026-08-06): the meeting object flows to CallDock.tsx,
+// which renders the vendor's prebuilt components around it. Nothing
+// OUTSIDE call.package may import the vendor SDK or receive a Meeting —
+// swapping providers (LiveKit ships the same-shaped prebuilt UI in
+// @livekit/components-react) means rewriting this package and nothing else.
 import RealtimeKitClient from '@cloudflare/realtimekit';
-import type { CallProvider, CallSnapshot, CallTile } from './provider';
 
 /** The SDK's meeting object, as Client.init returns it. */
-type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
+export type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
 
-/**
- * The track while its media is enabled, else undefined: the SDK keeps
- * stale track references around after a disable, and types some pairs as
- * always-present while handing back null/undefined members (a window
- * share has no audio track) — one rule, so every tile field reads the
- * same way.
- */
-function liveTrack(
-  enabled: boolean,
-  track: MediaStreamTrack | null | undefined,
-): MediaStreamTrack | undefined {
-  return enabled ? (track ?? undefined) : undefined;
+/** What dialing needs, besides the token: the one exit signal. */
+export interface DialRequest {
+  /** The participant token the Worker minted (api.ts). */
+  authToken: string;
+  /** The session ended on any path (own leave, kicked, meeting ended). */
+  onEnded(): void;
 }
 
 /**
- * Projects the SDK's live state into one CallSnapshot: the local
- * participant first, then everyone joined, tracks included only while the
- * matching media is enabled (liveTrack). Self audio is never projected —
- * playing back your own mic is feedback, and the mic state renders from
- * `micOn` instead. The same rule extends to the self screen-share's AUDIO
- * (a shared tab's sound is already playing in that tab); its video IS
- * projected, as the sharer's own confirmation of what everyone sees.
+ * Dials into the meeting: init with the minted token, join the room, hand
+ * back the live meeting for the dock to render. Media starts OFF on both
+ * sides — a call is entered listening, turning the camera and mic on is
+ * the participant's explicit act (the same intentionality rule as
+ * starting the call itself).
  */
-function snapshotOf(meeting: Meeting): CallSnapshot {
-  const self = meeting.self;
-  const tiles: CallTile[] = [
-    {
-      key: 'self',
-      name: self.name,
-      isSelf: true,
-      videoTrack: liveTrack(self.videoEnabled, self.videoTrack),
-      audioTrack: undefined,
-      screenTrack: liveTrack(self.screenShareEnabled, self.screenShareTracks.video),
-      screenAudioTrack: undefined,
-    },
-    ...meeting.participants.joined.toArray().map((participant) => ({
-      key: participant.id,
-      name: participant.name,
-      isSelf: false,
-      videoTrack: liveTrack(participant.videoEnabled, participant.videoTrack),
-      audioTrack: liveTrack(participant.audioEnabled, participant.audioTrack),
-      screenTrack: liveTrack(participant.screenShareEnabled, participant.screenShareTracks.video),
-      screenAudioTrack: liveTrack(
-        participant.screenShareEnabled,
-        participant.screenShareTracks.audio,
-      ),
-    })),
-  ];
-  return {
-    tiles,
-    micOn: self.audioEnabled,
-    cameraOn: self.videoEnabled,
-    screenShareOn: self.screenShareEnabled,
-  };
+export async function dialMeeting({ authToken, onEnded }: DialRequest): Promise<Meeting> {
+  const meeting = await RealtimeKitClient.init({
+    authToken,
+    defaults: { audio: false, video: false },
+  });
+  // Fires on every exit path — the dock's own leave() included — so the
+  // dock resets through one signal whether the user left, was kicked, or
+  // the meeting ended.
+  meeting.self.on('roomLeft', onEnded);
+  try {
+    await meeting.join();
+  } catch (err) {
+    // A failed join must not leave the initialized client (listeners,
+    // acquired devices) running with no handle to release it (a review
+    // finding); leave() is the SDK's teardown.
+    await meeting.leave().catch(() => {});
+    throw err;
+  }
+  return meeting;
 }
-
-/**
- * The RealtimeKit CallProvider: init with the minted token, join the room,
- * and re-publish a snapshot on every visible change. Media starts OFF on
- * both sides (defaults audio/video false) — a call is entered listening,
- * turning the camera and mic on is the participant's explicit act (the
- * same intentionality rule as starting the call itself).
- */
-export const realtimeKitProvider: CallProvider = {
-  async join({ authToken, onSnapshot, onEnded }) {
-    const meeting = await RealtimeKitClient.init({
-      authToken,
-      defaults: { audio: false, video: false },
-    });
-    const publish = (): void => onSnapshot(snapshotOf(meeting));
-    meeting.self.on('videoUpdate', publish);
-    meeting.self.on('audioUpdate', publish);
-    // Fires on the browser's own "stop sharing" bar too, not only the
-    // dock's toggle — the snapshot re-projection handles both the same.
-    meeting.self.on('screenShareUpdate', publish);
-    const joined = meeting.participants.joined;
-    joined.on('participantJoined', publish);
-    joined.on('participantLeft', publish);
-    joined.on('videoUpdate', publish);
-    joined.on('audioUpdate', publish);
-    joined.on('screenShareUpdate', publish);
-    // Fires on every exit path — the own leave() below included — so the
-    // dock resets through one signal whether the user left, was kicked, or
-    // the meeting ended.
-    meeting.self.on('roomLeft', onEnded);
-    try {
-      await meeting.join();
-    } catch (err) {
-      // A failed join must not leave the initialized client (listeners,
-      // acquired devices) running with no session handle to release it
-      // (a review finding); leave() is the SDK's teardown.
-      await meeting.leave().catch(() => {});
-      throw err;
-    }
-    publish();
-    return {
-      setMic: (on) => (on ? meeting.self.enableAudio() : meeting.self.disableAudio()),
-      setCamera: (on) => (on ? meeting.self.enableVideo() : meeting.self.disableVideo()),
-      // enableScreenShare opens the browser's picker; a cancelled picker
-      // rejects, which the dock's toggle swallows like every media refusal.
-      setScreenShare: (on) =>
-        on ? meeting.self.enableScreenShare() : meeting.self.disableScreenShare(),
-      leave: () => meeting.leave(),
-    };
-  },
-};
