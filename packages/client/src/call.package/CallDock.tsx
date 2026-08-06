@@ -13,6 +13,7 @@ import { blurringClick } from '../ui.package';
 import { mintCallToken, provisionMeeting, startCallRecording, stopCallRecording } from './api';
 import { acquireCallTicket } from './flow';
 import type { RecordingHandlers } from './InCallPanel';
+import { recordingPassGetterOf } from './pass';
 import { dialMeeting, type Meeting } from './realtimekit';
 
 // The UI Kit (hls.js, @floating-ui, hark, lodash-es, …) lives only in
@@ -98,6 +99,9 @@ export interface CallDockNet {
   registerGroupCall(meetingId: string): Promise<void>;
   /** NetApi.logGroupRecording — the fire-and-forget label write (増分④). */
   logGroupRecording(fileName: string): void;
+  /** NetApi.mintRecordingPass / ownRecordingPass — the pass flow (増分⑤). */
+  mintRecordingPass(): Promise<void>;
+  ownRecordingPass(): string | undefined;
 }
 
 /** Everything the join sequence below needs from the mounted dock. */
@@ -168,7 +172,10 @@ async function joinCall(ctx: JoinContext): Promise<void> {
  * secret and the R2 credentials) and then logs the label row the 録画一覧
  * decorates itself with; stop asks the Worker to look the active
  * recording up — no recording id is kept client-side (the stateless
- * rule). Split from the component to stay under the CRAP budget.
+ * rule). Both calls carry the recording pass (増分⑤) the Worker's
+ * member-only routes demand — acquired (and re-minted when stale) right
+ * before each request. Split from the component to stay under the CRAP
+ * budget.
  */
 function recordingHandlersFor(
   member: boolean,
@@ -177,12 +184,13 @@ function recordingHandlersFor(
   net: CallDockNet,
 ): RecordingHandlers | undefined {
   if (!member) return undefined;
+  const getPass = recordingPassGetterOf(net);
   return {
     start: async () => {
-      const fileName = await startCallRecording(getToken, meetingId);
+      const fileName = await startCallRecording(getToken, getPass, meetingId);
       net.logGroupRecording(fileName);
     },
-    stop: () => stopCallRecording(getToken, meetingId),
+    stop: () => stopCallRecording(getToken, getPass, meetingId),
   };
 }
 

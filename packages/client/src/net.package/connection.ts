@@ -204,6 +204,11 @@ export async function connect(
             // the Worker's R2 listing with them (see call_recording in the
             // server for why these rows carry no download capability).
             tables.callRecording,
+            // The own recording pass (Phase 4 増分⑤): subscribed whole and
+            // narrowed by row-level security to the own row alone — the
+            // delivery channel of mint_recording_pass (a reducer cannot
+            // return a value), read back by NetApi.ownRecordingPass.
+            tables.recordingPass,
           ]);
       })
       // Keep the token: a host that is down rejects every attempt, and dropping

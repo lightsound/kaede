@@ -21,12 +21,27 @@ const BASE_URL =
  * recording routes additionally require the MEMBER credential (増分④) —
  * the Worker 403s a guest's, and the UI never offers them to guests.
  */
+/**
+ * Produces the recording pass to send with a member-only recording route
+ * (増分⑤): the short-lived module-minted capability that proves the
+ * caller is an APPROVED member — acquireRecordingPass (pass.ts) with the
+ * net methods bound. Rejecting aborts the request, which is the same
+ * outcome the Worker's 403 would produce.
+ */
+export type RecordingPassGetter = () => Promise<string>;
+
 /** The fetch init of one authenticated JSON request (split for the CRAP budget). */
-function requestInit(method: 'GET' | 'POST', token: string, body: unknown): RequestInit {
+function requestInit(
+  method: 'GET' | 'POST',
+  token: string,
+  body: unknown,
+  pass?: string,
+): RequestInit {
   return {
     method,
     headers: {
       authorization: `Bearer ${token}`,
+      ...(pass === undefined ? {} : { 'x-recording-pass': pass }),
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -45,11 +60,13 @@ async function callWorker(
   path: string,
   body?: unknown,
   toleratedStatus?: number,
+  getPass?: RecordingPassGetter,
 ): Promise<unknown> {
   const token = (await getToken()) ?? storedSessionToken();
   if (token === undefined) throw new Error('call API: no auth token');
+  const pass = getPass === undefined ? undefined : await getPass();
   // fallow-ignore-next-line security-sink -- the host is the build-time BASE_URL constant; the only interpolated segments are a meeting id vetted to UUID shape at the reducer write (isMeetingIdLike) and a recording file name vetted by isRecordingFileNameLike, both re-vetted by the Worker's route
-  const response = await fetch(`${BASE_URL}${path}`, requestInit(method, token, body));
+  const response = await fetch(`${BASE_URL}${path}`, requestInit(method, token, body, pass));
   ensureOk(response, path, toleratedStatus);
   return response.json();
 }
@@ -89,16 +106,25 @@ export async function mintCallToken(
 
 /**
  * Asks the Worker to start the meeting's cloud recording (増分④ —
- * members only, R2 direct upload). Returns the recording file's basename,
+ * members only, R2 direct upload; 増分⑤ adds the recording pass every
+ * member-only route now demands). Returns the recording file's basename,
  * fixed at start time by the provider — what the starter logs into the
  * call_recording label row.
  */
 export async function startCallRecording(
   getToken: AuthTokenGetter,
+  getPass: RecordingPassGetter,
   meetingId: string,
 ): Promise<string> {
   return stringField(
-    await post(getToken, `/calls/meetings/${meetingId}/recordings`, {}),
+    await callWorker(
+      getToken,
+      'POST',
+      `/calls/meetings/${meetingId}/recordings`,
+      {},
+      undefined,
+      getPass,
+    ),
     'fileName',
   );
 }
@@ -111,9 +137,17 @@ export async function startCallRecording(
  */
 export async function stopCallRecording(
   getToken: AuthTokenGetter,
+  getPass: RecordingPassGetter,
   meetingId: string,
 ): Promise<void> {
-  await callWorker(getToken, 'POST', `/calls/meetings/${meetingId}/recordings/stop`, {}, 404);
+  await callWorker(
+    getToken,
+    'POST',
+    `/calls/meetings/${meetingId}/recordings/stop`,
+    {},
+    404,
+    getPass,
+  );
 }
 
 /** One finished recording, as the Worker's R2 listing reports it (増分④). */
@@ -124,20 +158,36 @@ export interface RecordingFile {
 }
 
 /** The finished recordings in the bucket, newest first (増分④ — members only). */
-export async function fetchRecordings(getToken: AuthTokenGetter): Promise<RecordingFile[]> {
-  const payload = (await callWorker(getToken, 'GET', '/calls/recordings')) as {
-    recordings?: unknown;
-  };
+export async function fetchRecordings(
+  getToken: AuthTokenGetter,
+  getPass: RecordingPassGetter,
+): Promise<RecordingFile[]> {
+  const payload = (await callWorker(
+    getToken,
+    'GET',
+    '/calls/recordings',
+    undefined,
+    undefined,
+    getPass,
+  )) as { recordings?: unknown };
   return Array.isArray(payload.recordings) ? (payload.recordings as RecordingFile[]) : [];
 }
 
 /** A short-lived presigned URL for one recording — the browser downloads straight from R2. */
 export async function fetchRecordingDownloadUrl(
   getToken: AuthTokenGetter,
+  getPass: RecordingPassGetter,
   fileName: string,
 ): Promise<string> {
   return stringField(
-    await callWorker(getToken, 'GET', `/calls/recordings/${fileName}/download-url`),
+    await callWorker(
+      getToken,
+      'GET',
+      `/calls/recordings/${fileName}/download-url`,
+      undefined,
+      undefined,
+      getPass,
+    ),
     'url',
   );
 }

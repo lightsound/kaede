@@ -10,7 +10,12 @@ import {
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
-import { fetchRecordingDownloadUrl, fetchRecordings, type RecordingFile } from './api';
+import {
+  fetchRecordingDownloadUrl,
+  fetchRecordings,
+  type RecordingFile,
+  type RecordingPassGetter,
+} from './api';
 
 // Top-left, mirroring the admin panel's top-right: the recordings are a
 // space-level archive, not something you do from where you stand (the
@@ -73,8 +78,8 @@ function dateLabel(iso: string): string {
  * tab's memory (the URL carries a content-disposition override, so the
  * browser saves instead of playing).
  */
-async function download(getToken: AuthTokenGetter, fileName: string): Promise<void> {
-  const url = await fetchRecordingDownloadUrl(getToken, fileName);
+async function download(ctx: PanelContext, fileName: string): Promise<void> {
+  const url = await fetchRecordingDownloadUrl(ctx.getToken, ctx.getPass, fileName);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.rel = 'noopener';
@@ -86,6 +91,8 @@ async function download(getToken: AuthTokenGetter, fileName: string): Promise<vo
 /** What every listing row and the panel body need from the mounted dock. */
 interface PanelContext {
   getToken: AuthTokenGetter;
+  /** The 増分⑤ recording pass, acquired per request (see api.ts). */
+  getPass: RecordingPassGetter;
   labels: RecordingLabelView[];
   onDownloadFailure: () => void;
 }
@@ -103,7 +110,7 @@ function RecordingRow({ file, ctx }: { file: RecordingFile; ctx: PanelContext })
         type="button"
         style={buttonStyle}
         onClick={blurringClick(
-          () => void download(ctx.getToken, file.fileName).catch(ctx.onDownloadFailure),
+          () => void download(ctx, file.fileName).catch(ctx.onDownloadFailure),
         )}
       >
         ⬇ DL
@@ -149,11 +156,14 @@ function ListingBody({
 export function RecordingsDock({
   visible,
   getToken,
+  getPass,
   labels,
 }: {
   /** Connected AND an approved member (cosmetic gate — see above). */
   visible: boolean;
   getToken: AuthTokenGetter;
+  /** The 増分⑤ recording pass getter (recordingPassGetterOf in pass.ts). */
+  getPass: RecordingPassGetter;
   /** The call_recording label rows (NetHooks.onRecordings), newest first. */
   labels: RecordingLabelView[];
 }) {
@@ -165,7 +175,7 @@ export function RecordingsDock({
     setListing({ kind: 'loading' });
     setDownloadFailed(false);
     try {
-      setListing({ kind: 'loaded', files: await fetchRecordings(getToken) });
+      setListing({ kind: 'loaded', files: await fetchRecordings(getToken, getPass) });
     } catch (err) {
       console.error('recording list failed', err);
       setListing({ kind: 'failed' });
@@ -200,7 +210,7 @@ export function RecordingsDock({
       </div>
       <ListingBody
         listing={listing}
-        ctx={{ getToken, labels, onDownloadFailure: () => setDownloadFailed(true) }}
+        ctx={{ getToken, getPass, labels, onDownloadFailure: () => setDownloadFailed(true) }}
       />
       {downloadFailed && (
         <span style={{ color: UI_ERROR_COLOR }}>ダウンロード URL を取得できませんでした</span>
