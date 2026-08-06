@@ -1160,6 +1160,52 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   （scope を `relay` 等に変えるだけで、#65 方式のように**生の秘密を
   reducer 引数で毎回運ばない** — 引数はログに残り得る）。アンカーの設営・
   ローテーション手順はそのまま共用できるため、中継増分に新しい設営は不要
+  → **ただし増分⑥候補（下）が先に実現すれば中継自体が不要になる**
+- **procedure によるアンカー撤去と Worker 縮退（増分⑥候補・未実装 —
+  2026-08-06 記載）**: 増分⑤の実装当日、オーナー指摘で **SpacetimeDB に
+  module からの outbound HTTP が既にある**ことを確認した（v1.10 で
+  procedure 導入・2.0 で TS module 対応。ピン留め済みの 2.7.1 に SDK・
+  ホストとも搭載）。増分⑤が橋を架けた「権威（module）と外部 API 境界
+  （Worker）の分断」は、procedure なら**分断ごと消せる**: 承認検査
+  （DB 読み）と外部 API 呼び出しを同一プロセスで書け、しかも reducer と
+  違い**値を返せる**（録画パスの「行を配達路にする」迂回も不要になる）。
+  スパイク実測（2026-08-06、ローカル 2.7.1 スタンドアロン）:
+  ①`spacetime.procedure` + `ctx.http.fetch`（同期）で外部 HTTPS が通る
+  （api.cloudflare.com / Clerk JWKS で 200）②3 秒応答も timeout 指定で
+  完走（v1.10 初期の 500ms クランプは撤廃済み。timeout 1 秒指定は 1 秒で
+  切れる）③private/special アドレスへの接続は拒否（SSRF ガード内蔵 —
+  ローカルの localhost API は呼べない）④戻り値が呼び出し元へ返る。
+  SDK 2.7.1 には **HTTP handlers（`Router` — module が HTTP を受ける口）**
+  も存在する。**Maincloud 側の前提はオーナー確認済み（2026-08-06）**:
+  procedure の外部 HTTP は許可されており、エネルギー課金も特段の記載なし
+  （無視してよい）。
+  **移行の方向**: 通話/録画 API（provision・mint・録画開始/停止・一覧・
+  presigned DL）を procedure 化し、
+  ①アンカー機構を丸ごと撤去（worker_anchor・recording_pass・
+  mint_recording_pass・録画パス・RECORDING_PASS_SECRETS・CI 同期 —
+  増分⑤は撤去コストが小さい設計にしてある）
+  ②Worker の bearer 検証スタックも撤去（Clerk JWKS・ホスト公開鍵・
+  callerKindOf・CORS・クライアントの BASE_URL/fetch 層 — procedure は
+  認証済み SpacetimeDB 接続越しに呼ばれ、`ctx.sender` が本人性そのもの）
+  ③Worker `kaede-call` は Webhook 受信のみに縮退。HTTP handlers での
+  直受け（rtk-signature の RSA 検証手段が論点）か、スケジュール
+  procedure による**ポーリング置換**（Webhook 自体の廃止）を増分内で
+  評価 — どちらかが成立すれば Worker→module 中継（増分⑤ 設計⑤）は
+  実装不要のまま消える
+  ④S3 SigV4 署名（一覧・presign）は module 内の純 TS 実装
+  （capability.ts の SHA-256/HMAC が流用できる）。
+  **引き受ける新リスク（オーナー了承 2026-08-06）**: 秘密が DB 内の
+  非公開テーブルへ移る（**日次バックアップ backup.yml からの除外が必須の
+  設計項目** — GitHub artifacts に 90 日残るため）・権威/秘密/外部呼び出しの
+  module への集中（現行は Worker 侵害でも DB が無事という分離があった）・
+  procedure API の成熟度（CLI に UNSTABLE 警告 — バージョン厳密ピンの
+  既存方針で緩和）・同期 HTTP の待ち時間がエネルギー消費になる点
+  （録画系は低頻度で実害僅少の見込み、移行時に実測）。
+  **実施タイミング**: 増分⑤マージ後の独立 PR。遅くとも最初の Webhook
+  中継が必要になる増分（課金 or Clerk 削除）より前が最安 — 中継の
+  relay 検証を一度も実装せずに済む。なお増分⑤アンカーの運用改善案
+  （CI 自動播種）は、本増分がアンカーごと撤去する前提では過剰投資として
+  見送り（設営はオーナー手順のまま）
 - 通話コストの実測とプラン判断（VISION の試算では RealtimeKit
   $0.002/参加者分 ≒ 月$20〜30想定）
 - 録画の透明性: **録画中インジケータを通話参加者全員に表示**する（同意の前提）。
