@@ -46,6 +46,7 @@ import JoinReducer from "./join_reducer";
 import JoinHuddleReducer from "./join_huddle_reducer";
 import LeaveHuddleReducer from "./leave_huddle_reducer";
 import LogGroupRecordingReducer from "./log_group_recording_reducer";
+import MintRecordingPassReducer from "./mint_recording_pass_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
 import RegisterGroupCallReducer from "./register_group_call_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
@@ -74,6 +75,7 @@ import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
 import PlayerStatusRow from "./player_status_table";
 import ReactionRow from "./reaction_table";
+import RecordingPassRow from "./recording_pass_table";
 import SpaceMemberRow from "./space_member_table";
 import SpaceSettingRow from "./space_setting_table";
 
@@ -212,6 +214,17 @@ const tablesSchema = __schema({
       { name: 'reaction_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, ReactionRow),
+  recordingPass: __table({
+    name: 'recording_pass',
+    indexes: [
+      { accessor: 'identity', name: 'recording_pass_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'recording_pass_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, RecordingPassRow),
   spaceMember: __table({
     name: 'space_member',
     indexes: [
@@ -250,6 +263,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_huddle", JoinHuddleReducer),
   __reducerSchema("leave_huddle", LeaveHuddleReducer),
   __reducerSchema("log_group_recording", LogGroupRecordingReducer),
+  __reducerSchema("mint_recording_pass", MintRecordingPassReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
   __reducerSchema("register_group_call", RegisterGroupCallReducer),
   __reducerSchema("reject_member", RejectMemberReducer),

@@ -127,6 +127,7 @@ export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
     ctx.db.portalGuard,
     ctx.db.huddleGuard,
     ctx.db.callGuard,
+    ctx.db.recordingPass,
     ctx.db.groupMember,
   ];
   for (const table of identityKeyed) table.identity.delete(identity);
