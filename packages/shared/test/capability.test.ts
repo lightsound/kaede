@@ -9,12 +9,14 @@ import {
 } from '../src/capability';
 
 const NOW = 1_785_972_000;
-const SUBJECT = 'c200dd03e1587e8995dd277e41928dd841aaf0aedc8cf1e02b2290955b289d7b';
+// A Clerk-style user id — what the recording pass binds (a hex Identity
+// is a subset of the same alphabet and needs no case of its own).
+const SUBJECT = 'user_3HVJjGyJ2OVHwrLPOpHPmFo6zV8';
 const SECRET = '9f2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff00';
 
 const claims = {
   scope: CAPABILITY_SCOPE_RECORDING,
-  subjectHex: SUBJECT,
+  subject: SUBJECT,
   expSeconds: NOW + RECORDING_PASS_TTL_SECONDS,
 };
 
@@ -98,7 +100,9 @@ describe('mintCapability / verifiedCapabilitySubject', () => {
   });
 
   it('語彙を破る claims は mint しない(区切り文字の混入余地を残さない)', () => {
-    expect(mintCapability({ ...claims, subjectHex: 'not-hex!' }, SECRET)).toBeUndefined();
+    expect(mintCapability({ ...claims, subject: 'user:with:colons' }, SECRET)).toBeUndefined();
+    expect(mintCapability({ ...claims, subject: 'bad subject!' }, SECRET)).toBeUndefined();
+    expect(mintCapability({ ...claims, subject: '' }, SECRET)).toBeUndefined();
     expect(mintCapability({ ...claims, scope: 'Bad:Scope' }, SECRET)).toBeUndefined();
     expect(mintCapability({ ...claims, expSeconds: 1.5 }, SECRET)).toBeUndefined();
     expect(mintCapability({ ...claims, expSeconds: -1 }, SECRET)).toBeUndefined();

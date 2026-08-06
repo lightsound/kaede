@@ -11,11 +11,11 @@ import {
 } from '../src/call.package/pass';
 
 const NOW = 1_785_972_000;
-const SUBJECT = 'c200dd03e1587e8995dd277e41928dd841aaf0aedc8cf1e02b2290955b289d7b';
+const SUBJECT = 'user_3HVJjGyJ2OVHwrLPOpHPmFo6zV8';
 
 function passExpiringAt(expSeconds: number): string {
   const pass = mintCapability(
-    { scope: CAPABILITY_SCOPE_RECORDING, subjectHex: SUBJECT, expSeconds },
+    { scope: CAPABILITY_SCOPE_RECORDING, subject: SUBJECT, expSeconds },
     'test-secret',
   );
   if (pass === undefined) throw new Error('test pass unmintable');

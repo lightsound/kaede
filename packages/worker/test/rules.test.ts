@@ -220,19 +220,21 @@ describe('callerKindOf', () => {
 
 describe('recordingPassSubject', () => {
   const NOW = 1_785_972_000;
-  const SUBJECT = 'c200dd03e1587e8995dd277e41928dd841aaf0aedc8cf1e02b2290955b289d7b';
+  // The Clerk user id the module binds the pass to — the caller must
+  // compare it against the verified bearer subject (vetRecordingPass).
+  const SUBJECT = 'user_3HVJjGyJ2OVHwrLPOpHPmFo6zV8';
   const SECRET = '9f2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff00';
   const pass =
     mintCapability(
       {
         scope: CAPABILITY_SCOPE_RECORDING,
-        subjectHex: SUBJECT,
+        subject: SUBJECT,
         expSeconds: NOW + RECORDING_PASS_TTL_SECONDS,
       },
       SECRET,
     ) ?? '';
 
-  it('module が mint した pass を受理し subject を返す(共有実装の往復)', () => {
+  it('module が mint した pass を受理し、束縛先の subject を返す(共有実装の往復)', () => {
     expect(recordingPassSubject(pass, SECRET, NOW)).toBe(SUBJECT);
   });
 

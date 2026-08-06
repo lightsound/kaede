@@ -274,7 +274,11 @@ async function vetCaller(
  * looseness (a signed-in-but-unapproved user hitting these routes
  * directly): the Clerk bearer proves "signed in against our instance",
  * the pass proves "approved, as of the last two minutes, says the module
- * itself". Split from vetCaller for the CRAP budget.
+ * itself". The pass must be the CALLER'S OWN: its subject is the Clerk
+ * user id the module recorded at connect time, compared against the
+ * bearer subject this Worker just verified — so a pass leaked to any
+ * other signed-in identity buys nothing (a Bugbot finding on the first
+ * cut). Split from vetCaller for the CRAP budget.
  */
 function vetRecordingPass(
   route: CallRoute,
@@ -289,7 +293,7 @@ function vetRecordingPass(
     env.RECORDING_PASS_SECRETS,
     Date.now() / 1000,
   );
-  if (subject === undefined) {
+  if (subject === undefined || subject !== caller.subject) {
     return { ok: false, response: json(403, { error: 'approval-required' }, cors) };
   }
   return { ok: true, caller };

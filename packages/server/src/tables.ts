@@ -29,6 +29,19 @@ export const spacetimedb = schema({
       displayName: t.string().optional(),
       createdAt: t.timestamp(),
       updatedAt: t.timestamp(),
+      // The provider's stable user id (the JWT `sub` claim — for Clerk a
+      // user_… id), written by clientConnected on every member connect
+      // (増分⑤): the recording pass embeds it so the Worker can bind the
+      // pass to the exact bearer it verified — the Worker cannot derive
+      // the SpacetimeDB Identity from the Clerk subject, so the module
+      // records the correspondence here, where it is a connect-time
+      // fact. Appended with an ''-default — NOT `.optional()`, which the
+      // host refuses as a migration ("requires a default value
+      // annotation", measured 2026-08-06) — so existing rows migrate on
+      // re-publish (additive-only rule); '' means "not recorded yet" and
+      // backfills on the owner's next connect, which every reducer call
+      // is preceded by.
+      subject: t.string().default(''),
     },
   ),
   // Membership of the single MVP space (承認制・管理者ロール — ROADMAP

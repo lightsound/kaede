@@ -180,38 +180,45 @@ export function hmacSha256Hex(secret: string, message: string): string | undefin
 // ── The capability format ───────────────────────────────────────────────
 
 /**
- * What one capability asserts, before it is signed. `subjectHex` is the
- * holder's SpacetimeDB Identity hex (the same key the module's rows use);
- * `expSeconds` is a Unix timestamp stamped from the module host's clock.
+ * What one capability asserts, before it is signed. `subject` is the
+ * holder as the VERIFIER knows them — for the recording pass that is the
+ * member's Clerk user id, so the Worker can require the pass to match
+ * the bearer it verified (a pass leaked to another signed-in identity
+ * buys nothing); `expSeconds` is a Unix timestamp stamped from the
+ * module host's clock.
  */
 export interface CapabilityClaims {
   scope: string;
-  subjectHex: string;
+  subject: string;
   expSeconds: number;
 }
 
 /** The signed prefix of one capability — what the MAC covers. */
 function capabilityPayload(claims: CapabilityClaims): string {
-  return `v1:${claims.scope}:${claims.subjectHex}:${claims.expSeconds}`;
+  return `v1:${claims.scope}:${claims.subject}:${claims.expSeconds}`;
 }
 
-/** The vocabulary shapes a capability's fields must keep (no delimiters). */
+/**
+ * The vocabulary shapes a capability's fields must keep — the subject
+ * alphabet (Clerk user ids, Identity hex) deliberately excludes the `:`
+ * delimiter, so no field can smuggle another field's boundary.
+ */
 function claimsWellFormed(claims: CapabilityClaims): boolean {
   return (
     /^[a-z][a-z-]*$/.test(claims.scope) &&
-    /^[0-9a-f]+$/.test(claims.subjectHex) &&
+    /^[A-Za-z0-9_-]+$/.test(claims.subject) &&
     Number.isInteger(claims.expSeconds) &&
     claims.expSeconds > 0
   );
 }
 
 /**
- * Mints one signed capability: `v1:{scope}:{subjectHex}:{exp}:{mac}`, or
- * undefined when the claims break the format's own vocabulary (hex
- * subject, kebab scope — nothing a delimiter could hide in) or the
- * secret is unusable. The caller (the module's minting reducer) treats
- * undefined as a refusal; it cannot happen through the reducer's own
- * inputs, which are the sender's identity and the server clock.
+ * Mints one signed capability: `v1:{scope}:{subject}:{exp}:{mac}`, or
+ * undefined when the claims break the format's own vocabulary (see
+ * claimsWellFormed — nothing a delimiter could hide in) or the secret is
+ * unusable. The caller (the module's minting reducer) treats undefined
+ * as a refusal; it cannot happen through the reducer's own inputs, which
+ * are the sender's stored subject and the server clock.
  */
 export function mintCapability(claims: CapabilityClaims, secret: string): string | undefined {
   if (!claimsWellFormed(claims) || secret === '') return undefined;
@@ -232,19 +239,22 @@ function macEquals(a: string, b: string): boolean {
 function parseCapability(token: string): (CapabilityClaims & { mac: string }) | undefined {
   const parts = token.split(':');
   if (parts.length !== 5 || parts[0] !== 'v1') return undefined;
-  const [, scope = '', subjectHex = '', expText = '', mac = ''] = parts;
+  const [, scope = '', subject = '', expText = '', mac = ''] = parts;
   if (!/^\d{1,15}$/.test(expText) || !/^[0-9a-f]{64}$/.test(mac)) return undefined;
-  const claims = { scope, subjectHex, expSeconds: Number(expText) };
+  const claims = { scope, subject, expSeconds: Number(expText) };
   return claimsWellFormed(claims) ? { ...claims, mac } : undefined;
 }
 
 /**
  * Verifies one capability against the accepted secrets and returns its
- * subject (the holder's Identity hex), or undefined for anything
- * unverifiable — malformed, wrong scope, expired, or signed by no
- * accepted secret. `secrets` is a LIST for rotation: the Worker accepts
- * old+new while the anchor flips (README「通話 API Worker」), and an
- * empty list verifies nothing (an unprovisioned anchor fails closed).
+ * subject, or undefined for anything unverifiable — malformed, wrong
+ * scope, expired, or signed by no accepted secret. The verifier must
+ * then BIND the returned subject to the caller it authenticated (the
+ * Worker compares it to the bearer's verified subject), so a capability
+ * leaked to anyone else buys nothing. `secrets` is a LIST for rotation:
+ * the Worker accepts old+new while the anchor flips (README「通話 API
+ * Worker」), and an empty list verifies nothing (an unprovisioned anchor
+ * fails closed).
  */
 export function verifiedCapabilitySubject(
   token: string,
@@ -260,7 +270,7 @@ export function verifiedCapabilitySubject(
   for (const secret of secrets) {
     if (secret === '') continue;
     const mac = hmacSha256Hex(secret, payload);
-    if (mac !== undefined && macEquals(mac, parsed.mac)) return parsed.subjectHex;
+    if (mac !== undefined && macEquals(mac, parsed.mac)) return parsed.subject;
   }
   return undefined;
 }

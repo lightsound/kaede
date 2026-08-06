@@ -179,10 +179,13 @@ export const RECORDING_PASS_HEADER = 'x-recording-pass';
  * member-only routes must refuse: a missing header, a malformed/expired/
  * mis-scoped pass, a signature no accepted secret produced — or an EMPTY
  * secret list, which is the unprovisioned anchor failing closed (the
- * worker_anchor table comment in the server). `secretsRaw` is the
- * RECORDING_PASS_SECRETS binding: comma-separated accepted secrets, a
- * LIST so rotation can hold old+new while the module's anchor flips
- * (README「通話 API Worker」). The verification itself is the shared
+ * worker_anchor table comment in the server). The returned subject is the
+ * Clerk user id the module minted the pass FOR; the caller must compare
+ * it to the bearer subject it verified (vetRecordingPass in index.ts) —
+ * verification alone does not bind the pass to the presenter. `secretsRaw`
+ * is the RECORDING_PASS_SECRETS binding: comma-separated accepted
+ * secrets, a LIST so rotation can hold old+new while the module's anchor
+ * flips (README「通話 API Worker」). The verification itself is the shared
  * verifiedCapabilitySubject — the exact code the module signs with, so
  * the two sides cannot disagree on the format.
  */

@@ -413,7 +413,8 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
 
 - **信頼アンカー（ROADMAP Phase 4 増分⑤）**: 録画ルートは Clerk bearer に
   加えて **module が承認済みメンバーへ発行する短命の録画パス**
-  （`x-recording-pass` ヘッダ、寿命 2 分）を要求します。パスの署名鍵が
+  （`x-recording-pass` ヘッダ、寿命 2 分。パスは発行先の Clerk subject に
+  束縛され、bearer と一致しなければ 403）を要求します。パスの署名鍵が
   Worker⇄SpacetimeDB の信頼アンカーで、環境ごとに 1 度だけ設営します:
 
   1. 秘密を生成する: `openssl rand -hex 32`

@@ -16,6 +16,7 @@ export const Account = __t.object("Account", {
   displayName: __t.option(__t.string()),
   createdAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
+  subject: __t.string(),
 });
 export type Account = __Infer<typeof Account>;
 

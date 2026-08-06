@@ -1116,7 +1116,7 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   ②**module→Worker のケイパビリティ = 短命の署名付き録画パス**:
   `mint_recording_pass` reducer が posting 前文（in-world + admission
   再検査）+ **approved 検査**（ラベル reducer と共有の requireApprovedMember）
-  + call_guard 課金のうえ、`v1:recording:<identityHex>:<exp>:<HMAC>`
+  + call_guard 課金のうえ、`v1:recording:<clerkSubject>:<exp>:<HMAC>`
   （寿命 `RECORDING_PASS_TTL_SECONDS` = 120 秒）を公開テーブル
   `recording_pass`（identity PK の upsert 行）へ書く。**行が配達路**
   （reducer は値を返せない）で、RLS `identity = :sender` 1 本が
@@ -1124,7 +1124,16 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   済み — 下の④）。Worker は録画 4 ルートで Clerk bearer **に加えて**
   `x-recording-pass` ヘッダを共有実装で検証し、無効なら 403
   `approval-required`。クライアントは提示直前に取得し、余命 15 秒未満なら
-  透過的に再 mint（`acquireRecordingPass` — 単体テスト済み）
+  透過的に再 mint（`acquireRecordingPass` — 単体テスト済み）。
+  **パスは bearer に束縛する**（初回実装への Bugbot HIGH 指摘で追加）:
+  Worker は SpacetimeDB Identity を Clerk subject から導出できない
+  （blake3 ベースの導出の再実装はバージョン結合が強すぎる）ため、逆に
+  **module 側が接続時に対応を記録する** — clientConnected が JWT の `sub` を
+  `account.subject` 列（末尾 optional の additive 追加）へ書き、mint は
+  identity hex ではなく **Clerk subject** をパスに埋め、Worker は検証済み
+  bearer の subject と完全一致しなければ 403。漏えいしたパスは本人の
+  Clerk セッション以外では無価値になる（束縛前は「サインイン済みの誰か」
+  なら TTL 内で流用できた）
   ③**署名は純 TS の HMAC-SHA-256**（`@kaede/shared` の capability.ts、
   RFC 4231 ベクタで単体テスト）: module ホストに WebCrypto が無い前提を
   設計で回避せず正面から満たし、Worker が**同じ共有コード**で検証するので

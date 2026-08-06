@@ -207,6 +207,22 @@ function upsertRecordingPass(ctx: Ctx, pass: string): void {
   ctx.db.recordingPass.insert({ identity: ctx.sender, pass });
 }
 
+/**
+ * The provider subject to bind the pass to: the sender's account row's
+ * `subject` (the Clerk user id clientConnected records — see the column
+ * comment in tables.ts). Present on every member connection by
+ * construction — clientConnected backfills it before any reducer of the
+ * same connection can run — so the refusal is the transitionMember rule:
+ * an "unreachable" branch must not read as a silent no-op.
+ */
+function recordingPassSubject(ctx: Ctx): string {
+  const subject = ctx.db.account.identity.find(ctx.sender)?.subject ?? '';
+  if (subject === '') {
+    throw new SenderError('mint_recording_pass refused (no-subject)');
+  }
+  return subject;
+}
+
 // Mints the sender's short-lived recording pass: the signed capability
 // the Worker's recording routes demand on top of the member bearer —
 // which is how the APPROVAL state only this module knows gets enforced at
@@ -220,18 +236,23 @@ function upsertRecordingPass(ctx: Ctx, pass: string): void {
 // from). The pass reaches its holder through the recording_pass row,
 // which RLS narrows to the sender alone (recordingPassVisibility) — a
 // reducer cannot return a value, so the row IS the delivery channel. The
-// claims are entirely server-made (the sender's identity, the server
-// clock), so mintCapability's undefined branch is unreachable here;
-// it still refuses loudly rather than writing an empty pass.
+// pass's subject is the sender's CLERK user id, not the SpacetimeDB
+// Identity: the Worker binds the pass to the bearer it verified (same
+// subject or 403), so a pass leaked to any other signed-in identity buys
+// nothing (a Bugbot finding on the first cut). The claims are entirely
+// server-made (the stored subject, the server clock), so mintCapability's
+// undefined branch is unreachable here; it still refuses loudly rather
+// than writing an empty pass.
 export const mintRecordingPass = spacetimedb.reducer((ctx) => {
   if (!findPostingSender(ctx, 'mint_recording_pass')) return;
   requireApprovedMember(ctx, 'mint_recording_pass');
+  const subject = recordingPassSubject(ctx);
   const secret = anchorSecret(ctx);
   chargeCallAllowance(ctx, 'mint_recording_pass');
   const pass = mintCapability(
     {
       scope: CAPABILITY_SCOPE_RECORDING,
-      subjectHex: ctx.sender.toHexString(),
+      subject,
       expSeconds:
         Number(ctx.timestamp.microsSinceUnixEpoch / 1_000_000n) + RECORDING_PASS_TTL_SECONDS,
     },
