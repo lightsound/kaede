@@ -152,7 +152,7 @@ export default Alchemy.Stack(
       compatibility: { date: '2026-08-01' },
       env: {
         // シークレット REALTIMEKIT_API_TOKEN・R2_ACCESS_KEY_ID・
-        // R2_SECRET_ACCESS_KEY は意図的にここに無い:
+        // R2_SECRET_ACCESS_KEY・RECORDING_PASS_SECRETS は意図的にここに無い:
         // Alchemy のステート(git コミット対象 — README「Alchemy の
         // ステート管理」の注意書き)は Redacted 値も平文で保存することを
         // 実測済み(2026-08-05、dev ステージで確認)。シークレットは

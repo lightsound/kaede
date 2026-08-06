@@ -139,7 +139,7 @@ function connectionPolicyFor(ctx: Ctx): ConnectionPolicy {
  * (two tabs, two devices) cannot interleave — the second clientConnected
  * runs after the first committed and finds its row.
  */
-function ensureAccount(ctx: Ctx): void {
+function ensureAccount(ctx: Ctx, subject: string): void {
   const claimedName = profileNameFrom(ctx.senderAuth.jwt?.fullPayload);
   const existing = ctx.db.account.identity.find(ctx.sender);
   if (existing === null) {
@@ -149,10 +149,12 @@ function ensureAccount(ctx: Ctx): void {
       displayName: claimedName,
       createdAt: ctx.timestamp,
       updatedAt: ctx.timestamp,
+      subject,
     });
     return;
   }
   backfillAccountName(ctx, existing.displayName, claimedName);
+  backfillAccountSubject(ctx, subject);
 }
 
 /**
@@ -170,6 +172,22 @@ function backfillAccountName(
 ): void {
   if (currentName !== undefined || claimedName === undefined) return;
   persistMemberName(ctx, claimedName);
+}
+
+/**
+ * Records the provider subject on the sender's account row (see the
+ * `subject` column comment in tables.ts): fills rows that predate the
+ * column, and rewrites it if a re-link ever changes the identity's
+ * provider mapping. Re-read rather than passed through because
+ * backfillAccountName may have just rewritten the row (persistMemberName)
+ * and a stale copy would clobber it. A separate function to keep
+ * ensureAccount under the CRAP budget (the backfillAccountName
+ * precedent).
+ */
+function backfillAccountSubject(ctx: Ctx, subject: string): void {
+  const account = ctx.db.account.identity.find(ctx.sender);
+  if (account === null || account.subject === subject) return;
+  ctx.db.account.id.update({ ...account, subject, updatedAt: ctx.timestamp });
 }
 
 /**
@@ -240,7 +258,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     // The account (global profile) is a fact of signing in; the membership
     // is not — joining this space is an explicit application, filed by the
     // apply_for_membership reducer when the user asks to.
-    ensureAccount(ctx);
+    ensureAccount(ctx, auth.subject);
     console.info(`member connected: sub=${auth.subject}`);
     recordConnectionEvent(ctx, 'connected', 'member');
     return;

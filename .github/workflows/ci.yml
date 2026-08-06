@@ -309,16 +309,29 @@ jobs:
       #   deploy token instead of adding GitHub secrets. Hardening path:
       #   swap in a bucket-scoped R2 token's pair, no code change. The
       #   preflight fails loudly if the deploy token lost its R2 grant.
+      # - RECORDING_PASS_SECRETS (増分⑤): the trust anchor's accepted
+      #   HMAC secrets (comma-separated for rotation) — must hold the
+      #   same value as the module's worker_anchor row, which the owner
+      #   seeds over `spacetime sql` (README「通話 API Worker」の設営手順).
+      #   Fail-fast when unset: a Worker without it fails closed (every
+      #   recording route 403s), which would read as an outage.
       - name: Sync call Worker secrets (wrangler)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 751c8a59858c9c04a8e722df7330444d
           REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
+          RECORDING_PASS_SECRETS: ${{ secrets.RECORDING_PASS_SECRETS }}
         run: |
           if [ -z "$REALTIMEKIT_API_TOKEN" ]; then
             echo "::error::REALTIMEKIT_API_TOKEN is not set (GitHub Actions secret). The call Worker cannot mint tokens without it."
             exit 1
           fi
+          if [ -z "$RECORDING_PASS_SECRETS" ]; then
+            echo "::error::RECORDING_PASS_SECRETS is not set (GitHub Actions secret). Without the trust anchor the recording routes refuse every member (fail closed) — seed the module's worker_anchor row and register the same value here (README 通話 API Worker)."
+            exit 1
+          fi
+          printf '%s' "$RECORDING_PASS_SECRETS" \
+            | pnpm --filter @kaede/infra exec wrangler secret put RECORDING_PASS_SECRETS --name kaede-call
           printf '%s' "$REALTIMEKIT_API_TOKEN" \
             | pnpm --filter @kaede/infra exec wrangler secret put REALTIMEKIT_API_TOKEN --name kaede-call
           r2_probe=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets" \

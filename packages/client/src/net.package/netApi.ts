@@ -91,6 +91,17 @@ function senderContext(c: DbConnection, identity: Identity) {
 }
 
 /**
+ * The own recording_pass row's pass on a live connection
+ * (NetApi.ownRecordingPass's live half — split out to keep both
+ * uncovered functions under the CRAP budget, the senderContext
+ * precedent).
+ */
+function ownRecordingPassOf(c: DbConnection): string | undefined {
+  const identity = c.identity;
+  return identity === undefined ? undefined : c.db.recordingPass.identity.find(identity)?.pass;
+}
+
+/**
  * The own membership's group and its registered call, read from the
  * subscribed cache (NetApi.ownGroupCall's live half — split out to keep
  * both uncovered functions under the CRAP budget, the senderContext
@@ -255,6 +266,22 @@ export interface NetApi {
    * blocks the recording itself.
    */
   logGroupRecording(fileName: string): void;
+  /**
+   * Asks the server to mint this member's recording pass
+   * (mint_recording_pass — ROADMAP Phase 4 増分⑤). Returns the reducer's
+   * promise (the registerGroupCall shape): the caller must know whether
+   * the mint was refused, and the pass itself arrives as the own
+   * recording_pass row — read it back with ownRecordingPass (the
+   * acquireRecordingPass flow in call.package owns the wait-and-retry).
+   */
+  mintRecordingPass(): Promise<void>;
+  /**
+   * The own recording_pass row's pass, read from the subscribed cache
+   * (RLS hands this client its own row only), or undefined while none
+   * was ever minted or while disconnected. Freshness is the caller's
+   * question (capabilityFresh) — the row keeps the last mint verbatim.
+   */
+  ownRecordingPass(): string | undefined;
 }
 
 /** What forwarding user actions needs from the lifecycle owner (sync.ts). */
@@ -398,5 +425,14 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     logGroupRecording: forward('log_group_recording', (c, fileName: string) =>
       c.reducers.logGroupRecording({ fileName }),
     ),
+    mintRecordingPass() {
+      const c = deps.conn();
+      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
+      return c.reducers.mintRecordingPass({}).then(() => undefined);
+    },
+    ownRecordingPass() {
+      const c = deps.conn();
+      return c === undefined ? undefined : ownRecordingPassOf(c);
+    },
   };
 }

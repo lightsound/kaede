@@ -29,6 +29,19 @@ export const spacetimedb = schema({
       displayName: t.string().optional(),
       createdAt: t.timestamp(),
       updatedAt: t.timestamp(),
+      // The provider's stable user id (the JWT `sub` claim — for Clerk a
+      // user_… id), written by clientConnected on every member connect
+      // (増分⑤): the recording pass embeds it so the Worker can bind the
+      // pass to the exact bearer it verified — the Worker cannot derive
+      // the SpacetimeDB Identity from the Clerk subject, so the module
+      // records the correspondence here, where it is a connect-time
+      // fact. Appended with an ''-default — NOT `.optional()`, which the
+      // host refuses as a migration ("requires a default value
+      // annotation", measured 2026-08-06) — so existing rows migrate on
+      // re-publish (additive-only rule); '' means "not recorded yet" and
+      // backfills on the owner's next connect, which every reducer call
+      // is preceded by.
+      subject: t.string().default(''),
     },
   ),
   // Membership of the single MVP space (承認制・管理者ロール — ROADMAP
@@ -666,6 +679,46 @@ export const spacetimedb = schema({
       startedAt: t.timestamp(),
     },
   ),
+  // The Worker⇄SpacetimeDB trust anchor (ROADMAP Phase 4 増分⑤): the
+  // shared HMAC secret this module MINTS recording passes with
+  // (mint_recording_pass in calls.ts) and the call-API Worker verifies
+  // them against (its RECORDING_PASS_SECRETS secret holds the same value).
+  // One row, id 0. PRIVATE — clients can never subscribe to it — and
+  // deliberately written by NO reducer: the row is seeded and rotated by
+  // the module owner over `spacetimedb-cli sql` (INSERT/UPDATE), which is
+  // an owner-only capability the host already enforces, so there is no
+  // set-secret reducer to mis-gate and no trust-on-first-use window on a
+  // live database (the 設営手順 is README「通話 API Worker」). A missing
+  // or empty row means the anchor is unprovisioned: minting refuses, and
+  // the Worker side independently fails closed on an empty secret list.
+  workerAnchor: table(
+    { name: 'worker_anchor' },
+    {
+      id: t.u8().primaryKey(),
+      secret: t.string(),
+    },
+  ),
+  // One member's short-lived recording pass (ROADMAP Phase 4 増分⑤): the
+  // signed capability mint_recording_pass writes for its APPROVED-member
+  // sender, which the client then presents to the Worker's recording
+  // routes (x-recording-pass) — how "approved" crosses the Worker boundary
+  // without the Worker reading this database (the 増分① division). An
+  // UPSERT row per identity (the reaction shape): a pass supersedes the
+  // previous one, and the table is bounded by the world population with no
+  // trimming rule. Public because RLS only filters public tables (the
+  // dm_message rule); the filter below (recordingPassVisibility) hands
+  // each row to its own holder ONLY — the pass rides no other client's
+  // subscription, ever. Rows die with the player (removePlayer): a pass
+  // outliving its holder's presence would be a dangling capability in a
+  // public table (expired within RECORDING_PASS_TTL_SECONDS either way,
+  // but rows nobody can use should not ride entry egress).
+  recordingPass: table(
+    { name: 'recording_pass', public: true },
+    {
+      identity: t.identity().primaryKey(),
+      pass: t.string(),
+    },
+  ),
 });
 
 // Row-level security for dm_message: a connection is handed only the rows it
@@ -756,4 +809,16 @@ export const chatGroupMemberVisibility = spacetimedb.clientVisibilityFilter.sql(
 // leaving revokes it as a delete (the 増分④ observation).
 export const groupCallVisibility = spacetimedb.clientVisibilityFilter.sql(
   'SELECT c.* FROM group_call c JOIN group_member m ON c.group_id = m.group_id WHERE m.identity = :sender',
+);
+
+// Row-level security for recording_pass (ROADMAP Phase 4 増分⑤): a pass
+// reaches its own holder only — the dm_message filter shape (a plain
+// :sender equality on an indexed column; identity is the PK, so its btree
+// satisfies the RLS index rule), and like every filter set it is the
+// allow-list entire: one filter, so no other connection ever receives any
+// pass row. Live-verified with non-owner connections before merge (the
+// 増分④ spike rule — a broken filter breaks every subscription on the
+// table at runtime and publish would not show it).
+export const recordingPassVisibility = spacetimedb.clientVisibilityFilter.sql(
+  'SELECT * FROM recording_pass WHERE identity = :sender',
 );

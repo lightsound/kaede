@@ -1011,7 +1011,9 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   緩さとして受け入れ、締める必要が出たら「reducer が承認済みメンバーへ
   発行するケイパビリティを Worker が検証する」将来増分で閉じる（webhook の
   relay identity と同じ道具立てになるため、その増分でセットで検討 —
-  再発条件・設計方向・実施トリガーは下の**増分⑤候補**に記載）。
+  再発条件・設計方向・実施トリガーは下の**増分⑤**に記載）。
+  → ✅ **この緩さは増分⑤で閉じた（2026-08-06）**: Worker は録画 4 ルートで
+  module 発行の短命署名パス（承認済みメンバーだけが得られる）を検証する。
   一覧・DL は**承認済みメンバー全員**（開始者限定にしない: 実ユースは録画を
   別メンバーが YouTube へ上げる二次利用で、開始者が先に退出しても残りが
   止められる必要もある）。「通話参加者だけに絞る」案は参加履歴の権威追跡
@@ -1084,8 +1086,8 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   ⑦実 WebRTC/録画は CI で回せないため、2 ブラウザ手動テスト（フェイク
   メディア）で「開始→両ブラウザにインジケータ→停止→一覧→DL」と負例
   （ゲストに録画トグル・録画一覧が出ない）を実証（増分①〜③の規約）
-- **Worker⇄SpacetimeDB の信頼アンカー（増分⑤候補・未実装 — 増分④で顕在化、
-  2026-08-06 記載）**: 「Worker は SpacetimeDB を読まない/書かない」という
+- **Worker⇄SpacetimeDB の信頼アンカー（増分⑤ — 増分④で顕在化、2026-08-06
+  記載、同日実装）**: 「Worker は SpacetimeDB を読まない/書かない」という
   増分①の分担は、同根の欠落を 2 つ作る — ①Worker が**承認状態を検証できない**
   （録画一覧/DL がサインインだけで通る — 増分④ 設計①の受け入れた緩さ、
   Security レビューが HIGH 指摘）②Worker が**信頼される送信者として書けない**
@@ -1097,20 +1099,113 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   値を載せ、クライアントが提示する」パターン（group_call の meeting id —
   増分①）で表現できる認可は現分担のままでよい（録画の開始/停止はこれで
   守られている）。
-  設計の方向（実装時にライブ検証）: 環境ごとに 1 度設営する相互信頼アンカー
-  （共有鍵 or 鍵対）で両方向を一気に閉じる —
-  ①module→Worker: 承認済みメンバーだけが reducer から得られる**短命の署名付き
-  ケイパビリティ**を Worker が鍵で検証（SpacetimeDB を読まないまま承認を強制。
-  クローズド PR #65 のサービスシークレット方式はこの一般解の局所版）
-  ②Worker→module: Worker の relay identity（ホスト発行トークン）を module が
-  ピン留めし、Webhook 中継リデューサーの送信者検証にする。
-  **実施タイミング（日付ではなくトリガー）**: 遅くとも
-  (a) **kaede.town の URL をコミュニティへ共有する前**（録画一覧/DL の緩さが
-  実リスク化する境界 — ゲート①②「実ユーザー投入前に必ず閉じる」規律の
-  録画版。Phase 4 完了＝移行マイルストーンなので、実質は増分④の次の
-  独立 PR が最安）
-  (b) **最初の Webhook 中継増分（課金 or Clerk 削除）と同時**
-  のどちらか早い方
+  ✅ **①module→Worker を実装（2026-08-06、トリガー (a) 相当の独立 PR）**:
+  録画の開始/停止・一覧/DL が**承認済みメンバーだけ**にサーバー側強制され、
+  増分④ 設計①の受け入れた緩さはクローズ（PR #66 の Security スレッドの
+  恒久対応）。設計の要点:
+  ①**アンカー = 環境ごとに 1 度設営する共有 HMAC 秘密**。module 側は非公開
+  テーブル `worker_anchor`（id 0 の 1 行）、Worker 側はシークレット
+  `RECORDING_PASS_SECRETS`（ローテーション用にカンマ区切りリスト）。設営は
+  **owner の SQL 播種**（`spacetime sql` の INSERT — 手順と無停止
+  ローテーションは README「通話 API Worker」）で、**設定 reducer は意図的に
+  作らない**: SQL 書き込みは owner 限定の能力なので、稼働中 DB での
+  先取り（trust-on-first-use の窓）が構造的に存在せず、#65 が要した
+  admin ゲートの設計も丸ごと消える。未設営は両側 fail closed（mint は
+  loud 拒否・Worker は空リストで全録画ルート 403、CI は未設定シークレットで
+  fail-fast）
+  ②**module→Worker のケイパビリティ = 短命の署名付き録画パス**:
+  `mint_recording_pass` reducer が posting 前文（in-world + admission
+  再検査）+ **approved 検査**（ラベル reducer と共有の requireApprovedMember）
+  + call_guard 課金のうえ、`v1:recording:<clerkSubject>:<exp>:<HMAC>`
+  （寿命 `RECORDING_PASS_TTL_SECONDS` = 120 秒）を公開テーブル
+  `recording_pass`（identity PK の upsert 行）へ書く。**行が配達路**
+  （reducer は値を返せない）で、RLS `identity = :sender` 1 本が
+  「パスは持ち主にしか届かない」を担う（dm_message の前例形。ライブ検証
+  済み — 下の④）。Worker は録画 4 ルートで Clerk bearer **に加えて**
+  `x-recording-pass` ヘッダを共有実装で検証し、無効なら 403
+  `approval-required`。クライアントは提示直前に取得し、余命 15 秒未満なら
+  透過的に再 mint（`acquireRecordingPass` — 単体テスト済み）。
+  **パスは bearer に束縛する**（初回実装への Bugbot HIGH 指摘で追加）:
+  Worker は SpacetimeDB Identity を Clerk subject から導出できない
+  （blake3 ベースの導出の再実装はバージョン結合が強すぎる）ため、逆に
+  **module 側が接続時に対応を記録する** — clientConnected が JWT の `sub` を
+  `account.subject` 列（末尾 optional の additive 追加）へ書き、mint は
+  identity hex ではなく **Clerk subject** をパスに埋め、Worker は検証済み
+  bearer の subject と完全一致しなければ 403。漏えいしたパスは本人の
+  Clerk セッション以外では無価値になる（束縛前は「サインイン済みの誰か」
+  なら TTL 内で流用できた）
+  ③**署名は純 TS の HMAC-SHA-256**（`@kaede/shared` の capability.ts、
+  RFC 4231 ベクタで単体テスト）: module ホストに WebCrypto が無い前提を
+  設計で回避せず正面から満たし、Worker が**同じ共有コード**で検証するので
+  両側の形式が乖離しない。鍵対（署名鍵/検証鍵の非対称）は不採用 — 両者は
+  同一運営者のインフラで、Worker は R2 秘密も既に持つ（Worker 侵害 =
+  どのみち全録画が漏れる）ため、非対称化が守る追加の脅威が無い。
+  **却下した代替案**: (a) #65 の RLS 定数 equijoin 案（space_member に
+  `spaceFlag` 定数列を足し call_recording を承認済みメンバー限定にする）—
+  守れるのは**メタデータ行だけ**で、HIGH 指摘の本体である Worker の R2
+  一覧/DL（ファイルそのもの）に RLS は届かず、目的に対して無効。
+  (b) Worker が SpacetimeDB を読む（owner トークンで HTTP SQL）— Worker が
+  オーナー級資格情報を持つことになり「薄いグルー」の分担（増分①）を壊す
+  ④**RLS はライブ検証済み**（増分④スパイクの規律 — フィルタの誤りは
+  publish では見えない）: 非オーナー 2 接続（承認済みメンバー+ゲスト）で
+  「mint 後、持ち主にだけ行が届き、他接続は seed・行イベントとも 0」を
+  実測（dev フック `recordingPassRowsReceived` — groupCallRowsReceived の
+  前例 — を追加し、手動テストの観測点とした。E2E からはメンバーを作れない
+  ため自動化は既存の制約のまま）。旧スキーマ DB への再 publish も
+  リハーサル済み（テーブル 2 本 + RLS 1 本 + reducer 1 本の追加のみ）
+  ⑤**②Worker→module（Webhook→リデューサー中継）は設計担保まで**（スコープ
+  外 — 課金・Clerk 削除の増分で実装）: 同じアンカー秘密・同じ共有
+  `hmacSha256Hex` で**逆方向**が乗る — 中継 reducer は引数
+  `(payload, exp, hmac)` を受け、module が純 TS HMAC で検証する
+  （scope を `relay` 等に変えるだけで、#65 方式のように**生の秘密を
+  reducer 引数で毎回運ばない** — 引数はログに残り得る）。アンカーの設営・
+  ローテーション手順はそのまま共用できるため、中継増分に新しい設営は不要
+  → **ただし増分⑥候補（下）が先に実現すれば中継自体が不要になる**
+- **procedure によるアンカー撤去と Worker 縮退（増分⑥候補・未実装 —
+  2026-08-06 記載）**: 増分⑤の実装当日、オーナー指摘で **SpacetimeDB に
+  module からの outbound HTTP が既にある**ことを確認した（v1.10 で
+  procedure 導入・2.0 で TS module 対応。ピン留め済みの 2.7.1 に SDK・
+  ホストとも搭載）。増分⑤が橋を架けた「権威（module）と外部 API 境界
+  （Worker）の分断」は、procedure なら**分断ごと消せる**: 承認検査
+  （DB 読み）と外部 API 呼び出しを同一プロセスで書け、しかも reducer と
+  違い**値を返せる**（録画パスの「行を配達路にする」迂回も不要になる）。
+  スパイク実測（2026-08-06、ローカル 2.7.1 スタンドアロン）:
+  ①`spacetime.procedure` + `ctx.http.fetch`（同期）で外部 HTTPS が通る
+  （api.cloudflare.com / Clerk JWKS で 200）②3 秒応答も timeout 指定で
+  完走（v1.10 初期の 500ms クランプは撤廃済み。timeout 1 秒指定は 1 秒で
+  切れる）③private/special アドレスへの接続は拒否（SSRF ガード内蔵 —
+  ローカルの localhost API は呼べない）④戻り値が呼び出し元へ返る。
+  SDK 2.7.1 には **HTTP handlers（`Router` — module が HTTP を受ける口）**
+  も存在する。**Maincloud 側の前提はオーナー確認済み（2026-08-06）**:
+  procedure の外部 HTTP は許可されており、エネルギー課金も特段の記載なし
+  （無視してよい）。
+  **移行の方向**: 通話/録画 API（provision・mint・録画開始/停止・一覧・
+  presigned DL）を procedure 化し、
+  ①アンカー機構を丸ごと撤去（worker_anchor・recording_pass・
+  mint_recording_pass・録画パス・RECORDING_PASS_SECRETS・CI 同期 —
+  増分⑤は撤去コストが小さい設計にしてある）
+  ②Worker の bearer 検証スタックも撤去（Clerk JWKS・ホスト公開鍵・
+  callerKindOf・CORS・クライアントの BASE_URL/fetch 層 — procedure は
+  認証済み SpacetimeDB 接続越しに呼ばれ、`ctx.sender` が本人性そのもの）
+  ③Worker `kaede-call` は Webhook 受信のみに縮退。HTTP handlers での
+  直受け（rtk-signature の RSA 検証手段が論点）か、スケジュール
+  procedure による**ポーリング置換**（Webhook 自体の廃止）を増分内で
+  評価 — どちらかが成立すれば Worker→module 中継（増分⑤ 設計⑤）は
+  実装不要のまま消える
+  ④S3 SigV4 署名（一覧・presign）は module 内の純 TS 実装
+  （capability.ts の SHA-256/HMAC が流用できる）。
+  **引き受ける新リスク（オーナー了承 2026-08-06）**: 秘密が DB 内の
+  非公開テーブルへ移る（**日次バックアップ backup.yml からの除外が必須の
+  設計項目** — GitHub artifacts に 90 日残るため）・権威/秘密/外部呼び出しの
+  module への集中（現行は Worker 侵害でも DB が無事という分離があった）・
+  procedure API の成熟度（CLI に UNSTABLE 警告 — バージョン厳密ピンの
+  既存方針で緩和）・同期 HTTP の待ち時間がエネルギー消費になる点
+  （録画系は低頻度で実害僅少の見込み、移行時に実測）。
+  **実施タイミング**: 増分⑤マージ後の独立 PR。遅くとも最初の Webhook
+  中継が必要になる増分（課金 or Clerk 削除）より前が最安 — 中継の
+  relay 検証を一度も実装せずに済む。なお増分⑤アンカーの運用改善案
+  （CI 自動播種）は、本増分がアンカーごと撤去する前提では過剰投資として
+  見送り（設営はオーナー手順のまま）
 - 通話コストの実測とプラン判断（VISION の試算では RealtimeKit
   $0.002/参加者分 ≒ 月$20〜30想定）
 - 録画の透明性: **録画中インジケータを通話参加者全員に表示**する（同意の前提）。

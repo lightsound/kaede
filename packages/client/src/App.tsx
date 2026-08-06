@@ -2,7 +2,7 @@
 import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@kaede/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
-import { CallDock, RecordingsDock } from './call.package';
+import { CallDock, RecordingsDock, recordingPassGetterOf } from './call.package';
 import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
 import { HuddleControl } from './huddle.package';
@@ -91,6 +91,10 @@ function callDockNetOf(netRef: { current: Net | undefined }) {
       netRef.current?.registerGroupCall(meetingId) ??
       Promise.reject(new Error('SpacetimeDB: not connected')),
     logGroupRecording: (fileName: string) => netRef.current?.logGroupRecording(fileName),
+    mintRecordingPass: () =>
+      netRef.current?.mintRecordingPass() ??
+      Promise.reject(new Error('SpacetimeDB: not connected')),
+    ownRecordingPass: () => netRef.current?.ownRecordingPass(),
   };
 }
 
@@ -252,6 +256,7 @@ export function App() {
       <RecordingsDock
         visible={recordingsDockVisible(connected, session.signedIn, space)}
         getToken={session.getToken}
+        getPass={recordingPassGetterOf(callDockNetOf(netRef))}
         labels={calls.recordings}
       />
       <HuddleControl

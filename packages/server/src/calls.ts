@@ -14,10 +14,13 @@
 import {
   CALL_BURST_SENDS,
   CALL_SEND_COST_MICROS,
+  CAPABILITY_SCOPE_RECORDING,
   evaluateSendAllowance,
   isMeetingIdLike,
   isRecordingFileNameLike,
+  mintCapability,
   RECORDING_HISTORY_MAX,
+  RECORDING_PASS_TTL_SECONDS,
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
 import { spacetimedb } from './tables';
@@ -104,17 +107,26 @@ function chargeCallAllowance(ctx: Ctx, reducerName: string): void {
 }
 
 /**
- * Vets one recording label: an approved-member sender (mirroring the
- * Worker's gate — recording start is members-only, so only a member ever
- * has a fileName to log; a guest reaching this reducer is a hand-rolled
- * client) and a provider-shaped file name. Every refusal is loud and
- * pre-write (the vetCallRegistration shape); the group half lives in
- * recordingGroupName so both stay under the CRAP budget.
+ * Refuses the call unless the sender is an APPROVED member — the shared
+ * gate of the recording reducers (the label write and the pass mint),
+ * mirroring the Worker's route gate: recording is 承認済みメンバー限定
+ * (増分④ 設計①), so a guest or an unapproved sign-in reaching either
+ * reducer is a hand-rolled client. Loud and pre-write.
+ */
+function requireApprovedMember(ctx: Ctx, reducerName: string): void {
+  if (membershipOf(ctx, ctx.sender)?.status !== 'approved') {
+    throw new SenderError(`${reducerName} refused (not-a-member)`);
+  }
+}
+
+/**
+ * Vets one recording label: an approved-member sender and a
+ * provider-shaped file name. Every refusal is loud and pre-write (the
+ * vetCallRegistration shape); the group half lives in recordingGroupName
+ * so both stay under the CRAP budget.
  */
 function vetRecordingLog(ctx: Ctx, fileName: string): void {
-  if (membershipOf(ctx, ctx.sender)?.status !== 'approved') {
-    throw new SenderError('log_group_recording refused (not-a-member)');
-  }
+  requireApprovedMember(ctx, 'log_group_recording');
   if (!isRecordingFileNameLike(fileName)) {
     throw new SenderError('log_group_recording refused (invalid-file-name)');
   }
@@ -166,3 +178,88 @@ export const logGroupRecording = spacetimedb.reducer(
     appendRecordingLabel(ctx, rows, fileName, groupName);
   },
 );
+
+// ── The recording pass (ROADMAP Phase 4 増分⑤) ──────────────────────────
+
+/**
+ * The anchor secret this module signs recording passes with, or a loud
+ * refusal while the anchor is unprovisioned (the worker_anchor table
+ * comment — the row is seeded by owner SQL, never by a reducer). An
+ * unprovisioned anchor keeps the recording routes closed on BOTH sides:
+ * nothing mints here, and the Worker's empty secret list verifies
+ * nothing.
+ */
+function anchorSecret(ctx: Ctx): string {
+  const secret = ctx.db.workerAnchor.id.find(0)?.secret ?? '';
+  if (secret === '') {
+    throw new SenderError('mint_recording_pass refused (anchor-not-provisioned)');
+  }
+  return secret;
+}
+
+/** Upserts the sender's pass row (the reaction upsert shape). */
+function upsertRecordingPass(ctx: Ctx, pass: string): void {
+  const existing = ctx.db.recordingPass.identity.find(ctx.sender);
+  if (existing) {
+    ctx.db.recordingPass.identity.update({ ...existing, pass });
+    return;
+  }
+  ctx.db.recordingPass.insert({ identity: ctx.sender, pass });
+}
+
+/**
+ * The provider subject to bind the pass to: the sender's account row's
+ * `subject` (the Clerk user id clientConnected records — see the column
+ * comment in tables.ts). Present on every member connection by
+ * construction — clientConnected backfills it before any reducer of the
+ * same connection can run — so the refusal is the transitionMember rule:
+ * an "unreachable" branch must not read as a silent no-op.
+ */
+function recordingPassSubject(ctx: Ctx): string {
+  const subject = ctx.db.account.identity.find(ctx.sender)?.subject ?? '';
+  if (subject === '') {
+    throw new SenderError('mint_recording_pass refused (no-subject)');
+  }
+  return subject;
+}
+
+// Mints the sender's short-lived recording pass: the signed capability
+// the Worker's recording routes demand on top of the member bearer —
+// which is how the APPROVAL state only this module knows gets enforced at
+// the Worker without the Worker reading this database (増分⑤ closing the
+// 増分④ 設計① accepted looseness; the anchor design is the ROADMAP 増分⑤
+// entry). Eligibility is the posting preamble (in the world + admission
+// re-check — a pending member cannot even be in the world) plus the
+// approved-membership gate the other recording reducer shares
+// (requireApprovedMember); the rate charge rides call_guard like the rest
+// of the call flow (same UI surface, no client-side mirror to drift
+// from). The pass reaches its holder through the recording_pass row,
+// which RLS narrows to the sender alone (recordingPassVisibility) — a
+// reducer cannot return a value, so the row IS the delivery channel. The
+// pass's subject is the sender's CLERK user id, not the SpacetimeDB
+// Identity: the Worker binds the pass to the bearer it verified (same
+// subject or 403), so a pass leaked to any other signed-in identity buys
+// nothing (a Bugbot finding on the first cut). The claims are entirely
+// server-made (the stored subject, the server clock), so mintCapability's
+// undefined branch is unreachable here; it still refuses loudly rather
+// than writing an empty pass.
+export const mintRecordingPass = spacetimedb.reducer((ctx) => {
+  if (!findPostingSender(ctx, 'mint_recording_pass')) return;
+  requireApprovedMember(ctx, 'mint_recording_pass');
+  const subject = recordingPassSubject(ctx);
+  const secret = anchorSecret(ctx);
+  chargeCallAllowance(ctx, 'mint_recording_pass');
+  const pass = mintCapability(
+    {
+      scope: CAPABILITY_SCOPE_RECORDING,
+      subject,
+      expSeconds:
+        Number(ctx.timestamp.microsSinceUnixEpoch / 1_000_000n) + RECORDING_PASS_TTL_SECONDS,
+    },
+    secret,
+  );
+  if (pass === undefined) {
+    throw new SenderError('mint_recording_pass refused (unmintable)');
+  }
+  upsertRecordingPass(ctx, pass);
+});

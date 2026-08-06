@@ -366,7 +366,7 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
 
 - **ローカル開発**は Alchemy を通さず `wrangler dev` で動かします。
   `infra/.dev.vars`（gitignore 済み — wrangler は設定ファイルの隣の
-  `.dev.vars` を読み、同名の vars を上書きする）に **8 つとも**書くこと —
+  `.dev.vars` を読み、同名の vars を上書きする）に **9 つとも**書くこと —
   `wrangler-call.jsonc` の vars は本番値なので、上書きしないと CORS が
   localhost を拒否し、ミーティングも本番アプリに作られてしまいます:
 
@@ -379,6 +379,7 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   RECORDINGS_BUCKET=<開発用の録画バケット名>
   R2_ACCESS_KEY_ID=<R2 権限付きトークンの ID>
   R2_SECRET_ACCESS_KEY=<同トークン値の SHA-256>
+  RECORDING_PASS_SECRETS=<ローカル DB の worker_anchor と同じ値 — 下の設営手順>
   ```
 
   ```sh
@@ -399,9 +400,9 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
 
 - **録画（ROADMAP Phase 4 増分④）**: 録画の開始/停止・一覧・ダウンロードは
   **承認済みメンバー限定**です（Worker が Clerk 経路だけに録画ルートを
-  開け — ゲストの bearer は 403 — UI とラベル reducer が承認状態を重ねて
-  検査する。Worker 単体はサインインまでしか検証できない — 受け入れた緩さの
-  全文は ROADMAP 増分④ 設計①）。録画ファイルは Start Recording の
+  開け — ゲストの bearer は 403 — さらに増分⑤の録画パス検証で**承認状態も
+  Worker 側で強制**される。UI とラベル reducer の検査はその上に重なる）。
+  録画ファイルは Start Recording の
   `storage_config` で R2 バケット（本番 `kaede-recordings`）へ直接
   アップロードされ、完了の真実源はバケット自体（一覧は Worker が S3 API で
   読む）。メタデータ（どの会議・誰が開始）は SpacetimeDB の `call_recording`
@@ -409,6 +410,33 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   `/webhooks/realtimekit` で受け、`rtk-signature` を well-known 公開鍵で
   検証して Workers Logs へ記録します（ERRORED の運用可視性）。登録は冪等な
   `scripts/ensure-realtimekit-webhook.sh` で行います（本番アプリは登録済み）。
+
+- **信頼アンカー（ROADMAP Phase 4 増分⑤）**: 録画ルートは Clerk bearer に
+  加えて **module が承認済みメンバーへ発行する短命の録画パス**
+  （`x-recording-pass` ヘッダ、寿命 2 分。パスは発行先の Clerk subject に
+  束縛され、bearer と一致しなければ 403）を要求します。パスの署名鍵が
+  Worker⇄SpacetimeDB の信頼アンカーで、環境ごとに 1 度だけ設営します:
+
+  1. 秘密を生成する: `openssl rand -hex 32`
+  2. **module 側**: owner として `worker_anchor` 行を SQL で播種する
+     （reducer は意図的に無い — SQL 書き込みは owner 限定の能力なので、
+     稼働中 DB での先取りが構造的に起きない）:
+
+     ```sh
+     spacetime sql kaede "INSERT INTO worker_anchor (id, secret) VALUES (0, '<秘密>')"
+     ```
+
+  3. **Worker 側**: 同じ値を GitHub Actions シークレット
+     `RECORDING_PASS_SECRETS` に登録する（CI デプロイが毎回
+     `wrangler secret put` で同期。未設定はデプロイが fail-fast、
+     Worker 側も空なら fail closed）。ローカルは `infra/.dev.vars` に
+     同じ値を書き、ローカル DB に同じ INSERT を打つ。
+
+  **ローテーション**（無停止）: ①Worker の `RECORDING_PASS_SECRETS` を
+  `新,旧` のカンマ区切りにして同期 → ②module 側を
+  `spacetime sql kaede "UPDATE worker_anchor SET secret = '<新>' WHERE id = 0"`
+  で差し替え → ③Worker 側から旧を落とす。秘密を紛失しても owner SQL で
+  いつでも上書きできます（設計の全文は ROADMAP Phase 4 増分⑤）。
 
 ## CI
 

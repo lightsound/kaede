@@ -12,8 +12,11 @@
 // 増分②, a guest's SpacetimeDB host-issued token (spacetime.ts), and
 // forwards to the provider (realtimekit.ts) or the bucket (r2.ts). The
 // recording routes are additionally MEMBERS-ONLY (増分④ — routeIsMemberOnly
-// in rules.ts), and the webhook route authenticates by provider signature
-// instead of a bearer (webhook.ts).
+// in rules.ts) and demand a module-minted recording pass (増分⑤ — the
+// trust anchor closing 増分④'s accepted looseness: approval lives in
+// SpacetimeDB, and the pass is how it crosses this boundary without this
+// Worker reading the database). The webhook route authenticates by
+// provider signature instead of a bearer (webhook.ts).
 //
 // Deployed by infra/alchemy.run.ts (Worker `kaede-call`); the wrangler
 // escape hatch is infra/wrangler-call.jsonc. Local dev runs `wrangler dev`
@@ -33,7 +36,9 @@ import {
   type CallRoute,
   callerKindOf,
   participantNameFrom,
+  RECORDING_PASS_HEADER,
   RECORDINGS_PREFIX,
+  recordingPassSubject,
   routeCallRequest,
   routeIsMemberOnly,
   summarizeRecordingEvent,
@@ -69,6 +74,16 @@ export interface Env {
    */
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
+  /**
+   * The trust anchor's accepted pass secrets (secret, 増分⑤):
+   * comma-separated HMAC secrets a recording pass may be signed with —
+   * the same value the module's worker_anchor row holds (a list so
+   * rotation can hold old+new mid-flip). Synced out-of-band like every
+   * other secret here; empty/unset fails closed (recordingPassSubject),
+   * so a Worker deployed before the anchor is provisioned refuses the
+   * recording routes rather than opening them.
+   */
+  RECORDING_PASS_SECRETS: string;
 }
 
 function json(status: number, body: unknown, cors: Record<string, string>): Response {
@@ -234,11 +249,11 @@ type CallerVerdict = { ok: true; caller: VerifiedCaller } | { ok: false; respons
 
 async function vetCaller(
   route: CallRoute,
-  authorization: string | null,
+  request: Request,
   env: Env,
   cors: Record<string, string>,
 ): Promise<CallerVerdict> {
-  const caller = await verifiedCaller(authorization, env);
+  const caller = await verifiedCaller(request.headers.get('authorization'), env);
   if (caller === undefined) {
     return { ok: false, response: json(401, { error: 'unauthorized' }, cors) };
   }
@@ -247,6 +262,39 @@ async function vetCaller(
   // the recording routes — the UI hiding its toggles stays cosmetic.
   if (routeIsMemberOnly(route) && caller.kind !== 'member') {
     return { ok: false, response: json(403, { error: 'members-only' }, cors) };
+  }
+  return vetRecordingPass(route, request, env, cors, caller);
+}
+
+/**
+ * The 増分⑤ half of the vetting: the member-only recording routes
+ * additionally demand a valid recording pass — the short-lived capability
+ * only the module's mint_recording_pass hands out, and it hands it to
+ * APPROVED members only. This is what closes the 増分④ 設計① accepted
+ * looseness (a signed-in-but-unapproved user hitting these routes
+ * directly): the Clerk bearer proves "signed in against our instance",
+ * the pass proves "approved, as of the last two minutes, says the module
+ * itself". The pass must be the CALLER'S OWN: its subject is the Clerk
+ * user id the module recorded at connect time, compared against the
+ * bearer subject this Worker just verified — so a pass leaked to any
+ * other signed-in identity buys nothing (a Bugbot finding on the first
+ * cut). Split from vetCaller for the CRAP budget.
+ */
+function vetRecordingPass(
+  route: CallRoute,
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+  caller: VerifiedCaller,
+): CallerVerdict {
+  if (!routeIsMemberOnly(route)) return { ok: true, caller };
+  const subject = recordingPassSubject(
+    request.headers.get(RECORDING_PASS_HEADER),
+    env.RECORDING_PASS_SECRETS,
+    Date.now() / 1000,
+  );
+  if (subject === undefined || subject !== caller.subject) {
+    return { ok: false, response: json(403, { error: 'approval-required' }, cors) };
   }
   return { ok: true, caller };
 }
@@ -259,7 +307,7 @@ async function handleRouted(
 ): Promise<Response> {
   const route = routeCallRequest(request.method, new URL(request.url).pathname);
   if (route === undefined) return json(404, { error: 'not-found' }, cors);
-  const verdict = await vetCaller(route, request.headers.get('authorization'), env, cors);
+  const verdict = await vetCaller(route, request, env, cors);
   if (!verdict.ok) return verdict.response;
   try {
     const result = await handleCall(route, request, env, verdict.caller.subject);
@@ -320,7 +368,7 @@ function preflightResponse(cors: Record<string, string>): Response {
     headers: {
       ...cors,
       'access-control-allow-methods': 'GET, POST, OPTIONS',
-      'access-control-allow-headers': 'authorization, content-type',
+      'access-control-allow-headers': `authorization, content-type, ${RECORDING_PASS_HEADER}`,
       'access-control-max-age': '86400',
     },
   });

@@ -115,6 +115,16 @@ export interface E2ENetStats {
    */
   groupCallRowsReceived: number;
   /**
+   * recording_pass rows handed to this client (subscription seed +
+   * insert/update events — the pass row is an upsert, so re-mints arrive
+   * as updates). The groupCallRowsReceived idea pointed at the 増分⑤
+   * recording passes: a pass is a capability that must reach its HOLDER
+   * only (the recordingPassVisibility RLS filter), so every other
+   * connection must sit at zero while the holder counts up — which no
+   * DOM assertion could prove.
+   */
+  recordingPassRowsReceived: number;
+  /**
    * DM rows this client DECIDED to notify for (shouldNotifyDm returned
    * true), counted before the Notification is constructed and regardless
    * of whether construction succeeds — an OS notification itself is

@@ -16,6 +16,7 @@ export const Account = __t.object("Account", {
   displayName: __t.option(__t.string()),
   createdAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
+  subject: __t.string(),
 });
 export type Account = __Infer<typeof Account>;
 
@@ -165,6 +166,12 @@ export const ReactionGuard = __t.object("ReactionGuard", {
 });
 export type ReactionGuard = __Infer<typeof ReactionGuard>;
 
+export const RecordingPass = __t.object("RecordingPass", {
+  identity: __t.identity(),
+  pass: __t.string(),
+});
+export type RecordingPass = __Infer<typeof RecordingPass>;
+
 export const SpaceMember = __t.object("SpaceMember", {
   identity: __t.identity(),
   displayName: __t.option(__t.string()),
@@ -186,4 +193,10 @@ export const StatusGuard = __t.object("StatusGuard", {
   allowanceMicros: __t.i64(),
 });
 export type StatusGuard = __Infer<typeof StatusGuard>;
+
+export const WorkerAnchor = __t.object("WorkerAnchor", {
+  id: __t.u8(),
+  secret: __t.string(),
+});
+export type WorkerAnchor = __Infer<typeof WorkerAnchor>;
 
