@@ -831,7 +831,9 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   同じ部品箱から使える
   ⑤実 WebRTC は CI で回せないため、2 ブラウザの手動テスト（フェイク
   メディア）でメンバー/ゲストの通話・画面共有・デバイス設定・自動退出を
-  実証（増分①②の規約）
+  実証（増分①②の規約）。**InCallPanel は React.lazy** — UI Kit とその
+  重い推移依存（hls.js 等）は通話に入ってから初めてダウンロードする
+  （App→CallDock の静的 import では idle プレイヤーにも乗ってしまう）
 - 小さなサーバー API の新設（**Cloudflare Workers**）: RealtimeKit の参加トークン
   発行・録画開始/停止はシークレットキーを要するためブラウザから直接呼べない
   （SpacetimeDB モジュールも外部 HTTP を呼べない）。VISION の「バックエンドは
@@ -918,12 +920,16 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   ✅ **実装済み（2026-08-05、増分②）**: 通話ドックに共有ボタンが付き、
   共有中の画面は全参加者のドックに大きめのタイル（letterbox — カメラと
   違い端まで内容なので contain）で映る。設計の要点:
-  ①**CallProvider 語彙の拡張だけで実現**: CallTile に screenTrack /
+  ①**CallProvider 語彙の拡張だけで実現**(当時): CallTile に screenTrack /
   screenAudioTrack、CallSnapshot に screenShareOn、CallSession に
   setScreenShare を追加し、ベンダー SDK を import するのは
-  realtimekit.ts 1 ファイルのまま（VISION の閉じ込め条件を維持）。
+  realtimekit.ts 1 ファイルのまま（当時の VISION 閉じ込め条件を維持）。
   ブラウザ自身の「共有を停止」バーも SDK の screenShareUpdate として
   届くので、ドックのトグルと同じ再投影で片付く
+  → **増分③（2026-08-06）で UI Kit 本採用に伴い CallProvider 語彙は
+  撤去、閉じ込めも call.package 1 パッケージへ緩和**（上の「UI Kit
+  本採用」参照）。画面共有の表示とトグルは RtkGrid と
+  RtkScreenShareToggle が担う
   ②**プリセット変更なし**: 既定 `group_call_participant` が画面共有
   ALLOWED（HD 5fps — 増分0 実測）。メンバー=host 相当の使い分けは
   **録画増分まで先送り** — host が participant に足すのは can_record と

@@ -1,23 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a React control over the call flow, rendering the vendor's prebuilt meeting components; needs a DOM and WebRTC, and no DOM test environment is configured. The sequencing rules live in flow.ts (unit-tested)
-
-// The prebuilt in-call UI (ROADMAP Phase 4 増分③). These imports are legal
-// INSIDE call.package only — the containment unit for the vendor
-// dependency is this package (VISION 決定ログ 2026-08-06).
-import {
-  // Not a React hook despite the name — a plain factory merging a partial
-  // dict over the UI Kit's default language (aliased so lint agrees).
-  useLanguage as makeRtkLanguage,
-  RtkCameraToggle,
-  RtkDialogManager,
-  RtkGrid,
-  RtkLeaveButton,
-  RtkMicToggle,
-  RtkParticipantsAudio,
-  RtkScreenShareToggle,
-  RtkSettingsToggle,
-  RtkUiProvider,
-} from '@cloudflare/realtimekit-react-ui';
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+// fallow-ignore-file coverage-gaps -- a React control over the call flow; needs a DOM and WebRTC, and no DOM test environment is configured. The sequencing rules live in flow.ts (unit-tested); the UI Kit panel is InCallPanel.tsx (lazy-loaded)
+import { type CSSProperties, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { AuthTokenGetter } from '../net.package';
 import {
   UI_BUTTON_BG,
@@ -31,6 +13,10 @@ import { blurringClick } from '../ui.package';
 import { mintCallToken, provisionMeeting } from './api';
 import { acquireCallTicket } from './flow';
 import { dialMeeting, type Meeting } from './realtimekit';
+
+// The UI Kit (hls.js, @floating-ui, hark, lodash-es, …) lives only in
+// InCallPanel — lazy so idle players never download it (a review finding).
+const InCallPanel = lazy(() => import('./InCallPanel').then((m) => ({ default: m.InCallPanel })));
 
 // Stacked above the huddle control in the profile corner (bottom-left):
 // a call is something you do from the conversation group you stand in,
@@ -68,91 +54,6 @@ const buttonStyle: CSSProperties = {
   cursor: 'pointer',
   flexShrink: 0,
 };
-
-// The ongoing call is wider than the idle offer: the grid needs room for
-// tiles and shared screens (kaede stays a dock over the 2D world, so the
-// panel is sized, not fullscreen — the 部品を組む decision, ROADMAP 増分③).
-const inCallStyle: CSSProperties = {
-  ...panelStyle,
-  width: 520,
-  maxWidth: 520,
-};
-
-// RtkGrid fills its container, so the stage fixes the dimensions.
-const stageStyle: CSSProperties = {
-  height: 300,
-  display: 'flex',
-};
-
-/**
- * The dock's visible vendor strings, over the UI Kit's English defaults
- * (the rest of kaede is Japanese). Vendor-keyed, so it lives here rather
- * than in the Paraglide messages (those keys are ours).
- */
-const dockLanguage = makeRtkLanguage({
-  '(you)': '(自分)',
-  you: '自分',
-  mic_on: 'マイク オン',
-  mic_off: 'マイク オフ',
-  enable_mic: 'マイクをオンにする',
-  disable_mic: 'マイクをオフにする',
-  video_on: 'カメラ オン',
-  video_off: 'カメラ オフ',
-  enable_video: 'カメラをオンにする',
-  disable_video: 'カメラをオフにする',
-  screenshare: '画面共有',
-  'screenshare.start': '画面共有',
-  'screenshare.stop': '共有停止',
-  'screenshare.shared': '画面を共有しています。',
-  'screenshare.min_preview': 'プレビューを縮小',
-  'screenshare.max_preview': 'プレビューを拡大',
-  settings: '設定',
-  audio: '音声',
-  video: '映像',
-  camera: 'カメラ',
-  screen: '画面',
-  test: 'テスト',
-  'settings.microphone_input': 'マイク入力',
-  'settings.speaker_output': 'スピーカー出力',
-  'settings.notification_sound': '通知音',
-  'settings.mirror_video': '自分の映像を反転',
-  'settings.camera_off': 'カメラがオフです',
-  leave: '退出',
-  leave_confirmation: '通話から退出しますか？',
-  cancel: 'キャンセル',
-  yes: 'はい',
-  'audio_playback.title': '音声を再生',
-  'audio_playback.description': 'ブラウザの自動再生制限のため、クリックで通話音声を有効にします。',
-  audio_playback: '音声を有効にする',
-});
-
-/**
- * The ongoing call, assembled from the UI Kit's parts: the participant
- * grid (which also lays out shared screens), the control bar toggles, the
- * remote audio sink, and the dialog manager (device settings and the
- * leave confirmation render through it). RtkUiProvider syncs the meeting
- * and the toggles' state into every Rtk child.
- */
-function InCallPanel({ meeting }: { meeting: Meeting }) {
-  return (
-    <div style={inCallStyle}>
-      <RtkUiProvider meeting={meeting} t={dockLanguage}>
-        <div style={stageStyle}>
-          <RtkGrid style={{ width: '100%', height: '100%' }} />
-        </div>
-        <div style={{ ...rowStyle, justifyContent: 'center' }}>
-          <RtkMicToggle size="sm" />
-          <RtkCameraToggle size="sm" />
-          <RtkScreenShareToggle size="sm" />
-          <RtkSettingsToggle size="sm" />
-          <RtkLeaveButton size="sm" />
-        </div>
-        <RtkParticipantsAudio />
-        <RtkDialogManager />
-      </RtkUiProvider>
-    </div>
-  );
-}
 
 /** The out-of-call offer: one button, plus the last failure if any. */
 function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () => void }) {
@@ -256,12 +157,13 @@ async function joinCall(ctx: JoinContext): Promise<void> {
 /**
  * The call dock (ROADMAP Phase 4 増分①〜③): joins the conversation
  * group's call — provisioning and registering its meeting when it has
- * none — and renders the ongoing call with the UI Kit's prebuilt parts.
- * Offered to everyone in a conversation group, guests included (増分② —
- * the api layer falls back to the connection's host-issued token, which
- * the Worker verifies); outside a group there is no call to join. Leaving
- * the group in any way (walking off, switching, getting swept) ends the
- * participation: the auto-leave effect below watches the own-group signal.
+ * none — and renders the ongoing call with the UI Kit's prebuilt parts
+ * (lazy InCallPanel). Offered to everyone in a conversation group, guests
+ * included (増分② — the api layer falls back to the connection's
+ * host-issued token, which the Worker verifies); outside a group there is
+ * no call to join. Leaving the group in any way (walking off, switching,
+ * getting swept) ends the participation: the auto-leave effect below
+ * watches the own-group signal.
  */
 export function CallDock({
   connected,
@@ -305,7 +207,16 @@ export function CallDock({
 
   if (dockHidden(connected, ownGroupId, phase)) return null;
   if (phase.kind === 'joining') return <div style={panelStyle}>📞 通話に接続中…</div>;
-  if (phase.kind === 'in-call') return <InCallPanel meeting={phase.meeting} />;
+  if (phase.kind === 'in-call') {
+    // Same copy as the joining phase — the chunk download is usually
+    // shorter than the dial, so reusing the string avoids inventing a
+    // third transient.
+    return (
+      <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
+        <InCallPanel meeting={phase.meeting} />
+      </Suspense>
+    );
+  }
   return (
     <IdlePanel
       notice={phase.notice}
