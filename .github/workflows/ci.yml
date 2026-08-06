@@ -328,7 +328,11 @@ jobs:
             exit 1
           fi
           token_id=$(curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" | jq -r '.result.id')
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" | jq -r '.result.id // empty')
+          if [ -z "$token_id" ]; then
+            echo "::error::/user/tokens/verify returned no token id; refusing to sync an empty R2_ACCESS_KEY_ID."
+            exit 1
+          fi
           printf '%s' "$token_id" \
             | pnpm --filter @kaede/infra exec wrangler secret put R2_ACCESS_KEY_ID --name kaede-call
           printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1 | tr -d '\n' \

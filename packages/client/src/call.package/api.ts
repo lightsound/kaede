@@ -33,17 +33,24 @@ function requestInit(method: 'GET' | 'POST', token: string, body: unknown): Requ
   };
 }
 
+/** Rejects the response unless it is OK — or exactly the one tolerated status. */
+function ensureOk(response: Response, path: string, toleratedStatus?: number): void {
+  if (response.ok || response.status === toleratedStatus) return;
+  throw new Error(`call API: ${path} failed (${response.status})`);
+}
+
 async function callWorker(
   getToken: AuthTokenGetter,
   method: 'GET' | 'POST',
   path: string,
   body?: unknown,
+  toleratedStatus?: number,
 ): Promise<unknown> {
   const token = (await getToken()) ?? storedSessionToken();
   if (token === undefined) throw new Error('call API: no auth token');
   // fallow-ignore-next-line security-sink -- the host is the build-time BASE_URL constant; the only interpolated segments are a meeting id vetted to UUID shape at the reducer write (isMeetingIdLike) and a recording file name vetted by isRecordingFileNameLike, both re-vetted by the Worker's route
   const response = await fetch(`${BASE_URL}${path}`, requestInit(method, token, body));
-  if (!response.ok) throw new Error(`call API: ${path} failed (${response.status})`);
+  ensureOk(response, path, toleratedStatus);
   return response.json();
 }
 
@@ -96,12 +103,17 @@ export async function startCallRecording(
   );
 }
 
-/** Asks the Worker to stop the meeting's active recording (増分④). */
+/**
+ * Asks the Worker to stop the meeting's active recording (増分④). The
+ * Worker answers 404 when none is active (auto-stop, or another member
+ * stopped first) — a benign race, so it is tolerated: the handler's
+ * contract is to resolve even when there is nothing to stop.
+ */
 export async function stopCallRecording(
   getToken: AuthTokenGetter,
   meetingId: string,
 ): Promise<void> {
-  await post(getToken, `/calls/meetings/${meetingId}/recordings/stop`, {});
+  await callWorker(getToken, 'POST', `/calls/meetings/${meetingId}/recordings/stop`, {}, 404);
 }
 
 /** One finished recording, as the Worker's R2 listing reports it (増分④). */
