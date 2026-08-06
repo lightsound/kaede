@@ -996,12 +996,13 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   ①**誰が開始/停止できるか**: **承認済みメンバーのみ**（ゲスト不可）。
   根拠: 録画は $0.010/分の課金レバーで、oVice でもホスト/メンバー側の操作。
   ゲストは通話・画面共有までは同等（増分②）だが can_record は渡さない。
-  実装は二層: Worker の start/stop は Clerk メンバー JWT のみ受理、参加
-  プリセットはメンバー＝`group_call_host`（can_record=true）・ゲスト＝
-  `group_call_participant`（can_record=false）なので UI Kit の
-  `RtkRecordingToggle` もゲストには出ない（増分②が先送りしたプリセット
-  分岐をここで決着。host が足す kick/pin/spotlight は今は許容 —
-  絞りたくなったら専用プリセットを API で作る）
+  実装は二層: Worker の start/stop は Clerk メンバー JWT のみ受理（通話中
+  UI の録画ボタンもここ経由 — `storage_config` で R2 直送するためクライアント
+  SDK の `RtkRecordingToggle` は使わない）。参加プリセットはメンバー＝
+  `group_call_host`（can_record=true）・ゲスト＝`group_call_participant`
+  （can_record=false）。ゲストには録画ボタン自体を出さない（増分②が
+  先送りしたプリセット分岐をここで決着。host が足す kick/pin/spotlight は
+  今は許容 — 絞りたくなったら専用プリセットを API で作る）
   ②**誰が一覧・DL できるか**: **承認済みメンバー全員**（開始者限定でも
   管理者限定でも通話参加者限定でもない）。根拠: 録画は通話より長生きし、
   コミュニティの二次利用（YouTube 等）が本ユースで、退室翌日に取れない
@@ -1033,10 +1034,12 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   wrangler secret / vars — `Config.redacted` 禁止の前例（REALTIMEKIT_API_TOKEN）
   を踏襲。DL は Worker が R2 バインディングからストリーム（署名付き URL
   をブラウザに直接渡さない — 認可はメンバー JWT）
-  ⑤**クライアント**: `InCallPanel` に `RtkRecordingToggle` ＋
-  `RtkRecordingIndicator`（増分③の予告どおり。ベンダー import は
+  ⑤**クライアント**: `InCallPanel` に Worker 経由の録画トグル
+  （`RecordingToggle` → start/stop API）＋ UI Kit の
+  `RtkRecordingIndicator`（全員に録画中が見える。ベンダー import は
   call.package 内のみ）。一覧/DL UI も call.package の `RecordingsPanel`
-  （SDK は使わない — Worker DL ＋ SpacetimeDB 購読だけ）
+  （SDK は使わない — Worker が `recordings/id/<recordingId>` をストリーム、
+  SpacetimeDB 購読だけで一覧）
   ⑥実 WebRTC/録画は CI 不可のため、2 ブラウザ手動テスト（フェイクメディア）
   で開始→インジケータ全員表示→停止→一覧→DL と、ゲストにトグルが出ない
   負例を実証

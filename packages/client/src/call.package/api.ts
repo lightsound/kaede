@@ -85,19 +85,17 @@ export async function stopCallRecording(
 
 /**
  * Downloads one uploaded recording through the Worker (members only).
- * `objectKey` is the R2 key from the call_recording row — the Worker
- * streams the object after re-checking the member JWT.
+ * The Worker resolves `recordings/id/<recordingId>` itself — the client
+ * never supplies an object key (a free-form key was a review finding).
  */
 export async function downloadCallRecording(
   getToken: AuthTokenGetter,
   recordingId: string,
-  objectKey: string,
 ): Promise<Blob> {
   const token = (await getToken()) ?? storedSessionToken();
   if (token === undefined) throw new Error('call API: no auth token');
-  const params = new URLSearchParams({ key: objectKey });
   // fallow-ignore-next-line security-sink -- BASE_URL is build-time; recordingId is UUID-shaped at the reducer write
-  const response = await fetch(`${BASE_URL}/calls/recordings/${recordingId}/download?${params}`, {
+  const response = await fetch(`${BASE_URL}/calls/recordings/${recordingId}/download`, {
     headers: { authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw new Error(`call API: download failed (${response.status})`);

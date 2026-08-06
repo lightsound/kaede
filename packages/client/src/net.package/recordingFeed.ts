@@ -38,7 +38,7 @@ function recordingViewOf(row: {
 }
 
 /** Newest-first list from the subscribed cache (RLS already narrowed it). */
-export function callRecordingsOf(c: DbConnection): CallRecordingView[] {
+function callRecordingsOf(c: DbConnection): CallRecordingView[] {
   const rows = [...c.db.callRecording.iter()].map(recordingViewOf);
   rows.sort(compareRecordingsNewestFirst);
   return rows;

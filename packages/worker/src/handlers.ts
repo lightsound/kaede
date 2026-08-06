@@ -2,7 +2,7 @@
 
 // Thin dispatch helpers for index.ts — split so each uncovered function
 // stays under the CRAP budget (the backfillAccountName precedent).
-import { recordingStatusFromProvider } from '@kaede/shared';
+import { isRecordingIdLike, recordingStatusFromProvider } from '@kaede/shared';
 import { upsertRecordingStatus } from './module';
 import {
   createMeeting,
@@ -15,6 +15,7 @@ import {
 import {
   type CallRoute,
   participantNameFrom,
+  recordingArchiveKey,
   recordingObjectKey,
   recordingWebhookFieldsFrom,
 } from './rules';
@@ -38,37 +39,34 @@ function json(status: number, body: unknown): Response {
   });
 }
 
-/** Rejects traversal / missing prefix before any R2 read. */
-function recordingDownloadKey(request: Request): string | undefined {
-  const key = new URL(request.url).searchParams.get('key') ?? '';
-  if (!key.startsWith('recordings/') || key.includes('..')) return undefined;
-  return key;
-}
-
 function recordingContentType(object: R2ObjectBody): string {
   return object.httpMetadata?.contentType ?? 'video/mp4';
 }
 
-function recordingFilename(key: string): string {
-  return key.split('/').pop() ?? 'recording.mp4';
+function recordingFilename(key: string, fallback: string): string {
+  return key.split('/').pop() ?? fallback;
 }
 
 /** Attachment headers for one R2 object body. */
 function recordingDownloadHeaders(object: R2ObjectBody, key: string): Headers {
   const headers = new Headers();
   headers.set('content-type', recordingContentType(object));
-  headers.set('content-disposition', `attachment; filename="${recordingFilename(key)}"`);
+  headers.set(
+    'content-disposition',
+    `attachment; filename="${recordingFilename(key, 'recording.mp4')}"`,
+  );
   if (object.size > 0) headers.set('content-length', String(object.size));
   return headers;
 }
 
-/** Streams one R2 object after a prefix / traversal check. */
-export async function streamRecordingDownload(
-  env: HandlerEnv,
-  request: Request,
-): Promise<Response> {
-  const key = recordingDownloadKey(request);
-  if (key === undefined) return json(400, { error: 'bad-key' });
+/**
+ * Streams the archive object for `recordingId`. The key is derived only
+ * from the path id (`recordings/id/<recordingId>`) — never from a client
+ * query param (Bugbot: download must not accept a free-form object key).
+ */
+async function streamRecordingDownload(env: HandlerEnv, recordingId: string): Promise<Response> {
+  if (!isRecordingIdLike(recordingId)) return json(400, { error: 'bad-id' });
+  const key = recordingArchiveKey(recordingId);
   const object = await env.RECORDINGS.get(key);
   if (object === null) return json(404, { error: 'not-found' });
   return new Response(object.body, { status: 200, headers: recordingDownloadHeaders(object, key) });
@@ -95,7 +93,6 @@ async function mintResponse(
 /** Recording start/stop/download half of the browser dispatch. */
 async function handleRecordingRoute(
   route: CallRoute,
-  request: Request,
   cfg: ProviderConfig,
   storage: RecordingStorageConfig,
   env: HandlerEnv,
@@ -108,7 +105,7 @@ async function handleRecordingRoute(
     return json(200, { ok: true });
   }
   if (route.kind === 'downloadRecording') {
-    return streamRecordingDownload(env, request);
+    return streamRecordingDownload(env, route.recordingId);
   }
   return undefined;
 }
@@ -128,7 +125,7 @@ export async function handleBrowserCall(
   if (route.kind === 'mint') {
     return mintResponse(cfg, route.meetingId, request, caller);
   }
-  const recording = await handleRecordingRoute(route, request, cfg, storage, env);
+  const recording = await handleRecordingRoute(route, cfg, storage, env);
   if (recording !== undefined) return recording;
   return json(404, { error: 'not-found' });
 }
@@ -155,39 +152,48 @@ async function putDownloadUrlInR2(
   }
 }
 
-/** Copies provider downloadUrl into R2 when the direct upload missed. */
-async function ensureObjectInR2(
+/** Copies an existing R2 object onto the archive key (by recording id). */
+async function copyToArchiveKey(
   env: HandlerEnv,
-  objectKey: string,
-  downloadUrl: string,
-): Promise<string> {
-  const existing = await env.RECORDINGS.head(objectKey);
-  if (existing !== null) return objectKey;
-  if (downloadUrl === '') return '';
-  return putDownloadUrlInR2(env, objectKey, downloadUrl);
+  archiveKey: string,
+  sourceKey: string,
+): Promise<boolean> {
+  if (sourceKey === '' || sourceKey === archiveKey) return false;
+  const source = await env.RECORDINGS.get(sourceKey);
+  if (source === null) return false;
+  await env.RECORDINGS.put(archiveKey, source.body, {
+    httpMetadata: { contentType: recordingContentType(source) },
+  });
+  return true;
 }
 
-/** R2 key for an uploaded recording, or '' when the name is missing. */
-function objectKeyForUpload(meetingId: string, outputFileName: string): string {
+function sourceObjectKey(meetingId: string, outputFileName: string): string {
   if (outputFileName === '') return '';
   return recordingObjectKey(meetingId, outputFileName);
 }
 
-/** Ensures R2 has the file once the provider reports uploaded. */
-async function resolveUploadedObjectKey(
+/**
+ * Lands the file at `recordings/id/<recordingId>` for download-by-id.
+ * Prefers the storage_config upload path; falls back to provider downloadUrl.
+ */
+async function ensureArchiveObject(
   env: HandlerEnv,
+  recordingId: string,
   meetingId: string,
   outputFileName: string,
   downloadUrl: string,
 ): Promise<string> {
-  const objectKey = objectKeyForUpload(meetingId, outputFileName);
-  if (objectKey === '') return '';
-  return ensureObjectInR2(env, objectKey, downloadUrl);
+  const archiveKey = recordingArchiveKey(recordingId);
+  if ((await env.RECORDINGS.head(archiveKey)) !== null) return archiveKey;
+  if (await copyToArchiveKey(env, archiveKey, sourceObjectKey(meetingId, outputFileName))) {
+    return archiveKey;
+  }
+  return downloadUrl === '' ? '' : putDownloadUrlInR2(env, archiveKey, downloadUrl);
 }
 
 /**
  * Handles a verified recording.statusUpdate: map status, ensure the R2
- * object, upsert the SpacetimeDB catalog row.
+ * archive object, upsert the SpacetimeDB catalog row.
  */
 export async function handleRecordingWebhook(env: HandlerEnv, body: unknown): Promise<void> {
   const fields = recordingWebhookFieldsFrom(body);
@@ -199,13 +205,14 @@ export async function handleRecordingWebhook(env: HandlerEnv, body: unknown): Pr
   }
   const objectKey =
     status === 'uploaded'
-      ? await resolveUploadedObjectKey(
+      ? await ensureArchiveObject(
           env,
+          fields.recordingId,
           fields.meetingId,
           fields.outputFileName,
           fields.downloadUrl,
         )
-      : objectKeyForUpload(fields.meetingId, fields.outputFileName);
+      : '';
   await upsertRecordingStatus(
     {
       hostUrl: env.SPACETIME_HOST_URL,

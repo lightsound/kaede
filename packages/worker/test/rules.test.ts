@@ -5,6 +5,7 @@ import {
   callerKindOf,
   guestSubjectFrom,
   participantNameFrom,
+  recordingArchiveKey,
   recordingObjectKey,
   recordingObjectPrefix,
   recordingWebhookFieldsFrom,
@@ -179,6 +180,7 @@ describe('recording object key / webhook fields', () => {
     expect(recordingObjectKey(MEETING_ID, '/weekly.mp4')).toBe(
       `recordings/${MEETING_ID}/weekly.mp4`,
     );
+    expect(recordingArchiveKey(RECORDING_ID)).toBe(`recordings/id/${RECORDING_ID}`);
   });
 
   it('recording.statusUpdate だけをカタログ更新用に読む', () => {

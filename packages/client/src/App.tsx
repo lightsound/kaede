@@ -102,6 +102,11 @@ function callDockNetOf(netRef: { current: Net | undefined }) {
   };
 }
 
+/** True when the space view says this client is an approved member. */
+function isApprovedMember(self: SpaceView['self'] | undefined): boolean {
+  return self?.status === 'approved';
+}
+
 export function App() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
@@ -234,6 +239,7 @@ export function App() {
         ownGroupId={ownGroupId}
         ownName={ownName}
         getToken={session.getToken}
+        canRecord={isApprovedMember(self)}
         net={callDockNetOf(netRef)}
       />
       <ApprovedRecordingsPanel

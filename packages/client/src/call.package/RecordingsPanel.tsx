@@ -159,7 +159,7 @@ export function RecordingsPanel({
     setBusyId(row.recordingId);
     setNotice(undefined);
     try {
-      const blob = await downloadCallRecording(getToken, row.recordingId, row.objectKey);
+      const blob = await downloadCallRecording(getToken, row.recordingId);
       await saveRecordingBlob(row, blob);
     } catch (err) {
       console.error('recording download failed', err);

@@ -174,11 +174,30 @@ function recordingStartedHandler(
 }
 
 /** Lazy UI Kit panel for an ongoing call. Split from CallDock for CRAP. */
-function InCallDock({ meeting, net }: { meeting: Meeting; net: CallDockNet }) {
+function InCallDock({
+  meeting,
+  net,
+  getToken,
+  canRecord,
+}: {
+  meeting: Meeting;
+  net: CallDockNet;
+  getToken: AuthTokenGetter;
+  canRecord: boolean;
+}) {
   const meetingId = net.ownGroupCall()?.meetingId;
+  if (meetingId === undefined) {
+    return <div style={panelStyle}>📞 通話に接続中…</div>;
+  }
   return (
     <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
-      <InCallPanel meeting={meeting} onRecordingStarted={recordingStartedHandler(net, meetingId)} />
+      <InCallPanel
+        meeting={meeting}
+        meetingId={meetingId}
+        getToken={getToken}
+        canRecord={canRecord}
+        onRecordingStarted={recordingStartedHandler(net, meetingId)}
+      />
     </Suspense>
   );
 }
@@ -199,6 +218,7 @@ export function CallDock({
   ownGroupId,
   ownName,
   getToken,
+  canRecord,
   net,
 }: {
   connected: boolean;
@@ -207,6 +227,8 @@ export function CallDock({
   /** The authoritative display name — what the call tile shows the others. */
   ownName: string | undefined;
   getToken: AuthTokenGetter;
+  /** Approved members may start/stop cloud recording (増分④). */
+  canRecord: boolean;
   net: CallDockNet;
 }) {
   const [phase, setPhase] = useState<CallPhase>({ kind: 'idle' });
@@ -236,7 +258,11 @@ export function CallDock({
 
   if (dockHidden(connected, ownGroupId, phase)) return null;
   if (phase.kind === 'joining') return <div style={panelStyle}>📞 通話に接続中…</div>;
-  if (phase.kind === 'in-call') return <InCallDock meeting={phase.meeting} net={net} />;
+  if (phase.kind === 'in-call') {
+    return (
+      <InCallDock meeting={phase.meeting} net={net} getToken={getToken} canRecord={canRecord} />
+    );
+  }
   return (
     <IdlePanel
       notice={phase.notice}

@@ -171,6 +171,15 @@ export function recordingObjectKey(meetingId: string, outputFileName: string): s
 }
 
 /**
+ * Stable download key keyed only by recordingId. Webhook copies the
+ * provider upload (or downloadUrl fallback) here so the download route
+ * never trusts a client-supplied object key (a review finding).
+ */
+export function recordingArchiveKey(recordingId: string): string {
+  return `recordings/id/${recordingId}`;
+}
+
+/**
  * Fields the webhook handler needs from a verified
  * recording.statusUpdate body. Undefined when the payload is not that
  * event or is missing required ids — the handler 204s those so RealtimeKit

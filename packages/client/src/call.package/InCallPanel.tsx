@@ -10,13 +10,14 @@ import {
   RtkMicToggle,
   RtkParticipantsAudio,
   RtkRecordingIndicator,
-  RtkRecordingToggle,
   RtkScreenShareToggle,
   RtkSettingsToggle,
   RtkUiProvider,
 } from '@cloudflare/realtimekit-react-ui';
 import { type CSSProperties, useEffect } from 'react';
+import type { AuthTokenGetter } from '../net.package';
 import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
+import { RecordingToggle } from './RecordingToggle';
 import type { Meeting } from './realtimekit';
 
 // The prebuilt in-call UI (ROADMAP Phase 4 増分③〜④). These imports are
@@ -148,18 +149,25 @@ function reportActiveRecordings(
 
 /**
  * The ongoing call, assembled from the UI Kit's parts: the participant
- * grid (which also lays out shared screens), the control bar toggles
- * (including recording — 増分④), the remote audio sink, and the dialog
- * manager. RtkUiProvider syncs the meeting and the toggles' state into
- * every Rtk child. `onRecordingStarted` feeds the SpacetimeDB catalog
- * row (register_call_recording) so the list/DL UI has something to show
- * before the webhook lands.
+ * grid (which also lays out shared screens), the control bar toggles,
+ * the Worker-backed recording control (増分④ — storage_config for R2),
+ * the remote audio sink, and the dialog manager. RtkUiProvider syncs the
+ * meeting into every Rtk child. `onRecordingStarted` feeds the SpacetimeDB
+ * catalog row (register_call_recording) so the list/DL UI has something
+ * to show before the webhook lands.
  */
 export function InCallPanel({
   meeting,
+  meetingId,
+  getToken,
+  canRecord,
   onRecordingStarted,
 }: {
   meeting: Meeting;
+  meetingId: string;
+  getToken: AuthTokenGetter;
+  /** Approved members only — guests never see the recording control. */
+  canRecord: boolean;
   onRecordingStarted?: (event: RecordingStarted) => void;
 }) {
   useEffect(() => {
@@ -188,7 +196,13 @@ export function InCallPanel({
           <RtkMicToggle size="sm" />
           <RtkCameraToggle size="sm" />
           <RtkScreenShareToggle size="sm" />
-          <RtkRecordingToggle size="sm" />
+          <RecordingToggle
+            meeting={meeting}
+            meetingId={meetingId}
+            getToken={getToken}
+            canRecord={canRecord}
+            onRecordingStarted={onRecordingStarted}
+          />
           <RtkSettingsToggle size="sm" />
           <RtkLeaveButton size="sm" />
         </div>
