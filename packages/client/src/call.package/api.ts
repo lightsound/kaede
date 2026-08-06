@@ -97,10 +97,9 @@ export async function downloadCallRecording(
   if (token === undefined) throw new Error('call API: no auth token');
   const params = new URLSearchParams({ key: objectKey });
   // fallow-ignore-next-line security-sink -- BASE_URL is build-time; recordingId is UUID-shaped at the reducer write
-  const response = await fetch(
-    `${BASE_URL}/calls/recordings/${recordingId}/download?${params}`,
-    { headers: { authorization: `Bearer ${token}` } },
-  );
+  const response = await fetch(`${BASE_URL}/calls/recordings/${recordingId}/download?${params}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
   if (!response.ok) throw new Error(`call API: download failed (${response.status})`);
   return response.blob();
 }

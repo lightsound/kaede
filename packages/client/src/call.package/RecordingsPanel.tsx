@@ -78,6 +78,61 @@ function formatDuration(secs: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function canDownloadRecording(row: RecordingListItem): boolean {
+  return row.status === RECORDING_STATUS_UPLOADED && row.objectKey !== '';
+}
+
+function recordingLabel(row: RecordingListItem): string {
+  const duration = formatDuration(row.durationSecs);
+  const status = STATUS_LABEL[row.status] ?? row.status;
+  if (duration === '') return `${formatStartedAt(row.startedAtMs)} · ${status}`;
+  return `${formatStartedAt(row.startedAtMs)} · ${duration} · ${status}`;
+}
+
+async function saveRecordingBlob(row: RecordingListItem, blob: Blob): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = row.outputFileName === '' ? `${row.recordingId}.mp4` : row.outputFileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/** One catalog row + its download button. Split for the CRAP budget. */
+function RecordingRow({
+  row,
+  busy,
+  onDownload,
+}: {
+  row: RecordingListItem;
+  busy: boolean;
+  onDownload: (row: RecordingListItem) => void;
+}) {
+  const ready = canDownloadRecording(row);
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        justifyContent: 'space-between',
+      }}
+    >
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {recordingLabel(row)}
+      </span>
+      <button
+        type="button"
+        style={buttonStyle}
+        disabled={!ready || busy}
+        onClick={blurringClick(() => onDownload(row))}
+      >
+        {busy ? '…' : 'DL'}
+      </button>
+    </div>
+  );
+}
+
 /**
  * Approved-member recording catalog (ROADMAP Phase 4 増分④). Lives in
  * call.package so the download helper (Worker client) stays next to the
@@ -97,7 +152,7 @@ export function RecordingsPanel({
   if (recordings.length === 0) return null;
 
   const download = async (row: RecordingListItem) => {
-    if (row.status !== RECORDING_STATUS_UPLOADED || row.objectKey === '') {
+    if (!canDownloadRecording(row)) {
       setNotice('まだダウンロードできません');
       return;
     }
@@ -105,12 +160,7 @@ export function RecordingsPanel({
     setNotice(undefined);
     try {
       const blob = await downloadCallRecording(getToken, row.recordingId, row.objectKey);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = row.outputFileName === '' ? `${row.recordingId}.mp4` : row.outputFileName;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await saveRecordingBlob(row, blob);
     } catch (err) {
       console.error('recording download failed', err);
       setNotice('ダウンロードに失敗しました');
@@ -122,35 +172,14 @@ export function RecordingsPanel({
   return (
     <div style={panelStyle}>
       <div style={{ fontWeight: 600 }}>録画</div>
-      {recordings.map((row) => {
-        const canDownload = row.status === RECORDING_STATUS_UPLOADED && row.objectKey !== '';
-        const duration = formatDuration(row.durationSecs);
-        return (
-          <div
-            key={row.recordingId}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              justifyContent: 'space-between',
-            }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {formatStartedAt(row.startedAtMs)}
-              {duration === '' ? '' : ` · ${duration}`}
-              {` · ${STATUS_LABEL[row.status] ?? row.status}`}
-            </span>
-            <button
-              type="button"
-              style={buttonStyle}
-              disabled={!canDownload || busyId === row.recordingId}
-              onClick={blurringClick(() => void download(row))}
-            >
-              {busyId === row.recordingId ? '…' : 'DL'}
-            </button>
-          </div>
-        );
-      })}
+      {recordings.map((row) => (
+        <RecordingRow
+          key={row.recordingId}
+          row={row}
+          busy={busyId === row.recordingId}
+          onDownload={(item) => void download(item)}
+        />
+      ))}
       {notice !== undefined && <span style={{ color: UI_ERROR_COLOR }}>{notice}</span>}
     </div>
   );

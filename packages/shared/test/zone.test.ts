@@ -1,5 +1,7 @@
 import {
   clampZoneRect,
+  compareRecordingsNewestFirst,
+  compareRecordingsOldestFirst,
   evaluateHuddleJoin,
   evaluateZoneSpec,
   findJoinableHuddleId,
@@ -11,11 +13,11 @@ import {
   isMeetingIdLike,
   isRecordingIdLike,
   isRecordingStatus,
-  recordingStatusFromProvider,
-  RECORDING_STATUS_RECORDING,
-  RECORDING_STATUS_UPLOADED,
   keepsHuddleMembership,
   normalizeHuddleName,
+  RECORDING_STATUS_RECORDING,
+  RECORDING_STATUS_UPLOADED,
+  recordingStatusFromProvider,
   resolveZoneOccupancy,
   sortedHuddleRows,
   sortedZoneRows,
@@ -382,5 +384,15 @@ describe('recording id / status', () => {
     expect(recordingStatusFromProvider('UPLOADED')).toBe(RECORDING_STATUS_UPLOADED);
     expect(recordingStatusFromProvider('ERRORED')).toBe('errored');
     expect(recordingStatusFromProvider('UNKNOWN')).toBeUndefined();
+  });
+
+  it('録画の並びは startedAtMs、同秒は recordingId', () => {
+    const older = { startedAtMs: 1n, recordingId: 'b' };
+    const newer = { startedAtMs: 2n, recordingId: 'a' };
+    const sameA = { startedAtMs: 1n, recordingId: 'a' };
+    expect(compareRecordingsOldestFirst(older, newer)).toBe(-1);
+    expect(compareRecordingsNewestFirst(older, newer)).toBe(1);
+    expect(compareRecordingsOldestFirst(sameA, older)).toBe(-1);
+    expect(compareRecordingsOldestFirst(older, older)).toBe(0);
   });
 });

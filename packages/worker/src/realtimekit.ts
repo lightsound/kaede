@@ -67,7 +67,13 @@ async function providerFetch(
     // The response body may carry provider internals; log it for Workers
     // Logs but never forward it to the browser (index.ts maps this to an
     // opaque 502).
-    console.error('RealtimeKit API failure', method, path, response.status, JSON.stringify(payload));
+    console.error(
+      'RealtimeKit API failure',
+      method,
+      path,
+      response.status,
+      JSON.stringify(payload),
+    );
     throw new ProviderError(`RealtimeKit ${path} failed (${response.status})`);
   }
   return payload.data;
@@ -111,11 +117,16 @@ export async function mintParticipantToken(
   participantId: string,
   asMember: boolean,
 ): Promise<string> {
-  const data = await providerFetch(cfg, 'POST', `/${cfg.appId}/meetings/${meetingId}/participants`, {
-    name,
-    preset_name: asMember ? MEMBER_PRESET : GUEST_PRESET,
-    custom_participant_id: participantId,
-  });
+  const data = await providerFetch(
+    cfg,
+    'POST',
+    `/${cfg.appId}/meetings/${meetingId}/participants`,
+    {
+      name,
+      preset_name: asMember ? MEMBER_PRESET : GUEST_PRESET,
+      custom_participant_id: participantId,
+    },
+  );
   return stringField(data, 'token');
 }
 

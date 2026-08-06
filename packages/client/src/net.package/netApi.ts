@@ -404,10 +404,8 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     },
     registerCallRecording: forward(
       'register_call_recording',
-      (
-        c,
-        args: { recordingId: string; meetingId: string; startedAtMs: bigint },
-      ) => c.reducers.registerCallRecording(args),
+      (c, args: { recordingId: string; meetingId: string; startedAtMs: bigint }) =>
+        c.reducers.registerCallRecording(args),
     ),
     setCallServiceSecret: forward('set_call_service_secret', (c, secret: string) =>
       c.reducers.setCallServiceSecret({ secret }),

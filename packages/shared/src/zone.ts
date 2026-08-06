@@ -553,3 +553,26 @@ export function recordingStatusFromProvider(raw: string): RecordingStatus | unde
 export function isRecordingIdLike(recordingId: string): boolean {
   return isMeetingIdLike(recordingId);
 }
+
+/**
+ * Oldest-first compare for call_recording trim (RECORDING_HISTORY_MAX).
+ * Ties break on recordingId ascending so the order is stable across hosts.
+ * Split out of the reducer / feed sort arrows for the CRAP budget.
+ */
+export function compareRecordingsOldestFirst(
+  a: { startedAtMs: bigint; recordingId: string },
+  b: { startedAtMs: bigint; recordingId: string },
+): number {
+  if (a.startedAtMs === b.startedAtMs) {
+    return a.recordingId < b.recordingId ? -1 : a.recordingId > b.recordingId ? 1 : 0;
+  }
+  return a.startedAtMs < b.startedAtMs ? -1 : 1;
+}
+
+/** Newest-first compare for the approved-member recordings list UI. */
+export function compareRecordingsNewestFirst(
+  a: { startedAtMs: bigint; recordingId: string },
+  b: { startedAtMs: bigint; recordingId: string },
+): number {
+  return compareRecordingsOldestFirst(b, a);
+}

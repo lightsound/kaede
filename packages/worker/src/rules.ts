@@ -5,60 +5,17 @@
 // workspace: the wiring stays a thin untestable shell).
 import { isMeetingIdLike, isRecordingIdLike, normalizeDisplayName } from '@kaede/shared';
 import { decodeJwt } from 'jose';
+import { type CallRoute, matchCallRoute } from './routes';
 
-/**
- * What one request asks of the call API:
- * - `provision`: create a meeting at the provider (the 通話開始 half —
- *   the caller then binds it to its group via the register_group_call
- *   reducer, which is the part this Worker has no authority over).
- * - `mint`: issue a participant token for an existing meeting (the 参加
- *   half — knowing the meeting id IS the authorization to join, see the
- *   group_call table comment in the server).
- * - `startRecording` / `stopRecording`: RealtimeKit cloud recording
- *   control (増分④ — members only at the auth layer; storage_config is
- *   attached by the provider half).
- * - `downloadRecording`: stream an uploaded R2 object (members only).
- * - `webhook`: RealtimeKit recording.statusUpdate (no Clerk/guest auth —
- *   verified by rtk-signature instead).
- */
-export type CallRoute =
-  | { kind: 'provision' }
-  | { kind: 'mint'; meetingId: string }
-  | { kind: 'startRecording'; meetingId: string }
-  | { kind: 'stopRecording'; recordingId: string }
-  | { kind: 'downloadRecording'; recordingId: string }
-  | { kind: 'webhook' };
+export type { CallRoute };
 
 /**
  * Routes one request, or undefined for anything this API does not serve.
  * Meeting / recording id segments are vetted with the same UUID shape the
- * reducers apply, so a malformed id 404s here instead of reaching the
- * provider as a mangled URL.
+ * reducers apply (matchCallRoute in routes.ts).
  */
 export function routeCallRequest(method: string, pathname: string): CallRoute | undefined {
-  if (method === 'POST' && pathname === '/webhooks/realtimekit') {
-    return { kind: 'webhook' };
-  }
-  if (method === 'POST' && pathname === '/calls/meetings') {
-    return { kind: 'provision' };
-  }
-  const mint = /^\/calls\/meetings\/([^/]+)\/participants$/.exec(pathname);
-  if (method === 'POST' && mint?.[1] !== undefined && isMeetingIdLike(mint[1])) {
-    return { kind: 'mint', meetingId: mint[1] };
-  }
-  const start = /^\/calls\/meetings\/([^/]+)\/recordings$/.exec(pathname);
-  if (method === 'POST' && start?.[1] !== undefined && isMeetingIdLike(start[1])) {
-    return { kind: 'startRecording', meetingId: start[1] };
-  }
-  const stop = /^\/calls\/recordings\/([^/]+)\/stop$/.exec(pathname);
-  if (method === 'POST' && stop?.[1] !== undefined && isRecordingIdLike(stop[1])) {
-    return { kind: 'stopRecording', recordingId: stop[1] };
-  }
-  const download = /^\/calls\/recordings\/([^/]+)\/download$/.exec(pathname);
-  if (method === 'GET' && download?.[1] !== undefined && isRecordingIdLike(download[1])) {
-    return { kind: 'downloadRecording', recordingId: download[1] };
-  }
-  return undefined;
+  return matchCallRoute(method, pathname);
 }
 
 /**

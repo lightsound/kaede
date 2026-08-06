@@ -116,6 +116,36 @@ export interface RecordingStarted {
   startedAtMs: bigint;
 }
 
+/** True when the UI Kit state means a recording is opening or live. */
+function isActiveRecordingState(state: string): boolean {
+  return state === 'STARTING' || state === 'RECORDING';
+}
+
+/** Whether this UI Kit recording row is a new active id we should report. */
+function shouldReportRecording(row: { id: string; state: string }, seen: Set<string>): boolean {
+  if (!isActiveRecordingState(row.state)) return false;
+  return row.id !== '' && !seen.has(row.id);
+}
+
+/**
+ * Emits one RecordingStarted per unseen active recording id. Split from
+ * the effect so the uncovered listener stays under the CRAP budget.
+ */
+function reportActiveRecordings(
+  meeting: Meeting,
+  seen: Set<string>,
+  onRecordingStarted: (event: RecordingStarted) => void,
+): void {
+  for (const row of meeting.recording.recordings) {
+    if (!shouldReportRecording(row, seen)) continue;
+    seen.add(row.id);
+    onRecordingStarted({
+      recordingId: row.id,
+      startedAtMs: BigInt(Date.now()),
+    });
+  }
+}
+
 /**
  * The ongoing call, assembled from the UI Kit's parts: the participant
  * grid (which also lays out shared screens), the control bar toggles
@@ -137,16 +167,8 @@ export function InCallPanel({
     // Dedup so STARTING→RECORDING does not double-register the same id.
     const seen = new Set<string>();
     const report = (state: string) => {
-      if (state !== 'STARTING' && state !== 'RECORDING') return;
-      for (const row of meeting.recording.recordings) {
-        if (row.state !== 'STARTING' && row.state !== 'RECORDING') continue;
-        if (row.id === '' || seen.has(row.id)) continue;
-        seen.add(row.id);
-        onRecordingStarted({
-          recordingId: row.id,
-          startedAtMs: BigInt(Date.now()),
-        });
-      }
+      if (!isActiveRecordingState(state)) return;
+      reportActiveRecordings(meeting, seen, onRecordingStarted);
     };
     meeting.recording.addListener('recordingUpdate', report);
     report(meeting.recording.recordingState);

@@ -21,20 +21,74 @@ function pemToSpki(pem: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-async function webhookPublicKeySpki(): Promise<ArrayBuffer> {
-  if (cachedSpki !== undefined) return cachedSpki;
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  return value as Record<string, unknown>;
+}
+
+function nestedData(payload: unknown): Record<string, unknown> | undefined {
+  const root = asRecord(payload);
+  if (root === undefined) return undefined;
+  return asRecord(root.data);
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function publicKeyPemFrom(payload: unknown): string | undefined {
+  const data = nestedData(payload);
+  if (data === undefined) return undefined;
+  return nonEmptyString(data.publicKey);
+}
+
+async function fetchWebhookPublicKeyPem(): Promise<string> {
   const response = await fetch(WEBHOOK_PUBLIC_KEY_URL);
   if (!response.ok) {
     throw new Error(`webhook public key fetch failed (${response.status})`);
   }
-  const payload: unknown = await response.json();
-  const data = (payload as { data?: { publicKey?: unknown } } | null)?.data;
-  const pem = data?.publicKey;
-  if (typeof pem !== 'string' || pem === '') {
-    throw new Error('webhook public key missing');
-  }
-  cachedSpki = pemToSpki(pem);
+  const pem = publicKeyPemFrom(await response.json());
+  if (pem === undefined) throw new Error('webhook public key missing');
+  return pem;
+}
+
+async function webhookPublicKeySpki(): Promise<ArrayBuffer> {
+  if (cachedSpki !== undefined) return cachedSpki;
+  cachedSpki = pemToSpki(await fetchWebhookPublicKeyPem());
   return cachedSpki;
+}
+
+/** Decodes the base64 `rtk-signature` header, or undefined when malformed. */
+function signatureBytesFrom(header: string): Uint8Array | undefined {
+  try {
+    const binary = atob(header);
+    const signature = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) signature[i] = binary.charCodeAt(i);
+    return signature;
+  } catch {
+    return undefined;
+  }
+}
+
+async function rsaVerify(signature: Uint8Array, body: ArrayBuffer): Promise<boolean> {
+  const spki = await webhookPublicKeySpki();
+  const key = await crypto.subtle.importKey(
+    'spki',
+    spki,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  return crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature, body);
+}
+
+async function tryRsaVerify(signature: Uint8Array, body: ArrayBuffer): Promise<boolean> {
+  try {
+    return await rsaVerify(signature, body);
+  } catch (err) {
+    console.error('webhook signature verify failed', err);
+    return false;
+  }
 }
 
 /**
@@ -47,26 +101,7 @@ export async function verifyRtkSignature(
   body: ArrayBuffer,
 ): Promise<boolean> {
   if (signatureHeader === null || signatureHeader === '') return false;
-  let signature: Uint8Array;
-  try {
-    const binary = atob(signatureHeader);
-    signature = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) signature[i] = binary.charCodeAt(i);
-  } catch {
-    return false;
-  }
-  try {
-    const spki = await webhookPublicKeySpki();
-    const key = await crypto.subtle.importKey(
-      'spki',
-      spki,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false,
-      ['verify'],
-    );
-    return crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature, body);
-  } catch (err) {
-    console.error('webhook signature verify failed', err);
-    return false;
-  }
+  const signature = signatureBytesFrom(signatureHeader);
+  if (signature === undefined) return false;
+  return tryRsaVerify(signature, body);
 }

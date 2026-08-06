@@ -54,6 +54,14 @@ const workerNameSlug = (stage: string): string => {
   return slug === '' ? suffix : `${slug}-${suffix}`;
 };
 
+/** Worker / バケット名: prod は固定、それ以外はステージ由来スラッグ。 */
+const stagedName = (stage: string, prodName: string, prefix: string): string =>
+  stage === 'prod' ? prodName : `${prefix}-${workerNameSlug(stage)}`;
+
+/** 本番だけカスタムドメインを付ける (VISION「名前・ドメイン」)。 */
+const prodDomain = (stage: string): { domain: string } | Record<string, never> =>
+  stage === 'prod' ? { domain: 'kaede.town' } : {};
+
 export default Alchemy.Stack(
   'kaede',
   {
@@ -83,7 +91,7 @@ export default Alchemy.Stack(
       // 上書き・削除できてしまう。Worker 名に使えるのは英小文字・数字・
       // ハイフンのみで、既定ステージ dev_$USER は $USER 由来の任意文字
       // (ドット等)を含み得るため、使えない文字はまとめて - に潰す。
-      name: stage === 'prod' ? 'kaede' : `kaede-${workerNameSlug(stage)}`,
+      name: stagedName(stage, 'kaede', 'kaede'),
       // ビルドはリポジトリルートで実行する(infra/ からの相対)。
       cwd: '..',
       command: 'pnpm --filter @kaede/client build',
@@ -105,15 +113,14 @@ export default Alchemy.Stack(
       // workers.dev のまま(ドメインは本番だけの概念)。workers.dev の URL も
       // 併存して同じ Worker を配信し続ける — Clerk 本番切替(ROADMAP ゲート①)
       // の移行中 URL として使う。
-      ...(stage === 'prod' ? { domain: 'kaede.town' } : {}),
+      ...prodDomain(stage),
     });
 
     // 録画アーカイブ用 R2 バケット(ROADMAP Phase 4 増分④)。Stripe Projects
     // の Cloudflare カタログに R2 は無いので Alchemy で定義する(VISION の
     // 役割分担)。prod は固定名、それ以外はステージ由来 — CallApi と同じ
     // スラッグ規則でステージ間の取り合いを防ぐ。
-    const recordingsBucketName =
-      stage === 'prod' ? 'kaede-recordings' : `kaede-recordings-${workerNameSlug(stage)}`;
+    const recordingsBucketName = stagedName(stage, 'kaede-recordings', 'kaede-recordings');
     const recordings = yield* Cloudflare.R2.Bucket('Recordings', {
       name: recordingsBucketName,
     });
@@ -127,7 +134,7 @@ export default Alchemy.Stack(
     // は Worker 側で ALLOWED_ORIGINS を完全一致で検査する。ローカル開発は
     // Alchemy を通さず wrangler dev + .dev.vars(README「通話 API Worker」)。
     const callApi = yield* Cloudflare.Worker('CallApi', {
-      name: stage === 'prod' ? 'kaede-call' : `kaede-call-${workerNameSlug(stage)}`,
+      name: stagedName(stage, 'kaede-call', 'kaede-call'),
       main: '../packages/worker/src/index.ts',
       compatibility: { date: '2026-08-01' },
       env: {

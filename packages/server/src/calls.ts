@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- a reducer only runs inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (meeting-id shape, recording status, rate limit) are delegated to isMeetingIdLike / isRecordingIdLike / isRecordingStatus / evaluateSendAllowance in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- a reducer only runs inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (meeting-id shape, recording status, rate limit, sort order) are delegated to isMeetingIdLike / isRecordingIdLike / isRecordingStatus / compareRecordingsOldestFirst / evaluateSendAllowance in @kaede/shared and unit-tested there
 
 // The group-call registration reducer (ROADMAP Phase 4 増分①〜②) and the
 // recording catalog reducers (増分④). The call flow splits authority in two:
@@ -12,6 +12,7 @@
 import {
   CALL_BURST_SENDS,
   CALL_SEND_COST_MICROS,
+  compareRecordingsOldestFirst,
   evaluateSendAllowance,
   isMeetingIdLike,
   isRecordingIdLike,
@@ -86,24 +87,26 @@ export const registerGroupCall = spacetimedb.reducer(
 
 // ── Recordings (増分④) ──────────────────────────────────────────────────
 
-/**
- * Vets a member-side recording registration: shapes, sender is an
- * APPROVED space member in a group whose call row matches `meetingId`.
- * Guests can mint call tokens (増分②) but cannot open the recording
- * catalog — that is the access-control decision in ROADMAP/VISION.
- * Returns the groupId to stamp on the row. Split for the CRAP budget.
- */
-function vetRecordingRegistration(ctx: Ctx, recordingId: string, meetingId: string): bigint {
+/** Shape checks for a member-side recording registration. Split for CRAP. */
+function vetRecordingIds(recordingId: string, meetingId: string): void {
   if (!isRecordingIdLike(recordingId)) {
     throw new SenderError('register_call_recording refused (invalid-recording-id)');
   }
   if (!isMeetingIdLike(meetingId)) {
     throw new SenderError('register_call_recording refused (invalid-meeting-id)');
   }
+}
+
+/** Approved space member, or loud refuse. Split for the CRAP budget. */
+function requireApprovedMember(ctx: Ctx): void {
   const membership = ctx.db.spaceMember.identity.find(ctx.sender);
   if (membership === null || membership.status !== 'approved') {
     throw new SenderError('register_call_recording refused (not-approved-member)');
   }
+}
+
+/** Sender's group whose call row matches `meetingId`, or loud refuse. */
+function groupIdForMatchingCall(ctx: Ctx, meetingId: string): bigint {
   const member = ctx.db.groupMember.identity.find(ctx.sender);
   if (member === null) {
     throw new SenderError('register_call_recording refused (not-in-a-group)');
@@ -115,16 +118,24 @@ function vetRecordingRegistration(ctx: Ctx, recordingId: string, meetingId: stri
   return member.groupId;
 }
 
+/**
+ * Vets a member-side recording registration: shapes, sender is an
+ * APPROVED space member in a group whose call row matches `meetingId`.
+ * Guests can mint call tokens (増分②) but cannot open the recording
+ * catalog — that is the access-control decision in ROADMAP/VISION.
+ * Returns the groupId to stamp on the row. Split for the CRAP budget.
+ */
+function vetRecordingRegistration(ctx: Ctx, recordingId: string, meetingId: string): bigint {
+  vetRecordingIds(recordingId, meetingId);
+  requireApprovedMember(ctx);
+  return groupIdForMatchingCall(ctx, meetingId);
+}
+
 /** Drops the oldest call_recording rows past RECORDING_HISTORY_MAX. */
 function trimCallRecordings(ctx: Ctx): void {
   const rows = [...ctx.db.callRecording.iter()];
   if (rows.length <= RECORDING_HISTORY_MAX) return;
-  rows.sort((a, b) => {
-    if (a.startedAtMs === b.startedAtMs) {
-      return a.recordingId < b.recordingId ? -1 : a.recordingId > b.recordingId ? 1 : 0;
-    }
-    return a.startedAtMs < b.startedAtMs ? -1 : 1;
-  });
+  rows.sort(compareRecordingsOldestFirst);
   const overflow = rows.length - RECORDING_HISTORY_MAX;
   for (let i = 0; i < overflow; i += 1) {
     const row = rows[i];
@@ -175,17 +186,114 @@ function serviceSecretOk(ctx: Ctx, secret: string): boolean {
  * row, else the group_call row keyed by meetingId (indexed). Undefined
  * when neither exists — a recording for a meeting we never registered.
  */
-function groupIdForRecording(
-  ctx: Ctx,
-  recordingId: string,
-  meetingId: string,
-): bigint | undefined {
+function groupIdForRecording(ctx: Ctx, recordingId: string, meetingId: string): bigint | undefined {
   const existing = ctx.db.callRecording.recordingId.find(recordingId);
   if (existing !== null) return existing.groupId;
   for (const call of ctx.db.groupCall.meetingId.filter(meetingId)) {
     return call.groupId;
   }
   return undefined;
+}
+
+/** Args the webhook upsert reducer accepts (named for the insert helper). */
+interface UpsertRecordingArgs {
+  recordingId: string;
+  meetingId: string;
+  status: string;
+  objectKey: string;
+  outputFileName: string;
+  startedAtMs: bigint;
+  durationSecs: number;
+}
+
+/** Inserts a brand-new catalog row from a webhook (register lost the race). */
+function insertRecordingFromWebhook(ctx: Ctx, groupId: bigint, args: UpsertRecordingArgs): void {
+  ctx.db.callRecording.insert({
+    recordingId: args.recordingId,
+    meetingId: args.meetingId,
+    groupId,
+    status: args.status,
+    objectKey: args.objectKey,
+    outputFileName: args.outputFileName,
+    startedAtMs: args.startedAtMs,
+    durationSecs: args.durationSecs,
+    spaceFlag: 0,
+  });
+  trimCallRecordings(ctx);
+}
+
+/** Prefer `next` unless the webhook sent an empty placeholder. */
+function coalesceNonEmpty(next: string, prior: string): string {
+  return next === '' ? prior : next;
+}
+
+/** Keeps prior values when the webhook sends empty / zero placeholders. */
+function coalesceRecordingFields(
+  existing: UpsertRecordingArgs,
+  args: UpsertRecordingArgs,
+): UpsertRecordingArgs {
+  return {
+    recordingId: args.recordingId,
+    meetingId: args.meetingId,
+    status: args.status,
+    objectKey: coalesceNonEmpty(args.objectKey, existing.objectKey),
+    outputFileName: coalesceNonEmpty(args.outputFileName, existing.outputFileName),
+    startedAtMs: args.startedAtMs === 0n ? existing.startedAtMs : args.startedAtMs,
+    durationSecs: args.durationSecs === 0 ? existing.durationSecs : args.durationSecs,
+  };
+}
+
+/**
+ * Patches an existing catalog row. Empty webhook fields must not wipe
+ * values the member register or a prior upsert already filled.
+ */
+function patchRecordingFromWebhook(
+  ctx: Ctx,
+  existing: {
+    recordingId: string;
+    meetingId: string;
+    groupId: bigint;
+    status: string;
+    objectKey: string;
+    outputFileName: string;
+    startedAtMs: bigint;
+    durationSecs: number;
+    spaceFlag: number;
+  },
+  args: UpsertRecordingArgs,
+): void {
+  const merged = coalesceRecordingFields(existing, args);
+  ctx.db.callRecording.recordingId.update({
+    ...existing,
+    status: merged.status,
+    objectKey: merged.objectKey,
+    outputFileName: merged.outputFileName,
+    startedAtMs: merged.startedAtMs,
+    durationSecs: merged.durationSecs,
+  });
+}
+
+/** Shape / status checks for a webhook upsert (secret already verified). */
+function vetWebhookRecordingArgs(args: UpsertRecordingArgs): void {
+  if (!isRecordingIdLike(args.recordingId) || !isMeetingIdLike(args.meetingId)) {
+    throw new SenderError('upsert_call_recording_status refused (invalid-id)');
+  }
+  if (!isRecordingStatus(args.status)) {
+    throw new SenderError('upsert_call_recording_status refused (invalid-status)');
+  }
+}
+
+/** Loud pre-write checks for the webhook upsert. Split for the CRAP budget. */
+function vetWebhookUpsert(ctx: Ctx, args: UpsertRecordingArgs & { secret: string }): bigint {
+  if (!serviceSecretOk(ctx, args.secret)) {
+    throw new SenderError('upsert_call_recording_status refused (unauthorized)');
+  }
+  vetWebhookRecordingArgs(args);
+  const groupId = groupIdForRecording(ctx, args.recordingId, args.meetingId);
+  if (groupId === undefined) {
+    throw new SenderError('upsert_call_recording_status refused (unknown-meeting)');
+  }
+  return groupId;
 }
 
 /**
@@ -208,46 +316,13 @@ export const upsertCallRecordingStatus = spacetimedb.reducer(
     durationSecs: t.u32(),
   },
   (ctx, args) => {
-    if (!serviceSecretOk(ctx, args.secret)) {
-      throw new SenderError('upsert_call_recording_status refused (unauthorized)');
-    }
-    if (!isRecordingIdLike(args.recordingId) || !isMeetingIdLike(args.meetingId)) {
-      throw new SenderError('upsert_call_recording_status refused (invalid-id)');
-    }
-    if (!isRecordingStatus(args.status)) {
-      throw new SenderError('upsert_call_recording_status refused (invalid-status)');
-    }
-    const groupId = groupIdForRecording(ctx, args.recordingId, args.meetingId);
-    if (groupId === undefined) {
-      throw new SenderError('upsert_call_recording_status refused (unknown-meeting)');
-    }
+    const groupId = vetWebhookUpsert(ctx, args);
     const existing = ctx.db.callRecording.recordingId.find(args.recordingId);
     if (existing === null) {
-      ctx.db.callRecording.insert({
-        recordingId: args.recordingId,
-        meetingId: args.meetingId,
-        groupId,
-        status: args.status,
-        objectKey: args.objectKey,
-        outputFileName: args.outputFileName,
-        startedAtMs: args.startedAtMs,
-        durationSecs: args.durationSecs,
-        spaceFlag: 0,
-      });
-      trimCallRecordings(ctx);
+      insertRecordingFromWebhook(ctx, groupId, args);
       return;
     }
-    ctx.db.callRecording.recordingId.update({
-      ...existing,
-      status: args.status,
-      // Empty webhook fields must not wipe values the member register or a
-      // prior upsert already filled (partial status transitions).
-      objectKey: args.objectKey === '' ? existing.objectKey : args.objectKey,
-      outputFileName:
-        args.outputFileName === '' ? existing.outputFileName : args.outputFileName,
-      startedAtMs: args.startedAtMs === 0n ? existing.startedAtMs : args.startedAtMs,
-      durationSecs: args.durationSecs === 0 ? existing.durationSecs : args.durationSecs,
-    });
+    patchRecordingFromWebhook(ctx, existing, args);
   },
 );
 

@@ -1,5 +1,6 @@
 // fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events into a React-facing list; the catalog rules live in @kaede/shared / packages/server
 
+import { compareRecordingsNewestFirst } from '@kaede/shared';
 import type { DbConnection } from '../module_bindings';
 
 /** One call_recording row as the recordings panel wants it. */
@@ -14,9 +15,17 @@ export interface CallRecordingView {
   durationSecs: number;
 }
 
-/** Newest-first list from the subscribed cache (RLS already narrowed it). */
-export function callRecordingsOf(c: DbConnection): CallRecordingView[] {
-  const rows = [...c.db.callRecording.iter()].map((row) => ({
+function recordingViewOf(row: {
+  recordingId: string;
+  meetingId: string;
+  groupId: bigint;
+  status: string;
+  objectKey: string;
+  outputFileName: string;
+  startedAtMs: bigint;
+  durationSecs: number;
+}): CallRecordingView {
+  return {
     recordingId: row.recordingId,
     meetingId: row.meetingId,
     groupId: row.groupId,
@@ -25,13 +34,13 @@ export function callRecordingsOf(c: DbConnection): CallRecordingView[] {
     outputFileName: row.outputFileName,
     startedAtMs: row.startedAtMs,
     durationSecs: row.durationSecs,
-  }));
-  rows.sort((a, b) => {
-    if (a.startedAtMs === b.startedAtMs) {
-      return a.recordingId < b.recordingId ? 1 : a.recordingId > b.recordingId ? -1 : 0;
-    }
-    return a.startedAtMs < b.startedAtMs ? 1 : -1;
-  });
+  };
+}
+
+/** Newest-first list from the subscribed cache (RLS already narrowed it). */
+export function callRecordingsOf(c: DbConnection): CallRecordingView[] {
+  const rows = [...c.db.callRecording.iter()].map(recordingViewOf);
+  rows.sort(compareRecordingsNewestFirst);
   return rows;
 }
 

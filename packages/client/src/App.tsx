@@ -7,6 +7,7 @@ import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
 import { HuddleControl } from './huddle.package';
 import {
+  type AuthTokenGetter,
   type CallRecordingView,
   type ChatLog,
   type ChatScopeView,
@@ -58,6 +59,47 @@ function promptFor(signedIn: boolean, space: SpaceView | undefined) {
     membership: space?.self,
     anyMemberRow: space !== undefined && space.members.length > 0,
   });
+}
+
+/** Connection-status pill; hidden while connected. Split for App's CRAP. */
+function ConnectionBanner({ status }: { status: ConnectionStatus }) {
+  if (status === 'connected') return null;
+  return <div style={overlayStyle}>{STATUS_MESSAGES[status]}</div>;
+}
+
+/**
+ * Approved-member recording catalog gate (増分④). Split from App so the
+ * connected ∧ approved ∧ list branching stays under the CRAP / cognitive
+ * budget (the ChatPanel LineMark precedent).
+ */
+function ApprovedRecordingsPanel({
+  connected,
+  selfStatus,
+  recordings,
+  getToken,
+}: {
+  connected: boolean;
+  selfStatus: string | undefined;
+  recordings: CallRecordingView[];
+  getToken: AuthTokenGetter;
+}) {
+  if (!connected || selfStatus !== 'approved') return null;
+  return <RecordingsPanel recordings={recordings} getToken={getToken} />;
+}
+
+/** Call-dock net facade over the live Net handle. Split for App's CRAP. */
+function callDockNetOf(netRef: { current: Net | undefined }) {
+  return {
+    ownGroupCall: () => netRef.current?.ownGroupCall(),
+    registerGroupCall: (meetingId: string) =>
+      netRef.current?.registerGroupCall(meetingId) ??
+      Promise.reject(new Error('SpacetimeDB: not connected')),
+    registerCallRecording: (args: {
+      recordingId: string;
+      meetingId: string;
+      startedAtMs: bigint;
+    }) => netRef.current?.registerCallRecording(args),
+  };
 }
 
 export function App() {
@@ -172,7 +214,7 @@ export function App() {
         prompt={prompt}
         onApply={apply}
       />
-      {status !== 'connected' && <div style={overlayStyle}>{STATUS_MESSAGES[status]}</div>}
+      <ConnectionBanner status={status} />
       <ApplyBanner connected={connected} admission={admission} prompt={prompt} onApply={apply} />
       <RenameControl
         connected={connected}
@@ -192,17 +234,14 @@ export function App() {
         ownGroupId={ownGroupId}
         ownName={ownName}
         getToken={session.getToken}
-        net={{
-          ownGroupCall: () => netRef.current?.ownGroupCall(),
-          registerGroupCall: (meetingId) =>
-            netRef.current?.registerGroupCall(meetingId) ??
-            Promise.reject(new Error('SpacetimeDB: not connected')),
-          registerCallRecording: (args) => netRef.current?.registerCallRecording(args),
-        }}
+        net={callDockNetOf(netRef)}
       />
-      {connected && self?.status === 'approved' && (
-        <RecordingsPanel recordings={recordings} getToken={session.getToken} />
-      )}
+      <ApprovedRecordingsPanel
+        connected={connected}
+        selfStatus={self?.status}
+        recordings={recordings}
+        getToken={session.getToken}
+      />
       <HuddleControl
         connected={connected}
         ownName={ownName}

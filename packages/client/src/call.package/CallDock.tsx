@@ -163,8 +163,28 @@ async function joinCall(ctx: JoinContext): Promise<void> {
   }
 }
 
+/** Catalog callback when the group's meeting id is known. Split for CRAP. */
+function recordingStartedHandler(
+  net: CallDockNet,
+  meetingId: string | undefined,
+): ((event: { recordingId: string; startedAtMs: bigint }) => void) | undefined {
+  if (meetingId === undefined) return undefined;
+  return ({ recordingId, startedAtMs }) =>
+    net.registerCallRecording({ recordingId, meetingId, startedAtMs });
+}
+
+/** Lazy UI Kit panel for an ongoing call. Split from CallDock for CRAP. */
+function InCallDock({ meeting, net }: { meeting: Meeting; net: CallDockNet }) {
+  const meetingId = net.ownGroupCall()?.meetingId;
+  return (
+    <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
+      <InCallPanel meeting={meeting} onRecordingStarted={recordingStartedHandler(net, meetingId)} />
+    </Suspense>
+  );
+}
+
 /**
- * The call dock (ROADMAP Phase 4 増分①〜③): joins the conversation
+ * The call dock (ROADMAP Phase 4 増分①〜④): joins the conversation
  * group's call — provisioning and registering its meeting when it has
  * none — and renders the ongoing call with the UI Kit's prebuilt parts
  * (lazy InCallPanel). Offered to everyone in a conversation group, guests
@@ -216,25 +236,7 @@ export function CallDock({
 
   if (dockHidden(connected, ownGroupId, phase)) return null;
   if (phase.kind === 'joining') return <div style={panelStyle}>📞 通話に接続中…</div>;
-  if (phase.kind === 'in-call') {
-    // Same copy as the joining phase — the chunk download is usually
-    // shorter than the dial, so reusing the string avoids inventing a
-    // third transient.
-    const meetingId = net.ownGroupCall()?.meetingId;
-    return (
-      <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
-        <InCallPanel
-          meeting={phase.meeting}
-          onRecordingStarted={
-            meetingId === undefined
-              ? undefined
-              : ({ recordingId, startedAtMs }) =>
-                  net.registerCallRecording({ recordingId, meetingId, startedAtMs })
-          }
-        />
-      </Suspense>
-    );
-  }
+  if (phase.kind === 'in-call') return <InCallDock meeting={phase.meeting} net={net} />;
   return (
     <IdlePanel
       notice={phase.notice}
