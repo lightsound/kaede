@@ -715,10 +715,10 @@ export const spacetimedb = schema({
       // provider (storage_config), what signs the bucket listing, and what
       // mints presigned download URLs. Derived from an R2-permitted API
       // token (access key = token id, secret = SHA-256 of the token value).
-      r2AccessKeyId: t.string(),
-      r2SecretAccessKey: t.string(),
+      storageAccessKeyId: t.string(),
+      storageSecretAccessKey: t.string(),
       // The R2 bucket finished recordings land in (a public identifier).
-      r2Bucket: t.string(),
+      storageBucket: t.string(),
     },
   ),
 });

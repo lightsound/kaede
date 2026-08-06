@@ -23,7 +23,6 @@ import {
   RECORDINGS_PREFIX,
   type RecordingObject,
   recordingObjectKey,
-  signedS3Headers,
 } from '@kaede/shared';
 import type { InferSchema, ProcedureCtx } from 'spacetimedb/server';
 import type { spacetimedb } from './tables';
@@ -192,9 +191,9 @@ export function startCloudRecording(http: Http, cfg: CallConfig, meetingId: stri
       meeting_id: meetingId,
       storage_config: {
         type: 'cloudflare',
-        access_key: cfg.r2AccessKeyId,
-        secret: cfg.r2SecretAccessKey,
-        bucket: cfg.r2Bucket,
+        access_key: cfg.storageAccessKeyId,
+        secret: cfg.storageSecretAccessKey,
+        bucket: cfg.storageBucket,
         path: RECORDINGS_PREFIX,
         account_id: cfg.cloudflareAccountId,
       },
@@ -244,45 +243,50 @@ function r2Host(cfg: CallConfig): string {
 }
 
 function r2Credentials(cfg: CallConfig) {
-  return { accessKeyId: cfg.r2AccessKeyId, secretAccessKey: cfg.r2SecretAccessKey };
+  return { accessKeyId: cfg.storageAccessKeyId, secretAccessKey: cfg.storageSecretAccessKey };
 }
 
 /** R2's SigV4 region is the literal 'auto'. */
 const R2_REGION = 'auto';
 
+/** How long the listing's own presigned URL lives: one immediate fetch. */
+const LIST_URL_TTL_SECONDS = 60;
+
 /**
  * The finished recordings under the recordings prefix, newest first. One
  * unpaginated ListObjectsV2 page (1,000 keys) — an order of magnitude
  * over the label table's own retention (RECORDING_HISTORY_MAX), so
- * pagination would outlive the product shape that needs it. `nowMs` is
- * the procedure's own timestamp (SigV4 dates the request).
+ * pagination would outlive the product shape that needs it. The request
+ * authenticates through a PRESIGNED URL fetched immediately, never
+ * through SigV4 headers: the SDK's Headers class splits the Authorization
+ * header's commas into a header list, which arrives as duplicate
+ * Authorization headers and a 400 (see presignedS3Url in @kaede/shared).
+ * `nowMs` is the procedure's own timestamp (SigV4 dates the request).
  */
 export function listRecordingObjects(
   http: Http,
   cfg: CallConfig,
   nowMs: number,
 ): RecordingObject[] {
-  const request = {
-    method: 'GET',
-    host: r2Host(cfg),
-    path: `/${cfg.r2Bucket}`,
-    query: [
-      ['list-type', '2'],
-      ['prefix', `${RECORDINGS_PREFIX}/`],
-    ],
-  } as const;
-  const headers = signedS3Headers(request, r2Credentials(cfg), nowMs, R2_REGION);
-  if (headers === undefined) throw new Error('R2 listing could not be signed');
   // The host and bucket come from the owner-seeded call_config row; the
   // query is a literal.
-  const response = http.fetch(
-    `https://${request.host}${request.path}?list-type=2&prefix=${RECORDINGS_PREFIX}/`,
+  const url = presignedS3Url(
     {
       method: 'GET',
-      headers,
-      timeout: timeoutOf(R2_TIMEOUT_MS),
+      host: r2Host(cfg),
+      path: `/${cfg.storageBucket}`,
+      query: [
+        ['list-type', '2'],
+        ['prefix', `${RECORDINGS_PREFIX}/`],
+      ],
     },
+    r2Credentials(cfg),
+    nowMs,
+    LIST_URL_TTL_SECONDS,
+    R2_REGION,
   );
+  if (url === undefined) throw new Error('R2 listing could not be signed');
+  const response = http.fetch(url, { method: 'GET', timeout: timeoutOf(R2_TIMEOUT_MS) });
   if (!response.ok) {
     console.error('R2 list failure', response.status);
     throw new Error(`R2 list failed (${response.status})`);
@@ -305,7 +309,7 @@ export function presignRecordingDownload(cfg: CallConfig, fileName: string, nowM
     {
       method: 'GET',
       host: r2Host(cfg),
-      path: `/${cfg.r2Bucket}/${recordingObjectKey(fileName)}`,
+      path: `/${cfg.storageBucket}/${recordingObjectKey(fileName)}`,
       query: [['response-content-disposition', `attachment; filename="${fileName}"`]],
     },
     r2Credentials(cfg),

@@ -5,7 +5,6 @@ import {
   presignedS3Url,
   RECORDINGS_PREFIX,
   recordingObjectKey,
-  signedS3Headers,
 } from '../src/s3';
 
 const MEETING_ID = 'bbb8280d-7d30-430b-a3a0-78802ed5617c';
@@ -49,62 +48,6 @@ describe('hmacSha256Hex', () => {
   it('非 ASCII の入力は署名しない(黙って誤エンコードしない)', () => {
     expect(hmacSha256Hex('鍵', 'message')).toBeUndefined();
     expect(hmacSha256Hex('key', 'かえで')).toBeUndefined();
-  });
-});
-
-describe('signedS3Headers', () => {
-  it('AWS ドキュメントの GET Bucket (List Objects) ベクタに一致する', () => {
-    const headers = signedS3Headers(
-      {
-        method: 'GET',
-        host: 'examplebucket.s3.amazonaws.com',
-        path: '/',
-        query: [
-          ['max-keys', '2'],
-          ['prefix', 'J'],
-        ],
-      },
-      AWS_DOC_CREDENTIALS,
-      AWS_DOC_NOW_MS,
-      AWS_DOC_REGION,
-    );
-    expect(headers?.authorization).toBe(
-      'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7',
-    );
-    expect(headers?.['x-amz-date']).toBe('20130524T000000Z');
-    // The empty payload's well-known SHA-256 — every request we sign is a
-    // body-less read.
-    expect(headers?.['x-amz-content-sha256']).toBe(
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    );
-  });
-
-  it('AWS ドキュメントの GET Bucket Lifecycle ベクタ(値なしクエリ)にも一致する', () => {
-    const headers = signedS3Headers(
-      {
-        method: 'GET',
-        host: 'examplebucket.s3.amazonaws.com',
-        path: '/',
-        query: [['lifecycle', '']],
-      },
-      AWS_DOC_CREDENTIALS,
-      AWS_DOC_NOW_MS,
-      AWS_DOC_REGION,
-    );
-    expect(headers?.authorization).toContain(
-      'Signature=fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543',
-    );
-  });
-
-  it('非 ASCII の入力は署名しない', () => {
-    expect(
-      signedS3Headers(
-        { method: 'GET', host: 'ホスト', path: '/', query: [] },
-        AWS_DOC_CREDENTIALS,
-        AWS_DOC_NOW_MS,
-        AWS_DOC_REGION,
-      ),
-    ).toBeUndefined();
   });
 });
 

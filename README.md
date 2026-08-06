@@ -360,7 +360,7 @@ URL 発行（R2 の S3 API）** は、SpacetimeDB module の **procedure** が�
   procedure が loud に拒否します（fail closed）:
 
   ```sh
-  spacetime sql kaede "INSERT INTO call_config (id, realtimekit_token, realtimekit_app_id, cloudflare_account_id, r2_access_key_id, r2_secret_access_key, r2_bucket) VALUES (0, '<Realtime Admin トークン>', '<RealtimeKit アプリ ID>', '<Cloudflare アカウント ID>', '<R2 アクセスキー ID>', '<R2 シークレット>', '<録画バケット名>')"
+  spacetime sql kaede "INSERT INTO call_config (id, realtimekit_token, realtimekit_app_id, cloudflare_account_id, storage_access_key_id, storage_secret_access_key, storage_bucket) VALUES (0, '<Realtime Admin トークン>', '<RealtimeKit アプリ ID>', '<Cloudflare アカウント ID>', '<R2 アクセスキー ID>', '<R2 シークレット>', '<録画バケット名>')"
   ```
 
   - `realtimekit_token`: Realtime Admin 権限のアカウント API トークン

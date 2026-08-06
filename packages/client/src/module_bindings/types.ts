@@ -25,9 +25,9 @@ export const CallConfig = __t.object("CallConfig", {
   realtimekitToken: __t.string(),
   realtimekitAppId: __t.string(),
   cloudflareAccountId: __t.string(),
-  r2AccessKeyId: __t.string(),
-  r2SecretAccessKey: __t.string(),
-  r2Bucket: __t.string(),
+  storageAccessKeyId: __t.string(),
+  storageSecretAccessKey: __t.string(),
+  storageBucket: __t.string(),
 });
 export type CallConfig = __Infer<typeof CallConfig>;
 

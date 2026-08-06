@@ -1232,7 +1232,7 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   ①**撤去したもの**: server `worker_anchor`・`recording_pass`（テーブル
   ＋RLS）・`mint_recording_pass`・`register_group_call`・
   `log_group_recording` / shared capability.ts の録画パス関連（SHA-256 /
-  HMAC 実装は SigV4 の基盤として sigv4.ts へ改組）/ client の pass 取得層
+  HMAC 実装は SigV4 の基盤として s3.ts へ改組）/ client の pass 取得層
   （pass.ts・api.ts の fetch 層・flow.ts・netApi の
   mint/ownRecordingPass・recording_pass 購読・e2e フック counter）/
   worker パッケージ全体（Clerk JWKS・ホスト公開鍵・callerKindOf・CORS —
@@ -1248,8 +1248,13 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   名乗る」余地ごと消えた）・`stop_group_recording`（アクティブ照会 →
   停止。「アクティブなし」は正常応答）・`list_recordings`・
   `recording_download_url`（承認済みメンバー限定。S3 SigV4 は
-  @kaede/shared の sigv4.ts に純 TS 実装 — module ホストに WebCrypto が
-  無いため。AWS 公式テストベクタで単体テスト）
+  @kaede/shared の s3.ts に純 TS 実装 — module ホストに WebCrypto が
+  無いため。AWS 公式ドキュメントの presign ベクタと RFC 4231 で単体
+  テスト。**認可はすべて presigned URL 一本**: SDK の Headers クラスが
+  カンマ区切り値をリスト分割して送るため、SigV4 の Authorization
+  ヘッダは複数ヘッダに割れて edge が 400 を返す — ヘッダ署名は
+  procedure から送信不能と実測（2026-08-06）し、一覧も presign した
+  URL を fetch する形に統一した）
   ③**不変のもの**: RealtimeKit→R2 の録画直送（storage_config）、
   `group_call` 行のメンバー限定 RLS（meeting id＝参加ケイパビリティ。
   行の書き手が reducer から join_group_call の結果 tx に変わっただけ）、
@@ -1260,9 +1265,20 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   外れた時点で削除）— 開きっぱなしの旧タブは旧 Worker と旧 reducer の
   両方を失うため通話系操作が失敗するが、リロードで回復する（小さな
   コミュニティで通話は短命、遅延削除は攻撃面と二度目の撤去 PR を残す
-  だけと判断）。オーナー操作: 本番 `worker_anchor` 行の DELETE・GitHub
-  シークレット `RECORDING_PASS_SECRETS` の削除（`REALTIMEKIT_API_TOKEN`
-  も CI では不要になる）・本番 `call_config` の播種
+  だけと判断）。**再 publish リハーサルの実測（2026-08-06、main の
+  モジュール → 行投入 → 本ブランチ publish）**: ホストは**行が残っている
+  テーブルの削除を拒否**する（「Cannot remove table `recording_pass`:
+  table contains data」— publish 自体が 400 で止まり、既存データは無傷）。
+  したがって本番の `worker_anchor` 行 DELETE と `recording_pass` の全行
+  DELETE は**マージ前のオーナー操作として必須**（消せば同じ publish が
+  受理され、既存行 — conversation_group・group_call・player 系 — は
+  存続し、旧テーブルだけが消えることを実測）。`call_config` はテーブルが
+  publish で生まれてからしか播種できないため、デプロイ直後にオーナーが
+  README の設営手順で INSERT するまで通話/録画は fail closed（loud 拒否
+  — 実測済み）。その他のオーナー操作: GitHub シークレット
+  `RECORDING_PASS_SECRETS` の削除（`REALTIMEKIT_API_TOKEN` も CI では
+  不要になる）・RealtimeKit 側 Webhook 登録の削除（D1 — 本 PR の作業で
+  API から削除済み）
   **引き受けた新リスク（オーナー了承 2026-08-06）**: 秘密が DB 内の
   非公開テーブルへ移る（バックアップ除外は D5 で対応済み）・権威/秘密/
   外部呼び出しの module への集中（現行は Worker 侵害でも DB が無事という

@@ -248,55 +248,18 @@ function sigv4Signature(
 }
 
 /**
- * The headers of one SigV4-signed S3 request (the listing's GET): host,
- * x-amz-date, x-amz-content-sha256 (the empty payload — every request this
- * project signs is a body-less read) and the Authorization header carrying
- * the derived signature. `region` is a parameter so the AWS documentation
- * vectors (us-east-1) can pin the implementation the tests cannot reach
- * through R2's fixed 'auto'. Undefined for non-ASCII input (file-header
- * rule).
- */
-export function signedS3Headers(
-  request: S3Request,
-  credentials: S3Credentials,
-  nowMs: number,
-  region: string,
-): Record<string, string> | undefined {
-  const { amzDate, dateStamp } = amzDates(nowMs);
-  const emptyPayloadHash = bytesToHex(sha256Bytes([]));
-  const headers: [string, string][] = [
-    ['host', request.host],
-    ['x-amz-content-sha256', emptyPayloadHash],
-    ['x-amz-date', amzDate],
-  ];
-  const signedHeaderNames = headers.map(([name]) => name).join(';');
-  const canonicalRequest = [
-    request.method,
-    canonicalUri(request.path),
-    canonicalQuery(request.query),
-    ...headers.map(([name, value]) => `${name}:${value}`),
-    '',
-    signedHeaderNames,
-    emptyPayloadHash,
-  ].join('\n');
-  const signature = sigv4Signature(credentials, region, dateStamp, amzDate, canonicalRequest);
-  if (signature === undefined) return undefined;
-  const credentialScope = `${dateStamp}/${region}/${S3_SERVICE}/aws4_request`;
-  return {
-    host: request.host,
-    'x-amz-content-sha256': emptyPayloadHash,
-    'x-amz-date': amzDate,
-    authorization: `AWS4-HMAC-SHA256 Credential=${credentials.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaderNames}, Signature=${signature}`,
-  };
-}
-
-/**
- * One presigned S3 GET URL (the download route): the browser fetches it
- * with no headers at all, so every signing input rides the query string
+ * One presigned S3 GET URL: every signing input rides the query string
  * and the payload is UNSIGNED-PAYLOAD (the presigning grammar — the AWS
- * documentation vector pins it, see the tests). `request.query` carries
- * the non-auth extras (response-content-disposition); expiry is checked
- * by R2 at request time, not mid-stream. Undefined for non-ASCII input.
+ * documentation vector pins it, see the tests). This is deliberately the
+ * ONLY auth form this project signs — for downloads it is a requirement
+ * (the browser fetches with no headers at all), and the module's bucket
+ * listing uses it too because header auth is UNSENDABLE from a procedure:
+ * the SDK's Headers class splits a comma-separated value into a list, so
+ * a SigV4 Authorization header (`Credential=…, SignedHeaders=…, …`) goes
+ * out as multiple Authorization headers and the edge answers 400
+ * (measured 2026-08-06). `request.query` carries the non-auth entries
+ * (list-type/prefix, response-content-disposition); expiry is checked by
+ * R2 at request time, not mid-stream. Undefined for non-ASCII input.
  */
 export function presignedS3Url(
   request: S3Request,
