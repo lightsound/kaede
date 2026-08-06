@@ -21,6 +21,7 @@ ROADMAP Phase 1「バックアップ・復旧手段の確認」の成果物。**
 | `space_setting` | 恒久（ゲスト許可トグル） | 1 行。エクスポートを見て手で戻せる |
 | `chat_message` / `dm_message` | 履歴（各 100 / 200 通で間引き済み） | ベストエフォート（消えても運用は止まらない） |
 | `player*` / `reaction` / `player_status` / `*_guard` / `connection_event` / `disconnect_intent` | 一時（在室状態・ガード・観測ログ） | 復旧不要（再入場で再生成される） |
+| `call_config` | **秘密（エクスポートしない）** — 通話/録画 API の資格情報（ROADMAP Phase 4 増分⑥ D5） | 復旧は**再播種**: バックアップには決して入れず（成果物が GitHub artifacts に 90 日残るため — `backup-maincloud.sh` の `EXCLUDE_TABLES`）、DB 再建時は README「通話/録画 API」の設営手順どおり owner SQL で INSERT し直す |
 
 ## エクスポート（バックアップ）手順
 
@@ -32,7 +33,8 @@ scripts/backup-maincloud.sh                     # backups/<UTC タイムスタ�
 ```
 
 - スクリプトは `describe --json` からテーブル一覧を動的に取得するので、
-  スキーマ変更時の追従漏れがない。
+  スキーマ変更時の追従漏れがない。**例外は秘密テーブル**（`call_config` —
+  スクリプト先頭の `EXCLUDE_TABLES`）で、名前で除外して決して書き出さない。
 - オーナー実行の `sql` は RLS と public フラグを受けないため、非公開テーブル
   （`account` 等）もそのまま読める。
 - `backups/` は成果物であり git 管理しない（`.gitignore` 済み）。
@@ -78,6 +80,9 @@ Identity に戻る**。復旧が「データの再投入」ではなく「状態
    - `banned` だった人 → 再申請が来た時点で拒否 → バンする
    - `rejected` / `pending` は放置でよい（本人の再申請から通常フロー）
 4. `space_setting.json` を見てゲスト許可トグルを合わせる。
+   あわせて `call_config` を再播種する（バックアップに無い意図的な穴 —
+   README「通話/録画 API」の設営手順。値は Cloudflare ダッシュボード /
+   API トークンから再導出できる）。
 5. `account` の表示名は、各メンバーの初回サインインで JWT の `name` クレーム
    から再初期化される。カスタム名にしていた人は各自で再設定
    （`account.json` が参照になる）。

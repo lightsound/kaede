@@ -1102,7 +1102,10 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   ✅ **①module→Worker を実装（2026-08-06、トリガー (a) 相当の独立 PR）**:
   録画の開始/停止・一覧/DL が**承認済みメンバーだけ**にサーバー側強制され、
   増分④ 設計①の受け入れた緩さはクローズ（PR #66 の Security スレッドの
-  恒久対応）。設計の要点:
+  恒久対応）。→ **このアンカー機構は増分⑥（同日確定）で撤去済み** —
+  承認検査と外部 API 呼び出しが module の procedure に同居するように
+  なったため、パス・アンカー・Worker 側検証は役目を終えた（設計の記録
+  として本項は残す）。設計の要点:
   ①**アンカー = 環境ごとに 1 度設営する共有 HMAC 秘密**。module 側は非公開
   テーブル `worker_anchor`（id 0 の 1 行）、Worker 側はシークレット
   `RECORDING_PASS_SECRETS`（ローテーション用にカンマ区切りリスト）。設営は
@@ -1161,51 +1164,129 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   reducer 引数で毎回運ばない** — 引数はログに残り得る）。アンカーの設営・
   ローテーション手順はそのまま共用できるため、中継増分に新しい設営は不要
   → **ただし増分⑥候補（下）が先に実現すれば中継自体が不要になる**
-- **procedure によるアンカー撤去と Worker 縮退（増分⑥候補・未実装 —
-  2026-08-06 記載）**: 増分⑤の実装当日、オーナー指摘で **SpacetimeDB に
-  module からの outbound HTTP が既にある**ことを確認した（v1.10 で
-  procedure 導入・2.0 で TS module 対応。ピン留め済みの 2.7.1 に SDK・
-  ホストとも搭載）。増分⑤が橋を架けた「権威（module）と外部 API 境界
-  （Worker）の分断」は、procedure なら**分断ごと消せる**: 承認検査
-  （DB 読み）と外部 API 呼び出しを同一プロセスで書け、しかも reducer と
-  違い**値を返せる**（録画パスの「行を配達路にする」迂回も不要になる）。
-  スパイク実測（2026-08-06、ローカル 2.7.1 スタンドアロン）:
-  ①`spacetime.procedure` + `ctx.http.fetch`（同期）で外部 HTTPS が通る
-  （api.cloudflare.com / Clerk JWKS で 200）②3 秒応答も timeout 指定で
-  完走（v1.10 初期の 500ms クランプは撤廃済み。timeout 1 秒指定は 1 秒で
-  切れる）③private/special アドレスへの接続は拒否（SSRF ガード内蔵 —
-  ローカルの localhost API は呼べない）④戻り値が呼び出し元へ返る。
-  SDK 2.7.1 には **HTTP handlers（`Router` — module が HTTP を受ける口）**
-  も存在する。**Maincloud 側の前提はオーナー確認済み（2026-08-06）**:
-  procedure の外部 HTTP は許可されており、エネルギー課金も特段の記載なし
-  （無視してよい）。
-  **移行の方向**: 通話/録画 API（provision・mint・録画開始/停止・一覧・
-  presigned DL）を procedure 化し、
-  ①アンカー機構を丸ごと撤去（worker_anchor・recording_pass・
-  mint_recording_pass・録画パス・RECORDING_PASS_SECRETS・CI 同期 —
-  増分⑤は撤去コストが小さい設計にしてある）
-  ②Worker の bearer 検証スタックも撤去（Clerk JWKS・ホスト公開鍵・
-  callerKindOf・CORS・クライアントの BASE_URL/fetch 層 — procedure は
-  認証済み SpacetimeDB 接続越しに呼ばれ、`ctx.sender` が本人性そのもの）
-  ③Worker `kaede-call` は Webhook 受信のみに縮退。HTTP handlers での
-  直受け（rtk-signature の RSA 検証手段が論点）か、スケジュール
-  procedure による**ポーリング置換**（Webhook 自体の廃止）を増分内で
-  評価 — どちらかが成立すれば Worker→module 中継（増分⑤ 設計⑤）は
-  実装不要のまま消える
-  ④S3 SigV4 署名（一覧・presign）は module 内の純 TS 実装
-  （capability.ts の SHA-256/HMAC が流用できる）。
-  **引き受ける新リスク（オーナー了承 2026-08-06）**: 秘密が DB 内の
-  非公開テーブルへ移る（**日次バックアップ backup.yml からの除外が必須の
-  設計項目** — GitHub artifacts に 90 日残るため）・権威/秘密/外部呼び出しの
-  module への集中（現行は Worker 侵害でも DB が無事という分離があった）・
-  procedure API の成熟度（CLI に UNSTABLE 警告 — バージョン厳密ピンの
-  既存方針で緩和）・同期 HTTP の待ち時間がエネルギー消費になる点
-  （録画系は低頻度で実害僅少の見込み、移行時に実測）。
-  **実施タイミング**: 増分⑤マージ後の独立 PR。遅くとも最初の Webhook
-  中継が必要になる増分（課金 or Clerk 削除）より前が最安 — 中継の
-  relay 検証を一度も実装せずに済む。なお増分⑤アンカーの運用改善案
-  （CI 自動播種）は、本増分がアンカーごと撤去する前提では過剰投資として
-  見送り（設営はオーナー手順のまま）
+- **procedure による信頼アンカー撤去と Worker 廃止（増分⑥ — 2026-08-06
+  候補記載、オーナー裁定 D1〜D7 で確定、同増分で実装）**: 増分⑤の実装
+  当日、オーナー指摘で **SpacetimeDB に module からの outbound HTTP が
+  既にある**ことを確認した（v1.10 で procedure 導入・2.0 で TS module
+  対応。ピン留め済みの 2.7.1 に SDK・ホストとも搭載）。増分⑤が橋を
+  架けた「権威（module）と外部 API 境界（Worker）の分断」は、procedure
+  なら**分断ごと消せる**: 承認検査（DB 読み）と外部 API 呼び出しを
+  同一プロセスで書け、しかも reducer と違い**値を返せる**（録画パスの
+  「行を配達路にする」迂回も不要になる）。
+  ✅ **実装済み（2026-08-06）**: 通話/録画 API の全 6 ルートを module の
+  procedure に集約し、Worker `kaede-call` と信頼アンカー機構を撤去した。
+  **確定済みの裁定（オーナー承認 2026-08-06）**:
+  - **D1 — RealtimeKit Webhook は廃止**: 受信ルート・webhook.ts・
+    `ensure-realtimekit-webhook.sh` を撤去し、RealtimeKit 側の登録も
+    削除。失敗録画の検知は「一覧に出てこない」で足り、調査はプロバイダ
+    API の手動照会。将来の課金/Clerk 削除 Webhook で受け口問題は再訪
+    （Clerk は svix HMAC 署名なので module の HTTP handlers 直受けが
+    第一候補）。帰結として Worker→module 中継（増分⑤ 設計⑤）は一度も
+    実装されないまま消えた
+  - **D2 — 全 6 ルート一括移行・Worker 廃止**: provision / mint /
+    record-start / record-stop / recordings-list / recording-download の
+    全部を procedure 化し、Worker `kaede-call` は削除（静的配信 Worker
+    `kaede` は別物・不変）
+  - **D3 — レート課金は 3 段**: 「課金 tx → 外部 HTTP → 結果 tx」。
+    procedure は**外部 HTTP 中にトランザクションを保持できない**ため、
+    課金は先行 tx でコミットし、HTTP 失敗時に課金が残るのは許容
+    （返金処理は作らない — call_guard の 1 発は数十秒で回復する）
+  - **D4 — 通話開始の競合解決は module へ寄せる**: provision＋register＋
+    トークン発行を 1 procedure（`join_group_call`）に統合。結果 tx が
+    membership を再解決して**現在の**グループに束縛し、already-registered
+    分岐では敗者が勝者の meeting のトークンをそのまま受け取る。
+    クライアント flow.ts（acquireCallTicket の敗者リカバリ・500ms 待ち）は
+    撤去 — リトライループ自体が不要になった
+  - **D5 — 秘密テーブル**: 非公開 `call_config`（id 0 の 1 行 —
+    RealtimeKit トークン・アプリ ID・アカウント ID・R2 S3 資格情報・
+    バケット名）。設営は増分⑤ worker_anchor の前例どおり **owner SQL
+    播種**（reducer は作らない — 手順は README「通話/録画 API」）。
+    未設営は fail closed（全 procedure が loud 拒否）。**日次バックアップ
+    からは除外必須**（backup.yml の成果物は GitHub artifacts に 90 日
+    残る）— `backup-maincloud.sh` がテーブル名で除外し、復旧手順は
+    「owner SQL で再播種」（docs/backup-restore.md）
+  - **D6 — 失敗のリトライはブラウザ側**（現行踏襲・module に自動
+    リトライを入れない）。timeout は実測に基づき外部 API ごとに定数化
+    （下のスパイク実測）
+  - **D7 — VISION バックエンド行の改訂**: 「薄いステートレスなグルー」
+    から「外部境界は module の procedure に集約、Worker は静的配信のみ」
+    へ（VISION 決定ログ 2026-08-06）
+  **スパイク実測**（2026-08-06、ローカル 2.7.1 スタンドアロン＋実
+  プロバイダ）: ①`spacetime.procedure` + `ctx.http.fetch`（同期）で外部
+  HTTPS が通る（api.cloudflare.com で 200）②3 秒応答も timeout 指定で
+  完走・timeout は指定どおり切れる ③private/special アドレスへの接続は
+  拒否（SSRF ガード内蔵 — ローカルの localhost API は呼べない）④戻り値
+  （struct 含む）が呼び出し元へ返り、procedure 内の throw はクライアント
+  側で Promise rejection になる ⑤`spacetimedb-cli generate`（2.7.1）は
+  procedure の**クライアントスタブを生成する**（`conn.procedures.<名>` が
+  型付き Promise を返す — 増分⑥実装時に確認）⑥実レイテンシ（この
+  リポジトリの CI 相当環境から実測、各 5 回）: meeting 作成 0.54〜0.92s・
+  参加トークン発行 0.63〜0.90s・録画開始 2.5s・アクティブ照会 0.69s・
+  録画停止 0.6〜0.9s・R2 ListObjectsV2 0.14〜0.17s → timeout 予算は
+  RealtimeKit 一般 5s・録画開始 10s・R2 3s（server/src/provider.ts の
+  定数）。presigned DL は署名計算のみで外部 HTTP なし。
+  **Maincloud 側の前提はオーナー確認済み（2026-08-06）**: procedure の
+  外部 HTTP は許可されており、エネルギー課金も特段の記載なし（無視して
+  よい）。
+  **実装の要点**:
+  ①**撤去したもの**: server `worker_anchor`・`recording_pass`（テーブル
+  ＋RLS）・`mint_recording_pass`・`register_group_call`・
+  `log_group_recording` / shared capability.ts の録画パス関連（SHA-256 /
+  HMAC 実装は SigV4 の基盤として s3.ts へ改組）/ client の pass 取得層
+  （pass.ts・api.ts の fetch 層・flow.ts・netApi の
+  mint/ownRecordingPass・recording_pass 購読・e2e フック counter）/
+  worker パッケージ全体（Clerk JWKS・ホスト公開鍵・callerKindOf・CORS —
+  procedure は認証済み SpacetimeDB 接続越しに呼ばれ、`ctx.sender` が
+  本人性そのもの）/ infra `CallApi`・`wrangler-call.jsonc` / ci.yml の
+  Worker シークレット同期ステップ
+  ②**procedure 群**（calls.ts。外部 HTTP の実装は provider.ts —
+  index.ts の `export *` 対象外）: `join_group_call`（D4 統合。ゲスト
+  含む in-world 全員 — `ctx.sender` で自然に成立）・
+  `start_group_recording`（承認済みメンバー限定。meeting は sender の
+  membership から解決し、ラベル行 call_recording は**結果 tx がサーバー
+  側で書く** — 旧 log_group_recording の「クライアントが fileName を
+  名乗る」余地ごと消えた）・`stop_group_recording`（アクティブ照会 →
+  停止。「アクティブなし」は正常応答）・`list_recordings`・
+  `recording_download_url`（承認済みメンバー限定。S3 SigV4 は
+  @kaede/shared の s3.ts に純 TS 実装 — module ホストに WebCrypto が
+  無いため。AWS 公式ドキュメントの presign ベクタと RFC 4231 で単体
+  テスト。**認可はすべて presigned URL 一本**: SDK の Headers クラスが
+  カンマ区切り値をリスト分割して送るため、SigV4 の Authorization
+  ヘッダは複数ヘッダに割れて edge が 400 を返す — ヘッダ署名は
+  procedure から送信不能と実測（2026-08-06）し、一覧も presign した
+  URL を fetch する形に統一した）
+  ③**不変のもの**: RealtimeKit→R2 の録画直送（storage_config）、
+  `group_call` 行のメンバー限定 RLS（meeting id＝参加ケイパビリティ。
+  行の書き手が reducer から join_group_call の結果 tx に変わっただけ）、
+  承認制・録画は承認済みメンバー限定という製品仕様（procedure 内で
+  approved を検査）、ゲストの通話開始/参加/画面共有はメンバー同等
+  ④**デプロイ順序と後始末**: module（procedure 追加）→ client の順で
+  同一デプロイ。Worker `kaede-call` は**即時削除**（Alchemy スタックから
+  外れた時点で削除）— 開きっぱなしの旧タブは旧 Worker と旧 reducer の
+  両方を失うため通話系操作が失敗するが、リロードで回復する（小さな
+  コミュニティで通話は短命、遅延削除は攻撃面と二度目の撤去 PR を残す
+  だけと判断）。**再 publish リハーサルの実測（2026-08-06、main の
+  モジュール → 行投入 → 本ブランチ publish）**: ホストは**行が残っている
+  テーブルの削除を拒否**する（「Cannot remove table `recording_pass`:
+  table contains data」— publish 自体が 400 で止まり、既存データは無傷）。
+  したがって本番の `worker_anchor` 行 DELETE と `recording_pass` の全行
+  DELETE は**マージ前のオーナー操作として必須**（消せば同じ publish が
+  受理され、既存行 — conversation_group・group_call・player 系 — は
+  存続し、旧テーブルだけが消えることを実測）。`call_config` はテーブルが
+  publish で生まれてからしか播種できないため、デプロイ直後にオーナーが
+  README の設営手順で INSERT するまで通話/録画は fail closed（loud 拒否
+  — 実測済み）。その他のオーナー操作: GitHub シークレット
+  `RECORDING_PASS_SECRETS` の削除（`REALTIMEKIT_API_TOKEN` も CI では
+  不要になる）・RealtimeKit 側 Webhook 登録の削除（D1 — 本 PR の作業で
+  API から削除済み）
+  **引き受けた新リスク（オーナー了承 2026-08-06）**: 秘密が DB 内の
+  非公開テーブルへ移る（バックアップ除外は D5 で対応済み）・権威/秘密/
+  外部呼び出しの module への集中（現行は Worker 侵害でも DB が無事という
+  分離があった）・procedure API の成熟度（CLI に UNSTABLE 警告 —
+  バージョン厳密ピンの既存方針で緩和）・同期 HTTP の待ち時間が
+  エネルギー消費になる点（録画系は低頻度・実測レイテンシ 3s 未満で
+  実害僅少）。なお増分⑤アンカーの運用改善案（CI 自動播種）は、本増分が
+  アンカーごと撤去したため消滅
 - 通話コストの実測とプラン判断（VISION の試算では RealtimeKit
   $0.002/参加者分 ≒ 月$20〜30想定）
 - 録画の透明性: **録画中インジケータを通話参加者全員に表示**する（同意の前提）。
@@ -1293,8 +1374,9 @@ Gather/oVice に対する明確な差別化。
 - 管理者向けマップエディタ
 - 通貨と課金（プラン連動で毎月配布＋追加購入。**Clerk Billing** を利用し、
   プラン状態は Webhook 中継で SpacetimeDB に同期 — VISION 参照）
-- アカウントの本人削除フロー（Clerk のユーザー削除 Webhook → Worker 中継 →
-  SpacetimeDB 側のデータ掃除）
+- アカウントの本人削除フロー（Clerk のユーザー削除 Webhook →
+  SpacetimeDB 側のデータ掃除。受け口は module の HTTP handlers 直受けが
+  第一候補 — Phase 4 増分⑥ D1）
 - 英語対応（Paraglide に en ロケールを追加。翻訳の自動化として
   **Lingo.dev CLI** をこのタイミングで評価 — VISION の i18n 行を参照）
 - モバイル対応

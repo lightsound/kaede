@@ -1,28 +1,40 @@
-// fallow-ignore-file coverage-gaps -- a reducer only runs inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (meeting-id shape, recording file-name shape, rate limit) are delegated to isMeetingIdLike / isRecordingFileNameLike / evaluateSendAllowance in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- procedures only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (file-name shape, rate limit, SigV4 signing, listing parse) are delegated to @kaede/shared and unit-tested there
 
-// The group-call reducers (ROADMAP Phase 4 増分①〜②・④): registering a
-// group's meeting, and labeling its recordings (log_group_recording). The
-// call flow splits authority in two: the WORKER (packages/worker) talks to
-// the call provider — it provisions meetings and mints participant tokens,
-// because those need the provider secret — while THIS module remains the
-// only group authority: which conversation group has which meeting is a
-// group_call row, written here after the standing membership checks, and
-// read back under the members-only RLS filter (groupCallVisibility in
-// tables.ts). The reducer never talks to the provider (SpacetimeDB modules
-// cannot call external HTTP), and the Worker never talks to this module —
-// the row is their only meeting point.
+// The group-call and recording procedures (ROADMAP Phase 4 増分①〜⑥).
+// Since 増分⑥ this module is BOTH the group authority and the external API
+// boundary: a procedure checks membership/approval and calls the provider
+// in one place (`ctx.withTx` for the database halves, `ctx.http` for the
+// synchronous outbound HTTP), and `ctx.sender` — the authenticated
+// SpacetimeDB connection — is the caller's identity, so no bearer
+// verification stack and no Worker⇄module trust anchor exists anymore
+// (the 増分⑤ mechanism, retired by 増分⑥; VISION バックエンド行).
+//
+// Every procedure follows the D3 charge rule: a first transaction vets
+// the sender and CHARGES the rate bucket, then the external HTTP runs
+// outside any transaction (a procedure cannot hold one open across it),
+// then a result transaction writes the outcome. An HTTP failure after the
+// charge leaves the charge standing — accepted (no refunds; the bucket
+// refills within seconds). Refusals inside a transaction throw before any
+// write (the posting loud/silent rule); the one silent case is the
+// reclaimed sender, which must COMMIT its reclaim and therefore surfaces
+// as a marker the procedure turns into a refusal after the commit.
 import {
   CALL_BURST_SENDS,
   CALL_SEND_COST_MICROS,
-  CAPABILITY_SCOPE_RECORDING,
   evaluateSendAllowance,
-  isMeetingIdLike,
   isRecordingFileNameLike,
-  mintCapability,
   RECORDING_HISTORY_MAX,
-  RECORDING_PASS_TTL_SECONDS,
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
+import {
+  type CallConfig,
+  createMeeting,
+  listRecordingObjects,
+  mintParticipantToken,
+  presignRecordingDownload,
+  startCloudRecording,
+  stopCloudRecording,
+} from './provider';
 import { spacetimedb } from './tables';
 import {
   type Ctx,
@@ -30,236 +42,339 @@ import {
   findPostingSender,
   membershipOf,
   trimHistory,
-  type WorldRows,
 } from './world';
 
-// Registers the sender's conversation group's call: binds the meeting the
-// Worker just provisioned to the group the sender is IN — the group is
-// never named by the client (the create_zone placement rule applied to
-// membership: the row addresses what the server knows about the sender,
-// not what the sender claims). Eligibility is the posting preamble (in the
-// world + admission re-check) plus holding a group membership — GUESTS
-// INCLUDED since 増分② (the huddle rule): a registration is a claim that
-// the provider issued this meeting id, which only someone the Worker will
-// mint for can honestly make, and the Worker now mints for every in-world
-// identity (a member's Clerk JWT or a guest's host-issued token). 増分①
-// gated this to approved members because guests could not mint at all —
-// every guest registration would have been a well-formed-but-dead id
-// wedging the group's call (a review finding); that premise is what 増分②
-// lifts, not the vetting. DELIBERATE dead-id vandalism stays possible for
-// anyone in-world — the chat-spam trust level, bounded by the same levers
-// (call_guard below; guests_allowed kicks guests out of the posting
-// preamble entirely).
-//
-// Refusals follow the posting loud/silent rule (everything throws before
-// any write). `already-registered` is the expected two-senders-race
-// outcome: the loser's provisioned meeting is simply never referenced
-// (the provider holds idle meetings at no cost), and the loser joins the
-// row that won — the client handles the refusal by re-reading the row.
 /**
- * Vets one registration: a provider-shaped meeting id, a sender who IS in
- * a group, and no call registered for it yet. Returns the group to bind.
- * Every refusal is loud and pre-write. Split from the reducer to keep
- * both uncovered functions under the CRAP budget (the vetHuddleJoin
- * precedent).
+ * Charges one call-flow send against call_guard — shared by every
+ * procedure here: they are the same UI flow's low-frequency operations
+ * with no client-side mirror to drift from (the one reason every other
+ * feature gets a bucket of its own). The evaluator stays an inline arrow
+ * rather than a shared wrapper, for the standing reason: a shared
+ * wrapper's signature would push the type-coupling evidence past its cap
+ * (the evaluateHuddleSend rationale).
  */
-function vetCallRegistration(ctx: Ctx, meetingId: string): bigint {
-  if (!isMeetingIdLike(meetingId)) {
-    throw new SenderError('register_group_call refused (invalid-meeting-id)');
-  }
-  const member = ctx.db.groupMember.identity.find(ctx.sender);
-  if (member === null) throw new SenderError('register_group_call refused (not-in-a-group)');
-  if (ctx.db.groupCall.groupId.find(member.groupId) !== null) {
-    throw new SenderError('register_group_call refused (already-registered)');
-  }
-  return member.groupId;
-}
-
-export const registerGroupCall = spacetimedb.reducer(
-  { meetingId: t.string() },
-  (ctx, { meetingId }) => {
-    if (!findPostingSender(ctx, 'register_group_call')) return;
-    const groupId = vetCallRegistration(ctx, meetingId);
-    // The token bucket (the huddle numbers — see call_guard in tables.ts).
-    // The evaluator stays an inline arrow rather than a shared wrapper, for
-    // the standing reason: a shared wrapper's signature would push the
-    // type-coupling evidence past its cap (the evaluateHuddleSend rationale).
-    chargeCallAllowance(ctx, 'register_group_call');
-    ctx.db.groupCall.insert({ groupId, meetingId });
-  },
-);
-
-/**
- * Charges one call-flow send against call_guard — shared by
- * register_group_call and log_group_recording, which are the same UI
- * flow's low-frequency operations with no client-side mirror to drift
- * from (the one reason every other feature gets a bucket of its own).
- * The evaluator stays an inline arrow for the standing type-coupling
- * reason (see registerGroupCall).
- */
-function chargeCallAllowance(ctx: Ctx, reducerName: string): void {
+function chargeCallAllowance(ctx: Ctx, procedureName: string): void {
   chargeSendAllowance(
     ctx,
     ctx.db.callGuard,
     (request) => evaluateSendAllowance(request, CALL_SEND_COST_MICROS, CALL_BURST_SENDS),
-    reducerName,
+    procedureName,
   );
 }
 
 /**
  * Refuses the call unless the sender is an APPROVED member — the shared
- * gate of the recording reducers (the label write and the pass mint),
- * mirroring the Worker's route gate: recording is 承認済みメンバー限定
- * (増分④ 設計①), so a guest or an unapproved sign-in reaching either
- * reducer is a hand-rolled client. Loud and pre-write.
+ * gate of the recording procedures: recording is 承認済みメンバー限定
+ * (増分④ 設計①, enforced here since 増分⑥ replaced the Worker gate), so
+ * a guest or an unapproved sign-in reaching one is a hand-rolled client.
+ * Loud and pre-write.
  */
-function requireApprovedMember(ctx: Ctx, reducerName: string): void {
+function requireApprovedMember(ctx: Ctx, procedureName: string): void {
   if (membershipOf(ctx, ctx.sender)?.status !== 'approved') {
-    throw new SenderError(`${reducerName} refused (not-a-member)`);
+    throw new SenderError(`${procedureName} refused (not-a-member)`);
   }
 }
 
 /**
- * Vets one recording label: an approved-member sender and a
- * provider-shaped file name. Every refusal is loud and pre-write (the
- * vetCallRegistration shape); the group half lives in recordingGroupName
- * so both stay under the CRAP budget.
+ * The provider configuration, or a loud refusal while unprovisioned (the
+ * call_config table comment — the row is seeded by owner SQL, never by a
+ * reducer). Fail closed: nothing dials out until the owner provisions.
  */
-function vetRecordingLog(ctx: Ctx, fileName: string): void {
-  requireApprovedMember(ctx, 'log_group_recording');
-  if (!isRecordingFileNameLike(fileName)) {
-    throw new SenderError('log_group_recording refused (invalid-file-name)');
+function callConfigOf(ctx: Ctx, procedureName: string): CallConfig {
+  const cfg = ctx.db.callConfig.id.find(0);
+  if (cfg === null) {
+    throw new SenderError(`${procedureName} refused (call-config-not-provisioned)`);
   }
-}
-
-/** The sender's group's display name to snapshot, or a loud refusal. */
-function recordingGroupName(ctx: Ctx): string {
-  const member = ctx.db.groupMember.identity.find(ctx.sender);
-  if (member === null) throw new SenderError('log_group_recording refused (not-in-a-group)');
-  const group = ctx.db.conversationGroup.id.find(member.groupId);
-  if (group === null) throw new SenderError('log_group_recording refused (group-gone)');
-  return group.name;
+  return cfg;
 }
 
 /**
- * Writes the label row and trims the history — split from the reducer to
- * keep both uncovered functions under the CRAP budget (the
- * vetCallRegistration precedent).
+ * The provider-side participant id for the sender: a member's Clerk
+ * subject (the account row's connect-time fact — see tables.ts), a
+ * guest's Identity hex. Recorded as custom_participant_id for future
+ * correlation (recording access, cost attribution).
  */
-function appendRecordingLabel(ctx: Ctx, rows: WorldRows, fileName: string, groupName: string) {
-  ctx.db.callRecording.insert({
-    id: 0n, // 0 asks autoInc to assign the real id
-    fileName,
-    groupName,
-    starterName: rows.nameRow.name,
-    startedAt: ctx.timestamp,
-  });
-  trimHistory(ctx.db.callRecording, RECORDING_HISTORY_MAX);
+function participantIdOf(ctx: Ctx): string {
+  const subject = ctx.db.account.identity.find(ctx.sender)?.subject ?? '';
+  return subject === '' ? ctx.sender.toHexString() : subject;
 }
 
-// Labels the recording the sender just started: one call_recording row —
-// the human-readable side of the R2 listing (see the table comment in
-// tables.ts for the whole design: the row is a LABEL, the R2 object is the
-// truth). Both names are resolved from the server's own rows — the group's
-// name from the membership the sender holds, the starter's from its
-// player_name row — so the client claims nothing but the provider-shaped
-// fileName (the register_group_call vetting philosophy). Called by the
-// starter's client right after the Worker's start call succeeds; a lost
-// label (rate refusal, disconnect) degrades that recording's listing to
-// date-only, never blocks the recording itself.
-export const logGroupRecording = spacetimedb.reducer(
-  { fileName: t.string() },
-  (ctx, { fileName }) => {
-    const rows = findPostingSender(ctx, 'log_group_recording');
-    if (!rows) return;
-    vetRecordingLog(ctx, fileName);
-    const groupName = recordingGroupName(ctx);
-    chargeCallAllowance(ctx, 'log_group_recording');
-    appendRecordingLabel(ctx, rows, fileName, groupName);
+/** What the join's charge transaction hands the HTTP half. */
+interface JoinSetup {
+  groupId: bigint;
+  /** The group's registered meeting, or undefined when one must be provisioned. */
+  meetingId: string | undefined;
+  /** The sender's display name — what the call tile shows the others. */
+  name: string;
+  participantId: string;
+  cfg: CallConfig;
+}
+
+/**
+ * The join's charge transaction: vets the sender (posting preamble —
+ * guests included, the 増分② product rule: ゲストも通話の開始・参加・
+ * 画面共有はメンバー同等), resolves its group and the group's registered
+ * call, and charges the bucket. Undefined marks the reclaimed sender
+ * (committed — the caller refuses after).
+ */
+function joinSetupIn(tx: Ctx): JoinSetup | undefined {
+  const rows = findPostingSender(tx, 'join_group_call');
+  if (!rows) return undefined;
+  const member = tx.db.groupMember.identity.find(tx.sender);
+  if (member === null) throw new SenderError('join_group_call refused (not-in-a-group)');
+  const cfg = callConfigOf(tx, 'join_group_call');
+  chargeCallAllowance(tx, 'join_group_call');
+  return {
+    groupId: member.groupId,
+    meetingId: tx.db.groupCall.groupId.find(member.groupId)?.meetingId,
+    name: rows.nameRow.name,
+    participantId: participantIdOf(tx),
+    cfg,
+  };
+}
+
+/**
+ * The join's result transaction: binds the meeting this procedure just
+ * provisioned to the sender's CURRENT group — re-resolved, because the
+ * sender may have walked between the charge and the provision landing
+ * (~1s of provider HTTP). Two senders racing to start the same group's
+ * call both provision; the first result transaction inserts the row and
+ * the second finds it and ADOPTS the winner's meeting (増分⑥ D4 — the
+ * loser's provisioned meeting is simply never referenced; the provider
+ * holds idle meetings at no cost). The returned groupId is the group the
+ * ticket is actually bound to — the client's auto-leave watch compares
+ * it against where the user now stands.
+ */
+function bindProvisionedMeeting(
+  tx: Ctx,
+  provisioned: string,
+): { groupId: bigint; meetingId: string } {
+  const member = tx.db.groupMember.identity.find(tx.sender);
+  if (member === null) throw new SenderError('join_group_call refused (left-the-group)');
+  const existing = tx.db.groupCall.groupId.find(member.groupId);
+  if (existing !== null) return { groupId: member.groupId, meetingId: existing.meetingId };
+  tx.db.groupCall.insert({ groupId: member.groupId, meetingId: provisioned });
+  return { groupId: member.groupId, meetingId: provisioned };
+}
+
+/**
+ * Refuses the join unless the sender's live membership still names the
+ * group the ticket is about to be minted for — run in its own transaction
+ * RIGHT BEFORE the mint (a Security-review finding): the provider HTTP
+ * between the charge transaction and the mint takes ~1s, and a sender who
+ * walked out of the group in that window must be refused rather than
+ * handed a token for a call they just left (the recording controls'
+ * not-in-that-group rule, applied to the join). A transaction cannot span
+ * the external mint call, so a verify-to-mint gap of milliseconds
+ * remains; the group_call row's members-only RLS and the client's
+ * auto-leave stay the standing enforcement on either side of it.
+ */
+function requireStillInGroup(tx: Ctx, groupId: bigint): void {
+  const member = tx.db.groupMember.identity.find(tx.sender);
+  if (member === null || member.groupId !== groupId) {
+    throw new SenderError('join_group_call refused (left-the-group)');
+  }
+}
+
+// Joins the sender's conversation group's call: reuses the group's
+// registered meeting, or provisions one at the provider and binds it via
+// the group_call row (whose members-only RLS filter remains the read-side
+// capability — the table comment in tables.ts), then mints the
+// participant token the client dials with. The 増分⑥ D4 consolidation of
+// what used to be three round-trips (Worker provision → register reducer
+// → Worker mint) with a client-side race-recovery loop (flow.ts,
+// retired): the race resolves in bindProvisionedMeeting's transaction
+// instead. The group is never named by the client (the create_zone
+// placement rule applied to membership), and the display name comes from
+// the sender's own player_name row — nothing here is client-claimed.
+export const joinGroupCall = spacetimedb.procedure(
+  t.object('CallTicket', { groupId: t.u64(), authToken: t.string() }),
+  (ctx) => {
+    const setup = ctx.withTx((tx) => joinSetupIn(tx));
+    if (setup === undefined) throw new SenderError('join_group_call refused (reclaimed)');
+    let bound = { groupId: setup.groupId, meetingId: setup.meetingId };
+    if (bound.meetingId === undefined) {
+      const provisioned = createMeeting(ctx.http, setup.cfg);
+      bound = ctx.withTx((tx) => bindProvisionedMeeting(tx, provisioned));
+    }
+    ctx.withTx((tx) => requireStillInGroup(tx, bound.groupId));
+    return {
+      groupId: bound.groupId,
+      authToken: mintParticipantToken(
+        ctx.http,
+        setup.cfg,
+        bound.meetingId as string,
+        setup.name,
+        setup.participantId,
+      ),
+    };
   },
 );
 
-// ── The recording pass (ROADMAP Phase 4 増分⑤) ──────────────────────────
-
-/**
- * The anchor secret this module signs recording passes with, or a loud
- * refusal while the anchor is unprovisioned (the worker_anchor table
- * comment — the row is seeded by owner SQL, never by a reducer). An
- * unprovisioned anchor keeps the recording routes closed on BOTH sides:
- * nothing mints here, and the Worker's empty secret list verifies
- * nothing.
- */
-function anchorSecret(ctx: Ctx): string {
-  const secret = ctx.db.workerAnchor.id.find(0)?.secret ?? '';
-  if (secret === '') {
-    throw new SenderError('mint_recording_pass refused (anchor-not-provisioned)');
-  }
-  return secret;
-}
-
-/** Upserts the sender's pass row (the reaction upsert shape). */
-function upsertRecordingPass(ctx: Ctx, pass: string): void {
-  const existing = ctx.db.recordingPass.identity.find(ctx.sender);
-  if (existing) {
-    ctx.db.recordingPass.identity.update({ ...existing, pass });
-    return;
-  }
-  ctx.db.recordingPass.insert({ identity: ctx.sender, pass });
+/** What a recording-control charge transaction hands the HTTP half. */
+interface RecordingSetup {
+  meetingId: string;
+  /** Label snapshots (the call_recording table comment). */
+  groupName: string;
+  starterName: string;
+  cfg: CallConfig;
 }
 
 /**
- * The provider subject to bind the pass to: the sender's account row's
- * `subject` (the Clerk user id clientConnected records — see the column
- * comment in tables.ts). Present on every member connection by
- * construction — clientConnected backfills it before any reducer of the
- * same connection can run — so the refusal is the transitionMember rule:
- * an "unreachable" branch must not read as a silent no-op.
+ * The sender's group's registered call and the group's display name, or a
+ * loud refusal. Split from recordingControlSetupIn to keep both uncovered
+ * functions under the CRAP budget (the vetCallRegistration precedent).
  */
-function recordingPassSubject(ctx: Ctx): string {
-  const subject = ctx.db.account.identity.find(ctx.sender)?.subject ?? '';
-  if (subject === '') {
-    throw new SenderError('mint_recording_pass refused (no-subject)');
-  }
-  return subject;
+function recordingCallOf(tx: Ctx, procedureName: string, groupId: bigint) {
+  const call = tx.db.groupCall.groupId.find(groupId);
+  if (call === null) throw new SenderError(`${procedureName} refused (no-call-registered)`);
+  const group = tx.db.conversationGroup.id.find(groupId);
+  if (group === null) throw new SenderError(`${procedureName} refused (group-gone)`);
+  return { meetingId: call.meetingId, groupName: group.name };
 }
 
-// Mints the sender's short-lived recording pass: the signed capability
-// the Worker's recording routes demand on top of the member bearer —
-// which is how the APPROVAL state only this module knows gets enforced at
-// the Worker without the Worker reading this database (増分⑤ closing the
-// 増分④ 設計① accepted looseness; the anchor design is the ROADMAP 増分⑤
-// entry). Eligibility is the posting preamble (in the world + admission
-// re-check — a pending member cannot even be in the world) plus the
-// approved-membership gate the other recording reducer shares
-// (requireApprovedMember); the rate charge rides call_guard like the rest
-// of the call flow (same UI surface, no client-side mirror to drift
-// from). The pass reaches its holder through the recording_pass row,
-// which RLS narrows to the sender alone (recordingPassVisibility) — a
-// reducer cannot return a value, so the row IS the delivery channel. The
-// pass's subject is the sender's CLERK user id, not the SpacetimeDB
-// Identity: the Worker binds the pass to the bearer it verified (same
-// subject or 403), so a pass leaked to any other signed-in identity buys
-// nothing (a Bugbot finding on the first cut). The claims are entirely
-// server-made (the stored subject, the server clock), so mintCapability's
-// undefined branch is unreachable here; it still refuses loudly rather
-// than writing an empty pass.
-export const mintRecordingPass = spacetimedb.reducer((ctx) => {
-  if (!findPostingSender(ctx, 'mint_recording_pass')) return;
-  requireApprovedMember(ctx, 'mint_recording_pass');
-  const subject = recordingPassSubject(ctx);
-  const secret = anchorSecret(ctx);
-  chargeCallAllowance(ctx, 'mint_recording_pass');
-  const pass = mintCapability(
-    {
-      scope: CAPABILITY_SCOPE_RECORDING,
-      subject,
-      expSeconds:
-        Number(ctx.timestamp.microsSinceUnixEpoch / 1_000_000n) + RECORDING_PASS_TTL_SECONDS,
-    },
-    secret,
-  );
-  if (pass === undefined) {
-    throw new SenderError('mint_recording_pass refused (unmintable)');
+/**
+ * The recording controls' charge transaction: the posting preamble PLUS
+ * the approved-member gate (録画は承認済みメンバー限定 — 増分④ 設計①),
+ * the registered call of the group the CLIENT's in-call ticket named,
+ * and the charge. The ticket's groupId is a CONSISTENCY CHECK, not an
+ * authority transfer: the sender's live membership must still name that
+ * group, or the call is refused — so a control clicked in the auto-leave
+ * window (walked off mid-call, WebRTC teardown pending, membership
+ * already elsewhere) refuses loudly instead of silently addressing the
+ * NEW group's call (a Bugbot finding), while a guessed groupId for a
+ * group the sender is not in buys nothing (group ids are sequential and
+ * guessable, unlike the retired Worker's meeting-id capability — naming
+ * alone must not open another conversation's recording controls).
+ * Undefined marks the reclaimed sender (the joinSetupIn contract).
+ */
+function recordingControlSetupIn(
+  tx: Ctx,
+  procedureName: string,
+  groupId: bigint,
+): RecordingSetup | undefined {
+  const rows = findPostingSender(tx, procedureName);
+  if (!rows) return undefined;
+  requireApprovedMember(tx, procedureName);
+  const member = tx.db.groupMember.identity.find(tx.sender);
+  if (member === null || member.groupId !== groupId) {
+    throw new SenderError(`${procedureName} refused (not-in-that-group)`);
   }
-  upsertRecordingPass(ctx, pass);
-});
+  const call = recordingCallOf(tx, procedureName, groupId);
+  const cfg = callConfigOf(tx, procedureName);
+  chargeCallAllowance(tx, procedureName);
+  return { ...call, starterName: rows.nameRow.name, cfg };
+}
+
+/**
+ * The start's result transaction: the call_recording label row — written
+ * server-side since 増分⑥ (the old log_group_recording reducer let the
+ * starter's client claim the fileName; now the provider's answer flows
+ * straight in, so nothing about the label is client-claimed) — plus the
+ * retention trim.
+ */
+function appendRecordingLabel(tx: Ctx, fileName: string, setup: RecordingSetup): void {
+  tx.db.callRecording.insert({
+    id: 0n, // 0 asks autoInc to assign the real id
+    fileName,
+    groupName: setup.groupName,
+    starterName: setup.starterName,
+    startedAt: tx.timestamp,
+  });
+  trimHistory(tx.db.callRecording, RECORDING_HISTORY_MAX);
+}
+
+// Starts the cloud recording of the ticket-named group's call (増分④→⑥):
+// the recording uploads straight to R2 (storage_config — the credentials
+// live in call_config and never leave the server), and the label row is
+// written by the result transaction. Returns the provider-fixed file
+// basename. A lost label (a crash between the HTTP and the result
+// transaction, a failed label write) degrades that recording's listing to
+// date-only, exactly the 増分④ failure mode — never a start failure: the
+// provider is already recording by then, so rejecting would report a
+// failure over a running recording and invite a duplicate start (the old
+// fire-and-forget log_group_recording contract, carried over).
+export const startGroupRecording = spacetimedb.procedure(
+  { groupId: t.u64() },
+  t.string(),
+  (ctx, { groupId }) => {
+    const setup = ctx.withTx((tx) => recordingControlSetupIn(tx, 'start_group_recording', groupId));
+    if (setup === undefined) throw new SenderError('start_group_recording refused (reclaimed)');
+    const fileName = startCloudRecording(ctx.http, setup.cfg, setup.meetingId);
+    try {
+      ctx.withTx((tx) => appendRecordingLabel(tx, fileName, setup));
+    } catch (err) {
+      console.error('start_group_recording label write failed', fileName, err);
+    }
+    return fileName;
+  },
+);
+
+// Stops the active recording of the ticket-named group's call. False
+// means there was none — a benign race (the unattended auto-stop, another
+// member's stop), reported as an answer rather than a refusal: the
+// outcome the user asked for is true either way (the Worker's tolerated
+// 404, carried over).
+export const stopGroupRecording = spacetimedb.procedure(
+  { groupId: t.u64() },
+  t.bool(),
+  (ctx, { groupId }) => {
+    const setup = ctx.withTx((tx) => recordingControlSetupIn(tx, 'stop_group_recording', groupId));
+    if (setup === undefined) throw new SenderError('stop_group_recording refused (reclaimed)');
+    return stopCloudRecording(ctx.http, setup.cfg, setup.meetingId) === 'stopped';
+  },
+);
+
+/**
+ * The recording reads' charge transaction: approved members only, like
+ * the Worker routes these replace — deliberately WITHOUT the in-world
+ * preamble, because the 録画一覧 is a space-level archive, not something
+ * you do from where you stand (the RecordingsDock placement reasoning),
+ * and the Worker never required presence either (現状同等).
+ */
+function recordingReadSetupIn(tx: Ctx, procedureName: string): CallConfig {
+  requireApprovedMember(tx, procedureName);
+  const cfg = callConfigOf(tx, procedureName);
+  chargeCallAllowance(tx, procedureName);
+  return cfg;
+}
+
+// The finished recordings in the R2 bucket, newest first (増分④→⑥ —
+// 承認済みメンバー全員: the space's shared archive; the 増分⑤ reasoning
+// for not narrowing to the starter or the participants stands).
+export const listRecordings = spacetimedb.procedure(
+  t.array(
+    t.object('RecordingFileView', {
+      fileName: t.string(),
+      size: t.u64(),
+      uploadedAt: t.string(),
+    }),
+  ),
+  (ctx) => {
+    const cfg = ctx.withTx((tx) => recordingReadSetupIn(tx, 'list_recordings'));
+    const nowMs = Number(ctx.timestamp.microsSinceUnixEpoch / 1_000n);
+    return listRecordingObjects(ctx.http, cfg, nowMs).map((object) => ({
+      fileName: object.fileName,
+      size: BigInt(object.size),
+      uploadedAt: object.uploadedAt,
+    }));
+  },
+);
+
+// A short-lived presigned URL for one recording — the browser downloads
+// straight from R2 (増分④→⑥). Pure signing, no external HTTP; the
+// fileName is the one client-claimed value and is vetted to the provider
+// naming, which also makes a key outside the recordings prefix
+// unrepresentable (the shared shape rule).
+export const recordingDownloadUrl = spacetimedb.procedure(
+  { fileName: t.string() },
+  t.string(),
+  (ctx, { fileName }) => {
+    if (!isRecordingFileNameLike(fileName)) {
+      throw new SenderError('recording_download_url refused (invalid-file-name)');
+    }
+    const cfg = ctx.withTx((tx) => recordingReadSetupIn(tx, 'recording_download_url'));
+    const nowMs = Number(ctx.timestamp.microsSinceUnixEpoch / 1_000n);
+    return presignRecordingDownload(cfg, fileName, nowMs);
+  },
+);

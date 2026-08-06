@@ -31,16 +31,17 @@ export const spacetimedb = schema({
       updatedAt: t.timestamp(),
       // The provider's stable user id (the JWT `sub` claim — for Clerk a
       // user_… id), written by clientConnected on every member connect
-      // (増分⑤): the recording pass embeds it so the Worker can bind the
-      // pass to the exact bearer it verified — the Worker cannot derive
-      // the SpacetimeDB Identity from the Clerk subject, so the module
-      // records the correspondence here, where it is a connect-time
-      // fact. Appended with an ''-default — NOT `.optional()`, which the
-      // host refuses as a migration ("requires a default value
-      // annotation", measured 2026-08-06) — so existing rows migrate on
-      // re-publish (additive-only rule); '' means "not recorded yet" and
-      // backfills on the owner's next connect, which every reducer call
-      // is preceded by.
+      // (増分⑤, retained through 増分⑥): what a member's provider-side
+      // records key on — today the call participant's
+      // custom_participant_id (join_group_call), tomorrow any correlation
+      // that must survive an Identity re-link. Recorded here because it
+      // is a connect-time fact only clientConnected can read. Appended
+      // with an ''-default — NOT `.optional()`, which the host refuses as
+      // a migration ("requires a default value annotation", measured
+      // 2026-08-06) — so existing rows migrate on re-publish
+      // (additive-only rule); '' means "not recorded yet" and backfills
+      // on the owner's next connect, which every reducer call is
+      // preceded by.
       subject: t.string().default(''),
     },
   ),
@@ -599,17 +600,16 @@ export const spacetimedb = schema({
   // with the group row (deleteGroupCall in world.ts) — and re-joining an
   // idle meeting is the provider's normal reuse, not a bug.
   //
-  // The meeting id is the JOIN CAPABILITY: the token-minting Worker
-  // verifies the caller is a signed-in member of the SPACE (a Clerk JWT)
-  // but knows nothing about groups — SpacetimeDB is the only group
-  // authority, so which GROUP'S call a member may join is enforced
-  // entirely by who can read this row (the members-only RLS filter below,
-  // the dm_message thinking). A member who shares the id out of band can
-  // already share the call itself; that is the chat-history trust level,
-  // accepted. Registration (register_group_call in calls.ts) accepts only
-  // the sender's own group and a provider-shaped id (isMeetingIdLike in
-  // @kaede/shared), from any in-world identity — guests included since
-  // 増分② (the Worker mints for them too; see the calls.ts header).
+  // The meeting id is the JOIN CAPABILITY on the read side: which
+  // GROUP'S call a client may see is enforced by who can read this row
+  // (the members-only RLS filter below, the dm_message thinking). Since
+  // 増分⑥ the row is written by the join_group_call procedure's result
+  // transaction (calls.ts) — the meeting id comes straight from the
+  // provider, never from a client claim — and the join itself re-checks
+  // the sender's membership server-side, guests included (増分②の製品
+  // 規則). A member who shares a meeting id out of band can already
+  // share the call itself; that is the chat-history trust level,
+  // accepted.
   //
   // No timestamp columns, deliberately (the conversation_group rule):
   // nothing rules on a registered-at, and columns the table does not have
@@ -624,14 +624,14 @@ export const spacetimedb = schema({
       meetingId: t.string(),
     },
   ),
-  // The call-registration rate limit's token-bucket marker — chat_guard's
-  // shape, for register_group_call (ROADMAP Phase 4 増分①). Its own bucket
-  // for the standing reason (buckets shared across features drift from
-  // their client-side mirrors), and because a refused registration must
-  // not tax chat: the call flow retries by design (two members racing to
-  // register resolve through a refusal). Same lifecycle as the other lazy
-  // guards: created on first use, deleted with the player rows
-  // (removePlayer).
+  // The call-flow rate limit's token-bucket marker — chat_guard's shape,
+  // for every call/recording procedure (ROADMAP Phase 4 増分①→⑥). Its
+  // own bucket for the standing reason (buckets shared across features
+  // drift from their client-side mirrors), and because a refused call
+  // must not tax chat. Since 増分⑥ the charge also bounds what a hostile
+  // in-world client can turn into provider HTTP round-trips (each one is
+  // module energy). Same lifecycle as the other lazy guards: created on
+  // first use, deleted with the player rows (removePlayer).
   callGuard: table(
     { name: 'call_guard' },
     {
@@ -642,17 +642,17 @@ export const spacetimedb = schema({
   // A cloud recording's LABEL row (ROADMAP Phase 4 増分④): who recorded
   // which conversation group, when, into which R2 object. Deliberately not
   // the recording's state machine — the truth about a finished recording is
-  // the object existing in the R2 bucket (the Worker's listing serves the
-  // 一覧/DL UI), and this row only labels that listing with the human facts
-  // the bucket cannot hold (the group's name, the starter, Japanese
-  // intact). A row whose object never appears (recording ERRORED
+  // the object existing in the R2 bucket (the list_recordings procedure
+  // serves the 一覧/DL UI), and this row only labels that listing with the
+  // human facts the bucket cannot hold (the group's name, the starter,
+  // Japanese intact). A row whose object never appears (recording ERRORED
   // provider-side) is a harmless orphan label; an object whose row was
-  // trimmed lists date-only. Written by log_group_recording (calls.ts)
-  // right after the Worker's start call succeeds — the starter CLIENT
-  // writes it, but both names are resolved server-side from the sender's
-  // authoritative rows (the create_zone placement rule applied to labels);
-  // the only client-claimed value is fileName, shape-checked against the
-  // provider's naming (isRecordingFileNameLike in @kaede/shared).
+  // trimmed lists date-only. Since 増分⑥ the row is written by the
+  // start_group_recording procedure's result transaction — every value,
+  // fileName included, comes from the server's own rows or the provider's
+  // answer, so nothing about the label is client-claimed (増分④'s
+  // log_group_recording let the starter's client claim the fileName,
+  // shape-checked; that reducer is retired).
   //
   // `fileName` is the R2 object's basename — fixed at start time by the
   // provider (the Start Recording response's output_file_name, live-probed
@@ -666,9 +666,10 @@ export const spacetimedb = schema({
   // Public with NO RLS filter, an explicit decision (the chat_message
   // read-gate precedent): these rows are metadata every in-world connection
   // may see, while the capability they label — downloading the file — is
-  // enforced by the Worker's members-only gate. A members-only filter is
-  // not expressible anyway: call_recording and space_member share no
-  // column, so the filter SQL subset has no ON equality to join them on.
+  // enforced by the recording procedures' approved-member gate. A
+  // members-only filter is not expressible anyway: call_recording and
+  // space_member share no column, so the filter SQL subset has no ON
+  // equality to join them on.
   callRecording: table(
     { name: 'call_recording', public: true },
     {
@@ -679,44 +680,45 @@ export const spacetimedb = schema({
       startedAt: t.timestamp(),
     },
   ),
-  // The Worker⇄SpacetimeDB trust anchor (ROADMAP Phase 4 増分⑤): the
-  // shared HMAC secret this module MINTS recording passes with
-  // (mint_recording_pass in calls.ts) and the call-API Worker verifies
-  // them against (its RECORDING_PASS_SECRETS secret holds the same value).
-  // One row, id 0. PRIVATE — clients can never subscribe to it — and
-  // deliberately written by NO reducer: the row is seeded and rotated by
-  // the module owner over `spacetimedb-cli sql` (INSERT/UPDATE), which is
-  // an owner-only capability the host already enforces, so there is no
-  // set-secret reducer to mis-gate and no trust-on-first-use window on a
-  // live database (the 設営手順 is README「通話 API Worker」). A missing
-  // or empty row means the anchor is unprovisioned: minting refuses, and
-  // the Worker side independently fails closed on an empty secret list.
-  workerAnchor: table(
-    { name: 'worker_anchor' },
+  // The call/recording procedures' provider configuration and secrets
+  // (ROADMAP Phase 4 増分⑥): everything talking to RealtimeKit and R2
+  // needs — the Realtime-Admin API token, the app and account identifiers,
+  // and the R2 S3 credentials + bucket the recordings land in. One row,
+  // id 0, PRIVATE — clients can never subscribe to it — and deliberately
+  // written by NO reducer: the row is seeded and rotated by the module
+  // owner over `spacetimedb-cli sql` (INSERT/UPDATE), an owner-only
+  // capability the host already enforces, so there is no set-config
+  // reducer to mis-gate and no trust-on-first-use window on a live
+  // database (the 増分⑤ worker_anchor precedent; the 設営手順 is
+  // README「通話/録画 API」). A missing row means the provider is
+  // unprovisioned: every procedure refuses loudly (fail closed). The
+  // identifiers ride the same row as the secrets because they differ per
+  // environment too (the local dev app is kaede-dev, production is
+  // kaede), and one seeding step beats two.
+  //
+  // ⚠️ This table must NEVER reach the daily backup (backup.yml writes
+  // GitHub artifacts retained 90 days): scripts/backup-maincloud.sh
+  // excludes it BY NAME — renaming this table means updating that list
+  // in the same PR. Recovery is re-seeding, not restore
+  // (docs/backup-restore.md).
+  callConfig: table(
+    { name: 'call_config' },
     {
       id: t.u8().primaryKey(),
-      secret: t.string(),
-    },
-  ),
-  // One member's short-lived recording pass (ROADMAP Phase 4 増分⑤): the
-  // signed capability mint_recording_pass writes for its APPROVED-member
-  // sender, which the client then presents to the Worker's recording
-  // routes (x-recording-pass) — how "approved" crosses the Worker boundary
-  // without the Worker reading this database (the 増分① division). An
-  // UPSERT row per identity (the reaction shape): a pass supersedes the
-  // previous one, and the table is bounded by the world population with no
-  // trimming rule. Public because RLS only filters public tables (the
-  // dm_message rule); the filter below (recordingPassVisibility) hands
-  // each row to its own holder ONLY — the pass rides no other client's
-  // subscription, ever. Rows die with the player (removePlayer): a pass
-  // outliving its holder's presence would be a dangling capability in a
-  // public table (expired within RECORDING_PASS_TTL_SECONDS either way,
-  // but rows nobody can use should not ride entry egress).
-  recordingPass: table(
-    { name: 'recording_pass', public: true },
-    {
-      identity: t.identity().primaryKey(),
-      pass: t.string(),
+      // Cloudflare account API token with Realtime Admin (secret).
+      realtimekitToken: t.string(),
+      // The RealtimeKit app every meeting lives under (a public identifier).
+      realtimekitAppId: t.string(),
+      // The Cloudflare account the app and bucket belong to (a public identifier).
+      cloudflareAccountId: t.string(),
+      // R2 S3 credentials (secrets): what the recording start hands the
+      // provider (storage_config), what signs the bucket listing, and what
+      // mints presigned download URLs. Derived from an R2-permitted API
+      // token (access key = token id, secret = SHA-256 of the token value).
+      storageAccessKeyId: t.string(),
+      storageSecretAccessKey: t.string(),
+      // The R2 bucket finished recordings land in (a public identifier).
+      storageBucket: t.string(),
     },
   ),
 });
@@ -809,16 +811,4 @@ export const chatGroupMemberVisibility = spacetimedb.clientVisibilityFilter.sql(
 // leaving revokes it as a delete (the 増分④ observation).
 export const groupCallVisibility = spacetimedb.clientVisibilityFilter.sql(
   'SELECT c.* FROM group_call c JOIN group_member m ON c.group_id = m.group_id WHERE m.identity = :sender',
-);
-
-// Row-level security for recording_pass (ROADMAP Phase 4 増分⑤): a pass
-// reaches its own holder only — the dm_message filter shape (a plain
-// :sender equality on an indexed column; identity is the PK, so its btree
-// satisfies the RLS index rule), and like every filter set it is the
-// allow-list entire: one filter, so no other connection ever receives any
-// pass row. Live-verified with non-owner connections before merge (the
-// 増分④ spike rule — a broken filter breaks every subscription on the
-// table at runtime and publish would not show it).
-export const recordingPassVisibility = spacetimedb.clientVisibilityFilter.sql(
-  'SELECT * FROM recording_pass WHERE identity = :sender',
 );

@@ -90,35 +90,6 @@ function senderContext(c: DbConnection, identity: Identity) {
   };
 }
 
-/**
- * The own recording_pass row's pass on a live connection
- * (NetApi.ownRecordingPass's live half — split out to keep both
- * uncovered functions under the CRAP budget, the senderContext
- * precedent).
- */
-function ownRecordingPassOf(c: DbConnection): string | undefined {
-  const identity = c.identity;
-  return identity === undefined ? undefined : c.db.recordingPass.identity.find(identity)?.pass;
-}
-
-/**
- * The own membership's group and its registered call, read from the
- * subscribed cache (NetApi.ownGroupCall's live half — split out to keep
- * both uncovered functions under the CRAP budget, the senderContext
- * precedent).
- */
-function ownGroupCallOf(
-  c: DbConnection,
-): { groupId: bigint; meetingId: string | undefined } | undefined {
-  const identity = c.identity;
-  const member = identity === undefined ? null : c.db.groupMember.identity.find(identity);
-  if (member === null) return undefined;
-  return {
-    groupId: member.groupId,
-    meetingId: c.db.groupCall.groupId.find(member.groupId)?.meetingId,
-  };
-}
-
 /** Each member transition's generated reducer call, keyed by the shared vocabulary. */
 const MEMBER_ACTION_CALLS: Record<
   MemberAction,
@@ -242,46 +213,46 @@ export interface NetApi {
   joinHuddle(groupId: bigint): void;
   leaveHuddle(): void;
   /**
-   * Where a call join would land RIGHT NOW, read from the subscribed cache
-   * at click time (the chatTargetOf submit-time precedent): the own
-   * membership's group and, if one is registered, its meeting id — the
-   * group_call row is RLS-narrowed to groups this client is in, so a
-   * readable meeting id is by construction one it may join. Undefined
-   * while disconnected or in no group.
+   * Joins the sender's conversation group's call (the join_group_call
+   * procedure — ROADMAP Phase 4 増分⑥): the module resolves the group
+   * from the sender's own membership, reuses or provisions the meeting
+   * (racing starters resolve server-side), and returns the ticket — the
+   * group the meeting was bound to (what the dock's auto-leave watch
+   * compares against) and the participant token the dial uses. Rejects
+   * on refusal (not in a group, rate-limited, provider failure) for the
+   * dock to surface.
    */
-  ownGroupCall(): { groupId: bigint; meetingId: string | undefined } | undefined;
+  joinGroupCall(): Promise<{ groupId: bigint; authToken: string }>;
   /**
-   * Binds a provisioned meeting to the sender's group (register_group_call).
-   * Unlike the fire-and-forget methods this returns the reducer's promise:
-   * the call flow (call.package) must know whether the registration won —
-   * a refusal usually means another member registered first, and the flow
-   * recovers by re-reading ownGroupCall (see acquireCallTicket).
+   * Starts / stops the cloud recording of the ticket-named group's call
+   * (start_group_recording / stop_group_recording — 承認済みメンバー
+   * 限定, enforced server-side; the dock's member gate is cosmetic).
+   * `groupId` is the join ticket's group — a consistency check the
+   * module verifies against the sender's live membership, so a control
+   * clicked in the auto-leave window (membership already moved) refuses
+   * instead of addressing the new group's call; the module resolves the
+   * meeting from its own group_call row and writes the label row itself.
+   * Both reject on refusal; a stop with nothing to stop resolves (the
+   * benign race — auto-stop, another member stopped first).
    */
-  registerGroupCall(meetingId: string): Promise<void>;
+  startGroupRecording(groupId: bigint): Promise<void>;
+  stopGroupRecording(groupId: bigint): Promise<void>;
   /**
-   * Labels the recording the sender just started (log_group_recording —
-   * ROADMAP Phase 4 増分④): the provider-named file, with the group and
-   * starter names resolved server-side. Fire-and-forget deliberately: a
-   * lost label degrades that recording's 一覧 entry to date-only, never
-   * blocks the recording itself.
+   * The finished recordings in the bucket, newest first, and a
+   * short-lived presigned download URL for one of them (list_recordings /
+   * recording_download_url — 承認済みメンバー限定, enforced server-side).
    */
-  logGroupRecording(fileName: string): void;
-  /**
-   * Asks the server to mint this member's recording pass
-   * (mint_recording_pass — ROADMAP Phase 4 増分⑤). Returns the reducer's
-   * promise (the registerGroupCall shape): the caller must know whether
-   * the mint was refused, and the pass itself arrives as the own
-   * recording_pass row — read it back with ownRecordingPass (the
-   * acquireRecordingPass flow in call.package owns the wait-and-retry).
-   */
-  mintRecordingPass(): Promise<void>;
-  /**
-   * The own recording_pass row's pass, read from the subscribed cache
-   * (RLS hands this client its own row only), or undefined while none
-   * was ever minted or while disconnected. Freshness is the caller's
-   * question (capabilityFresh) — the row keeps the last mint verbatim.
-   */
-  ownRecordingPass(): string | undefined;
+  listRecordings(): Promise<RecordingFile[]>;
+  recordingDownloadUrl(fileName: string): Promise<string>;
+}
+
+/** One finished recording, as the listing procedure reports it (増分④→⑥). */
+export interface RecordingFile {
+  fileName: string;
+  /** Object size in bytes (the u64 return narrowed — far below 2^53). */
+  size: number;
+  /** The R2 LastModified timestamp (ISO 8601) — when the upload landed. */
+  uploadedAt: string;
 }
 
 /** What forwarding user actions needs from the lifecycle owner (sync.ts). */
@@ -413,26 +384,36 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     sendAnnouncement: forward('send_announcement', (c, text: string) =>
       c.reducers.sendAnnouncement({ text }),
     ),
-    ownGroupCall() {
-      const c = deps.conn();
-      return c === undefined ? undefined : ownGroupCallOf(c);
-    },
-    registerGroupCall(meetingId) {
+    joinGroupCall() {
       const c = deps.conn();
       if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.reducers.registerGroupCall({ meetingId }).then(() => undefined);
+      return c.procedures.joinGroupCall({});
     },
-    logGroupRecording: forward('log_group_recording', (c, fileName: string) =>
-      c.reducers.logGroupRecording({ fileName }),
-    ),
-    mintRecordingPass() {
+    startGroupRecording(groupId) {
       const c = deps.conn();
       if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.reducers.mintRecordingPass({}).then(() => undefined);
+      return c.procedures.startGroupRecording({ groupId }).then(() => undefined);
     },
-    ownRecordingPass() {
+    stopGroupRecording(groupId) {
       const c = deps.conn();
-      return c === undefined ? undefined : ownRecordingPassOf(c);
+      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
+      return c.procedures.stopGroupRecording({ groupId }).then(() => undefined);
+    },
+    listRecordings() {
+      const c = deps.conn();
+      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
+      return c.procedures.listRecordings({}).then((files) =>
+        files.map((file) => ({
+          fileName: file.fileName,
+          size: Number(file.size),
+          uploadedAt: file.uploadedAt,
+        })),
+      );
+    },
+    recordingDownloadUrl(fileName) {
+      const c = deps.conn();
+      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
+      return c.procedures.recordingDownloadUrl({ fileName });
     },
   };
 }

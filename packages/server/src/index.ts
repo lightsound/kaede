@@ -22,6 +22,5 @@ export {
   chatSpaceVisibility,
   dmMessageVisibility,
   groupCallVisibility,
-  recordingPassVisibility,
 } from './tables';
 export * from './zones';
