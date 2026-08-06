@@ -157,6 +157,25 @@ function bindProvisionedMeeting(
   return { groupId: member.groupId, meetingId: provisioned };
 }
 
+/**
+ * Refuses the join unless the sender's live membership still names the
+ * group the ticket is about to be minted for — run in its own transaction
+ * RIGHT BEFORE the mint (a Security-review finding): the provider HTTP
+ * between the charge transaction and the mint takes ~1s, and a sender who
+ * walked out of the group in that window must be refused rather than
+ * handed a token for a call they just left (the recording controls'
+ * not-in-that-group rule, applied to the join). A transaction cannot span
+ * the external mint call, so a verify-to-mint gap of milliseconds
+ * remains; the group_call row's members-only RLS and the client's
+ * auto-leave stay the standing enforcement on either side of it.
+ */
+function requireStillInGroup(tx: Ctx, groupId: bigint): void {
+  const member = tx.db.groupMember.identity.find(tx.sender);
+  if (member === null || member.groupId !== groupId) {
+    throw new SenderError('join_group_call refused (left-the-group)');
+  }
+}
+
 // Joins the sender's conversation group's call: reuses the group's
 // registered meeting, or provisions one at the provider and binds it via
 // the group_call row (whose members-only RLS filter remains the read-side
@@ -178,6 +197,7 @@ export const joinGroupCall = spacetimedb.procedure(
       const provisioned = createMeeting(ctx.http, setup.cfg);
       bound = ctx.withTx((tx) => bindProvisionedMeeting(tx, provisioned));
     }
+    ctx.withTx((tx) => requireStillInGroup(tx, bound.groupId));
     return {
       groupId: bound.groupId,
       authToken: mintParticipantToken(
