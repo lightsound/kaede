@@ -1,3 +1,8 @@
+import {
+  CAPABILITY_SCOPE_RECORDING,
+  mintCapability,
+  RECORDING_PASS_TTL_SECONDS,
+} from '@kaede/shared';
 import { describe, expect, it } from 'vitest';
 import {
   allowedOrigin,
@@ -6,8 +11,10 @@ import {
   guestSubjectFrom,
   parseBucketListing,
   participantNameFrom,
+  RECORDING_PASS_HEADER,
   RECORDINGS_PREFIX,
   recordingObjectKey,
+  recordingPassSubject,
   routeCallRequest,
   routeIsMemberOnly,
   summarizeRecordingEvent,
@@ -208,6 +215,42 @@ describe('callerKindOf', () => {
   it('知らない issuer はどの検証器にも渡さない', () => {
     expect(callerKindOf('https://evil.example', clerk)).toBeUndefined();
     expect(callerKindOf(undefined, clerk)).toBeUndefined();
+  });
+});
+
+describe('recordingPassSubject', () => {
+  const NOW = 1_785_972_000;
+  const SUBJECT = 'c200dd03e1587e8995dd277e41928dd841aaf0aedc8cf1e02b2290955b289d7b';
+  const SECRET = '9f2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff00';
+  const pass =
+    mintCapability(
+      {
+        scope: CAPABILITY_SCOPE_RECORDING,
+        subjectHex: SUBJECT,
+        expSeconds: NOW + RECORDING_PASS_TTL_SECONDS,
+      },
+      SECRET,
+    ) ?? '';
+
+  it('module が mint した pass を受理し subject を返す(共有実装の往復)', () => {
+    expect(recordingPassSubject(pass, SECRET, NOW)).toBe(SUBJECT);
+  });
+
+  it('ローテーション用のカンマ区切りリストのどれでも通る(空白は寛容)', () => {
+    expect(recordingPassSubject(pass, `next-secret, ${SECRET}`, NOW)).toBe(SUBJECT);
+    expect(recordingPassSubject(pass, 'next-secret', NOW)).toBeUndefined();
+  });
+
+  it('ヘッダなし・空・期限切れ・空シークレット(アンカー未設営)は拒否する', () => {
+    expect(recordingPassSubject(null, SECRET, NOW)).toBeUndefined();
+    expect(recordingPassSubject('', SECRET, NOW)).toBeUndefined();
+    expect(recordingPassSubject(pass, SECRET, NOW + RECORDING_PASS_TTL_SECONDS)).toBeUndefined();
+    expect(recordingPassSubject(pass, '', NOW)).toBeUndefined();
+    expect(recordingPassSubject(pass, ' , ,', NOW)).toBeUndefined();
+  });
+
+  it('ヘッダ名は preflight の許可リストと一致させる定数', () => {
+    expect(RECORDING_PASS_HEADER).toBe('x-recording-pass');
   });
 });
 

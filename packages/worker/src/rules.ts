@@ -4,7 +4,13 @@
 // event summary) — split from the fetch wiring (index.ts) so they are
 // unit-testable (the @kaede/shared convention applied inside this
 // workspace: the wiring stays a thin untestable shell).
-import { isMeetingIdLike, isRecordingFileNameLike, normalizeDisplayName } from '@kaede/shared';
+import {
+  CAPABILITY_SCOPE_RECORDING,
+  isMeetingIdLike,
+  isRecordingFileNameLike,
+  normalizeDisplayName,
+  verifiedCapabilitySubject,
+} from '@kaede/shared';
 import { decodeJwt } from 'jose';
 
 /**
@@ -156,6 +162,41 @@ export function summarizeRecordingEvent(
     fileName: field(recording.outputFileName),
     error: field(recording.errMessage),
   };
+}
+
+/**
+ * The header a recording pass rides in (ROADMAP Phase 4 増分⑤). Its own
+ * header rather than a second bearer: the Authorization slot already
+ * carries the caller's identity credential (Clerk JWT), and the pass is
+ * an ADDITIONAL claim — "an approved member, minted moments ago by the
+ * module" — presented alongside it. The preflight allow-list must name
+ * it (index.ts).
+ */
+export const RECORDING_PASS_HEADER = 'x-recording-pass';
+
+/**
+ * The subject of a verified recording pass, or undefined for anything the
+ * member-only routes must refuse: a missing header, a malformed/expired/
+ * mis-scoped pass, a signature no accepted secret produced — or an EMPTY
+ * secret list, which is the unprovisioned anchor failing closed (the
+ * worker_anchor table comment in the server). `secretsRaw` is the
+ * RECORDING_PASS_SECRETS binding: comma-separated accepted secrets, a
+ * LIST so rotation can hold old+new while the module's anchor flips
+ * (README「通話 API Worker」). The verification itself is the shared
+ * verifiedCapabilitySubject — the exact code the module signs with, so
+ * the two sides cannot disagree on the format.
+ */
+export function recordingPassSubject(
+  pass: string | null,
+  secretsRaw: string,
+  nowSeconds: number,
+): string | undefined {
+  if (pass === null || pass === '') return undefined;
+  const secrets = secretsRaw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+  return verifiedCapabilitySubject(pass, CAPABILITY_SCOPE_RECORDING, secrets, nowSeconds);
 }
 
 /**
