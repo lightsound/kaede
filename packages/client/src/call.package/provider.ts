@@ -17,6 +17,10 @@ export interface CallTile {
   videoTrack: MediaStreamTrack | undefined;
   /** The live mic track while unmuted — undefined for self (never played back). */
   audioTrack: MediaStreamTrack | undefined;
+  /** The live screen-share video while the participant is sharing (増分②). */
+  screenTrack: MediaStreamTrack | undefined;
+  /** The shared tab/window audio, when the share carries any — undefined for self. */
+  screenAudioTrack: MediaStreamTrack | undefined;
 }
 
 /** The whole visible state of the ongoing call, re-published on every change. */
@@ -24,12 +28,14 @@ export interface CallSnapshot {
   tiles: CallTile[];
   micOn: boolean;
   cameraOn: boolean;
+  screenShareOn: boolean;
 }
 
 /** The handle on one joined call. */
 export interface CallSession {
   setMic(on: boolean): Promise<void>;
   setCamera(on: boolean): Promise<void>;
+  setScreenShare(on: boolean): Promise<void>;
   leave(): Promise<void>;
 }
 

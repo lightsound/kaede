@@ -140,6 +140,12 @@ export default Alchemy.Stack(
         // issuer はローカル wrangler dev の .dev.vars だけが知る。
         CLERK_ISSUER: 'https://clerk.kaede.town',
         CLERK_AUDIENCE: 'kaede-spacetimedb',
+        // ゲスト確認に使う SpacetimeDB ホスト(増分②): ゲスト接続時に
+        // ホストが発行するセッショントークンを、このホストの公開鍵
+        // (/v1/identity/public-key)で署名検証する。本番は Maincloud 固定。
+        // ローカルは .dev.vars が http://localhost:3000 を指す(README
+        // 「通話 API Worker」)。
+        SPACETIME_HOST_URL: 'https://maincloud.spacetimedb.com',
         ALLOWED_ORIGINS: 'https://kaede.town,https://kaede.kaede-751.workers.dev',
       },
     });

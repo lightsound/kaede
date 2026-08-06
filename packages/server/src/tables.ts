@@ -593,9 +593,10 @@ export const spacetimedb = schema({
   // entirely by who can read this row (the members-only RLS filter below,
   // the dm_message thinking). A member who shares the id out of band can
   // already share the call itself; that is the chat-history trust level,
-  // accepted. Registration is member-gated too: register_group_call
-  // (calls.ts) accepts only the sender's own group and a
-  // provider-shaped id (isMeetingIdLike in @kaede/shared).
+  // accepted. Registration (register_group_call in calls.ts) accepts only
+  // the sender's own group and a provider-shaped id (isMeetingIdLike in
+  // @kaede/shared), from any in-world identity — guests included since
+  // 増分② (the Worker mints for them too; see the calls.ts header).
   //
   // No timestamp columns, deliberately (the conversation_group rule):
   // nothing rules on a registered-at, and columns the table does not have

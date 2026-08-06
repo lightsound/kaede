@@ -5,8 +5,8 @@ import { enterWorld, netStats, snapshot, sql, walkWhile } from './helpers';
 
 // What this file fixes is 増分①'s privacy core: a group_call row's meeting
 // id is the JOIN CAPABILITY for the group's call (the token Worker checks
-// membership of the SPACE, not of the group — SpacetimeDB is the only
-// group authority), so the row must reach group MEMBERS only. Asserted on
+// a kaede identity, not group membership — SpacetimeDB is the only group
+// authority), so the row must reach group MEMBERS only. Asserted on
 // what crossed the wire (groupCallRowsReceived), not on the DOM — the
 // chat-scope spec's reasoning: a display filter could hide a delivered row.
 //
@@ -51,11 +51,11 @@ test.setTimeout(300_000);
  * reaches A's subscription; B is handed ZERO rows — live, and through the
  * seed after a reload. B then walks in: membership is what the filter
  * reads, so the row arrives (the positive control proving the probe can
- * see rows at all). Guests never see the call dock — calls are for
- * signed-in members (the Worker refuses guests), which the button's
- * absence pins.
+ * see rows at all). Guests get the call dock like members (増分② — the
+ * Worker verifies their host-issued token), which the button's presence
+ * pins; joining stays a manual test (the Worker is out of E2E).
  */
-test('通話レジストリの行はグループのメンバーだけに届き、ゲストに通話ボタンは出ない', async ({
+test('通話レジストリの行はグループのメンバーだけに届き、ゲストにも通話ボタンが出る', async ({
   browser,
 }) => {
   await seedZone();
@@ -81,10 +81,12 @@ test('通話レジストリの行はグループのメンバーだけに届き�
     // "not yet" cannot masquerade as "never".
     expect(await callRows(pageB)).toBe(0);
 
-    // A is a GUEST: in a group with a registered call, and still offered no
-    // call button — calls are the signed-in members' (the Worker would
-    // refuse the token anyway; the dock never renders for guests).
-    await expect(pageA.getByRole('button', { name: '📞 通話に参加' })).toHaveCount(0);
+    // A is a GUEST in a group: the dock offers the call (増分② lifted the
+    // members-only cut — guests start, join and screen-share like members;
+    // the actual join needs the live Worker, out of E2E). B, outside every
+    // group, is offered nothing.
+    await expect(pageA.getByRole('button', { name: '📞 通話に参加' })).toBeVisible();
+    await expect(pageB.getByRole('button', { name: '📞 通話に参加' })).toHaveCount(0);
 
     // Seed-side privacy: a reloaded B re-subscribes from scratch and its
     // count is still zero (world entry proves the seed applied — the

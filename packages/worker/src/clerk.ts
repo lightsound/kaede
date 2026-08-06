@@ -25,19 +25,18 @@ function jwksFor(issuer: string): ReturnType<typeof createRemoteJWKSet> {
  * connections (the `spacetimedb` template): one issuer, one audience, one
  * trust domain — the Worker checks the same issuer+audience pair the
  * module's connection policy pins, so "may call this API" and "is a
- * member-issuer identity" cannot drift apart. Guests hold no Clerk
- * session and are therefore refused here — the 増分① scope cut recorded
- * in the ROADMAP (guests join calls in a later increment, which needs a
- * verification path for SpacetimeDB-issued guest tokens).
+ * member-issuer identity" cannot drift apart. Guests carry a SpacetimeDB
+ * host-issued token instead, verified by the sibling path in
+ * spacetime.ts (増分② — the lift of 増分①'s members-only cut); the
+ * issuer dispatch between the two is callerKindOf in rules.ts.
  */
 export async function verifiedMemberSubject(
-  authorization: string | null,
+  token: string,
   issuer: string,
   audience: string,
 ): Promise<string | undefined> {
-  if (!authorization?.startsWith('Bearer ')) return undefined;
   try {
-    const { payload } = await jwtVerify(authorization.slice('Bearer '.length), jwksFor(issuer), {
+    const { payload } = await jwtVerify(token, jwksFor(issuer), {
       issuer,
       audience,
     });

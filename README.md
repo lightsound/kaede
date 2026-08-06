@@ -357,7 +357,7 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
 
 - **ローカル開発**は Alchemy を通さず `wrangler dev` で動かします。
   `infra/.dev.vars`（gitignore 済み — wrangler は設定ファイルの隣の
-  `.dev.vars` を読み、同名の vars を上書きする）に **4 つとも**書くこと —
+  `.dev.vars` を読み、同名の vars を上書きする）に **5 つとも**書くこと —
   `wrangler-call.jsonc` の vars は本番値なので、上書きしないと CORS が
   localhost を拒否し、ミーティングも本番アプリに作られてしまいます:
 
@@ -365,6 +365,7 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   REALTIMEKIT_API_TOKEN=<Realtime Admin トークン>
   REALTIMEKIT_APP_ID=<ローカル開発用アプリ kaede-dev の ID>
   CLERK_ISSUER=https://<開発インスタンス>.clerk.accounts.dev
+  SPACETIME_HOST_URL=http://localhost:3000
   ALLOWED_ORIGINS=http://localhost:5173
   ```
 
@@ -377,9 +378,12 @@ wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
   `https://kaede-call.kaede-751.workers.dev`）。
 
 - 通話の**状態は SpacetimeDB が真実源**です: どのグループにどのミーティングが
-  紐づくかは `group_call` 行（メンバー限定 RLS）、Worker は「スペースのメンバーで
-  あること」（Clerk JWT）だけを検証します。ゲストの通話参加は増分①では未対応
-  （ROADMAP Phase 4 参照）。
+  紐づくかは `group_call` 行（メンバー限定 RLS）、Worker は「kaede の
+  アイデンティティであること」だけを検証します — サインイン済みメンバーは
+  Clerk JWT（JWKS 検証）、ゲストは SpacetimeDB ホスト発行のセッショントークン
+  （`SPACETIME_HOST_URL` の `/v1/identity/public-key` に対する署名検証 —
+  増分②でメンバー限定を解除、ROADMAP Phase 4 参照）。ゲストも通話の開始・
+  参加・画面共有をメンバーと同等にできます。
 
 ## CI
 

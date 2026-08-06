@@ -22,6 +22,19 @@ export const target = `${URI}/${DB}`;
 // keeping the two-windows-side-by-side demo working.
 const TOKEN_KEY = 'kaede.spacetime.token';
 
+/**
+ * The stored per-tab session token (the host-issued anonymous credential
+ * `connect` persists below), or undefined before any guest connection
+ * succeeded. This is the guest's bearer credential for the call API
+ * (ROADMAP Phase 4 増分②): the Worker verifies it against the same host
+ * key that signed it, so "may call the API" and "holds this tab's guest
+ * identity" stay one fact. Members never need it — their getter mints a
+ * Clerk JWT per request.
+ */
+export function storedSessionToken(): string | undefined {
+  return sessionStorage.getItem(TOKEN_KEY) ?? undefined;
+}
+
 export interface Connected {
   conn: DbConnection;
   /** This connection's identity: the key into own rows and reducer targets. */

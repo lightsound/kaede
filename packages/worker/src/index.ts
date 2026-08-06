@@ -1,21 +1,30 @@
 // fallow-ignore-file coverage-gaps -- the Worker fetch wiring: routes, CORS and error mapping over live network calls; runs only inside workerd. Every rule worth testing is in rules.ts (unit-tested); the network halves are clerk.ts / realtimekit.ts
 // fallow-ignore-file unused-export unused-type -- the default export is the Worker entry workerd loads (nothing in this repo imports it), and Env is its bindings contract with infra/alchemy.run.ts / wrangler-call.jsonc
 
-// kaede の通話 API Worker (ROADMAP Phase 4 増分①) — the first of the thin
-// stateless glue Workers VISION limits the backend to: it exists ONLY
+// kaede の通話 API Worker (ROADMAP Phase 4 増分①〜②) — the first of the
+// thin stateless glue Workers VISION limits the backend to: it exists ONLY
 // because RealtimeKit calls need a secret the browser must never hold
 // (and SpacetimeDB modules cannot call external HTTP). It keeps no state:
 // which group has which meeting lives in SpacetimeDB (group_call), and
 // who may join is enforced there too (the members-only RLS filter) — this
-// Worker only checks "a signed-in member of the space is asking"
-// (clerk.ts) and forwards to the provider (realtimekit.ts).
+// Worker only checks "a kaede identity is asking": a signed-in member's
+// Clerk JWT (clerk.ts) or, since 増分②, a guest's SpacetimeDB host-issued
+// token (spacetime.ts), and forwards to the provider (realtimekit.ts).
 //
 // Deployed by infra/alchemy.run.ts (Worker `kaede-call`); the wrangler
 // escape hatch is infra/wrangler-call.jsonc. Local dev runs `wrangler dev`
 // against the same entry with .dev.vars — see README「通話 API Worker」.
 import { verifiedMemberSubject } from './clerk';
 import { createMeeting, mintParticipantToken } from './realtimekit';
-import { allowedOrigin, participantNameFrom, routeCallRequest } from './rules';
+import {
+  allowedOrigin,
+  bearerTokenFrom,
+  callerKindOf,
+  participantNameFrom,
+  routeCallRequest,
+  unverifiedIssuerOf,
+} from './rules';
+import { verifiedGuestSubject } from './spacetime';
 
 /** The bindings infra/alchemy.run.ts declares for this Worker. */
 export interface Env {
@@ -29,6 +38,8 @@ export interface Env {
   CLERK_ISSUER: string;
   /** The `aud` the client's JWT template pins (kaede-spacetimedb). */
   CLERK_AUDIENCE: string;
+  /** The SpacetimeDB host whose guest identities may call this API (増分②). */
+  SPACETIME_HOST_URL: string;
   /** Comma-separated browser origins allowed to call this API. */
   ALLOWED_ORIGINS: string;
 }
@@ -63,6 +74,28 @@ async function handleCall(
   };
 }
 
+/**
+ * Verifies the caller and returns its subject, or undefined to 401. The
+ * token's claimed issuer only PICKS the verifier (callerKindOf — each path
+ * re-checks everything against its own trust anchor): the Clerk member
+ * path or, since 増分②, the SpacetimeDB guest path — guests start, join
+ * and screen-share calls exactly like members (the product rule), so the
+ * two subjects come out of one seam.
+ */
+async function verifiedCallerSubject(
+  authorization: string | null,
+  env: Env,
+): Promise<string | undefined> {
+  const token = bearerTokenFrom(authorization);
+  if (token === undefined) return undefined;
+  const kind = callerKindOf(unverifiedIssuerOf(token), env.CLERK_ISSUER);
+  if (kind === 'member') {
+    return verifiedMemberSubject(token, env.CLERK_ISSUER, env.CLERK_AUDIENCE);
+  }
+  if (kind === 'guest') return verifiedGuestSubject(token, env.SPACETIME_HOST_URL);
+  return undefined;
+}
+
 /** Routes and authenticates one non-preflight request, mapping every failure. */
 async function handleRouted(
   request: Request,
@@ -71,11 +104,7 @@ async function handleRouted(
 ): Promise<Response> {
   const route = routeCallRequest(request.method, new URL(request.url).pathname);
   if (route === undefined) return json(404, { error: 'not-found' }, cors);
-  const subject = await verifiedMemberSubject(
-    request.headers.get('authorization'),
-    env.CLERK_ISSUER,
-    env.CLERK_AUDIENCE,
-  );
+  const subject = await verifiedCallerSubject(request.headers.get('authorization'), env);
   if (subject === undefined) return json(401, { error: 'unauthorized' }, cors);
   try {
     const result = await handleCall(route, request, env, subject);
