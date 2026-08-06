@@ -6,5 +6,20 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as JoinGroupCallProcedure from "../join_group_call_procedure";
+import * as ListRecordingsProcedure from "../list_recordings_procedure";
+import * as RecordingDownloadUrlProcedure from "../recording_download_url_procedure";
+import * as StartGroupRecordingProcedure from "../start_group_recording_procedure";
+import * as StopGroupRecordingProcedure from "../stop_group_recording_procedure";
 
+export type JoinGroupCallArgs = __Infer<typeof JoinGroupCallProcedure.params>;
+export type JoinGroupCallResult = __Infer<typeof JoinGroupCallProcedure.returnType>;
+export type ListRecordingsArgs = __Infer<typeof ListRecordingsProcedure.params>;
+export type ListRecordingsResult = __Infer<typeof ListRecordingsProcedure.returnType>;
+export type RecordingDownloadUrlArgs = __Infer<typeof RecordingDownloadUrlProcedure.params>;
+export type RecordingDownloadUrlResult = __Infer<typeof RecordingDownloadUrlProcedure.returnType>;
+export type StartGroupRecordingArgs = __Infer<typeof StartGroupRecordingProcedure.params>;
+export type StartGroupRecordingResult = __Infer<typeof StartGroupRecordingProcedure.returnType>;
+export type StopGroupRecordingArgs = __Infer<typeof StopGroupRecordingProcedure.params>;
+export type StopGroupRecordingResult = __Infer<typeof StopGroupRecordingProcedure.returnType>;
 

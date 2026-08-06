@@ -1,6 +1,6 @@
-// fallow-ignore-file coverage-gaps -- a React panel over the Worker's recording listing; needs a DOM and the live Worker, and no DOM test environment is configured. The Worker-side rules (member gate, listing parse, key vetting) are unit-tested in packages/worker
+// fallow-ignore-file coverage-gaps -- a React panel over the module's recording listing; needs a DOM and a live connection, and no DOM test environment is configured. The server-side rules (member gate, SigV4 signing, listing parse) are unit-tested in @kaede/shared
 import { type CSSProperties, useState } from 'react';
-import type { AuthTokenGetter, RecordingLabelView } from '../net.package';
+import type { RecordingFile, RecordingLabelView } from '../net.package';
 import {
   UI_BUTTON_BG,
   UI_ERROR_COLOR,
@@ -10,12 +10,6 @@ import {
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
-import {
-  fetchRecordingDownloadUrl,
-  fetchRecordings,
-  type RecordingFile,
-  type RecordingPassGetter,
-} from './api';
 
 // Top-left, mirroring the admin panel's top-right: the recordings are a
 // space-level archive, not something you do from where you stand (the
@@ -56,6 +50,14 @@ const rowStyle: CSSProperties = {
   justifyContent: 'space-between',
 };
 
+/** What the panel calls on the net facade (the CallDockNet shape). */
+export interface RecordingsDockNet {
+  /** NetApi.listRecordings — the module's R2 listing (増分⑥). */
+  listRecordings(): Promise<RecordingFile[]>;
+  /** NetApi.recordingDownloadUrl — a short-lived presigned URL. */
+  recordingDownloadUrl(fileName: string): Promise<string>;
+}
+
 /** What the panel knows about the listing right now. */
 type Listing =
   | { kind: 'closed' }
@@ -72,14 +74,14 @@ function dateLabel(iso: string): string {
 }
 
 /**
- * Starts a browser download for one recording: ask the Worker for a
+ * Starts a browser download for one recording: ask the module for a
  * short-lived presigned URL (member-gated), then hand it to the browser —
- * the bytes stream straight from R2, never through the Worker or this
+ * the bytes stream straight from R2, never through the module or this
  * tab's memory (the URL carries a content-disposition override, so the
  * browser saves instead of playing).
  */
 async function download(ctx: PanelContext, fileName: string): Promise<void> {
-  const url = await fetchRecordingDownloadUrl(ctx.getToken, ctx.getPass, fileName);
+  const url = await ctx.net.recordingDownloadUrl(fileName);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.rel = 'noopener';
@@ -90,9 +92,7 @@ async function download(ctx: PanelContext, fileName: string): Promise<void> {
 
 /** What every listing row and the panel body need from the mounted dock. */
 interface PanelContext {
-  getToken: AuthTokenGetter;
-  /** The 増分⑤ recording pass, acquired per request (see api.ts). */
-  getPass: RecordingPassGetter;
+  net: RecordingsDockNet;
   labels: RecordingLabelView[];
   onDownloadFailure: () => void;
 }
@@ -144,26 +144,23 @@ function ListingBody({
 }
 
 /**
- * The 録画一覧 dock (ROADMAP Phase 4 増分④): the finished recordings in
- * the R2 bucket, labeled by the call_recording rows and downloadable via
- * presigned URLs. Offered to signed-in members only (App gates the mount;
- * the Worker's member gate is the authority — a guest calling the API
- * gets 403 regardless). The truth about what exists is the Worker's R2
- * listing, fetched when the panel opens (and on 更新): a recording still
- * uploading appears on the next refresh — the label rows arrive live but
- * carry no download capability of their own.
+ * The 録画一覧 dock (ROADMAP Phase 4 増分④→⑥): the finished recordings
+ * in the R2 bucket, labeled by the call_recording rows and downloadable
+ * via presigned URLs — both served by module procedures since 増分⑥
+ * (承認済みメンバー限定, enforced server-side; App's mount gate is
+ * cosmetic). The truth about what exists is the R2 listing, fetched when
+ * the panel opens (and on 更新): a recording still uploading appears on
+ * the next refresh — the label rows arrive live but carry no download
+ * capability of their own.
  */
 export function RecordingsDock({
   visible,
-  getToken,
-  getPass,
+  net,
   labels,
 }: {
   /** Connected AND an approved member (cosmetic gate — see above). */
   visible: boolean;
-  getToken: AuthTokenGetter;
-  /** The 増分⑤ recording pass getter (recordingPassGetterOf in pass.ts). */
-  getPass: RecordingPassGetter;
+  net: RecordingsDockNet;
   /** The call_recording label rows (NetHooks.onRecordings), newest first. */
   labels: RecordingLabelView[];
 }) {
@@ -175,7 +172,7 @@ export function RecordingsDock({
     setListing({ kind: 'loading' });
     setDownloadFailed(false);
     try {
-      setListing({ kind: 'loaded', files: await fetchRecordings(getToken, getPass) });
+      setListing({ kind: 'loaded', files: await net.listRecordings() });
     } catch (err) {
       console.error('recording list failed', err);
       setListing({ kind: 'failed' });
@@ -210,7 +207,7 @@ export function RecordingsDock({
       </div>
       <ListingBody
         listing={listing}
-        ctx={{ getToken, getPass, labels, onDownloadFailure: () => setDownloadFailed(true) }}
+        ctx={{ net, labels, onDownloadFailure: () => setDownloadFailed(true) }}
       />
       {downloadFailed && (
         <span style={{ color: UI_ERROR_COLOR }}>ダウンロード URL を取得できませんでした</span>

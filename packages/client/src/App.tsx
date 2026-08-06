@@ -2,7 +2,7 @@
 import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@kaede/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
-import { CallDock, RecordingsDock, recordingPassGetterOf } from './call.package';
+import { CallDock, RecordingsDock } from './call.package';
 import { ChatPanel } from './chat.package';
 import { createGameApp, type GameApp } from './game.package';
 import { HuddleControl } from './huddle.package';
@@ -81,20 +81,20 @@ function recordingsDockVisible(
 }
 
 /**
- * The call dock's net adapter over the (possibly not-yet-mounted) net
+ * The call surfaces' net adapter over the (possibly not-yet-mounted) net
  * stack — split from App's JSX to keep App under the cognitive budget.
+ * Every method is a procedure call (増分⑥), so the not-yet-mounted
+ * fallback is the same rejection a disconnected NetApi produces.
  */
-function callDockNetOf(netRef: { current: Net | undefined }) {
+function callNetOf(netRef: { current: Net | undefined }) {
+  const rejectUnmounted = () => Promise.reject(new Error('SpacetimeDB: not connected'));
   return {
-    ownGroupCall: () => netRef.current?.ownGroupCall(),
-    registerGroupCall: (meetingId: string) =>
-      netRef.current?.registerGroupCall(meetingId) ??
-      Promise.reject(new Error('SpacetimeDB: not connected')),
-    logGroupRecording: (fileName: string) => netRef.current?.logGroupRecording(fileName),
-    mintRecordingPass: () =>
-      netRef.current?.mintRecordingPass() ??
-      Promise.reject(new Error('SpacetimeDB: not connected')),
-    ownRecordingPass: () => netRef.current?.ownRecordingPass(),
+    joinGroupCall: () => netRef.current?.joinGroupCall() ?? rejectUnmounted(),
+    startGroupRecording: () => netRef.current?.startGroupRecording() ?? rejectUnmounted(),
+    stopGroupRecording: () => netRef.current?.stopGroupRecording() ?? rejectUnmounted(),
+    listRecordings: () => netRef.current?.listRecordings() ?? rejectUnmounted(),
+    recordingDownloadUrl: (fileName: string) =>
+      netRef.current?.recordingDownloadUrl(fileName) ?? rejectUnmounted(),
   };
 }
 
@@ -249,14 +249,11 @@ export function App() {
         connected={connected}
         member={approvedMember(session.signedIn, space)}
         ownGroupId={calls.ownGroupId}
-        ownName={ownName}
-        getToken={session.getToken}
-        net={callDockNetOf(netRef)}
+        net={callNetOf(netRef)}
       />
       <RecordingsDock
         visible={recordingsDockVisible(connected, session.signedIn, space)}
-        getToken={session.getToken}
-        getPass={recordingPassGetterOf(callDockNetOf(netRef))}
+        net={callNetOf(netRef)}
         labels={calls.recordings}
       />
       <HuddleControl

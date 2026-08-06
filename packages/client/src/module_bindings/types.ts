@@ -20,6 +20,17 @@ export const Account = __t.object("Account", {
 });
 export type Account = __Infer<typeof Account>;
 
+export const CallConfig = __t.object("CallConfig", {
+  id: __t.u8(),
+  realtimekitToken: __t.string(),
+  realtimekitAppId: __t.string(),
+  cloudflareAccountId: __t.string(),
+  r2AccessKeyId: __t.string(),
+  r2SecretAccessKey: __t.string(),
+  r2Bucket: __t.string(),
+});
+export type CallConfig = __Infer<typeof CallConfig>;
+
 export const CallGuard = __t.object("CallGuard", {
   identity: __t.identity(),
   allowanceMicros: __t.i64(),
@@ -34,6 +45,12 @@ export const CallRecording = __t.object("CallRecording", {
   startedAt: __t.timestamp(),
 });
 export type CallRecording = __Infer<typeof CallRecording>;
+
+export const CallTicket = __t.object("CallTicket", {
+  groupId: __t.u64(),
+  authToken: __t.string(),
+});
+export type CallTicket = __Infer<typeof CallTicket>;
 
 export const ChatGuard = __t.object("ChatGuard", {
   identity: __t.identity(),
@@ -166,11 +183,12 @@ export const ReactionGuard = __t.object("ReactionGuard", {
 });
 export type ReactionGuard = __Infer<typeof ReactionGuard>;
 
-export const RecordingPass = __t.object("RecordingPass", {
-  identity: __t.identity(),
-  pass: __t.string(),
+export const RecordingFileView = __t.object("RecordingFileView", {
+  fileName: __t.string(),
+  size: __t.u64(),
+  uploadedAt: __t.string(),
 });
-export type RecordingPass = __Infer<typeof RecordingPass>;
+export type RecordingFileView = __Infer<typeof RecordingFileView>;
 
 export const SpaceMember = __t.object("SpaceMember", {
   identity: __t.identity(),
@@ -193,10 +211,4 @@ export const StatusGuard = __t.object("StatusGuard", {
   allowanceMicros: __t.i64(),
 });
 export type StatusGuard = __Infer<typeof StatusGuard>;
-
-export const WorkerAnchor = __t.object("WorkerAnchor", {
-  id: __t.u8(),
-  secret: __t.string(),
-});
-export type WorkerAnchor = __Infer<typeof WorkerAnchor>;
 

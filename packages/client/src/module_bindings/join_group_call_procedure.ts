@@ -10,6 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  fileName: __t.string(),
+import {
+  CallTicket,
+} from "./types";
+
+export const params = {
 };
+export const returnType = CallTicket

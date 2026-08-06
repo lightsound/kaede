@@ -45,10 +45,7 @@ import EnterPortalReducer from "./enter_portal_reducer";
 import JoinReducer from "./join_reducer";
 import JoinHuddleReducer from "./join_huddle_reducer";
 import LeaveHuddleReducer from "./leave_huddle_reducer";
-import LogGroupRecordingReducer from "./log_group_recording_reducer";
-import MintRecordingPassReducer from "./mint_recording_pass_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
-import RegisterGroupCallReducer from "./register_group_call_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendAnnouncementReducer from "./send_announcement_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
@@ -63,6 +60,11 @@ import UnbanMemberReducer from "./unban_member_reducer";
 import UpdateZoneReducer from "./update_zone_reducer";
 
 // Import all procedure arg schemas
+import * as JoinGroupCallProcedure from "./join_group_call_procedure";
+import * as ListRecordingsProcedure from "./list_recordings_procedure";
+import * as RecordingDownloadUrlProcedure from "./recording_download_url_procedure";
+import * as StartGroupRecordingProcedure from "./start_group_recording_procedure";
+import * as StopGroupRecordingProcedure from "./stop_group_recording_procedure";
 
 // Import all table schema definitions
 import CallRecordingRow from "./call_recording_table";
@@ -75,7 +77,6 @@ import PlayerRow from "./player_table";
 import PlayerNameRow from "./player_name_table";
 import PlayerStatusRow from "./player_status_table";
 import ReactionRow from "./reaction_table";
-import RecordingPassRow from "./recording_pass_table";
 import SpaceMemberRow from "./space_member_table";
 import SpaceSettingRow from "./space_setting_table";
 
@@ -214,17 +215,6 @@ const tablesSchema = __schema({
       { name: 'reaction_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, ReactionRow),
-  recordingPass: __table({
-    name: 'recording_pass',
-    indexes: [
-      { accessor: 'identity', name: 'recording_pass_identity_idx_btree', algorithm: 'btree', columns: [
-        'identity',
-      ] },
-    ],
-    constraints: [
-      { name: 'recording_pass_identity_key', constraint: 'unique', columns: ['identity'] },
-    ],
-  }, RecordingPassRow),
   spaceMember: __table({
     name: 'space_member',
     indexes: [
@@ -262,10 +252,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join", JoinReducer),
   __reducerSchema("join_huddle", JoinHuddleReducer),
   __reducerSchema("leave_huddle", LeaveHuddleReducer),
-  __reducerSchema("log_group_recording", LogGroupRecordingReducer),
-  __reducerSchema("mint_recording_pass", MintRecordingPassReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
-  __reducerSchema("register_group_call", RegisterGroupCallReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_announcement", SendAnnouncementReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),
@@ -282,6 +269,11 @@ const reducersSchema = __reducers(
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("join_group_call", JoinGroupCallProcedure.params, JoinGroupCallProcedure.returnType),
+  __procedureSchema("list_recordings", ListRecordingsProcedure.params, ListRecordingsProcedure.returnType),
+  __procedureSchema("recording_download_url", RecordingDownloadUrlProcedure.params, RecordingDownloadUrlProcedure.returnType),
+  __procedureSchema("start_group_recording", StartGroupRecordingProcedure.params, StartGroupRecordingProcedure.returnType),
+  __procedureSchema("stop_group_recording", StopGroupRecordingProcedure.params, StopGroupRecordingProcedure.returnType),
 );
 
 /** The remote SpacetimeDB module schema, both runtime and type information. */

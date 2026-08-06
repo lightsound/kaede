@@ -131,25 +131,6 @@ importers:
         specifier: ~7.0.2
         version: 7.0.2
 
-  packages/worker:
-    dependencies:
-      '@kaede/shared':
-        specifier: workspace:*
-        version: link:../shared
-      aws4fetch:
-        specifier: ^1.0.20
-        version: 1.0.20
-      jose:
-        specifier: ^6.2.8
-        version: 6.2.8
-    devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^5.20260804.1
-        version: 5.20260804.1
-      typescript:
-        specifier: ~7.0.2
-        version: 7.0.2
-
 packages:
 
   '@alcalzone/ansi-tokenize@0.2.5':
@@ -2263,9 +2244,6 @@ packages:
   istanbul-reports@3.2.0:
     resolution: {integrity: sha512-HGYWWS/ehqTV3xN10i23tkPkpH46MLCIMFNCaaKNavAXTF1RkqxawEPtnjnGZ6XKSInBKkiOA5BKS+aZiY3AvA==}
     engines: {node: '>=8'}
-
-  jose@6.2.8:
-    resolution: {integrity: sha512-Bsdjwm3Qsd/P0jR+BHDe3LytDfY7WBq2HmCCLIwuVRHMuEC9ae7/R474GIUdF1NgCyZjzVo/A9DOiOBtXq8ZoQ==}
 
   js-base64@3.9.2:
     resolution: {integrity: sha512-6zayE8QlUdiweYI6cETD/XBSqFcoCUlufn/29PJR99r82x1yDnIprRca0YvAYpAW+ez0GuQkVBC6xG5QkD7OjA==}
@@ -5114,8 +5092,6 @@ snapshots:
     dependencies:
       html-escaper: 2.0.2
       istanbul-lib-report: 3.0.1
-
-  jose@6.2.8: {}
 
   js-base64@3.9.2: {}
 

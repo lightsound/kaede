@@ -1,5 +1,4 @@
 export * from './auth';
-export * from './capability';
 export * from './chat';
 export * from './connectionEvent';
 export * from './constants';
@@ -14,6 +13,7 @@ export * from './notification';
 export * from './physics';
 export * from './player';
 export * from './reaction';
+export * from './s3';
 export * from './sendAllowance';
 export * from './sendGate';
 export * from './status';

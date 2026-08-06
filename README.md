@@ -61,8 +61,11 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 | `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期） |
 | `packages/server` | SpacetimeDB モジュール（`player`・`player_name`・`player_guard`・`account`・`space_member`・`space_setting` テーブルと `join`・`submit_inputs`・管理系リデューサー。サーバー権威で物理・入場制御を実施。高頻度更新の `player` 行から低頻度の表示名（`player_name`、公開）とガード内部値（`player_guard`、非公開）を分離し、行更新1回あたりの egress を抑える） |
 | `packages/e2e` | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証） |
-| `packages/worker` | 通話 API の Cloudflare Worker（`kaede-call`）。RealtimeKit のミーティング作成・参加トークン発行という「シークレットを要する外部 API 呼び出し」だけを行う薄いステートレスなグルー（VISION のバックエンド原則）。状態は持たない — どのグループにどのミーティングが紐づくかは SpacetimeDB の `group_call` 行が真実源 |
 | `infra` | Cloudflare リソースの IaC（Alchemy v2）。Alchemy / Effect への依存はこのディレクトリに隔離し、アプリコードには漏らさない（デプロイ手順は後述） |
+
+通話/録画の外部 API（RealtimeKit・R2）は `packages/server` の **procedure** が
+直接呼びます（「通話/録画 API」の節を参照）。かつての通話 API Worker
+`kaede-call`（`packages/worker`）は ROADMAP Phase 4 増分⑥で廃止しました。
 
 ## 同期方式
 
@@ -337,106 +340,73 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    設定します（`VITE_SPACETIME_URI` は本番ビルドの既定が `wss://maincloud.spacetimedb.com`
    なので、Maincloud を使う限り設定不要です）。
 
-### 通話 API Worker（kaede-call）
+### 通話/録画 API（module の procedure）
 
-ビデオ通話（ROADMAP Phase 4）の RealtimeKit 呼び出しのうち、シークレットを要する
-**ミーティング作成・参加トークン発行・録画の開始/停止**と、録画ファイルの
-**一覧・ダウンロード URL 発行（R2）・Webhook 受信**を行う Worker です
-（`packages/worker`）。CI の自動デプロイに含まれ、リソース定義は
-`infra/alchemy.run.ts` の `CallApi`（録画バケットは `Recordings`）、
-wrangler の逃げ道は `infra/wrangler-call.jsonc` です。
+ビデオ通話（ROADMAP Phase 4）の RealtimeKit 呼び出し — **ミーティング作成・
+参加トークン発行・録画の開始/停止** — と録画ファイルの **一覧・ダウンロード
+URL 発行（R2 の S3 API）** は、SpacetimeDB module の **procedure** が直接
+行います（増分⑥。`packages/server/src/calls.ts` が procedure 群、
+`provider.ts` が外部 HTTP、SigV4 署名は `@kaede/shared` の `s3.ts`）。
+呼び出しは認証済みの SpacetimeDB 接続越しなので `ctx.sender` が本人性
+そのもので、別系統の bearer 検証はありません。承認済みメンバー限定
+（録画系）・グループ解決はすべて procedure 内のサーバー側検査です。
+かつての通話 API Worker `kaede-call` と増分⑤の信頼アンカー
+（`worker_anchor`・録画パス・`RECORDING_PASS_SECRETS`）は撤去済み。
 
-- **ランタイムシークレット**（`REALTIMEKIT_API_TOKEN`＝Realtime Admin 権限の
-  アカウント API トークン、`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`＝録画
-  バケットの S3 資格情報）は **Alchemy のバインディングにしていません** —
-  Alchemy のステート（prod は git コミット対象）は `Redacted` 値も平文で保存する
-  ことを実測済みのため（2026-08-05）。CI のデプロイジョブが Alchemy デプロイ後に
-  `wrangler secret put` で毎回同期します（GitHub Actions シークレット
-  `REALTIMEKIT_API_TOKEN` が必要。R2 の対は **`CLOUDFLARE_API_TOKEN` から導出** —
-  R2 の S3 資格情報は「R2 権限付き API トークン」の別表現で、access key =
-  トークン ID・secret = トークン値の SHA-256。実測 2026-08-06。バケットスコープの
-  専用トークンに硬化する場合はシークレット値の差し替えだけで済みます）。
-  Alchemy のスクリプト再アップロードは帯域外の secret_text バインディングを
-  保持します（2026-08-05 実測）。手動で入れ直す場合:
+- **資格情報の設営（環境ごとに 1 度・owner SQL）**: 秘密は module の
+  非公開テーブル `call_config`（id 0 の 1 行）に置きます。設定 reducer は
+  意図的にありません — SQL 書き込みは owner 限定の能力なので、稼働中 DB
+  での先取りが構造的に起きない（増分⑤の前例）。未設営のあいだは全
+  procedure が loud に拒否します（fail closed）:
 
   ```sh
-  cd infra && printf '%s' "$REALTIMEKIT_API_TOKEN" | \
-    pnpm exec wrangler secret put REALTIMEKIT_API_TOKEN --name kaede-call
+  spacetime sql kaede "INSERT INTO call_config (id, realtimekit_token, realtimekit_app_id, cloudflare_account_id, r2_access_key_id, r2_secret_access_key, r2_bucket) VALUES (0, '<Realtime Admin トークン>', '<RealtimeKit アプリ ID>', '<Cloudflare アカウント ID>', '<R2 アクセスキー ID>', '<R2 シークレット>', '<録画バケット名>')"
   ```
 
-- **ローカル開発**は Alchemy を通さず `wrangler dev` で動かします。
-  `infra/.dev.vars`（gitignore 済み — wrangler は設定ファイルの隣の
-  `.dev.vars` を読み、同名の vars を上書きする）に **9 つとも**書くこと —
-  `wrangler-call.jsonc` の vars は本番値なので、上書きしないと CORS が
-  localhost を拒否し、ミーティングも本番アプリに作られてしまいます:
+  - `realtimekit_token`: Realtime Admin 権限のアカウント API トークン
+    （本番はトークン `kaede-realtimekit-worker`）。
+  - R2 の S3 資格情報は「R2 権限付き API トークン」の別表現です —
+    access key = トークン ID、secret = トークン値の SHA-256
+    （`printf '%s' "$TOKEN" | sha256sum`。実測 2026-08-06）。
+  - 本番の公開識別子: アプリ `kaede` = `84053947-0a8e-4b23-840a-a47731b7310b`、
+    アカウント = `751c8a59858c9c04a8e722df7330444d`、バケット =
+    `kaede-recordings`。ローカル開発はアプリ `kaede-dev` =
+    `0949bb57-deae-4d8f-ba58-b5479f77ee58` を使う（下記）。
+  - **ローテーション**は同じ行の `UPDATE`（
+    `spacetime sql kaede "UPDATE call_config SET realtimekit_token = '<新>' WHERE id = 0"`）。
+    秘密を紛失しても owner SQL でいつでも上書きできます。
+  - **この行は日次バックアップから除外**されます（`backup-maincloud.sh` の
+    `EXCLUDE_TABLES` — 成果物が GitHub artifacts に 90 日残るため）。DB
+    再建時はこの節の INSERT で再播種します（docs/backup-restore.md）。
 
-  ```ini
-  REALTIMEKIT_API_TOKEN=<Realtime Admin トークン>
-  REALTIMEKIT_APP_ID=<ローカル開発用アプリ kaede-dev の ID>
-  CLERK_ISSUER=https://<開発インスタンス>.clerk.accounts.dev
-  SPACETIME_HOST_URL=http://localhost:3000
-  ALLOWED_ORIGINS=http://localhost:5173
-  RECORDINGS_BUCKET=<開発用の録画バケット名>
-  R2_ACCESS_KEY_ID=<R2 権限付きトークンの ID>
-  R2_SECRET_ACCESS_KEY=<同トークン値の SHA-256>
-  RECORDING_PASS_SECRETS=<ローカル DB の worker_anchor と同じ値 — 下の設営手順>
-  ```
+- **ローカル開発**: procedure の SSRF ガードにより module から localhost は
+  呼べないため、ローカル DB でも外部呼び出しは**実サービス直**です。
+  ローカル DB に上と同じ INSERT を打ちます — RealtimeKit は開発用アプリ
+  `kaede-dev`、R2 は実バケット（開発では本番バケットを共用 — 録画一覧に
+  テストの録画が混ざるのは許容し、不要になったら S3 DELETE で消す）。
+  wrangler dev・`.dev.vars`・`VITE_CALL_API_URL` は増分⑥で不要になりました。
 
-  ```sh
-  cd infra && pnpm exec wrangler dev --config wrangler-call.jsonc --port 8787
-  ```
+- 通話の**状態は SpacetimeDB が真実源**のまま: どのグループにどの
+  ミーティングが紐づくかは `group_call` 行（メンバー限定 RLS ＝参加
+  ケイパビリティ）で、行の書き手が `join_group_call` procedure の結果
+  トランザクションに変わっただけです。ゲストも通話の開始・参加・画面共有を
+  メンバーと同等にできます（in-world の `ctx.sender` なら誰でも —
+  録画系だけ承認済みメンバー限定）。
 
-  クライアントの開発ビルドは既定で `http://localhost:8787` を呼びます
-  （`VITE_CALL_API_URL` で上書き可能。本番ビルドの既定は
-  `https://kaede-call.kaede-751.workers.dev`）。
+- **録画**: 録画ファイルは Start Recording の `storage_config` で R2
+  バケット（本番 `kaede-recordings`）へ直接アップロードされ、完了の
+  真実源はバケット自体（一覧は `list_recordings` procedure が S3 API で
+  読む）。メタデータ（どの会議・誰が開始）は `call_recording` 行が持ち、
+  増分⑥からは `start_group_recording` の結果トランザクションがサーバー側で
+  書きます。RealtimeKit の Webhook は増分⑥（D1）で廃止しました — 失敗した
+  録画は「一覧に出てこない」で検知し、調査はプロバイダ API の手動照会
+  （`scripts/spike-realtimekit.sh` が API の形の再確認に使えます）。
 
-- 通話の**状態は SpacetimeDB が真実源**です: どのグループにどのミーティングが
-  紐づくかは `group_call` 行（メンバー限定 RLS）、Worker は「kaede の
-  アイデンティティであること」だけを検証します — サインイン済みメンバーは
-  Clerk JWT（JWKS 検証）、ゲストは SpacetimeDB ホスト発行のセッショントークン
-  （`SPACETIME_HOST_URL` の `/v1/identity/public-key` に対する署名検証 —
-  増分②でメンバー限定を解除、ROADMAP Phase 4 参照）。ゲストも通話の開始・
-  参加・画面共有をメンバーと同等にできます。
-
-- **録画（ROADMAP Phase 4 増分④）**: 録画の開始/停止・一覧・ダウンロードは
-  **承認済みメンバー限定**です（Worker が Clerk 経路だけに録画ルートを
-  開け — ゲストの bearer は 403 — さらに増分⑤の録画パス検証で**承認状態も
-  Worker 側で強制**される。UI とラベル reducer の検査はその上に重なる）。
-  録画ファイルは Start Recording の
-  `storage_config` で R2 バケット（本番 `kaede-recordings`）へ直接
-  アップロードされ、完了の真実源はバケット自体（一覧は Worker が S3 API で
-  読む）。メタデータ（どの会議・誰が開始）は SpacetimeDB の `call_recording`
-  行が持ちます。Webhook（`recording.statusUpdate`）は
-  `/webhooks/realtimekit` で受け、`rtk-signature` を well-known 公開鍵で
-  検証して Workers Logs へ記録します（ERRORED の運用可視性）。登録は冪等な
-  `scripts/ensure-realtimekit-webhook.sh` で行います（本番アプリは登録済み）。
-
-- **信頼アンカー（ROADMAP Phase 4 増分⑤）**: 録画ルートは Clerk bearer に
-  加えて **module が承認済みメンバーへ発行する短命の録画パス**
-  （`x-recording-pass` ヘッダ、寿命 2 分。パスは発行先の Clerk subject に
-  束縛され、bearer と一致しなければ 403）を要求します。パスの署名鍵が
-  Worker⇄SpacetimeDB の信頼アンカーで、環境ごとに 1 度だけ設営します:
-
-  1. 秘密を生成する: `openssl rand -hex 32`
-  2. **module 側**: owner として `worker_anchor` 行を SQL で播種する
-     （reducer は意図的に無い — SQL 書き込みは owner 限定の能力なので、
-     稼働中 DB での先取りが構造的に起きない）:
-
-     ```sh
-     spacetime sql kaede "INSERT INTO worker_anchor (id, secret) VALUES (0, '<秘密>')"
-     ```
-
-  3. **Worker 側**: 同じ値を GitHub Actions シークレット
-     `RECORDING_PASS_SECRETS` に登録する（CI デプロイが毎回
-     `wrangler secret put` で同期。未設定はデプロイが fail-fast、
-     Worker 側も空なら fail closed）。ローカルは `infra/.dev.vars` に
-     同じ値を書き、ローカル DB に同じ INSERT を打つ。
-
-  **ローテーション**（無停止）: ①Worker の `RECORDING_PASS_SECRETS` を
-  `新,旧` のカンマ区切りにして同期 → ②module 側を
-  `spacetime sql kaede "UPDATE worker_anchor SET secret = '<新>' WHERE id = 0"`
-  で差し替え → ③Worker 側から旧を落とす。秘密を紛失しても owner SQL で
-  いつでも上書きできます（設計の全文は ROADMAP Phase 4 増分⑤）。
+- **外部 HTTP のタイムアウト**は実測に基づく定数です
+  （`packages/server/src/provider.ts` — RealtimeKit 一般 5s・録画開始 10s・
+  R2 3s。増分⑥スパイクの実測は ROADMAP 参照）。タイムアウトや
+  プロバイダ障害は procedure の拒否としてクライアントに返り、リトライは
+  ブラウザ側（ユーザーの再クリック）です。
 
 ## CI
 

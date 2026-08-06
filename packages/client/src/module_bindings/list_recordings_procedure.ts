@@ -10,6 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  meetingId: __t.string(),
+import {
+  RecordingFileView,
+} from "./types";
+
+export const params = {
 };
+export const returnType = __t.array(RecordingFileView)

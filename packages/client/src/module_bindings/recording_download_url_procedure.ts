@@ -10,7 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  identity: __t.identity().primaryKey(),
-  pass: __t.string(),
-});
+export const params = {
+  fileName: __t.string(),
+};
+export const returnType = __t.string()

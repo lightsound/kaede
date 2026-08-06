@@ -21,7 +21,15 @@
 #   - `sql` はデータベースオーナーとして実行され、RLS も public フラグも
 #     受けない(非公開テーブルも全部読める)。JSON はスキーマ+行の自己記述形式。
 #   - CLI の WARNING は stderr、JSON は stdout に分かれる(2026-08-04 実測)。
+#   - 秘密テーブルは名前で除外する(下の EXCLUDE_TABLES)。バックアップの
+#     成果物は GitHub artifacts に 90 日残るため、API トークン・S3 資格情報を
+#     持つ行を絶対に書き出さない(ROADMAP Phase 4 増分⑥ D5)。復旧は
+#     リストアではなく owner SQL での再播種(docs/backup-restore.md)。
 set -euo pipefail
+
+# 除外テーブル(スペース区切り)。call_config = 通話/録画 API の資格情報
+# (packages/server/src/tables.ts のテーブルコメントと対で更新すること)。
+EXCLUDE_TABLES="call_config"
 
 SPACETIME_BIN="${SPACETIME_BIN:-spacetime}"
 DATABASE="${DATABASE:-kaede}"
@@ -41,6 +49,12 @@ if [ -z "$tables" ]; then
 fi
 
 for t in $tables; do
+  for excluded in $EXCLUDE_TABLES; do
+    if [ "$t" = "$excluded" ]; then
+      echo "skipped $t (secret table — see EXCLUDE_TABLES)"
+      continue 2
+    fi
+  done
   "$SPACETIME_BIN" sql "$DATABASE" --server "$SERVER" --no-config --format json \
     "SELECT * FROM $t" > "$OUT/$t.json"
   echo "exported $t"

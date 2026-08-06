@@ -29,7 +29,6 @@
       "packages/shared/tsconfig.json",
       "packages/client/tsconfig.json",
       "packages/server/tsconfig.json",
-      "packages/worker/tsconfig.json",
       "packages/e2e/tsconfig.json"
     ],
     "require": "complete"
@@ -50,18 +49,12 @@
       { "name": "shared", "patterns": ["packages/shared/**"] },
       { "name": "client", "patterns": ["packages/client/**"] },
       { "name": "server", "patterns": ["packages/server/**"] },
-      { "name": "worker", "patterns": ["packages/worker/**"] },
       { "name": "e2e", "patterns": ["packages/e2e/**"] }
     ],
     "rules": [
       { "from": "shared", "allow": [] },
       { "from": "client", "allow": ["shared"] },
       { "from": "server", "allow": ["shared"] },
-      // The call API Worker (Phase 4 増分①): thin stateless glue that talks
-      // to the call provider. It shares the meeting-id and display-name
-      // rules with the reducers/client through shared, and must never see
-      // client or server code (it runs in workerd, deployed separately).
-      { "from": "worker", "allow": ["shared"] },
       // E2E drives the running app from outside through the browser, so it
       // never imports client/server code. shared is allowed for the hook
       // contract (E2EHook) and the physics constants assertions derive from.

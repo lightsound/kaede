@@ -105,26 +105,9 @@ function installNetStats(): E2ENetStats | undefined {
     dmNotifyDecisions: 0,
     groupChatRowsReceived: 0,
     groupCallRowsReceived: 0,
-    recordingPassRowsReceived: 0,
   };
   window.__kaedeE2ENet = stats;
   return stats;
-}
-
-/**
- * The recording-pass wire counter (増分⑤ — see E2ENetStats): the seed and
- * every insert/update, because the pass row is an upsert whose re-mints
- * arrive as updates. A module-scope function (not inline in wireSession)
- * to keep that uncovered giant under the CRAP budget fallow enforces.
- */
-function wireRecordingPassProbe(c: DbConnection, stale: () => boolean, bump: () => void): void {
-  for (const _row of c.db.recordingPass.iter()) bump();
-  c.db.recordingPass.onInsert(() => {
-    if (!stale()) bump();
-  });
-  c.db.recordingPass.onUpdate(() => {
-    if (!stale()) bump();
-  });
 }
 
 /**
@@ -632,12 +615,6 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     c.db.groupCall.onInsert(() => {
       if (!stale()) bumpStat('groupCallRowsReceived');
     });
-
-    // The RLS privacy probe for the recording passes (増分⑤ — the
-    // groupCall probe's shape, plus onUpdate because the pass row is an
-    // upsert: a re-mint must count too). Split out to keep wireSession
-    // under the CRAP budget.
-    wireRecordingPassProbe(c, stale, () => bumpStat('recordingPassRowsReceived'));
 
     /**
      * Enters the world once admission says so: resume the surviving own row

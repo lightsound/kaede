@@ -1,6 +1,5 @@
-// fallow-ignore-file coverage-gaps -- a React control over the call flow; needs a DOM and WebRTC, and no DOM test environment is configured. The sequencing rules live in flow.ts (unit-tested); the UI Kit panel is InCallPanel.tsx (lazy-loaded)
+// fallow-ignore-file coverage-gaps -- a React control over the call flow; needs a DOM and WebRTC, and no DOM test environment is configured. The join and race rules live server-side in the join_group_call procedure (増分⑥); the UI Kit panel is InCallPanel.tsx (lazy-loaded)
 import { type CSSProperties, lazy, Suspense, useEffect, useRef, useState } from 'react';
-import type { AuthTokenGetter } from '../net.package';
 import {
   UI_BUTTON_BG,
   UI_ERROR_COLOR,
@@ -10,10 +9,7 @@ import {
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
-import { mintCallToken, provisionMeeting, startCallRecording, stopCallRecording } from './api';
-import { acquireCallTicket } from './flow';
 import type { RecordingHandlers } from './InCallPanel';
-import { recordingPassGetterOf } from './pass';
 import { dialMeeting, type Meeting } from './realtimekit';
 
 // The UI Kit (hls.js, @floating-ui, hark, lodash-es, …) lives only in
@@ -75,18 +71,18 @@ function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () 
 type CallPhase =
   | { kind: 'idle'; notice?: string }
   | { kind: 'joining' }
-  | { kind: 'in-call'; groupId: bigint; meetingId: string; meeting: Meeting };
+  | { kind: 'in-call'; groupId: bigint; meeting: Meeting };
 
 /**
  * Whether the dock renders nothing: disconnected, or out of every
- * conversation group. Guests are offered the dock like members (増分② —
- * the Worker verifies their host-issued token). An ONGOING call always
- * renders — the WebRTC session is independent of the SpacetimeDB
- * connection, so a reconnect blip must not hide a live mic/camera with no
- * way to leave it (the session outliving its UI was a review finding);
- * sign-out needs no case here because the auth remount unmounts the dock,
- * whose cleanup leaves the call. Split from the component to keep both
- * under the CRAP budget.
+ * conversation group. Guests are offered the dock like members (増分②;
+ * since 増分⑥ the join_group_call procedure admits every in-world
+ * ctx.sender). An ONGOING call always renders — the WebRTC session is
+ * independent of the SpacetimeDB connection, so a reconnect blip must not
+ * hide a live mic/camera with no way to leave it (the session outliving
+ * its UI was a review finding); sign-out needs no case here because the
+ * auth remount unmounts the dock, whose cleanup leaves the call. Split
+ * from the component to keep both under the CRAP budget.
  */
 function dockHidden(connected: boolean, ownGroupId: bigint | undefined, phase: CallPhase): boolean {
   if (phase.kind === 'in-call') return false;
@@ -95,20 +91,16 @@ function dockHidden(connected: boolean, ownGroupId: bigint | undefined, phase: C
 
 /** What the dock calls on the net facade (the HuddleActions shape). */
 export interface CallDockNet {
-  ownGroupCall(): { groupId: bigint; meetingId: string | undefined } | undefined;
-  registerGroupCall(meetingId: string): Promise<void>;
-  /** NetApi.logGroupRecording — the fire-and-forget label write (増分④). */
-  logGroupRecording(fileName: string): void;
-  /** NetApi.mintRecordingPass / ownRecordingPass — the pass flow (増分⑤). */
-  mintRecordingPass(): Promise<void>;
-  ownRecordingPass(): string | undefined;
+  /** NetApi.joinGroupCall — the whole 増分⑥ join procedure. */
+  joinGroupCall(): Promise<{ groupId: bigint; authToken: string }>;
+  /** NetApi.startGroupRecording / stopGroupRecording (増分④→⑥). */
+  startGroupRecording(): Promise<void>;
+  stopGroupRecording(): Promise<void>;
 }
 
 /** Everything the join sequence below needs from the mounted dock. */
 interface JoinContext {
   net: CallDockNet;
-  getToken: AuthTokenGetter;
-  ownName: string | undefined;
   setPhase: (update: (current: CallPhase) => CallPhase) => void;
   meetingRef: { current: Meeting | undefined };
   /** The in-flight latch: a double-click must not start two pipelines. */
@@ -116,11 +108,12 @@ interface JoinContext {
 }
 
 /**
- * The whole join sequence: acquire the ticket (flow.ts — provisioning and
- * registering the meeting when the group has none), dial in, and hand the
- * live meeting to the in-call phase. Failures land back in the idle phase
- * with a notice; the dial's onEnded resets the phase on every exit path
- * (own leave, kick, meeting end).
+ * The whole join sequence: ask the module for the ticket (join_group_call
+ * — provisioning and binding the meeting when the group has none, racing
+ * starters resolved server-side, 増分⑥ D4), dial in, and hand the live
+ * meeting to the in-call phase. Failures land back in the idle phase with
+ * a notice; the dial's onEnded resets the phase on every exit path (own
+ * leave, kick, meeting end).
  */
 async function joinCall(ctx: JoinContext): Promise<void> {
   // The latch, ref-based because two clicks can land before React renders
@@ -130,13 +123,7 @@ async function joinCall(ctx: JoinContext): Promise<void> {
   ctx.joiningRef.current = true;
   ctx.setPhase(() => ({ kind: 'joining' }));
   try {
-    const ticket = await acquireCallTicket({
-      ownGroupCall: () => ctx.net.ownGroupCall(),
-      registerGroupCall: (meetingId) => ctx.net.registerGroupCall(meetingId),
-      provisionMeeting: () => provisionMeeting(ctx.getToken),
-      mintToken: (meetingId) => mintCallToken(ctx.getToken, meetingId, ctx.ownName ?? ''),
-      delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    });
+    const ticket = await ctx.net.joinGroupCall();
     // onEnded can beat the lines after the dial (kicked mid-handshake):
     // the dead meeting must not repopulate the ref — the unmount
     // cleanup's and the next join's only teardown handle — nor overwrite
@@ -152,12 +139,10 @@ async function joinCall(ctx: JoinContext): Promise<void> {
     });
     if (ended) return;
     ctx.meetingRef.current = meeting;
-    ctx.setPhase(() => ({
-      kind: 'in-call',
-      groupId: ticket.groupId,
-      meetingId: ticket.meetingId,
-      meeting,
-    }));
+    // The ticket names the group the module actually bound the meeting to
+    // (re-resolved server-side); if the user walked elsewhere mid-dial,
+    // the auto-leave watch below sees the mismatch and leaves at once.
+    ctx.setPhase(() => ({ kind: 'in-call', groupId: ticket.groupId, meeting }));
   } catch (err) {
     console.error('call join failed', err);
     ctx.setPhase(() => ({ kind: 'idle', notice: '通話に参加できませんでした' }));
@@ -168,49 +153,34 @@ async function joinCall(ctx: JoinContext): Promise<void> {
 
 /**
  * The member-only recording control the in-call panel renders (増分④), or
- * undefined for guests: start asks the Worker (which holds the provider
- * secret and the R2 credentials) and then logs the label row the 録画一覧
- * decorates itself with; stop asks the Worker to look the active
- * recording up — no recording id is kept client-side (the stateless
- * rule). Both calls carry the recording pass (増分⑤) the Worker's
- * member-only routes demand — acquired (and re-minted when stale) right
- * before each request. Split from the component to stay under the CRAP
- * budget.
+ * undefined for guests. Since 増分⑥ both handlers are argument-less
+ * procedures: the module resolves the meeting from the sender's own
+ * membership and writes the label row itself, so the dock keeps no
+ * meeting id and no label write. The gate is cosmetic like every UI gate
+ * — the procedures re-check approved membership server-side.
  */
-function recordingHandlersFor(
-  member: boolean,
-  getToken: AuthTokenGetter,
-  meetingId: string,
-  net: CallDockNet,
-): RecordingHandlers | undefined {
+function recordingHandlersFor(member: boolean, net: CallDockNet): RecordingHandlers | undefined {
   if (!member) return undefined;
-  const getPass = recordingPassGetterOf(net);
   return {
-    start: async () => {
-      const fileName = await startCallRecording(getToken, getPass, meetingId);
-      net.logGroupRecording(fileName);
-    },
-    stop: () => stopCallRecording(getToken, getPass, meetingId),
+    start: () => net.startGroupRecording(),
+    stop: () => net.stopGroupRecording(),
   };
 }
 
 /**
- * The call dock (ROADMAP Phase 4 増分①〜③): joins the conversation
- * group's call — provisioning and registering its meeting when it has
- * none — and renders the ongoing call with the UI Kit's prebuilt parts
- * (lazy InCallPanel). Offered to everyone in a conversation group, guests
- * included (増分② — the api layer falls back to the connection's
- * host-issued token, which the Worker verifies); outside a group there is
- * no call to join. Leaving the group in any way (walking off, switching,
- * getting swept) ends the participation: the auto-leave effect below
- * watches the own-group signal.
+ * The call dock (ROADMAP Phase 4 増分①〜⑥): joins the conversation
+ * group's call — the join_group_call procedure provisions and binds the
+ * meeting when the group has none — and renders the ongoing call with the
+ * UI Kit's prebuilt parts (lazy InCallPanel). Offered to everyone in a
+ * conversation group, guests included; outside a group there is no call
+ * to join. Leaving the group in any way (walking off, switching, getting
+ * swept) ends the participation: the auto-leave effect below watches the
+ * own-group signal.
  */
 export function CallDock({
   connected,
   member,
   ownGroupId,
-  ownName,
-  getToken,
   net,
 }: {
   connected: boolean;
@@ -218,18 +188,13 @@ export function CallDock({
    * Whether this client is an APPROVED member — the recording control is
    * offered to approved members only (増分④ 設計①), not merely to
    * signed-in identities: a signed-in-but-unapproved user walks under the
-   * guest rules and must get the guest treatment here (surfaced by the
-   * 増分④ manual test — log_group_recording refuses non-approved
-   * senders, so a signedIn gate would offer a toggle whose label write
-   * is refused). Cosmetic like every UI gate: the Worker 403s guest
-   * bearers, and the label reducer re-checks membership server-side.
+   * guest rules and must get the guest treatment here. Cosmetic like
+   * every UI gate: the recording procedures re-check approval
+   * server-side.
    */
   member: boolean;
   /** The own-group signal (NetHooks.onOwnGroup). */
   ownGroupId: bigint | undefined;
-  /** The authoritative display name — what the call tile shows the others. */
-  ownName: string | undefined;
-  getToken: AuthTokenGetter;
   net: CallDockNet;
 }) {
   const [phase, setPhase] = useState<CallPhase>({ kind: 'idle' });
@@ -265,17 +230,14 @@ export function CallDock({
     // third transient.
     return (
       <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
-        <InCallPanel
-          meeting={phase.meeting}
-          recording={recordingHandlersFor(member, getToken, phase.meetingId, net)}
-        />
+        <InCallPanel meeting={phase.meeting} recording={recordingHandlersFor(member, net)} />
       </Suspense>
     );
   }
   return (
     <IdlePanel
       notice={phase.notice}
-      onJoin={() => void joinCall({ net, getToken, ownName, setPhase, meetingRef, joiningRef })}
+      onJoin={() => void joinCall({ net, setPhase, meetingRef, joiningRef })}
     />
   );
 }
