@@ -1,11 +1,13 @@
 # ドッグフーディング開始ランブック
 
-実ユーザー投入（ROADMAP Phase 2 の実測開始）までの残作業を、依存順に一本の
+実ユーザー投入（ROADMAP Phase 2 の実測開始。2026-08-07 からは Phase 4 から
+付け替えた通話コストの実測も含む — §6）までの残作業を、依存順に一本の
 チェックリストにしたもの。**ドメインと Clerk 本番 issuer は、実ユーザーが本番で
 ログインした瞬間から実質変更不可**（Identity が issuer から導出される — VISION
-参照）なので、URL を人に渡す前にここを全部通すこと。作成 2026-08-04。
+参照）なので、URL を人に渡す前にここを全部通すこと。作成 2026-08-04、
+更新 2026-08-07（Phase 4 完了に伴う実測項目の追加と R2 硬化手順 — §7）。
 
-## 0. 前提の現在地（2026-08-04 更新）
+## 0. 前提の現在地（2026-08-07 更新）
 
 | 項目 | 状態 |
 | --- | --- |
@@ -18,12 +20,18 @@
 | 本番クライアントのサインイン導線 | ✅ 開通（2026-08-04）— Clerk 証明書発行済み・Google OAuth 本番設定済み（同意画面も In production）・pk_live_ 焼き込みを実測 |
 | 初代管理者 | ✅ 確保（2026-08-04）— オーナーが本番 issuer でサインイン → 申請 → 入場。`space_member` に approved/admin 1 行を実測確認 |
 | Maincloud プラン | **当面 Free で小規模に試す**（オーナー判断 2026-08-04）。無料枠は月 2,500 TeV — 実測（§6）でエネルギー消費を見ながら Pro 化を判断。オートポーズは接続で 1 秒未満の自動再開なので小規模運用では実害なし |
+| Phase 3（空間と会話グループ） | ✅ 完了（2026-08-05）— 複数マップ・会議室ゾーン・立ち話・チャットスコープ |
+| Phase 4（ビデオ通話 — 移行マイルストーン） | ✅ 完了（2026-08-07）— 通話・画面共有・録画・一覧/DL をオーナーが本番で実測確認。本番は増分⑥の procedure 構成（`call_config` 播種済み・Worker `kaede-call` 削除済み）。SpacetimeDB は CLI/ホスト/SDK とも 2.8.0 ピン |
 
 **残タスク**（⏸️ **保留中 — 2026-08-04 オーナー判断**: 実際に試用した結果、
 現状の機能セットでは常用に至らないため、作り込み（Phase 3 以降）を進めてから
-再開する — VISION 決定ログ参照）:
+再開する — VISION 決定ログ参照。→ **作り込みの前提は Phase 3・4 の完了で
+解消済み（2026-08-07）**。再開＝URL 共有はオーナー判断のまま — この
+ランブックは判断材料と再開手順を揃えておくのが役目）:
 1. URL のコミュニティ共有（オーナー。共有した日＝実測の起点）
-2. 共有から数日〜2週間の実測（§6。別セッションで集計）
+2. 共有から数日〜2週間の実測（§6。別セッションで集計 — Phase 4 から
+   付け替えた通話コストの実測を含む）
+3. ~~任意: `call_config` の R2 資格情報の硬化~~ ✅ **実施済み（2026-08-07、§7）**
 
 **UX メモ（2026-08-04、初代管理者ブートストラップ）**: サインイン直後の
 オーナーに出る「メンバーとして参加できます／参加を申請する」バナーは、
@@ -139,6 +147,8 @@ Clerk でサインインする限り本番側の Identity になる）。あわ�
 | --- | --- | --- |
 | Maincloud 利用料金 | Maincloud ダッシュボードのエネルギー消費（日次で記録） | 月換算で 5〜7.5万 TeV ≒ Pro 枠 100,000 TeV 内か（$1≒2,592 TeV、egress 2,000 TeV/GB、ストレージ $1/GB/月）。超えるなら ROADMAP の変化点駆動へのエスカレーションを検討 |
 | エネルギー内訳の CPU 命令数 | 同ダッシュボードの内訳 | CPU が支配項なら「クライアント権威＋サーバー側クランプ」への縮退を再検討（ROADMAP Phase 2） |
+| 通話/録画 procedure のエネルギー消費（Phase 4 増分⑥で追加） | 同ダッシュボードの内訳。procedure の同期 HTTP は**待ち時間がそのままエネルギー消費に乗る**（増分⑥で引き受けた新リスク。実測レイテンシ: meeting 作成〜1s・録画開始 2.5s — ROADMAP 増分⑥スパイク） | 録画系は低頻度で実害僅少の見込み。通話開始（`join_group_call`）の頻度で支配項になるようなら timeout 予算（`provider.ts` の定数）と呼び出し頻度を見直す |
+| RealtimeKit 通話コスト（ROADMAP Phase 4 から付け替え 2026-08-07） | Cloudflare ダッシュボードの RealtimeKit 利用量（参加者分・録画分）。あわせて **GA 課金の開始状況**を確認（2026-08-07 時点はベータ無償） | VISION 試算内か: AV $0.002/参加者分 ≒ 月$20〜30、録画 $0.010/分（月 100 分の無料枠）。ベータ無償のうちは利用量の記録のみでプラン判断は GA 後 |
 | 日本からの RTT | `curl -o /dev/null -s -w 'connect %{time_connect}s ttfb %{time_starttransfer}s\n' https://maincloud.spacetimedb.com/v1/ping` を日本の回線から数回。体感は入力→リモート反映の遅延 | 問題があれば補間・プロトコル側の調整で吸収（セルフホストは 2026-08-04 に選択肢から除外 — VISION 決定ログ） |
 | PostHog の広告ブロッカー欠落率（ADR §9-6） | サーバー側 `connection_event`（member の connected 件数 — `spacetime sql` で日次集計）と PostHog の `spacetimedb_connected` 件数の差分 | 欠落率が高ければリバースプロキシ（`us.i.posthog.com` を自ドメイン経由に）の要否を判断 |
 | エラーグルーピング精度（ADR §9-1） | 最初の 2 週間、PostHog の issue リストで同一バグの分裂／無関係な統合を観察 | 原因究明に時間を取られるようなら ADR §7-4 の見直しトリガー |
@@ -150,7 +160,54 @@ spacetime sql kaede --server maincloud \
   "SELECT * FROM connection_event WHERE kind = 'connected' AND detail = 'member'" --format json
 ```
 
+## 7. R2 資格情報の硬化（トークン発行はオーナー操作）
+
+✅ **実施済み（2026-08-07）**: オーナーがバケットスコープの専用 R2 トークン
+（アカウント API トークン）を発行し、エージェントが差し替えと検証を実施 —
+①新資格情報で ListObjectsV2（読み）と PUT/DELETE（書き）が
+`kaede-recordings` に通ることを S3 API 直で実測 ②本番 `call_config` を
+owner SQL で UPDATE ③読み戻しで `storage_access_key_id` の切替を確認。
+旧デプロイトークンは無効化していない（CI デプロイ・Alchemy が使用中）。
+以下はローテーション・再発行時のためのランブックとして残す。
+
+本番 `call_config` の S3 資格情報（録画の R2 直送 `storage_config`・一覧
+ListObjectsV2・DL の presign の 3 経路が使う）は、当初デプロイ用
+`CLOUDFLARE_API_TOKEN` から導出した値だった（2026-08-07 実測:
+`storage_access_key_id` がデプロイトークンの ID と一致）。このトークンは
+Workers・Alchemy 等の広い権限を持つため、**バケット `kaede-recordings`
+スコープの専用 R2 トークン**へ差し替える。値の UPDATE のみでコード変更は
+不要（README「通話/録画 API」のローテーション手順そのまま）。
+
+1. **トークン発行（オーナー操作）**: Cloudflare ダッシュボード → R2 →
+   Manage R2 API Tokens で「Object Read & Write・バケット指定
+   `kaede-recordings`」のトークンを作成する（録画直送の PUT と一覧/presign の
+   GET の両方に必要。TTL は無期限でよい — ローテーションは同じ UPDATE で
+   いつでもできる）。**アカウント API トークン**にする（個人ユーザーに
+   紐づかないサービス資格情報 — ユーザーの離脱・権限変更で壊れない）。作成画面が S3 用の Access Key ID / Secret Access Key を
+   直接表示するのでそれを控える。API 発行は現行のデプロイトークンでは不可
+   （API Tokens 管理権限なし — 2026-08-07 実測）。汎用 API トークンとして
+   発行した場合の導出規則（access key = トークン ID、secret = トークン値の
+   SHA-256）は README 参照。
+2. **差し替え（owner SQL。トークン値を渡せばエージェントに任せてよい）**:
+
+   ```sh
+   spacetime sql kaede --server maincloud \
+     "UPDATE call_config SET storage_access_key_id = '<Access Key ID>', storage_secret_access_key = '<Secret Access Key>' WHERE id = 0"
+   ```
+
+3. **確認**: アプリの録画一覧が表示できる（`list_recordings` が新資格情報で
+   R2 を読めた証拠）→ 新規録画が一覧に現れて DL できる（`storage_config` の
+   PUT と presign の GET も新資格情報で通った証拠）。
+4. 旧デプロイトークンは**無効化しない**（CI デプロイ・Alchemy が使い続ける）。
+   ローカル開発 DB の `call_config` を播種している場合も同じ UPDATE で
+   差し替えられる（開発は本番バケット共用 — README）。
+
 ## 付記: パッケージ名整理（⑤、任意）の判断
+
+✅ **完了（2026-08-04、PR #50/#51/#52 — 経緯は ROADMAP Phase 1 の
+「パッケージ名の整理」参照）**: npm スコープ・表示名は `@kaede/*` へ、
+Maincloud の DB 名は `maple-like` → `kaede` へ改名済み（旧 `kaede`・
+`kaede-366x1` はオーナー了承のうえ削除）。以下は当時の判断メモとして残す。
 
 - **npm スコープ・表示名の改名（`maple-like` / `@maple/*` → kaede 系）は
   PR #42/#43/#44 がマージされるまで保留**する。リポジトリ全域に触る改名を
