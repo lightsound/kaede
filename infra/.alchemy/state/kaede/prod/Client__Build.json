@@ -13,8 +13,8 @@
   "attr": {
     "outdir": "../packages/client/dist",
     "hash": {
-      "output": "9ffa47dcbd99b41ebd51641638b841a911748110fef3e005a2832c8c7835f20c",
-      "input": "c0514ae0828eba6a04dbb9087372761b472fd5979d0b08e0823f1945ca61fb28"
+      "output": "15bddb4c4c1d3181524958a22211caf50c4c3ccda04429898e7d35e7d652d4ab",
+      "input": "1bf9c42711c8358f5a8e548cc372dd467ae0639cf0f14f80c23a2c98a4109fba"
     }
   },
   "bindings": [],
