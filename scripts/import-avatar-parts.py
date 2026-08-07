@@ -16,12 +16,12 @@ import sys
 from PIL import Image
 
 # Part name -> (quadrant column, quadrant row, output height px at 2x).
-# Heights are 2x the logical rig heights (see rig.ts PART_LAYOUT).
+# Heights are 2x the logical rig heights (see partsAvatar.ts BLUEPRINT).
 PARTS = {
     "head": (0, 0, 60),
     "torso": (1, 0, 30),
-    "arm": (0, 1, 22),
-    "leg": (1, 1, 20),
+    "arm": (0, 1, 20),
+    "leg": (1, 1, 22),
 }
 
 # Chroma key: green dominance d = g - max(r, b). Fully transparent above
