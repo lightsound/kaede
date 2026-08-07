@@ -283,10 +283,10 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      アカウントに解決されます。CI は fresh VM でプロファイルが存在しない
      ため従来どおり env 認証（`CI=true` + `CLOUDFLARE_API_TOKEN`）に
      落ちます（影響なし）。
-   - Node 22.18 未満では TS の型ストリッピングにフラグが要ります。`infra` の
-     `deploy:prod` / `plan:prod` / `destroy:prod` と汎用の `alchemy` スクリプトが
-     `NODE_OPTIONS=--experimental-strip-types` を設定済みなので、スクリプト経由で
-     実行する限り気にする必要はありません。
+   - Node は **24（Active LTS）** を標準とします（`.node-version` が単一の
+     真実源。CI の `setup-node` もこのファイルを参照）。Node 22.18 以降は TS の
+     型ストリッピングがデフォルト有効なため、かつて infra スクリプトに
+     あった `NODE_OPTIONS=--experimental-strip-types` は撤去済みです。
 
 2. **クライアントのデプロイ（Alchemy）**
 
@@ -300,8 +300,9 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    （スクリプト名が `deploy` ではなく `deploy:prod` なのは、`pnpm deploy` が
    pnpm の組み込みサブコマンドと衝突してスクリプトが実行されないためです。）
    prod 以外のステージや他の alchemy サブコマンドは、ワークアラウンド
-   （型ストリッピングのフラグ等）込みの汎用スクリプト経由で実行します。
-   素の `pnpm exec alchemy` や `npx alchemy` は Node 22.18 未満で失敗します:
+   （ランチャーの bun 誤検知回避 `npm_execpath=` とプロファイル固定）込みの
+   汎用スクリプト経由で実行します。素の `pnpm exec alchemy` や `npx alchemy`
+   はこれらを迂回してしまうため使いません:
 
    ```sh
    pnpm --filter @kaede/infra alchemy plan --stage dev_yourname
