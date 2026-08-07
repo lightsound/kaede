@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/localizations": "^4.13.10",
     "@clerk/react": "^6.13.0",
     "@cloudflare/realtimekit": "2.0.1",
     "@cloudflare/realtimekit-react-ui": "2.0.1",

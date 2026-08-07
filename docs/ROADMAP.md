@@ -1379,10 +1379,11 @@ UI Kit 本採用は増分③）②**録画** — 開始/停止・録画中イン
 before/after スクリーンショットでオーナー確認を取る（lint/test 通過だけで
 完了にしない）:
 
-- **①Clerk 認証 UI の日本語化**: 公式 `@clerk/localizations` の `jaJP` を
-  `ClerkProvider` の `localization` に渡す。自前翻訳はしない — i18n 単一系統
-  （Paraglide）の対象は自前文字列で、ベンダー UI の辞書はベンダーのものを
-  使う（UI Kit の `useLanguage` 部分辞書の前例 — Phase 4 増分③）
+- **①Clerk 認証 UI の日本語化** ✅ **実装済み（2026-08-07）**: 公式
+  `@clerk/localizations` の `jaJP` を `ClerkProvider` の `localization` に
+  渡す。自前翻訳はしない — i18n 単一系統（Paraglide）の対象は自前文字列で、
+  ベンダー UI の辞書はベンダーのものを使う（UI Kit の `useLanguage` 部分辞書の
+  前例 — Phase 4 増分③）
 - **②ゲーム画面の黒余白の解消**: キャンバスは固定 1280×720 で init しており
   （`GameApp.ts` の VIEW_W / VIEW_H）、ウィンドウの残りが黒地のまま。
   ビューポートのリサイズ追従（キャンバスのウィンドウフィット＋カメラ・

@@ -31,17 +31,14 @@ minimumReleaseAge: 1440
 # 静かに入る」方が事故のもとで、エラーなら対応(バージョン限定の除外 or 待つ)を
 # 明示的に選べる — PR #75 の pullfrog 指摘を受けて明文化。
 minimumReleaseAgeStrict: true
-# 下の除外はすべて pnpm 11 移行(2026-08-07)時点で lockfile に既に存在し、
-# PR #71/#72 のレビューと CI を通過済みのバージョン(公開は 2026-08-06)。
-# バージョン限定なので将来のリリースには保護が効く。全行が 2026-08-07 中に
-# 自然に期限切れになるため、次にこのファイルを触るときに削除してよい。
+# 2026-08-06 公開分のうち、まだ 24h 足切りを通らない行だけ残す。
+# alchemy@2.0.0-beta.70 / postcss@8.5.26 は既に失効したので外した。
+# 残りも 2026-08-07 中（最遅 vite@8.2.1 の 13:46 UTC 頃）に落ちる。
 minimumReleaseAgeExclude:
   - '@clerk/react@6.13.0'
   - '@clerk/shared@4.27.0'
   - '@posthog/core@1.46.9'
   - '@posthog/types@1.402.2'
-  - 'alchemy@2.0.0-beta.70'
-  - 'postcss@8.5.26'
   - 'posthog-js@1.413.3'
   - 'vite@8.2.1'
 
