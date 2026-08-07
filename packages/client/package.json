@@ -10,22 +10,22 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/react": "^6.12.9",
+    "@clerk/react": "^6.13.0",
     "@cloudflare/realtimekit": "2.0.1",
     "@cloudflare/realtimekit-react-ui": "2.0.1",
     "@kaede/shared": "workspace:*",
     "pixi.js": "^8.19.0",
-    "posthog-js": "^1.410.4",
+    "posthog-js": "^1.413.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "spacetimedb": "2.8.0"
   },
   "devDependencies": {
     "@posthog/rollup-plugin": "^1.4.7",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^6.0.4",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
     "typescript": "~7.0.2",
-    "vite": "^8.1.5"
+    "vite": "^8.2.1"
   }
 }
