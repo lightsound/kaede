@@ -36,11 +36,13 @@ export const IDLE_WALK_STATE: WalkState = { phase: 0, intensity: 0 };
 const STRIDE_PX = 64;
 const PHASE_PER_PX = (2 * Math.PI) / STRIDE_PX;
 /**
- * Per-frame horizontal motion above this is treated as a discontinuity
- * (portal teleport, correction snap), not travel: the clamp keeps one bad
- * frame from spinning the legs through several strides.
+ * Rendered speed (logical px/s) above which a frame's motion is treated as
+ * a discontinuity (portal teleport, correction snap), not travel: such a
+ * frame neither advances the phase nor counts as walking. Real movement
+ * never exceeds MOVE_SPEED (240 px/s) even on a long catch-up frame that
+ * simulates many ticks at once, so double that separates lag from jumps.
  */
-const MAX_STEP_PX = 12;
+const MAX_TRAVEL_SPEED = 480;
 /** Rendered speed (logical px/s) below which the player counts as standing. */
 const WALK_SPEED_MIN = 30;
 /** Time constant for easing intensity toward walking/standing. */
@@ -59,8 +61,9 @@ const BOB_PX = 1.5;
  */
 export function advanceWalk(state: WalkState, dxPx: number, dtMs: number): WalkState {
   if (dtMs <= 0) return state;
-  const step = Math.min(Math.abs(dxPx), MAX_STEP_PX);
-  const walking = (step / dtMs) * 1000 >= WALK_SPEED_MIN;
+  const speed = (Math.abs(dxPx) / dtMs) * 1000;
+  const step = speed <= MAX_TRAVEL_SPEED ? Math.abs(dxPx) : 0;
+  const walking = step > 0 && speed >= WALK_SPEED_MIN;
   const blend = 1 - Math.exp(-dtMs / INTENSITY_TAU_MS);
   return {
     phase: (state.phase + step * PHASE_PER_PX) % (2 * Math.PI),
