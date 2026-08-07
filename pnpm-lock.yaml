@@ -12,8 +12,8 @@ importers:
         specifier: ^2.5.7
         version: 2.5.7
       '@import-lint/cli':
-        specifier: 0.1.6
-        version: 0.1.6
+        specifier: 0.1.8
+        version: 0.1.8
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
@@ -917,41 +917,41 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@import-lint/cli@0.1.6':
-    resolution: {integrity: sha512-ttMMf9MjJPMoKzkOKtqj38Ts2he25CoP62Yk3oxiQXvT7b/B14X4UXxxxb6Tspb5nSa0ysaoJfY+EydEkvMO9Q==}
+  '@import-lint/cli@0.1.8':
+    resolution: {integrity: sha512-n68OZ1jjPBo38MkwOs2jkaYovFb5x0OdjoLGuvMRGw+FOTCj7S2q1IQRM3NTkI2WTRcW6FQJhe/6nk2lv351ZQ==}
     engines: {node: '>=18'}
     hasBin: true
 
-  '@import-lint/darwin-arm64@0.1.6':
-    resolution: {integrity: sha512-op5H23fNegtSf/vC5qjRZZ7aqT9zD7lUIEQ16kxq+bOZUXFseMtSRqfhcSqfWkOsOt5BbW0LHdpAtv96i4QfEA==}
+  '@import-lint/darwin-arm64@0.1.8':
+    resolution: {integrity: sha512-QrXkyDfupv8Wibu0Il5tjlJLRFZ3ZQHrTDWbjM5DUkXBriPcrafxkW3gGF9eV7RuGMKBVrmRQC9/DnO5eYmk/A==}
     cpu: [arm64]
     os: [darwin]
 
-  '@import-lint/darwin-x64@0.1.6':
-    resolution: {integrity: sha512-Aa7kYZ0VzFY9IRcOfL+Vu2XkjJ9DWYLEasmcHpgPsq7bfzHMMZ0P16UY0E5QhzQokYelh0eVBcM7ura+ASxoBg==}
+  '@import-lint/darwin-x64@0.1.8':
+    resolution: {integrity: sha512-PD3BiOTsFC+8wk9TyUvnUgYobg83EzdwvOBYxwPblLAeI6IzCQfMldPnT483tUT9HZzgJkLHbxpAguag5LBGWA==}
     cpu: [x64]
     os: [darwin]
 
-  '@import-lint/linux-arm64-gnu@0.1.6':
-    resolution: {integrity: sha512-hCwatiaoj/C8F4KDr4AtE9waC30sWHoTDaUBGepSGnnL3GrlPe83WeJHB5MbZwjv7+ssXsEnxcSP3JJRWu/caA==}
+  '@import-lint/linux-arm64-gnu@0.1.8':
+    resolution: {integrity: sha512-/EnqJxiwjbbb1Fb7U1EP8emE2gfyJ2sktdjJUCKPAKHZqajQpqRlaGTop0YVp1zuG8ync/8+QrabJrDKaCx7kA==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@import-lint/linux-x64-gnu@0.1.6':
-    resolution: {integrity: sha512-OgwikrcOw0GlRx+9jPzHZLgIMQXRLxSRNrRjHFoFOIeo0ZGfBWNtnMobwaOz1ZYptjnPTnQuQ2bkhUoPvtvtEw==}
+  '@import-lint/linux-x64-gnu@0.1.8':
+    resolution: {integrity: sha512-5BIxMrRCKBS16vRTout2R2WA8Dq/hfF+J2OVnb/qos7NrjXzd1QZYxaBERutMx92JhHutWKwpbOeBmXBWcSbbQ==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@import-lint/linux-x64-musl@0.1.6':
-    resolution: {integrity: sha512-P4qWSa8sNm+Efb7GeR6zEO+urwKFwEkaKVxHcZkhJJsX/yVv0ANBZwr9EK46vXQlO1XKibrs0e6UohJ+QfVyPQ==}
+  '@import-lint/linux-x64-musl@0.1.8':
+    resolution: {integrity: sha512-ljFwHFGNAHewyox9KEs5g2epHKAtzGEF0dxqkRie8w7EMTQ92kqdFDA1B9aeTFoO9SdVPPq4tCy5ck1UtCLPug==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@import-lint/win32-x64@0.1.6':
-    resolution: {integrity: sha512-ktUm0TV+/rzwOeP6WoGDctL3gTdRtuFZGrDmkZ315rtvRDCdf8Lq9Hvlf/ubpvsNrPZkqhhTi4N8zuHI8YgjtQ==}
+  '@import-lint/win32-x64@0.1.8':
+    resolution: {integrity: sha512-KVgGoIG/pUwc63NnWHsQqx48wYMrlbyVGQzq8loOzV4lzJzHngWNZpmiTbnJO+2RGtmO/NuivZlv8U3mmppjxw==}
     cpu: [x64]
     os: [win32]
 
@@ -3971,31 +3971,31 @@ snapshots:
   '@img/sharp-win32-x64@0.35.2':
     optional: true
 
-  '@import-lint/cli@0.1.6':
+  '@import-lint/cli@0.1.8':
     optionalDependencies:
-      '@import-lint/darwin-arm64': 0.1.6
-      '@import-lint/darwin-x64': 0.1.6
-      '@import-lint/linux-arm64-gnu': 0.1.6
-      '@import-lint/linux-x64-gnu': 0.1.6
-      '@import-lint/linux-x64-musl': 0.1.6
-      '@import-lint/win32-x64': 0.1.6
+      '@import-lint/darwin-arm64': 0.1.8
+      '@import-lint/darwin-x64': 0.1.8
+      '@import-lint/linux-arm64-gnu': 0.1.8
+      '@import-lint/linux-x64-gnu': 0.1.8
+      '@import-lint/linux-x64-musl': 0.1.8
+      '@import-lint/win32-x64': 0.1.8
 
-  '@import-lint/darwin-arm64@0.1.6':
+  '@import-lint/darwin-arm64@0.1.8':
     optional: true
 
-  '@import-lint/darwin-x64@0.1.6':
+  '@import-lint/darwin-x64@0.1.8':
     optional: true
 
-  '@import-lint/linux-arm64-gnu@0.1.6':
+  '@import-lint/linux-arm64-gnu@0.1.8':
     optional: true
 
-  '@import-lint/linux-x64-gnu@0.1.6':
+  '@import-lint/linux-x64-gnu@0.1.8':
     optional: true
 
-  '@import-lint/linux-x64-musl@0.1.6':
+  '@import-lint/linux-x64-musl@0.1.8':
     optional: true
 
-  '@import-lint/win32-x64@0.1.6':
+  '@import-lint/win32-x64@0.1.8':
     optional: true
 
   '@ioredis/commands@1.10.0': {}
