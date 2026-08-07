@@ -24,7 +24,11 @@ describe('cameraOffset', () => {
     expect(offset(WORLD_W, WORLD_H)).toEqual({ x: -200, y: -200 });
   });
 
-  it('pins the camera at the origin when the world is smaller than the viewport', () => {
-    expect(cameraOffset(50, 50, VIEW_W, VIEW_H, 400, 200)).toEqual({ x: -0, y: -0 });
+  it('centers a world smaller than the viewport instead of pinning an edge', () => {
+    expect(cameraOffset(50, 50, VIEW_W, VIEW_H, 400, 200)).toEqual({ x: 200, y: 100 });
+  });
+
+  it('treats a world exactly the viewport size as centered at zero', () => {
+    expect(cameraOffset(50, 50, VIEW_W, VIEW_H, VIEW_W, VIEW_H)).toEqual({ x: 0, y: 0 });
   });
 });

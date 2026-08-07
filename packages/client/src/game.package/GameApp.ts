@@ -15,6 +15,7 @@ import {
   SPAWN_X,
   SPAWN_Y,
   stepPlayer,
+  WORLD_HEIGHT,
   type WorldMap,
 } from '@kaede/shared';
 import type { Texture } from 'pixi.js';
@@ -40,8 +41,14 @@ import { mergeInputs } from './mergeInputs';
 import { createTouchControls } from './touchControls';
 import { renderZoneLayer, type ZoneRender } from './zoneLayer';
 
-const VIEW_W = 1280;
-const VIEW_H = 720;
+// The viewport follows the window (Phase 4.5 増分② — no more black margins
+// around a fixed 1280x720 canvas). The LOGICAL coordinate system is
+// unchanged: physics AABBs, camera math and the e2e snapshot hook all keep
+// reading world pixels. What varies is only how many of them are visible
+// and at what render resolution — the world container is scaled so the full
+// world height (WORLD_HEIGHT, shared by every map) always fits the window,
+// and the visible width follows the window's aspect ratio.
+const VIEW_H = WORLD_HEIGHT;
 const MAX_FRAME = 0.25;
 
 const BG_COLOR = 0x10131b;
@@ -338,9 +345,25 @@ function buildMapLayer(map: WorldMap): Container {
   return layer;
 }
 
+/** The rendering resolution: the device pixel ratio, or 1 where unreported. */
+function renderResolution(): number {
+  return window.devicePixelRatio || 1;
+}
+
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const app = new Application();
-  await app.init({ width: VIEW_W, height: VIEW_H, background: BG_COLOR, antialias: false });
+  // Window-fit canvas: sized to the window in CSS pixels, rendered at the
+  // device pixel ratio (autoDensity keeps the CSS size in sync). Resizes are
+  // handled by our own listener below rather than resizeTo, so a devicePixelRatio
+  // change (browser zoom, monitor move) updates the resolution too.
+  await app.init({
+    width: window.innerWidth,
+    height: window.innerHeight,
+    resolution: renderResolution(),
+    autoDensity: true,
+    background: BG_COLOR,
+    antialias: false,
+  });
   host.appendChild(app.canvas);
 
   // The one avatar texture every player view shares (bundled by Vite, so the
@@ -392,7 +415,20 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   // to app.stage (not world) so it stays fixed in screen space, above the world.
   const wantsTouch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   const touch = wantsTouch ? createTouchControls() : undefined;
-  if (touch) app.stage.addChild(touch.container);
+  if (touch) {
+    app.stage.addChild(touch.container);
+    touch.layout(app.screen.width, app.screen.height);
+  }
+
+  // Window-size follower: the renderer tracks the window (and the current
+  // devicePixelRatio), the touch overlay re-anchors to the new corners. The
+  // camera needs no notification — renderLocal derives the world scale and
+  // the visible logical width from app.screen every frame.
+  const onWindowResize = () => {
+    app.renderer.resize(window.innerWidth, window.innerHeight, renderResolution());
+    touch?.layout(app.screen.width, app.screen.height);
+  };
+  window.addEventListener('resize', onWindowResize);
 
   const tickCbs: ((s: PlayerState, tick: number, packedInput: number) => void)[] = [];
   const frameCbs: ((nowMs: number) => void)[] = [];
@@ -439,15 +475,22 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     local.root.position.set(sx, sy);
     local.body.scale.x = curr.facing;
 
+    // Vertical-fit zoom: the full world height always fills the window, and
+    // the visible logical width follows from the window's aspect ratio. The
+    // camera math stays in logical world pixels; only the world container's
+    // scale and offset are expressed in screen pixels.
+    const scale = Math.max(app.screen.height, 1) / VIEW_H;
+    const viewW = app.screen.width / scale;
+    world.scale.set(scale);
     const cam = cameraOffset(
       sx,
       sy,
-      VIEW_W,
+      viewW,
       VIEW_H,
       currentMap.collision.width,
       currentMap.collision.height,
     );
-    world.position.set(cam.x, cam.y);
+    world.position.set(cam.x * scale, cam.y * scale);
   }
 
   /**
@@ -500,6 +543,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       // Guarded so a torn-down instance cannot erase a hook installed by the
       // instance that outlives it (StrictMode mounts two in parallel).
       if (e2eHook && window.__kaedeE2E === e2eHook) window.__kaedeE2E = undefined;
+      window.removeEventListener('resize', onWindowResize);
       input.dispose();
       touch?.dispose();
       app.destroy(true, { children: true });
