@@ -13,7 +13,7 @@
 // バグ回避: ランチャーは npm_execpath に "bun" が含まれると bun 経由の
 // 起動と判定するが、pnpm run 経由ではこの値が pnpm 本体のパスになり、
 // 例えば /home/ubuntu/... の「ubuntu」が誤マッチして存在しない bun を
-// spawn しようとする(alchemy 2.0.0-beta.67 の bin/cli.js)。環境変数の
+// spawn しようとする(beta.70 の bin/cli.js でも未修正を確認)。環境変数の
 // 設定は Windows の cmd.exe でも動くよう cross-env 経由にしている。
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
@@ -21,8 +21,18 @@ import * as Effect from 'effect/Effect';
 
 // アカウント「Kaede」の ID(シークレットではない公開識別子)。API トークンと
 // 違い環境変数で配る必要がないため、ここに固定して deploy コマンドの前提を
-// 減らす。別アカウントに向けたいときは環境変数が優先される。通話 API Worker の
-// バインディングも同じ値を参照する(下の CallApi)。
+// 減らす。別アカウントに向けたいときは環境変数が優先される。
+//
+// beta.70 での注意: この env 固定が効くのは env 認証パス(CI=true +
+// CLOUDFLARE_API_TOKEN — CI のデプロイはこちら)だけになった。ローカルの
+// 対話実行では auth プロファイルが持つ accountId が優先され、
+// CLOUDFLARE_ACCOUNT_ID は読まれない。プロファイルが別アカウントに
+// リンクされていると、全リソースが「別アカウントにある」扱いになり plan が
+// 偽の replace を出す(R2 は中身ごと消える経路)。このため infra の
+// スクリプトはリポジトリ専用プロファイル `kaede`(ALCHEMY_PROFILE=kaede)に
+// 固定してあり、初回のみ `pnpm --filter @kaede/infra alchemy login` で
+// Kaede アカウント(下の ID)を選んでリンクする。CI は fresh VM で
+// プロファイルが存在しないため従来どおり env 認証に落ちる(影響なし)。
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID ?? '751c8a59858c9c04a8e722df7330444d';
 process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT_ID;
 
@@ -125,6 +135,11 @@ export default Alchemy.Stack(
     // README「通話/録画 API」)。録画はコミュニティの資産なので削除
     // ライフサイクルは置かず、失敗したマルチパートアップロードの破片だけ
     // 7 日で掃除する。
+    // removalPolicy: retain — 録画はコミュニティの資産で再取得不能。destroy
+    // (既定)だと、スタックからの削除や replace 計画の適用時に Alchemy が
+    // バケットを「中身ごと空にしてから削除」する(プロバイダの emptyBucket)。
+    // retain なら放棄するだけでデータは残る。誤った plan(上のアカウント解決の
+    // 注意を参照)や将来のリファクタからの最終防衛線として明示する。
     yield* Cloudflare.R2.Bucket('Recordings', {
       name: stagedName(stage, 'kaede-recordings'),
       lifecycleRules: [
@@ -135,7 +150,7 @@ export default Alchemy.Stack(
           },
         },
       ],
-    });
+    }).pipe(Alchemy.RemovalPolicy.retain());
 
     // 通話 API Worker `kaede-call` はここに居たが、増分⑥(ROADMAP Phase 4)で
     // 廃止した: 通話/録画 API は SpacetimeDB module の procedure に移り、
