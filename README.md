@@ -267,6 +267,22 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      IaC で管理したい場合は別途必要**。R2 権限は不要）。
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
      `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
+   - **ローカル実行の認証（alchemy 2.0.0-beta.70 以降）**: 対話実行では
+     auth プロファイル（`~/.alchemy/profiles.json`）が持つ accountId が
+     優先され、`CLOUDFLARE_ACCOUNT_ID` は読まれません。別アカウントに
+     リンクしたプロファイルで plan すると**全リソースに偽の replace が出る**
+     ため、infra のスクリプトはリポジトリ専用プロファイル
+     `kaede`（`ALCHEMY_PROFILE=kaede`）に固定してあります。初回のみ
+     次を実行し、OAuth で **Kaede アカウント**を選んでリンクしてください:
+
+     ```sh
+     pnpm --filter @kaede/infra alchemy login --configure
+     ```
+
+     以後の `plan:prod` / `deploy:prod` はこのプロファイルで正しい
+     アカウントに解決されます。CI は fresh VM でプロファイルが存在しない
+     ため従来どおり env 認証（`CI=true` + `CLOUDFLARE_API_TOKEN`）に
+     落ちます（影響なし）。
    - Node 22.18 未満では TS の型ストリッピングにフラグが要ります。`infra` の
      `deploy:prod` / `plan:prod` / `destroy:prod` と汎用の `alchemy` スクリプトが
      `NODE_OPTIONS=--experimental-strip-types` を設定済みなので、スクリプト経由で
