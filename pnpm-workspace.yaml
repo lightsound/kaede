@@ -5,9 +5,39 @@ packages:
 # pnpm はビルドスクリプトを既定で無効化する。@posthog/cli の postinstall は
 # ソースマップ用 CLI バイナリの取得で、許可しないと @posthog/rollup-plugin の
 # アップロード(デプロイジョブ)が「バイナリなし」で落ちる。許可はこの1つ
-# だけに絞る(他の警告されたスクリプトは無効のままでも動いている実績)。
-onlyBuiltDependencies:
-  - '@posthog/cli'
+# だけに絞る(他のスクリプトは無効のままでも動いている実績)。
+# v11 で onlyBuiltDependencies から allowBuilds(true=許可 / false=明示拒否)へ
+# 移行。false 行は「検討済みで不要」の記録を兼ねる。
+allowBuilds:
+  '@posthog/cli': true
+  # 以下は v10 時代から無効のままで動いている実績のある拒否(v11 の
+  # strictDepBuilds は未判定のビルドスクリプトをエラーにするため明示する)。
+  # esbuild/workerd はプリビルドバイナリを npm の optionalDependencies で
+  # 取得する方式なので postinstall 不要。sharp / msgpackr-extract も同様。
+  # core-js の postinstall は寄付告知のみ。
+  core-js: false
+  esbuild: false
+  msgpackr-extract: false
+  sharp: false
+  workerd: false
+
+# サプライチェーン保護: 公開から 1 日未満のバージョンを解決しない(v11 既定値の
+# 明示)。侵害されたパッケージの多くは公開後数時間〜1日で撤回されるため、
+# 意図的なアップグレード PR が最大 1 日待つコストと引き換えに足切りする。
+minimumReleaseAge: 1440
+# 下の除外はすべて pnpm 11 移行(2026-08-07)時点で lockfile に既に存在し、
+# PR #71/#72 のレビューと CI を通過済みのバージョン(公開は 2026-08-06)。
+# バージョン限定なので将来のリリースには保護が効く。全行が 2026-08-07 中に
+# 自然に期限切れになるため、次にこのファイルを触るときに削除してよい。
+minimumReleaseAgeExclude:
+  - '@clerk/react@6.13.0'
+  - '@clerk/shared@4.27.0'
+  - '@posthog/core@1.46.9'
+  - '@posthog/types@1.402.2'
+  - 'alchemy@2.0.0-beta.70'
+  - 'postcss@8.5.26'
+  - 'posthog-js@1.413.3'
+  - 'vite@8.2.1'
 
 # effect 4 のベータは beta.104 で Schema の API リネームがあり、alchemy
 # 2.0.0-beta.70 は beta.103 までしか動かない(infra/package.json で effect と
