@@ -169,15 +169,18 @@ function recordingPhaseOf(state: string): RecordingPhase {
   return PHASE_BY_STATE[state] ?? 'starting';
 }
 
+/** The direction of our own in-flight procedure call, or null when none is. */
+type PendingAction = 'start' | 'stop' | null;
+
 /**
- * What the toggle is waiting on, busy folded in: while our own procedure
- * call is in flight the room state has not moved yet (the click lands
- * seconds before the provider's recordingUpdate), so busy-from-idle
- * reads as starting and busy-from-recording as stopping.
+ * What the toggle is waiting on, the in-flight call folded in: the room
+ * state can lag the click by seconds (start) or race ahead of the
+ * promise (stop can see IDLE before our procedure resolves), so while
+ * our call is in flight the clicked direction wins over the room state.
  */
-function effectivePhase(phase: RecordingPhase, busy: boolean): RecordingPhase {
-  if (!busy) return phase;
-  return phase === 'idle' ? 'starting' : phase === 'recording' ? 'stopping' : phase;
+function effectivePhase(phase: RecordingPhase, pending: PendingAction): RecordingPhase {
+  if (pending === null) return phase;
+  return pending === 'start' ? 'starting' : 'stopping';
 }
 
 /**
@@ -194,8 +197,11 @@ const TRANSITIONAL_FACES: Record<'starting' | 'stopping', string> = {
 };
 
 /** The button's face for one phase (disabled while anything is in flight). */
-function toggleFace(phase: RecordingPhase, busy: boolean): { label: string; disabled: boolean } {
-  const effective = effectivePhase(phase, busy);
+function toggleFace(
+  phase: RecordingPhase,
+  pending: PendingAction,
+): { label: string; disabled: boolean } {
+  const effective = effectivePhase(phase, pending);
   if (effective === 'starting' || effective === 'stopping') {
     return { label: TRANSITIONAL_FACES[effective], disabled: true };
   }
@@ -214,19 +220,20 @@ function toggleFace(phase: RecordingPhase, busy: boolean): { label: string; disa
  */
 function RecordingToggle({ meeting, handlers }: { meeting: Meeting; handlers: RecordingHandlers }) {
   const phase = recordingPhaseOf(useRecordingState(meeting));
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<PendingAction>(null);
   const [failed, setFailed] = useState(false);
-  const face = toggleFace(phase, busy);
+  const face = toggleFace(phase, pending);
   const toggle = async () => {
-    setBusy(true);
+    const action = phase === 'recording' ? 'stop' : 'start';
+    setPending(action);
     setFailed(false);
     try {
-      await (phase === 'recording' ? handlers.stop() : handlers.start());
+      await (action === 'stop' ? handlers.stop() : handlers.start());
     } catch (err) {
       console.error('recording toggle failed', err);
       setFailed(true);
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
   return (
