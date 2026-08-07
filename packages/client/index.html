@@ -13,20 +13,15 @@
       body {
         margin: 0;
         height: 100%;
+        overflow: hidden;
         background: #0b0d12;
         overscroll-behavior: none;
       }
-      body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      /* The canvas is appended by Pixi at runtime under #root. Internal
-         resolution stays 1280x720; we scale it down purely via CSS. */
+      /* The canvas is appended by Pixi at runtime under #root. It fills the
+         window: GameApp resizes the renderer to the window size (autoDensity
+         writes the matching CSS size), so no width rule belongs here. */
       #root canvas {
         display: block;
-        width: min(100vw, 1280px);
-        height: auto;
         touch-action: none;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
