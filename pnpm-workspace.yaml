@@ -8,3 +8,15 @@ packages:
 # だけに絞る(他の警告されたスクリプトは無効のままでも動いている実績)。
 onlyBuiltDependencies:
   - '@posthog/cli'
+
+# effect 4 のベータは beta.104 で Schema の API リネームがあり、alchemy
+# 2.0.0-beta.70 は beta.103 までしか動かない(infra/package.json で effect と
+# @effect/platform-node を beta.103 に固定済み)。ここでの override は、alchemy
+# が範囲指定(>=beta.102)で引き込む残りの @effect/* が beta.105 に解決されて
+# effect@beta.103 と peer 不整合のまま混在するのを防ぐ(pnpm は lockfile 確定後
+# この不整合を警告しない — PR #71 の pullfrog 指摘)。alchemy を上げるときは
+# infra 側のピンと一緒にこの 3 行も見直すこと。
+overrides:
+  '@effect/platform-bun': 4.0.0-beta.103
+  '@effect/platform-node-shared': 4.0.0-beta.103
+  '@effect/sql-sqlite-do': 4.0.0-beta.103
