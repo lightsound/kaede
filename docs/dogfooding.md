@@ -31,8 +31,7 @@
 1. URL のコミュニティ共有（オーナー。共有した日＝実測の起点）
 2. 共有から数日〜2週間の実測（§6。別セッションで集計 — Phase 4 から
    付け替えた通話コストの実測を含む）
-3. 任意: `call_config` の R2 資格情報の硬化（§7 — 共有前でも後でもよいが、
-   トークン発行はオーナー操作）
+3. ~~任意: `call_config` の R2 資格情報の硬化~~ ✅ **実施済み（2026-08-07、§7）**
 
 **UX メモ（2026-08-04、初代管理者ブートストラップ）**: サインイン直後の
 オーナーに出る「メンバーとして参加できます／参加を申請する」バナーは、
@@ -161,11 +160,19 @@ spacetime sql kaede --server maincloud \
   "SELECT * FROM connection_event WHERE kind = 'connected' AND detail = 'member'" --format json
 ```
 
-## 7. R2 資格情報の硬化（任意・トークン発行はオーナー操作）
+## 7. R2 資格情報の硬化（トークン発行はオーナー操作）
+
+✅ **実施済み（2026-08-07）**: オーナーがバケットスコープの専用 R2 トークン
+（アカウント API トークン）を発行し、エージェントが差し替えと検証を実施 —
+①新資格情報で ListObjectsV2（読み）と PUT/DELETE（書き）が
+`kaede-recordings` に通ることを S3 API 直で実測 ②本番 `call_config` を
+owner SQL で UPDATE ③読み戻しで `storage_access_key_id` の切替を確認。
+旧デプロイトークンは無効化していない（CI デプロイ・Alchemy が使用中）。
+以下はローテーション・再発行時のためのランブックとして残す。
 
 本番 `call_config` の S3 資格情報（録画の R2 直送 `storage_config`・一覧
-ListObjectsV2・DL の presign の 3 経路が使う）は、デプロイ用
-`CLOUDFLARE_API_TOKEN` から導出した値のまま（2026-08-07 実測:
+ListObjectsV2・DL の presign の 3 経路が使う）は、当初デプロイ用
+`CLOUDFLARE_API_TOKEN` から導出した値だった（2026-08-07 実測:
 `storage_access_key_id` がデプロイトークンの ID と一致）。このトークンは
 Workers・Alchemy 等の広い権限を持つため、**バケット `kaede-recordings`
 スコープの専用 R2 トークン**へ差し替える。値の UPDATE のみでコード変更は
@@ -175,7 +182,8 @@ Workers・Alchemy 等の広い権限を持つため、**バケット `kaede-reco
    Manage R2 API Tokens で「Object Read & Write・バケット指定
    `kaede-recordings`」のトークンを作成する（録画直送の PUT と一覧/presign の
    GET の両方に必要。TTL は無期限でよい — ローテーションは同じ UPDATE で
-   いつでもできる）。作成画面が S3 用の Access Key ID / Secret Access Key を
+   いつでもできる）。**アカウント API トークン**にする（個人ユーザーに
+   紐づかないサービス資格情報 — ユーザーの離脱・権限変更で壊れない）。作成画面が S3 用の Access Key ID / Secret Access Key を
    直接表示するのでそれを控える。API 発行は現行のデプロイトークンでは不可
    （API Tokens 管理権限なし — 2026-08-07 実測）。汎用 API トークンとして
    発行した場合の導出規則（access key = トークン ID、secret = トークン値の
