@@ -16,6 +16,21 @@ import { dialMeeting, type Meeting } from './realtimekit';
 // InCallPanel — lazy so idle players never download it (a review finding).
 const InCallPanel = lazy(() => import('./InCallPanel').then((m) => ({ default: m.InCallPanel })));
 
+/**
+ * Warms the InCallPanel chunk the moment the dock becomes visible
+ * (Phase 4.5 増分⑤): the download rides the idle seconds between seeing
+ * the 📞 button and clicking it, instead of the join's critical path
+ * (~0.4–0.8s measured). The lazy split's purpose — idle players never
+ * download the kit — survives, because the dock only shows inside a
+ * conversation group. Module-level latch: one warm-up per page load.
+ */
+let panelWarmed = false;
+function warmInCallPanel(): void {
+  if (panelWarmed) return;
+  panelWarmed = true;
+  void import('./InCallPanel');
+}
+
 // Stacked above the huddle control in the profile corner (bottom-left):
 // a call is something you do from the conversation group you stand in,
 // like the huddle is something you found where you stand.
@@ -67,10 +82,24 @@ function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () 
   );
 }
 
+/**
+ * Where the join currently waits, for the staged progress copy (増分⑤ —
+ * the single 接続中… hid which half was slow): 'ticket' is the
+ * join_group_call procedure (~0.7–1.4s measured; longer when it
+ * provisions the meeting), 'dial' is the SDK init + WebRTC handshake
+ * (~2–4s measured — the irreducible floor, provider-side).
+ */
+type JoinStage = 'ticket' | 'dial';
+
+const JOINING_FACES: Record<JoinStage, string> = {
+  ticket: '📞 通話室を準備しています…',
+  dial: '📞 通話サーバーに接続しています…',
+};
+
 /** The dock's phase: out of a call, dialing, or in one. */
 type CallPhase =
   | { kind: 'idle'; notice?: string }
-  | { kind: 'joining' }
+  | { kind: 'joining'; stage: JoinStage }
   | { kind: 'in-call'; groupId: bigint; meeting: Meeting };
 
 /**
@@ -121,9 +150,10 @@ async function joinCall(ctx: JoinContext): Promise<void> {
   // instead of a parallel pipeline whose meeting nothing would track.
   if (ctx.joiningRef.current) return;
   ctx.joiningRef.current = true;
-  ctx.setPhase(() => ({ kind: 'joining' }));
+  ctx.setPhase(() => ({ kind: 'joining', stage: 'ticket' }));
   try {
     const ticket = await ctx.net.joinGroupCall();
+    ctx.setPhase(() => ({ kind: 'joining', stage: 'dial' }));
     // onEnded can beat the lines after the dial (kicked mid-handshake):
     // the dead meeting must not repopulate the ref — the unmount
     // cleanup's and the next join's only teardown handle — nor overwrite
@@ -229,14 +259,20 @@ export function CallDock({
     [],
   );
 
-  if (dockHidden(connected, ownGroupId, phase)) return null;
-  if (phase.kind === 'joining') return <div style={panelStyle}>📞 通話に接続中…</div>;
+  const hidden = dockHidden(connected, ownGroupId, phase);
+
+  // Fires on show and stays warm: by the time anyone can click 📞 the
+  // chunk is (usually) already here, so the Suspense fallback below is
+  // the slow-network safety net rather than a routine phase.
+  useEffect(() => {
+    if (!hidden) warmInCallPanel();
+  }, [hidden]);
+
+  if (hidden) return null;
+  if (phase.kind === 'joining') return <div style={panelStyle}>{JOINING_FACES[phase.stage]}</div>;
   if (phase.kind === 'in-call') {
-    // Same copy as the joining phase — the chunk download is usually
-    // shorter than the dial, so reusing the string avoids inventing a
-    // third transient.
     return (
-      <Suspense fallback={<div style={panelStyle}>📞 通話に接続中…</div>}>
+      <Suspense fallback={<div style={panelStyle}>📞 通話画面を読み込んでいます…</div>}>
         <InCallPanel
           meeting={phase.meeting}
           recording={recordingHandlersFor(member, phase.groupId, net)}
