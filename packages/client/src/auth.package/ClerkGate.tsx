@@ -1,4 +1,5 @@
 // fallow-ignore-file coverage-gaps -- Clerk-bound React components; need a loaded Clerk instance and a DOM, and no DOM test environment is configured
+import { jaJP } from '@clerk/localizations';
 import {
   ClerkFailed,
   ClerkLoaded,
@@ -103,7 +104,10 @@ export function ClerkGate({ children }: { children: ReactNode }) {
   const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   if (!publishableKey) return children;
   return (
-    <ClerkProvider publishableKey={publishableKey}>
+    // Vendor UI dictionary (not Paraglide): same pattern as RealtimeKit's
+    // useLanguage partial dict — our strings stay in Paraglide; Clerk's stay
+    // in @clerk/localizations (ROADMAP Phase 4.5 増分①).
+    <ClerkProvider publishableKey={publishableKey} localization={jaJP}>
       <ClerkLoading>
         <div style={noticeStyle}>ログイン状態を確認しています…</div>
       </ClerkLoading>
