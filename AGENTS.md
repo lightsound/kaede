@@ -14,15 +14,15 @@ Do not add gameplay features (combat, mobs, XP); that direction was abandoned (P
 `kaede` is a single-product pnpm monorepo (a MapleStory-style 2D virtual office). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `test:e2e`, `lint`, `lint:imports`, `analyze`).
 
 ### SpacetimeDB CLI binary name and version
-The pinned CLI (`v2.7.1`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`.
+The pinned CLI (`v2.8.0`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`.
 
 **Check `spacetimedb-cli --version` before publishing or generating**: fresh VMs
-have shipped with 2.7.0 preinstalled, and generating bindings with it drifts
-from the committed ones, which fails CI's drift check. If the binary is missing
-or not 2.7.1, reinstall it:
+have shipped with older versions preinstalled (2.7.0 was observed), and
+generating bindings with them drifts from the committed ones, which fails CI's
+drift check. If the binary is missing or not 2.8.0, reinstall it:
 
 ```sh
-curl -sSfL -o /tmp/spacetime.tar.gz "https://github.com/clockworklabs/SpacetimeDB/releases/download/v2.7.1/spacetime-x86_64-unknown-linux-gnu.tar.gz"
+curl -sSfL -o /tmp/spacetime.tar.gz "https://github.com/clockworklabs/SpacetimeDB/releases/download/v2.8.0/spacetime-x86_64-unknown-linux-gnu.tar.gz"
 mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/bin"
 ```
 

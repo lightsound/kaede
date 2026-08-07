@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@kaede/shared": "workspace:*",
-    "spacetimedb": "2.7.1"
+    "spacetimedb": "2.8.0"
   },
   "devDependencies": {
     "typescript": "~7.0.2"
