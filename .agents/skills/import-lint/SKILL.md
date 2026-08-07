@@ -63,6 +63,17 @@ first fix that fits, in this order:
 Do not weaken the rule, expand exclusions, or loosen `defaultImportability` to fix a violation.
 After editing, rerun `pnpm lint:imports`.
 
+### Suppression directives — do not use in kaede
+
+Since v0.1.7 the CLI accepts ESLint-style directives
+(`// import-lint-disable-next-line package-access -- reason`, or
+`// import-lint-disable-line` at the end of the line). In kaede these are
+**not an accepted fix**: a violation is a design issue and must be resolved
+with one of the three structural fixes above. Add a directive only when the
+user explicitly asks for one, and always include the ` -- reason`
+justification (mirroring fallow's `require-suppression-reason` policy).
+Every directive is a hole in the boundary.
+
 ## Project convention
 
 - Every first-level `packages/*/src/*` directory is automatically a boundary; use `*.package`
