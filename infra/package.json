@@ -4,18 +4,18 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.6"
+    "node": ">=24"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "alchemy": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede NODE_OPTIONS=--experimental-strip-types alchemy",
-    "deploy:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede NODE_OPTIONS=--experimental-strip-types alchemy deploy --stage prod",
-    "plan:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede NODE_OPTIONS=--experimental-strip-types alchemy plan --stage prod",
-    "destroy:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede NODE_OPTIONS=--experimental-strip-types alchemy destroy --stage prod"
+    "alchemy": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy",
+    "deploy:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy deploy --stage prod",
+    "plan:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy plan --stage prod",
+    "destroy:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy destroy --stage prod"
   },
   "devDependencies": {
     "@effect/platform-node": "4.0.0-beta.103",
-    "@types/node": "^22.20.1",
+    "@types/node": "^24.13.3",
     "alchemy": "2.0.0-beta.70",
     "cross-env": "^10.1.0",
     "effect": "4.0.0-beta.103",
