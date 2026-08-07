@@ -345,6 +345,11 @@ function buildMapLayer(map: WorldMap): Container {
   return layer;
 }
 
+/** The rendering resolution: the device pixel ratio, or 1 where unreported. */
+function renderResolution(): number {
+  return window.devicePixelRatio || 1;
+}
+
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const app = new Application();
   // Window-fit canvas: sized to the window in CSS pixels, rendered at the
@@ -354,7 +359,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   await app.init({
     width: window.innerWidth,
     height: window.innerHeight,
-    resolution: window.devicePixelRatio || 1,
+    resolution: renderResolution(),
     autoDensity: true,
     background: BG_COLOR,
     antialias: false,
@@ -420,7 +425,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   // camera needs no notification — renderLocal derives the world scale and
   // the visible logical width from app.screen every frame.
   const onWindowResize = () => {
-    app.renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+    app.renderer.resize(window.innerWidth, window.innerHeight, renderResolution());
     touch?.layout(app.screen.width, app.screen.height);
   };
   window.addEventListener('resize', onWindowResize);
