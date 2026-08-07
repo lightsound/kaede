@@ -13,14 +13,14 @@
   "attr": {
     "outdir": "../packages/client/dist",
     "hash": {
-      "output": "f2d6216690bcb944799446956a96e344f459694ecddebac62cf51fdb264a1629",
-      "input": "7eebd39651b7007379550a318bd4dcfe2bf5086f2aee1c1155ea42c200c24dae"
+      "output": "d4a548d083b4ad80a513e21c306282b4c3121369c4b3e2850c6a4e37b00a5b52",
+      "input": "17aa39f34178dcf1339f056bd3e083ce44f610a172365f15cbfc8302b94f64dc"
     }
   },
   "bindings": [],
   "providerVersion": 0,
   "downstream": [
-    "Client/Worker"
+    "Client"
   ],
   "removalPolicy": "destroy",
   "namespace": {

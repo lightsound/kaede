@@ -1,7 +1,7 @@
 {
   "status": "updated",
-  "fqn": "Client/Worker",
-  "logicalId": "Worker",
+  "fqn": "Client",
+  "logicalId": "Client",
   "instanceId": "5d2e1e7fd6ad5c9836e8eddfd0582035",
   "resourceType": "Cloudflare.Worker",
   "props": {
@@ -11,10 +11,7 @@
     "outdir": "packages/client/dist",
     "assets": {
       "directory": "../packages/client/dist",
-      "hash": {
-        "output": "f2d6216690bcb944799446956a96e344f459694ecddebac62cf51fdb264a1629",
-        "input": "7eebd39651b7007379550a318bd4dcfe2bf5086f2aee1c1155ea42c200c24dae"
-      },
+      "hash": "d4a548d083b4ad80a513e21c306282b4c3121369c4b3e2850c6a4e37b00a5b52",
       "notFoundHandling": "single-page-application"
     },
     "compatibility": {
@@ -40,17 +37,15 @@
     "tags": [
       "alchemy:stack:kaede",
       "alchemy:stage:prod",
-      "alchemy:id:Worker"
+      "alchemy:id:Client"
     ],
     "durableObjectNamespaces": {},
     "accountId": "751c8a59858c9c04a8e722df7330444d",
     "routes": [],
     "crons": [],
+    "tailConsumers": [],
     "hash": {
-      "assets": {
-        "output": "f2d6216690bcb944799446956a96e344f459694ecddebac62cf51fdb264a1629",
-        "input": "7eebd39651b7007379550a318bd4dcfe2bf5086f2aee1c1155ea42c200c24dae"
-      },
+      "assets": "d4a548d083b4ad80a513e21c306282b4c3121369c4b3e2850c6a4e37b00a5b52",
       "metadata": "7e366b51863d67e0c6465be4a322448ce18d53779c463b52085065c6c2ac49c3"
     }
   },
@@ -58,8 +53,5 @@
   "providerVersion": 0,
   "downstream": [],
   "removalPolicy": "destroy",
-  "providerMode": "live",
-  "namespace": {
-    "Id": "Client"
-  }
+  "providerMode": "live"
 }
