@@ -44,9 +44,19 @@ describe('advanceWalk', () => {
     expect(s.intensity).toBeLessThan(0.05);
   });
 
-  it('clamps a teleport-sized jump instead of spinning the legs', () => {
-    const jump = advanceWalk(IDLE_WALK_STATE, 1500, FRAME_MS);
-    expect(jump.phase).toBeLessThan(Math.PI * 2 * 0.25); // well under one stride
+  it('treats a teleport-sized jump as a discontinuity: no stride, no walking', () => {
+    const walking = run(IDLE_WALK_STATE, 30);
+    const jump = advanceWalk(walking, 1500, FRAME_MS);
+    expect(jump.phase).toBe(walking.phase); // the legs did not spin
+    expect(jump.intensity).toBeLessThanOrEqual(walking.intensity);
+  });
+
+  it('keeps a lag frame walking: many ticks of travel in one long frame', () => {
+    // 120px over 500ms is ordinary MOVE_SPEED travel, just delivered late.
+    const walking = run(IDLE_WALK_STATE, 30);
+    const lag = advanceWalk(walking, 120, 500);
+    expect(lag.intensity).toBeGreaterThan(0.9);
+    expect(lag.phase).not.toBe(walking.phase); // the stride advanced with the travel
   });
 
   it('returns the state unchanged for a zero-length frame', () => {
