@@ -11,7 +11,7 @@
     "outdir": "packages/client/dist",
     "assets": {
       "directory": "../packages/client/dist",
-      "hash": "906710ac109e7475630c192bd157274b2734e243fdf43f329c1e1802ff14aa51",
+      "hash": "02d0aab47d8765a35e4cac6121d956c6c8c259acbb6d509747ce6e48979e5d32",
       "notFoundHandling": "single-page-application"
     },
     "compatibility": {
@@ -45,7 +45,7 @@
     "crons": [],
     "tailConsumers": [],
     "hash": {
-      "assets": "906710ac109e7475630c192bd157274b2734e243fdf43f329c1e1802ff14aa51",
+      "assets": "02d0aab47d8765a35e4cac6121d956c6c8c259acbb6d509747ce6e48979e5d32",
       "metadata": "7e366b51863d67e0c6465be4a322448ce18d53779c463b52085065c6c2ac49c3"
     }
   },
