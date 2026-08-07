@@ -18,7 +18,7 @@
     "posthog-js": "^1.410.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "spacetimedb": "2.7.1"
+    "spacetimedb": "2.8.0"
   },
   "devDependencies": {
     "@posthog/rollup-plugin": "^1.4.7",

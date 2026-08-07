@@ -26,10 +26,11 @@ env:
   # changes codegen — module_bindings/index.ts records the CLI version, so any
   # bump must land together with a bindings regeneration commit.
   #
-  # Kept on the same version as the `spacetimedb` npm dependency (2.7.1), whose
-  # update motivated this pin bump: the SDK's page-resume reconnect recovery
-  # rides the same release line.
-  SPACETIME_VERSION: v2.7.1
+  # Kept on the same version as the `spacetimedb` npm dependency (2.8.0):
+  # the CLI, the host and the SDK move as one pinned set — the module host
+  # and the procedure/HTTP APIs the call stack rides are version-coupled
+  # (ROADMAP Phase 4 増分⑥の引き受けたリスク).
+  SPACETIME_VERSION: v2.8.0
 
 jobs:
   ci:
