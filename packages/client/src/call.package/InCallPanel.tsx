@@ -149,19 +149,57 @@ function useRecordingState(meeting: Meeting): string {
 }
 
 /** The provider states collapsed to what the toggle rules on. */
-type RecordingPhase = 'idle' | 'recording' | 'transitional';
+type RecordingPhase = 'idle' | 'recording' | 'starting' | 'stopping';
+
+/**
+ * The SDK's RecordingState vocabulary, folded per direction. Unknown
+ * states (a future SDK word) read as 'starting': both transitional
+ * phases render a disabled wait face, so an unknown state degrades to
+ * "wait" rather than offering a possibly wrong action.
+ */
+const PHASE_BY_STATE: Record<string, RecordingPhase> = {
+  IDLE: 'idle',
+  STARTING: 'starting',
+  RECORDING: 'recording',
+  PAUSED: 'recording',
+  STOPPING: 'stopping',
+};
 
 function recordingPhaseOf(state: string): RecordingPhase {
-  if (state === 'RECORDING' || state === 'PAUSED') return 'recording';
-  return state === 'IDLE' ? 'idle' : 'transitional';
+  return PHASE_BY_STATE[state] ?? 'starting';
 }
+
+/**
+ * What the toggle is waiting on, busy folded in: while our own procedure
+ * call is in flight the room state has not moved yet (the click lands
+ * seconds before the provider's recordingUpdate), so busy-from-idle
+ * reads as starting and busy-from-recording as stopping.
+ */
+function effectivePhase(phase: RecordingPhase, busy: boolean): RecordingPhase {
+  if (!busy) return phase;
+  return phase === 'idle' ? 'starting' : phase === 'recording' ? 'stopping' : phase;
+}
+
+/**
+ * The transitional faces name what is happening instead of a silently
+ * disabled button: cloud recording provisions a server-side recorder on
+ * demand, and the gap between the start click and the RECORDING room
+ * event is ~12–15 seconds (measured 2026-08-07 — start API accepts in
+ * ~2s, the recorder boots in ~12s). Without copy the button just greys
+ * out and the wait reads as breakage.
+ */
+const TRANSITIONAL_FACES: Record<'starting' | 'stopping', string> = {
+  starting: '⏳ 録画準備中…',
+  stopping: '⏳ 停止処理中…',
+};
 
 /** The button's face for one phase (disabled while anything is in flight). */
 function toggleFace(phase: RecordingPhase, busy: boolean): { label: string; disabled: boolean } {
-  return {
-    label: phase === 'recording' ? '⏹ 録画停止' : '⏺ 録画開始',
-    disabled: busy || phase === 'transitional',
-  };
+  const effective = effectivePhase(phase, busy);
+  if (effective === 'starting' || effective === 'stopping') {
+    return { label: TRANSITIONAL_FACES[effective], disabled: true };
+  }
+  return { label: effective === 'recording' ? '⏹ 録画停止' : '⏺ 録画開始', disabled: false };
 }
 
 /**
