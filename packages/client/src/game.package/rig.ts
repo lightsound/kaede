@@ -30,8 +30,15 @@ export type AvatarPose = 'stand' | (typeof WALK_POSES)[number];
 
 export const IDLE_WALK_STATE: WalkState = { phase: 0, intensity: 0 };
 
-/** One full stride per this many logical pixels of horizontal travel. */
-const STRIDE_PX = 64;
+/**
+ * One full stride (all WALK_POSES once) per this many logical pixels of
+ * horizontal travel. At MOVE_SPEED (240 px/s) this paces the cycle at
+ * 240/192 = 1.25 strides/s = 2.5 steps/s — a natural walk cadence, each
+ * frame showing for 200ms. The spike's 64 played 3.75 cycles/s (7.5
+ * steps/s), which read as frantic shuffling once the frames became real
+ * poses (2026-08-08 review).
+ */
+const STRIDE_PX = 192;
 const PHASE_PER_PX = (2 * Math.PI) / STRIDE_PX;
 /**
  * Rendered speed (logical px/s) above which a frame's motion is treated as
