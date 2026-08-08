@@ -18,16 +18,6 @@ Anchor coordinates are pixels in the emitted frame image (origin top-left,
 chin-to-hip band (the chibi neck pinch); `hand` is a proportional estimate
 (unused until 増分①d, which refines it without touching the sheet).
 
-The line also applies the far-leg shading convention (the order's
-`legShading`): the leg farther from the viewer is darkened and the near leg
-lightened, MapleStory-style. Flat-shaded chibi limbs are identical in color,
-so "left leg forward" and "right leg forward" are otherwise the same picture
-— without this pass a walk cycle reads as skipping on one leg (the 増分①a
-owner review). Generation cannot be trusted with it (text prompts collapse
-both contact poses onto one stride), so the line enforces it mechanically:
-legs are segmented by growing outward from the two shoe blobs, and the
-order names which leg is FAR per pose (left / right / raised / planted).
-
 Usage:
     python3 scripts/import-avatar-sheet.py <order.json>
 
@@ -41,7 +31,7 @@ import hashlib
 import json
 import subprocess
 import sys
-from collections import Counter, deque
+from collections import Counter
 from pathlib import Path
 
 from PIL import Image
@@ -60,20 +50,6 @@ OPAQUE = 128
 # are keying residue (stray sheet speckles), not character: drop them before
 # trimming or a single pixel skews the frame's bounding box.
 SPECK_FRACTION = 0.005
-
-# Far-leg shading: the fraction of the frame height where the leg region
-# starts (below the belt), and the pixel filters that bound it. Bright
-# pixels (skin, the white shirt) are never leg; the shoe browns seed the
-# per-leg segmentation (hair is also brown but lives above the band).
-LEG_BAND = 0.60
-
-
-def is_bright(r: int, g: int, b: int) -> bool:
-    return (r > 200 and g > 160) or (r > 190 and g > 190 and b > 190)
-
-
-def is_shoe(r: int, g: int, b: int) -> bool:
-    return 40 <= r <= 190 and g <= r * 0.65 + 15 and b <= g + 10
 
 PALETTE_COLORS = 5
 
@@ -96,12 +72,14 @@ def chroma_key(img: Image.Image) -> Image.Image:
     return out
 
 
-def connected(pixels: set[tuple[int, int]]) -> list[set[tuple[int, int]]]:
-    """4-connected components of a pixel set."""
+def alpha_components(cell: Image.Image) -> list[set[tuple[int, int]]]:
+    """4-connected components of the cell's nonzero-alpha pixels."""
+    alpha = cell.getchannel("A").load()
+    w, h = cell.size
     seen: set[tuple[int, int]] = set()
     components = []
-    for start in pixels:
-        if start in seen:
+    for start in ((x, y) for y in range(h) for x in range(w)):
+        if alpha[start] == 0 or start in seen:
             continue
         component, stack = set(), [start]
         seen.add(start)
@@ -109,18 +87,11 @@ def connected(pixels: set[tuple[int, int]]) -> list[set[tuple[int, int]]]:
             x, y = stack.pop()
             component.add((x, y))
             for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-                if nb in pixels and nb not in seen:
+                if 0 <= nb[0] < w and 0 <= nb[1] < h and alpha[nb] > 0 and nb not in seen:
                     seen.add(nb)
                     stack.append(nb)
         components.append(component)
     return components
-
-
-def alpha_components(cell: Image.Image) -> list[set[tuple[int, int]]]:
-    """4-connected components of the cell's nonzero-alpha pixels."""
-    alpha = cell.getchannel("A").load()
-    w, h = cell.size
-    return connected({(x, y) for x in range(w) for y in range(h) if alpha[x, y] > 0})
 
 
 def despeckle(cell: Image.Image) -> Image.Image:
@@ -134,68 +105,6 @@ def despeckle(cell: Image.Image) -> Image.Image:
                 r, g, b, _ = px[x, y]
                 px[x, y] = (r, g, b, 0)
     return cell
-
-
-# How the order names the FAR leg per pose, resolved against the two shoe
-# blobs' centroids: image-left / image-right / the lifted knee / the foot on
-# the ground. The dark leg then travels like a real leg through the cycle
-# (back -> swinging forward -> front -> supporting).
-FAR_LEG_PICKS = {
-    "left": lambda c: min((0, 1), key=lambda i: c[i][0]),
-    "right": lambda c: max((0, 1), key=lambda i: c[i][0]),
-    "raised": lambda c: min((0, 1), key=lambda i: c[i][1]),
-    "planted": lambda c: max((0, 1), key=lambda i: c[i][1]),
-}
-
-
-def assign_legs(frame: Image.Image) -> dict[tuple[int, int], int] | None:
-    """Maps each leg-band pixel to leg 0/1 by growing outward from the two
-    shoe blobs (multi-source BFS): the belt stays untouched above the band,
-    and the split lands along the inseam where a shading boundary belongs."""
-    px = frame.load()
-    band = {
-        (x, y)
-        for x in range(frame.width)
-        for y in range(int(frame.height * LEG_BAND), frame.height)
-        if px[x, y][3] > 0 and not is_bright(*px[x, y][:3])
-    }
-    shoes = sorted(connected({p for p in band if is_shoe(*px[p][:3])}), key=len, reverse=True)[:2]
-    if len(shoes) < 2:
-        return None
-    owner: dict[tuple[int, int], int] = {}
-    queue: deque[tuple[int, int]] = deque()
-    for leg, shoe in enumerate(shoes):
-        for p in shoe:
-            owner[p] = leg
-            queue.append(p)
-    while queue:
-        x, y = queue.popleft()
-        for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-            if nb in band and nb not in owner:
-                owner[nb] = owner[(x, y)]
-                queue.append(nb)
-    return owner
-
-
-def shade_legs(frame: Image.Image, pose: str, shading: dict) -> None:
-    """Darkens the FAR leg and lightens the near one (module docstring)."""
-    owner = assign_legs(frame)
-    if owner is None:
-        raise SystemExit(f"{pose}: cannot segment two legs for far-leg shading")
-    centroids = [[0.0, 0.0], [0.0, 0.0]]
-    counts = [0, 0]
-    for (x, y), leg in owner.items():
-        centroids[leg][0] += x
-        centroids[leg][1] += y
-        counts[leg] += 1
-    for leg in (0, 1):
-        centroids[leg] = [v / counts[leg] for v in centroids[leg]]
-    far = FAR_LEG_PICKS[shading["farLegByPose"][pose]](centroids)
-    px = frame.load()
-    for p, leg in owner.items():
-        r, g, b, a = px[p]
-        factor = shading["far"] if leg == far else shading["near"]
-        px[p] = (min(255, int(r * factor)), min(255, int(g * factor)), min(255, int(b * factor)), a)
 
 
 def cut_cell(sheet: Image.Image, cols: int, rows: int, index: int) -> Image.Image:
@@ -262,8 +171,6 @@ def main() -> None:
     sheet = chroma_key(Image.open(base / order["sheet"]))
     grid = order["grid"]
     frames = [cut_cell(sheet, grid["cols"], grid["rows"], i) for i in range(len(order["poses"]))]
-    for name, frame in zip(order["poses"], frames):
-        shade_legs(frame, name, order["legShading"])
 
     # One scale for every frame, derived from the stand pose's target height
     # (2x display resolution): relative pose heights must survive, so walking
