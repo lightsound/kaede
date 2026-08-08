@@ -7,6 +7,17 @@
   "grid": { "cols": 5, "rows": 1 },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
   "standHeightPx": 96,
+  "legShading": {
+    "far": 0.66,
+    "near": 1.35,
+    "farLegByPose": {
+      "stand": "left",
+      "walk-a": "left",
+      "walk-b": "raised",
+      "walk-c": "right",
+      "walk-d": "planted"
+    }
+  },
   "references": ["reference.png"],
   "prompt": "A 2D game character sprite sheet on a uniform pure green chroma-key background (#00FF00, flat solid green everywhere, no gradients). Exactly ONE horizontal row of exactly 5 equal-width cells, each cell showing the SAME character in a different pose, all characters the same size and drawn standing on the same invisible ground line (feet bottoms aligned at the same height in every cell). The character: cute chibi boy in MapleStory style, 2-head-tall proportion (head as tall as the whole body below it), fluffy brown hair, big dark eyes, white short-sleeve collared shirt, navy blue pants, large rounded brown shoes (oversized cute shoes typical of chibi game sprites), small visible arms and legs with chibi proportions (short stubby limbs, hands visible at his sides), facing to the RIGHT in 3/4 view (his face and body angled to the viewer's right). Crisp clean anime cel-shaded style with soft shading, clean outlines. The 5 poses, left to right: (1) standing idle, arms relaxed at sides, both feet together on the ground; (2) walking, right leg stepped forward and left leg back, left arm swung forward and right arm back; (3) walking mid-stride passing pose, legs nearly together under the body, one knee slightly raised, arms near the sides; (4) walking, left leg stepped forward and right leg back, right arm swung forward and left arm back; (5) walking mid-stride passing pose mirroring pose 3, the other knee slightly raised. Each pose fully inside its own cell with green margin around it, no cell borders or grid lines drawn, no text, no shadows on the ground, no watermark. — NOTE: text-only grid prompts kept producing two identical contact poses (cells 2 and 4), so cell 4 (walk-c) in the committed sheet-original.png was replaced by a second single-frame generation that used cell 2 (walk-a) as its reference image with the instruction: same character, same style, same green background, but the stride swapped to the opposite phase of the walk cycle — the forward leg/arm become trailing and vice versa."
 }
