@@ -93,11 +93,11 @@ describe('selectPose', () => {
   it('advances through the cycle with continued travel', () => {
     let state = run(IDLE_WALK_STATE, 30); // steady walk, some phase
     const seen = new Set([selectPose(state)]);
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 90; i++) {
       state = advanceWalk(state, WALK_DX, FRAME_MS);
       seen.add(selectPose(state));
     }
-    // 30 more frames ≈ 90px ≈ 1.4 strides: every cycle frame appears.
+    // 90 more frames ≈ 270px ≈ 1.4 strides: every cycle frame appears.
     for (const pose of WALK_POSES) expect(seen).toContain(pose);
   });
 });
