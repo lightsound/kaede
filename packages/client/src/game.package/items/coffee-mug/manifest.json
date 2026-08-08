@@ -1,0 +1,19 @@
+{
+  "id": "item.coffee-mug",
+  "type": "held-item",
+  "name": "コーヒーカップ",
+  "author": "kaede",
+  "license": "kaede-internal",
+  "palette": ["#e1ccbd", "#f9f1e6", "#f5f3ee", "#d1c7ba", "#dbded4"],
+  "source": {
+    "prompt": "Generated via Cloudflare AI Gateway (gateway kaede-assets, unified billing) with google/nano-banana-2, image_input = the base character's stand frame as a style reference only (~$0.10 — the ①b(a) layer-composition spike, 2026-08-08). Prompt: 'Using the reference image only as an art-style guide (cute chibi cartoon game sprite style, clean bold outlines, soft cel shading, warm colors), draw ONE simple ceramic coffee mug as a game item sprite: a white mug with a curved handle on the right side, filled with brown coffee visible from a slight top-down 3/4 angle, a tiny wisp of steam above it. The mug is a small hand-held prop sized for a chibi character to hold in one fist. Draw ONLY the mug, centered, large, on a completely flat pure green #00FF00 chroma-key background. No character, no table, no shadow, no text. Constant even lighting.' First try was accepted. heightPx 16 (2x resolution = 8 logical px) was chosen by compositing 14/16/20 onto every pose frame at the measured hand anchors and eyeballing at game scale; grip [0.5, 0.55] centers the mug body slightly below middle so the fist reads as wrapping the mug, not the rim.",
+    "referenceHashes": ["6d2187bb1cf836b3b922ac2378b9138a03239be73da11ef0a774f738e75dd93d"]
+  },
+  "frame": {
+    "file": "coffee-mug.png",
+    "size": [12, 16],
+    "anchors": {
+      "grip": [6, 9]
+    }
+  }
+}

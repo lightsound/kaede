@@ -20,6 +20,23 @@ export interface AvatarSheetTextures {
 }
 
 /**
+ * A held item composited onto the avatar's hand anchor (avatar-rig.md §2 —
+ * the held-item layer; validated by the ①b(a) layer-composition spike).
+ * All coordinates are pixels in the source frames (2x display resolution,
+ * origin top-left, straight from the manifests): `grip` is the point in
+ * the item frame that lands on the pose's hand anchor, and `hands` are the
+ * per-pose hand anchors (the near arm's fist, measured per frame — the
+ * frame-center estimate the import line records by default would park the
+ * item on the hip). The keys mirror AvatarSheetTextures so held items and
+ * pose frames can never disagree about which poses exist.
+ */
+export interface HeldItemDisplay {
+  texture: Texture;
+  grip: readonly number[];
+  hands: { readonly [P in keyof AvatarSheetTextures]: readonly number[] };
+}
+
+/**
  * The thin rendering boundary of docs/avatar-rig.md §4: the game side hands
  * over rendered positions and frame times, and how those become a posed
  * figure (today a pose-frame swap; a future DP-A could swap in Spine) stays
@@ -40,20 +57,57 @@ export interface AvatarView {
 const ASSET_SCALE = 0.5;
 
 /**
+ * The held item as a sprite whose origin is its grip point: positioning it
+ * at a pose's hand anchor is then a single coordinate conversion per frame
+ * (see placeHeldItem). Added to `body` after the avatar sprite, so the item
+ * draws in front — the hand anchor tracks the NEAR arm's fist, which the
+ * source frames draw over the body in every pose (measured across the
+ * stride by the ①b(a) spike), so one z-position suffices; no per-pose
+ * z or rotation field earned its way into the manifest.
+ */
+function createHeldItemSprite(item: HeldItemDisplay): Sprite {
+  const sprite = new Sprite(item.texture);
+  const [gripX, gripY] = item.grip;
+  sprite.anchor.set((gripX ?? 0) / item.texture.width, (gripY ?? 0) / item.texture.height);
+  sprite.scale.set(ASSET_SCALE);
+  return sprite;
+}
+
+/**
+ * Parks the held item's grip on the pose's hand anchor. The anchor is in
+ * frame pixels (2x, origin top-left); the avatar sprite renders that frame
+ * bottom-centered at the AABB's bottom edge at ASSET_SCALE, so the same
+ * transform maps the anchor into body-local coordinates.
+ */
+function placeHeldItem(item: Sprite, frame: Texture, hand: readonly number[]): void {
+  const [handX, handY] = hand;
+  item.x = ((handX ?? 0) - frame.width / 2) * ASSET_SCALE;
+  item.y = PLAYER_HALF_H - (frame.height - (handY ?? 0)) * ASSET_SCALE;
+}
+
+/**
  * Builds the pose-frame avatar under `body` (the unit-scale container whose
  * scale.x carries the facing flip — unchanged from the one-sprite era) and
  * returns its per-frame animator. The sprite anchors bottom-center at the
  * physics AABB's bottom edge: the import line aligns every frame's ground
  * baseline to the frame bottom, so each pose stands grounded whatever its
  * trimmed size — the AABB stays the authority for collision and every
- * overlay anchor, and the frames are only how that box looks.
+ * overlay anchor, and the frames are only how that box looks. A held item
+ * (optional) rides the pose's hand anchor and flips with the body.
  */
-export function createAvatarView(body: Container, sheet: AvatarSheetTextures): AvatarView {
+export function createAvatarView(
+  body: Container,
+  sheet: AvatarSheetTextures,
+  held?: HeldItemDisplay,
+): AvatarView {
   const sprite = new Sprite(sheet.stand);
   sprite.anchor.set(0.5, 1);
   sprite.y = PLAYER_HALF_H;
   sprite.scale.set(ASSET_SCALE);
   body.addChild(sprite);
+
+  const item = held ? createHeldItemSprite(held) : undefined;
+  if (item) body.addChild(item);
 
   let walk: WalkState = IDLE_WALK_STATE;
   let lastX: number | undefined;
@@ -62,7 +116,9 @@ export function createAvatarView(body: Container, sheet: AvatarSheetTextures): A
       const dx = lastX === undefined ? 0 : xPx - lastX;
       lastX = xPx;
       walk = advanceWalk(walk, dx, dtMs);
-      sprite.texture = sheet[selectPose(walk)];
+      const pose = selectPose(walk);
+      sprite.texture = sheet[pose];
+      if (item && held) placeHeldItem(item, sheet[pose], held.hands[pose]);
     },
   };
 }

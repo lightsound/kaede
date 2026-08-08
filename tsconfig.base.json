@@ -7,6 +7,7 @@
     "lib": ["ES2022"],
     "skipLibCheck": true,
     "noEmit": true,
+    "resolveJsonModule": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,

@@ -25,7 +25,12 @@ import walkAUrl from './avatar/walk-a.png';
 import walkBUrl from './avatar/walk-b.png';
 import walkCUrl from './avatar/walk-c.png';
 import walkDUrl from './avatar/walk-d.png';
-import { type AvatarSheetTextures, type AvatarView, createAvatarView } from './avatarView';
+import {
+  type AvatarSheetTextures,
+  type AvatarView,
+  createAvatarView,
+  type HeldItemDisplay,
+} from './avatarView';
 import {
   type Bubble,
   createBubble,
@@ -210,10 +215,15 @@ function createUnderline(style: TextStyle, y: number): Text {
  * (which follows the local player) are what tell people apart until the
  * dress-up increments.
  */
-function createPlayerView(world: Container, name: string, sheet: AvatarSheetTextures): PlayerView {
+function createPlayerView(
+  world: Container,
+  name: string,
+  sheet: AvatarSheetTextures,
+  held?: HeldItemDisplay,
+): PlayerView {
   const root = new Container();
   const body = new Container();
-  const avatar = createAvatarView(body, sheet);
+  const avatar = createAvatarView(body, sheet, held);
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
@@ -353,6 +363,74 @@ function renderResolution(): number {
   return window.devicePixelRatio || 1;
 }
 
+/**
+ * What the dev-only dress-up preview swaps in (ROADMAP ①b 着手順⑵ — the
+ * layer-composition verification spike): an outfit-swapped pose sheet
+ * and/or a held item pinned to the hand anchors. 増分①e replaces this with
+ * real selection UI + persistence; until then the preview exists so the
+ * generated assets can be verified walking in the actual game.
+ */
+interface DressUpPreview {
+  sheet?: AvatarSheetTextures;
+  held?: HeldItemDisplay;
+}
+
+/** The red-hoodie outfit sheet (avatar.boy-basic-red), loaded on demand. */
+async function loadRedSheet(): Promise<AvatarSheetTextures> {
+  const urls = await Promise.all([
+    import('./avatar-red/stand.png'),
+    import('./avatar-red/walk-a.png'),
+    import('./avatar-red/walk-b.png'),
+    import('./avatar-red/walk-c.png'),
+    import('./avatar-red/walk-d.png'),
+  ]);
+  const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
+    urls.map((m) => Assets.load(m.default)),
+  );
+  return { stand, 'walk-a': walkA, 'walk-b': walkB, 'walk-c': walkC, 'walk-d': walkD };
+}
+
+/**
+ * The coffee-mug held item (item.coffee-mug), manifest-driven: the mug's
+ * grip point comes from its own manifest, and the per-pose hand anchors
+ * from the manifest of whichever body sheet is being worn — the anchors
+ * are frame coordinates, so they must match the frames actually rendered.
+ */
+async function loadMugItem(redOutfit: boolean): Promise<HeldItemDisplay> {
+  const [mugManifest, bodyManifest, mugUrl] = await Promise.all([
+    import('./items/coffee-mug/manifest.json'),
+    redOutfit ? import('./avatar-red/manifest.json') : import('./avatar/manifest.json'),
+    import('./items/coffee-mug/coffee-mug.png'),
+  ]);
+  const texture = await Assets.load(mugUrl.default);
+  const poses = bodyManifest.default.poses;
+  return {
+    texture,
+    grip: mugManifest.default.frame.anchors.grip,
+    hands: {
+      stand: poses.stand.anchors.hand,
+      'walk-a': poses['walk-a'].anchors.hand,
+      'walk-b': poses['walk-b'].anchors.hand,
+      'walk-c': poses['walk-c'].anchors.hand,
+      'walk-d': poses['walk-d'].anchors.hand,
+    },
+  };
+}
+
+/**
+ * Reads the dev-only preview selection from the URL (?outfit=red,
+ * ?held=mug). Dev builds only — the callers gate on import.meta.env.DEV,
+ * so production bundles drop this code and the preview assets with it.
+ */
+async function loadDressUpPreview(): Promise<DressUpPreview> {
+  const params = new URLSearchParams(window.location.search);
+  const redOutfit = params.get('outfit') === 'red';
+  const preview: DressUpPreview = {};
+  if (redOutfit) preview.sheet = await loadRedSheet();
+  if (params.get('held') === 'mug') preview.held = await loadMugItem(redOutfit);
+  return preview;
+}
+
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const app = new Application();
   // Window-fit canvas: sized to the window in CSS pixels, rendered at the
@@ -375,13 +453,18 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
     [standUrl, walkAUrl, walkBUrl, walkCUrl, walkDUrl].map((url) => Assets.load(url)),
   );
-  const avatarSheet: AvatarSheetTextures = {
+  const baseSheet: AvatarSheetTextures = {
     stand,
     'walk-a': walkA,
     'walk-b': walkB,
     'walk-c': walkC,
     'walk-d': walkD,
   };
+  // Dev-only dress-up preview (the ①b(a) spike): swapped sheet / held item
+  // for EVERY view in this tab — selection is per-player only from 増分①e.
+  const preview: DressUpPreview = import.meta.env.DEV ? await loadDressUpPreview() : {};
+  const avatarSheet = preview.sheet ?? baseSheet;
+  const heldItem = preview.held;
 
   const world = new Container();
   app.stage.addChild(world);
@@ -405,7 +488,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const huddleLayerRoot = new Container();
   world.addChild(huddleLayerRoot);
 
-  const local = createPlayerView(world, 'You', avatarSheet);
+  const local = createPlayerView(world, 'You', avatarSheet, heldItem);
   const remotes = new Map<string, PlayerView>();
 
   /** The member sprites a huddle circle anchors on this frame. */
@@ -632,7 +715,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     upsertRemotePlayer(id, label, x, y, facing) {
       let view = remotes.get(id);
       if (!view) {
-        view = createPlayerView(world, label.name, avatarSheet);
+        view = createPlayerView(world, label.name, avatarSheet, heldItem);
         remotes.set(id, view);
       }
       view.label.text = label.name;

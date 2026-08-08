@@ -15,8 +15,19 @@ the sheet; refining the VALUES later is just editing coordinates).
 
 Anchor coordinates are pixels in the emitted frame image (origin top-left,
 2x resolution). `neck` is detected as the narrowest opaque row of the frame's
-chin-to-hip band (the chibi neck pinch); `hand` is a proportional estimate
-(unused until 増分①d, which refines it without touching the sheet).
+chin-to-hip band (the chibi neck pinch); `hand` defaults to a proportional
+estimate, overridden per pose by the order's `handAnchors` (measured values —
+the ①b(a) layer-composition spike measured them as the near arm's fist,
+tracked physically through the stride via skin-tone blob detection plus
+visual confirmation; the override lives in the order so a re-run of this
+script reproduces the committed manifest instead of clobbering the
+measurements back to the estimate). `neckAnchors` overrides the neck
+detection the same way: the ①b(a) spike measured that the narrowest-row
+heuristic breaks on outfits that widen the neck silhouette (the red
+hoodie's hood makes the hip row the narrowest, landing the neck on the
+hips), so an outfit-swapped sheet transfers the base sheet's measured
+anchors instead (poses are identical by construction; only the frame trims
+shift by a pixel).
 
 Usage:
     python3 scripts/import-avatar-sheet.py <order.json>
@@ -181,13 +192,17 @@ def main() -> None:
         for f in frames
     ]
 
+    hand_overrides = order.get("handAnchors", {})
+    neck_overrides = order.get("neckAnchors", {})
     poses = {}
     for name, frame in zip(order["poses"], frames):
         frame.save(out_dir / f"{name}.png")
+        hand = hand_overrides.get(name, list(hand_anchor(frame)))
+        neck = neck_overrides.get(name, list(neck_anchor(frame)))
         poses[name] = {
             "file": f"{name}.png",
             "size": [frame.width, frame.height],
-            "anchors": {"neck": list(neck_anchor(frame)), "hand": list(hand_anchor(frame))},
+            "anchors": {"neck": neck, "hand": hand},
         }
         print(f"{name}.png {frame.width}x{frame.height}")
 
