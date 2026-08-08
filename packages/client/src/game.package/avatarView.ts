@@ -1,0 +1,68 @@
+// fallow-ignore-file coverage-gaps -- binds PixiJS sprites to the pose-frame sheet; the walk-phase and frame-selection logic lives in rig.ts, which is unit-tested
+import { PLAYER_HALF_H } from '@kaede/shared';
+import { type Container, Sprite, type Texture } from 'pixi.js';
+import { advanceWalk, IDLE_WALK_STATE, selectPose, type WalkState } from './rig';
+
+/**
+ * The pose-frame textures of one character (avatar/manifest.json poses —
+ * the frames the import line cut from the green-screen sheet). The keys are
+ * spelled out rather than derived from rig.ts's AvatarPose so this public
+ * signature references no type from another file (the fallow type-coupling
+ * budget); the compiler still enforces the correspondence at the indexing
+ * site below.
+ */
+export interface AvatarSheetTextures {
+  stand: Texture;
+  'walk-a': Texture;
+  'walk-b': Texture;
+  'walk-c': Texture;
+  'walk-d': Texture;
+}
+
+/**
+ * The thin rendering boundary of docs/avatar-rig.md §4: the game side hands
+ * over rendered positions and frame times, and how those become a posed
+ * figure (today a pose-frame swap; a future DP-A could swap in Spine) stays
+ * behind this interface. Gestures (増分①c) will add a play(motion) here;
+ * dress-up (増分①d) a setSkin.
+ */
+export interface AvatarView {
+  /**
+   * Advances the walk cycle from where the avatar is rendered this frame
+   * (`xPx` the root's logical world x, `dtMs` the frame time) and shows the
+   * resulting pose frame. The first call only records the position.
+   */
+  update(xPx: number, dtMs: number): void;
+}
+
+// Frame assets ship at 2x the logical display resolution (the Phase 4
+// avatar precedent, docs/asset-pipeline.md §2).
+const ASSET_SCALE = 0.5;
+
+/**
+ * Builds the pose-frame avatar under `body` (the unit-scale container whose
+ * scale.x carries the facing flip — unchanged from the one-sprite era) and
+ * returns its per-frame animator. The sprite anchors bottom-center at the
+ * physics AABB's bottom edge: the import line aligns every frame's ground
+ * baseline to the frame bottom, so each pose stands grounded whatever its
+ * trimmed size — the AABB stays the authority for collision and every
+ * overlay anchor, and the frames are only how that box looks.
+ */
+export function createAvatarView(body: Container, sheet: AvatarSheetTextures): AvatarView {
+  const sprite = new Sprite(sheet.stand);
+  sprite.anchor.set(0.5, 1);
+  sprite.y = PLAYER_HALF_H;
+  sprite.scale.set(ASSET_SCALE);
+  body.addChild(sprite);
+
+  let walk: WalkState = IDLE_WALK_STATE;
+  let lastX: number | undefined;
+  return {
+    update(xPx, dtMs) {
+      const dx = lastX === undefined ? 0 : xPx - lastX;
+      lastX = xPx;
+      walk = advanceWalk(walk, dx, dtMs);
+      sprite.texture = sheet[selectPose(walk)];
+    },
+  };
+}

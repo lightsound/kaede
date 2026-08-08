@@ -18,10 +18,14 @@ import {
   WORLD_HEIGHT,
   type WorldMap,
 } from '@kaede/shared';
-import type { Texture } from 'pixi.js';
-import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
-import avatarUrl from './avatar.png';
+import standUrl from './avatar/stand.png';
+import walkAUrl from './avatar/walk-a.png';
+import walkBUrl from './avatar/walk-b.png';
+import walkCUrl from './avatar/walk-c.png';
+import walkDUrl from './avatar/walk-d.png';
+import { type AvatarSheetTextures, type AvatarView, createAvatarView } from './avatarView';
 import {
   type Bubble,
   createBubble,
@@ -157,10 +161,12 @@ interface PlayerView {
   /**
    * The avatar visual, wrapped in a Container kept at unit scale so the
    * facing flip stays `body.scale.x = facing` — the sprite inside carries
-   * the fit-to-size scale, and mixing the two on one node would make the
-   * flip erase the fit.
+   * its own scale and ground anchor, and mixing the two on one node would
+   * make the flip erase them.
    */
   body: Container;
+  /** The pose-frame avatar inside `body` (Phase 5 増分①a); animated every frame. */
+  avatar: AvatarView;
   label: Text;
   /** The status line under the avatar, hidden while the status is default (setUnderline). */
   status: Text;
@@ -196,21 +202,18 @@ function createUnderline(style: TextStyle, y: number): Text {
 
 /**
  * A labelled avatar view parented under the world container. The visual is
- * the minimal character sprite (Phase 4 の必達「最低限のアバター」— one
- * AI-generated character, no dress-up), scaled to the physics AABB height
- * and centered on it: the AABB stays the authority for collision and every
- * overlay anchor, and the sprite is only how that box looks. Local and
+ * the pose-frame avatar (Phase 5 増分①a — one AI-generated character as a
+ * stand + walk pose sheet, frame-swapped by avatarView.ts), grounded on the
+ * physics AABB: the AABB stays the authority for collision and every
+ * overlay anchor, and the frames are only how that box looks. Local and
  * remote players share the one character — the name label and the camera
  * (which follows the local player) are what tell people apart until the
- * Phase 5 dress-up work.
+ * dress-up increments.
  */
-function createPlayerView(world: Container, name: string, texture: Texture): PlayerView {
+function createPlayerView(world: Container, name: string, sheet: AvatarSheetTextures): PlayerView {
   const root = new Container();
   const body = new Container();
-  const sprite = new Sprite(texture);
-  sprite.anchor.set(0.5);
-  sprite.scale.set((PLAYER_HALF_H * 2) / texture.height);
-  body.addChild(sprite);
+  const avatar = createAvatarView(body, sheet);
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
@@ -220,7 +223,7 @@ function createPlayerView(world: Container, name: string, texture: Texture): Pla
   const reaction = createReactionBadge();
   root.addChild(body, label, status, zone, bubble.root, reaction.root);
   world.addChild(root);
-  return { root, body, label, status, zone, bubble, reaction };
+  return { root, body, avatar, label, status, zone, bubble, reaction };
 }
 
 /**
@@ -366,10 +369,19 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   });
   host.appendChild(app.canvas);
 
-  // The one avatar texture every player view shares (bundled by Vite, so the
-  // hashed URL busts caches with the asset). Loaded before any view exists —
-  // createGameApp is already the async init path.
-  const avatarTexture: Texture = await Assets.load(avatarUrl);
+  // The one pose-frame sheet every player view shares (bundled by Vite, so
+  // the hashed URLs bust caches with the assets). Loaded before any view
+  // exists — createGameApp is already the async init path.
+  const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
+    [standUrl, walkAUrl, walkBUrl, walkCUrl, walkDUrl].map((url) => Assets.load(url)),
+  );
+  const avatarSheet: AvatarSheetTextures = {
+    stand,
+    'walk-a': walkA,
+    'walk-b': walkB,
+    'walk-c': walkC,
+    'walk-d': walkD,
+  };
 
   const world = new Container();
   app.stage.addChild(world);
@@ -393,7 +405,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const huddleLayerRoot = new Container();
   world.addChild(huddleLayerRoot);
 
-  const local = createPlayerView(world, 'You', avatarTexture);
+  const local = createPlayerView(world, 'You', avatarSheet);
   const remotes = new Map<string, PlayerView>();
 
   /** The member sprites a huddle circle anchors on this frame. */
@@ -510,6 +522,18 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     for (const view of remotes.values()) expireViewOverheads(view, nowMs);
   }
 
+  /**
+   * Advances every avatar's walk cycle from where its root is rendered this
+   * frame. Runs after every position write (renderLocal, the remote upserts
+   * in the onFrame callbacks), so the stride follows the RENDERED motion —
+   * the same rule for the predicted local pose and the interpolated remote
+   * poses, with no extra synced data (rig.ts).
+   */
+  function animateAvatars(deltaMS: number): void {
+    local.avatar.update(local.root.x, deltaMS);
+    for (const view of remotes.values()) view.avatar.update(view.root.x, deltaMS);
+  }
+
   app.ticker.add((ticker) => {
     const now = performance.now();
     for (const cb of frameCbs) cb(now);
@@ -517,6 +541,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
     while (acc >= DT) simulateTick();
     renderLocal(ticker.deltaMS);
+    animateAvatars(ticker.deltaMS);
     // After renderLocal and the remote upserts (onFrame above): the huddle
     // circles anchor on where the sprites ARE this frame.
     huddleLayer.renderFrame();
@@ -607,7 +632,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     upsertRemotePlayer(id, label, x, y, facing) {
       let view = remotes.get(id);
       if (!view) {
-        view = createPlayerView(world, label.name, avatarTexture);
+        view = createPlayerView(world, label.name, avatarSheet);
         remotes.set(id, view);
       }
       view.label.text = label.name;
