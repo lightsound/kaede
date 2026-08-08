@@ -431,6 +431,19 @@ async function loadDressUpPreview(): Promise<DressUpPreview> {
   return preview;
 }
 
+/**
+ * The avatar look every player view in this tab renders: the base sheet,
+ * unless the dev-only dress-up preview (the ①b(a) spike) swaps in an
+ * outfit sheet and/or a held item. A helper rather than inline branches so
+ * createGameApp stays under the CRAP complexity budget.
+ */
+async function resolveAvatarLook(
+  base: AvatarSheetTextures,
+): Promise<{ sheet: AvatarSheetTextures; held?: HeldItemDisplay }> {
+  const preview: DressUpPreview = import.meta.env.DEV ? await loadDressUpPreview() : {};
+  return { sheet: preview.sheet ?? base, held: preview.held };
+}
+
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const app = new Application();
   // Window-fit canvas: sized to the window in CSS pixels, rendered at the
@@ -462,9 +475,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   };
   // Dev-only dress-up preview (the ①b(a) spike): swapped sheet / held item
   // for EVERY view in this tab — selection is per-player only from 増分①e.
-  const preview: DressUpPreview = import.meta.env.DEV ? await loadDressUpPreview() : {};
-  const avatarSheet = preview.sheet ?? baseSheet;
-  const heldItem = preview.held;
+  const { sheet: avatarSheet, held: heldItem } = await resolveAvatarLook(baseSheet);
 
   const world = new Container();
   app.stage.addChild(world);

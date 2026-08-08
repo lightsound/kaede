@@ -17,11 +17,17 @@ Anchor coordinates are pixels in the emitted frame image (origin top-left,
 2x resolution). `neck` is detected as the narrowest opaque row of the frame's
 chin-to-hip band (the chibi neck pinch); `hand` defaults to a proportional
 estimate, overridden per pose by the order's `handAnchors` (measured values —
-the ①b(a) layer-composition spike measured them as the near arm's fist,
-tracked physically through the stride via skin-tone blob detection plus
-visual confirmation; the override lives in the order so a re-run of this
-script reproduces the committed manifest instead of clobbering the
-measurements back to the estimate). `neckAnchors` overrides the neck
+skin-tone blob detection plus visual confirmation; the override lives in the
+order so a re-run of this script reproduces the committed manifest instead
+of clobbering the measurements back to the estimate). The measured spec,
+decided by the ①b(a) layer-composition spike after an in-game video review:
+`hand` is THE FIST THE ART DRAWS IN FRONT OF THE TORSO in each frame, not
+one physical hand tracked through the stride. The physical track parks 3 of
+4 walk frames at the hip (back swing / two passings) and pops forward for
+one frame, which at 96px and 200ms/frame reads as "the item is parked on
+the hip, ignoring the hand"; the front-fist positions stay within a few
+pixels of each other across the walk frames, so a held item reads as
+carried steadily in the visible hand. `neckAnchors` overrides the neck
 detection the same way: the ①b(a) spike measured that the narrowest-row
 heuristic breaks on outfits that widen the neck silhouette (the red
 hoodie's hood makes the hip row the narrowest, landing the neck on the
