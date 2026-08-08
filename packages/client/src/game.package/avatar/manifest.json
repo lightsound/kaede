@@ -4,9 +4,9 @@
   "name": "男の子（基本）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#a85e2f", "#fedda9", "#fedaae", "#995529", "#fddeb3"],
+  "palette": ["#a1542b", "#fddca8", "#fdd8af", "#9a5529", "#a05a2a"],
   "source": {
-    "prompt": "A 2D game character sprite sheet on a uniform pure green chroma-key background (#00FF00, flat solid green everywhere, no gradients). Exactly ONE horizontal row of exactly 5 equal-width cells, each cell showing the SAME character in a different pose, all characters the same size and drawn standing on the same invisible ground line (feet bottoms aligned at the same height in every cell). The character: cute chibi boy in MapleStory style, 2-head-tall proportion (head as tall as the whole body below it), fluffy brown hair, big dark eyes, white short-sleeve collared shirt, navy blue pants, large rounded brown shoes (oversized cute shoes typical of chibi game sprites), small visible arms and legs with chibi proportions (short stubby limbs, hands visible at his sides), facing to the RIGHT in 3/4 view (his face and body angled to the viewer's right). Crisp clean anime cel-shaded style with soft shading, clean outlines. The 5 poses, left to right: (1) standing idle, arms relaxed at sides, both feet together on the ground; (2) walking, right leg stepped forward and left leg back, left arm swung forward and right arm back; (3) walking mid-stride passing pose, legs nearly together under the body, one knee slightly raised, arms near the sides; (4) walking, left leg stepped forward and right leg back, right arm swung forward and left arm back; (5) walking mid-stride passing pose mirroring pose 3, the other knee slightly raised. Each pose fully inside its own cell with green margin around it, no cell borders or grid lines drawn, no text, no shadows on the ground, no watermark. — NOTE: text-only grid prompts kept producing two identical contact poses (cells 2 and 4), so cell 4 (walk-c) in the committed sheet-original.png was replaced by a second single-frame generation that used cell 2 (walk-a) as its reference image with the instruction: same character, same style, same green background, but the stride swapped to the opposite phase of the walk cycle — the forward leg/arm become trailing and vice versa.",
+    "prompt": "Two-stage generation via Cloudflare AI Gateway (unified billing, gateway kaede-assets — the walk-quality bench of ROADMAP Phase 5 ①b(c), 2026-08-08). Stage 1 input: the character's stand frame on a 720x720 pure #00FF00 canvas (character ~470px tall, feet on y=640; derived from the previous sheet's stand cell, itself generated from reference.png). Stage 2, model alibaba/wan-2.7-i2v (image-to-video), prompt: 'The chibi boy game character from the image walks in place, treadmill-style, without moving across the frame. An exaggerated cartoon game walk cycle like classic 2D side-scrolling games: BIG strides with legs swinging far forward and far back, knees lifting high on each step, and arms swinging WIDELY — the near arm swings clearly in front of his chest, then far behind his back, opposite to the legs. Legs strictly alternate: right leg steps forward, then left leg steps forward. He keeps facing right in 3/4 view. The camera is completely static, no zoom, no pan. The flat pure green #00FF00 chroma-key background stays perfectly unchanged and empty. The character stays centered with his feet returning to the same ground line every step. Constant even lighting, no shadows.' Output: 5s 30fps 1440x1440 video. The committed sheet is video frames n0 (stand = the input image as rendered), n66 (walk-a: contact, near arm swung back), n72 (walk-b: passing), n78 (walk-c: the opposite contact, near arm swung front), n84 (walk-d: the opposite passing), each cropped to the center 760px, downscaled 2x into one row, with shadowed-green background pixels flattened to solid green (the video adds a soft ground shadow despite the prompt). Why a video model: static image models cannot produce the alternating contact poses — text-grid, mirror-instruction and reference-edit attempts all collapse both contacts onto one stride (measured on the previous sheet and re-confirmed on seedream-4.5 / nano-banana-2 in this bench), and a nano-banana-2 restyle pass over the video frames drifted the poses back to one stride too. A video model renders true leg alternation because motion consistency is what it is trained on; the exaggerated-swing prompt is what makes the alternation readable at 96px (arm clearly front vs clearly back). Post-composition: the stand frame's head (everything above its detected neck pinch, +14px chin overlap) is composited onto every walk frame at that frame's own neck anchor, replacing the video-rendered head — the video model repaints the face/hair every frame and the resulting outline wobble read as mud/morphing at game scale (2026-08-08 review); a pixel-identical head with per-frame neck placement keeps the natural head bob while eliminating the wobble. This composite also doubles as the first validation of the ①d head-group separation spec (head as a layer anchored at neck).",
     "referenceHashes": ["0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e"]
   },
   "poses": {
@@ -14,39 +14,39 @@
       "file": "stand.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [26, 49],
+        "neck": [25, 49],
         "hand": [26, 63]
       }
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [51, 96],
+      "size": [52, 93],
       "anchors": {
-        "neck": [25, 49],
-        "hand": [25, 63]
+        "neck": [24, 49],
+        "hand": [26, 61]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [26, 49],
+        "neck": [25, 49],
         "hand": [26, 63]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [52, 96],
+      "size": [57, 92],
       "anchors": {
-        "neck": [27, 49],
-        "hand": [26, 63]
+        "neck": [34, 48],
+        "hand": [28, 60]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [26, 49],
+        "neck": [25, 49],
         "hand": [26, 63]
       }
     }
