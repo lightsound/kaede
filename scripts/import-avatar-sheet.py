@@ -20,14 +20,19 @@ estimate, overridden per pose by the order's `handAnchors` (measured values —
 skin-tone blob detection plus visual confirmation; the override lives in the
 order so a re-run of this script reproduces the committed manifest instead
 of clobbering the measurements back to the estimate). The measured spec,
-decided by the ①b(a) layer-composition spike after an in-game video review:
-`hand` is THE FIST THE ART DRAWS IN FRONT OF THE TORSO in each frame, not
-one physical hand tracked through the stride. The physical track parks 3 of
-4 walk frames at the hip (back swing / two passings) and pops forward for
-one frame, which at 96px and 200ms/frame reads as "the item is parked on
-the hip, ignoring the hand"; the front-fist positions stay within a few
-pixels of each other across the walk frames, so a held item reads as
-carried steadily in the visible hand. `neckAnchors` overrides the neck
+revised across the ①b(a) spike's owner/video reviews: the STAND `hand` is
+the visible hanging hand at the character's side — a held item's baked
+gripping hand covers it and connects to the arm (anchoring at the barely
+drawn front-hip hand instead reads as a disembodied hand). The WALK values
+record the fist the art draws in front of the torso (kept as measurements),
+but statically composited items are NOT rendered during walk at all: the
+exaggerated arm swing that makes the leg alternation readable (①b(c))
+leaves both fists prominently empty every stride, so wherever an item is
+pinned, half the frames read as floating — the same-physical-hand track
+parks it at the hip, the front-fist track pins it to the chest while the
+near arm swings past (both measured, both rejected). Items during walk
+need a carry-pose body variant or an arm-included overlay layer — the ①e
+design decision recorded in ROADMAP ①b(a). `neckAnchors` overrides the neck
 detection the same way: the ①b(a) spike measured that the narrowest-row
 heuristic breaks on outfits that widen the neck silhouette (the red
 hoodie's hood makes the hip row the narrowest, landing the neck on the

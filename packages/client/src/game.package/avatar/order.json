@@ -11,7 +11,7 @@
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
   "standHeightPx": 96,
   "handAnchors": {
-    "stand": [36, 69],
+    "stand": [15, 67],
     "walk-a": [39, 57],
     "walk-b": [37, 60],
     "walk-c": [42, 58],

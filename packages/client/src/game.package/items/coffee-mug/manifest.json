@@ -4,16 +4,16 @@
   "name": "コーヒーカップ",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#e1ccbd", "#f9f1e6", "#f5f3ee", "#d1c7ba", "#dbded4"],
+  "palette": ["#fddba6", "#c3c3c5", "#ffffff", "#b98467", "#aca39c"],
   "source": {
-    "prompt": "Generated via Cloudflare AI Gateway (gateway kaede-assets, unified billing) with google/nano-banana-2, image_input = the base character's stand frame as a style reference only (~$0.10 — the ①b(a) layer-composition spike, 2026-08-08). Prompt: 'Using the reference image only as an art-style guide (cute chibi cartoon game sprite style, clean bold outlines, soft cel shading, warm colors), draw ONE simple ceramic coffee mug as a game item sprite: a white mug with a curved handle on the right side, filled with brown coffee visible from a slight top-down 3/4 angle, a tiny wisp of steam above it. The mug is a small hand-held prop sized for a chibi character to hold in one fist. Draw ONLY the mug, centered, large, on a completely flat pure green #00FF00 chroma-key background. No character, no table, no shadow, no text. Constant even lighting.' First try was accepted. heightPx 16 (2x resolution = 8 logical px) was chosen by compositing 14/16/20 onto every pose frame at the measured hand anchors and eyeballing at game scale; grip [0.5, 0.55] centers the mug body slightly below middle so the fist reads as wrapping the mug, not the rim.",
+    "prompt": "Generated via Cloudflare AI Gateway (gateway kaede-assets, unified billing) with google/nano-banana-2, image_input = the base character's stand frame as a style/skin-tone reference (~$0.10/枚 ×2 — the ①b(a) layer-composition spike, 2026-08-08). SPEC (decided by owner review of the first attempt): a held-item sprite INCLUDES THE GRIPPING HAND. The first attempt drew the bare mug and composited it over the body's drawn fist; with no occlusion (fingers in front of the item) a single-layer composite reads as the item floating near the hand — most visibly in the stand pose, where the art's front hand is a hip sliver and the mug hung beside the thigh touching nothing. Baking a chibi fist into the item sprite gives the 'held' reading without arm-split layers: the sprite's fist covers the body's drawn fist (same skin tone, slightly larger), and the fingers wrap visibly in front of the mug. Prompt: 'Using the reference image only as a style and skin-tone guide (cute chibi cartoon game sprite style, clean bold outlines, soft cel shading), draw ONE tiny game sprite: a small chibi hand GRIPPING a white ceramic coffee mug filled with brown coffee. The hand has the exact same skin tone as the reference character. The chubby cartoon fingers wrap around the mug's body so the fingers are clearly visible IN FRONT of the mug; the mug is upright with a tiny steam wisp above it and its curved handle points to the right. Side view, as if carried by a character walking toward the right. Draw ONLY the hand and the mug — no arm, no wrist, no sleeve, no character, no table, no shadow, no text. Centered and large on a completely flat pure green #00FF00 chroma-key background. Constant even lighting.' First try accepted. heightPx 20 (2x = 10 logical px) sizes the baked fist slightly larger than the sheets' drawn fists so it covers them (18/20 compared on every pose of both outfits); grip [0.24, 0.65] is the baked fist's measured centroid (skin-blob detection restricted to the hand side), so the grip point lands exactly on the body's hand anchor.",
     "referenceHashes": ["6d2187bb1cf836b3b922ac2378b9138a03239be73da11ef0a774f738e75dd93d"]
   },
   "frame": {
     "file": "coffee-mug.png",
-    "size": [12, 16],
+    "size": [23, 20],
     "anchors": {
-      "grip": [6, 9]
+      "grip": [6, 13]
     }
   }
 }
