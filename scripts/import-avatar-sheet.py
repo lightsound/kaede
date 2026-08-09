@@ -59,6 +59,7 @@ import json
 import subprocess
 import sys
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 from PIL import Image
@@ -187,20 +188,20 @@ def is_outline(px: tuple[int, int, int, int]) -> bool:
     return a >= OPAQUE and r < 120 and g < 100 and b < 100
 
 
-def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Image, list[int]]:
-    """The bare hand/arm as its own layer (MapleStory's hand-over-item):
-    the skin pixels 4-connected to the hand anchor, plus their dark outline
-    ring, alpha-masked and cropped. Rendered ON TOP of a held item so the
-    mitten reads as being in front of it (the ①b(a) spike's owner-decided
-    z rule); cut from the stand frame only — the carry sheets hold the arm
-    still, so one overlay serves every pose at its own hand anchor."""
+def _flood_skin(
+    frame: Image.Image,
+    hand: tuple[int, int],
+    *,
+    allow: Callable[[int, int], bool] | None = None,
+) -> set[tuple[int, int]]:
+    """4-connected skin pixels around the hand anchor, optionally masked."""
     w, h = frame.size
     hx, hy = hand
     seeds = [
         (x, y)
         for y in range(max(0, hy - 6), min(h, hy + 7))
         for x in range(max(0, hx - 6), min(w, hx + 7))
-        if is_skin(frame.getpixel((x, y)))
+        if (allow is None or allow(x, y)) and is_skin(frame.getpixel((x, y)))
     ]
     if not seeds:
         raise SystemExit(f"no skin at the hand anchor ({hx},{hy}) to cut a hand layer from")
@@ -208,9 +209,42 @@ def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Ima
     while stack:
         x, y = stack.pop()
         for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-            if 0 <= nb[0] < w and 0 <= nb[1] < h and nb not in seen and is_skin(frame.getpixel(nb)):
+            nx, ny = nb
+            if not (0 <= nx < w and 0 <= ny < h) or nb in seen:
+                continue
+            if allow is not None and not allow(nx, ny):
+                continue
+            if is_skin(frame.getpixel(nb)):
                 seen.add(nb)
                 stack.append(nb)
+    return seen
+
+
+def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Image, list[int]]:
+    """The bare hand/arm as its own layer (MapleStory's hand-over-item):
+    the skin pixels 4-connected to the hand anchor, plus their dark outline
+    ring, alpha-masked and cropped. Rendered ON TOP of a held item so the
+    mitten reads as being in front of it (the ①b(a) spike's owner-decided
+    z rule); cut from the stand frame only — the carry sheets hold the arm
+    still, so one overlay serves every pose at its own hand anchor.
+
+    Shirtless bodies connect the mitten to the whole torso through bare skin;
+    if the unbounded fill grows past a mitten-sized bbox we retry inside a
+    small ellipse so the overlay does not swallow the head.
+    """
+    w, h = frame.size
+    hx, hy = hand
+    seen = _flood_skin(frame, hand)
+    xs = [x for x, _ in seen]
+    ys = [y for _, y in seen]
+    too_big = (max(xs) - min(xs) > w * 0.45) or (max(ys) - min(ys) > h * 0.28)
+    if too_big:
+        rx, ry = max(7, w // 7), max(6, h // 14)
+
+        def in_mitten(x: int, y: int) -> bool:
+            return ((x - hx) / rx) ** 2 + ((y - hy) / ry) ** 2 <= 1.05
+
+        seen = _flood_skin(frame, hand, allow=in_mitten)
     ring = set()
     for x, y in seen:
         for dx in (-1, 0, 1):

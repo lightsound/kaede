@@ -26,56 +26,43 @@ CHIN_OVERLAP = 14
 
 
 def key_pixel(r: int, g: int, b: int, a: int) -> tuple[int, int, int, int]:
+    """Chroma-key green to transparent (structure anchors need real alpha)."""
     dominance = g - max(r, b)
     despilled = min(g, max(r, b))
     if dominance >= KEY_HARD:
-        return (0, 255, 0, 255)  # flatten to solid green (keeps sheet keyable)
+        return (r, despilled, b, 0)
     if dominance > KEY_SOFT:
-        # Soft shadow zone from wan: force to solid green too.
-        return (0, 255, 0, 255)
+        # Soft shadow zone from wan: drop it (same as hard key for analysis).
+        return (r, despilled, b, 0)
     return (r, despilled, b, a)
 
 
-def flatten_green(img: Image.Image) -> Image.Image:
+def chroma_key(img: Image.Image) -> Image.Image:
     out = Image.new("RGBA", img.size)
     out.putdata([key_pixel(*px) for px in img.convert("RGBA").getdata()])
     return out
 
 
 def content_bbox(img: Image.Image) -> tuple[int, int, int, int]:
-    """BBox of non-green, opaque-enough pixels."""
-    px = img.load()
-    w, h = img.size
-    xs, ys = [], []
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = px[x, y]
-            if a >= OPAQUE and (g - max(r, b)) < KEY_SOFT:
-                xs.append(x)
-                ys.append(y)
-    if not xs:
-        raise SystemExit("no character pixels after green flatten")
-    return (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
+    """BBox of opaque pixels (green already keyed to alpha 0)."""
+    bbox = img.getchannel("A").point(lambda a: 255 if a >= OPAQUE else 0).getbbox()
+    if bbox is None:
+        raise SystemExit("no character pixels after chroma key")
+    return bbox
 
 
 def trim_grounded(img: Image.Image) -> Image.Image:
     """Crop to content; feet sit on the image's bottom edge."""
-    flat = flatten_green(img)
-    x0, y0, x1, y1 = content_bbox(flat)
-    return flat.crop((x0, y0, x1, y1))
+    keyed = chroma_key(img)
+    x0, y0, x1, y1 = content_bbox(keyed)
+    return keyed.crop((x0, y0, x1, y1))
 
 
 def cut_head(stand: Image.Image, neck: tuple[int, int]) -> tuple[Image.Image, int]:
-    """Everything above neck_y + CHIN_OVERLAP, with green cleared to transparent."""
+    """Everything above neck_y + CHIN_OVERLAP (stand is already chroma-keyed)."""
     _, neck_y = neck
     cut_y = min(stand.height, neck_y + CHIN_OVERLAP)
     head = stand.crop((0, 0, stand.width, cut_y)).copy()
-    px = head.load()
-    for y in range(head.height):
-        for x in range(head.width):
-            r, g, b, a = px[x, y]
-            if (g - max(r, b)) >= KEY_SOFT:
-                px[x, y] = (0, 0, 0, 0)
     return head, neck_y
 
 
@@ -97,9 +84,9 @@ def paste_head(
         canvas = Image.new(
             "RGBA",
             (out.width + pad_left + pad_right, out.height + pad_top + pad_bottom),
-            GREEN,
+            (0, 0, 0, 0),
         )
-        canvas.paste(out, (pad_left, pad_top))
+        canvas.paste(out, (pad_left, pad_top), out)
         out = canvas
         paste_x += pad_left
         paste_y += pad_top
@@ -112,15 +99,7 @@ def cell_on_green(frame: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
     cell = Image.new("RGBA", (cell_w, cell_h), GREEN)
     x = (cell_w - frame.width) // 2
     y = cell_h - frame.height
-    # Replace green in frame with transparency for clean paste, then composite.
-    src = frame.copy()
-    px = src.load()
-    for yy in range(src.height):
-        for xx in range(src.width):
-            r, g, b, a = px[xx, yy]
-            if (g - max(r, b)) >= KEY_SOFT:
-                px[xx, yy] = (0, 0, 0, 0)
-    cell.paste(src, (x, max(0, y)), src)
+    cell.paste(frame, (x, max(0, y)), frame)
     return cell
 
 
@@ -136,11 +115,28 @@ def compose_walk_sheet(
     stand_neck = structure_neck(stand)
     head, stand_neck_y = cut_head(stand, stand_neck)
 
+    # Work at a moderate resolution: full nano/wan frames are 1000px+ and
+    # make neck detection / compositing unnecessarily heavy. Import scales
+    # to standHeightPx afterwards.
+    target_h = 400
+    if stand.height > target_h:
+        scale = target_h / stand.height
+        stand = stand.resize(
+            (max(1, round(stand.width * scale)), target_h), Image.LANCZOS
+        )
+        stand_neck = structure_neck(stand)
+        head, stand_neck_y = cut_head(stand, stand_neck)
+
     ordered = ["stand", "walk-a", "walk-b", "walk-c", "walk-d"]
     frames: list[Image.Image] = [stand]
     necks: dict[str, tuple[int, int]] = {"stand": stand_neck}
     for pose in ordered[1:]:
         body = trim_grounded(Image.open(walk_paths[pose]))
+        if body.height > target_h:
+            scale = target_h / body.height
+            body = body.resize(
+                (max(1, round(body.width * scale)), target_h), Image.LANCZOS
+            )
         body_neck = structure_neck(body)
         composited = paste_head(body, head, stand_neck_y, body_neck)
         # Re-trim after paste (head may extend the bbox).

@@ -15,12 +15,13 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await page.goto('/assets');
   await expect(page.getByTestId('asset-studio')).toBeVisible({ timeout: 15_000 });
 
-  // The full roster: 4 avatar-body sheets × 5 poses each, 5 held items.
-  await expect(page.getByTestId('avatar-card')).toHaveCount(4);
-  await expect(page.getByTestId('pose-frame')).toHaveCount(20);
+  // The full roster: 7 avatar-body sheets × 5 poses each, 5 held items
+  // (basic / basic-carry / red / red-carry / pants / pants-carry / girl).
+  await expect(page.getByTestId('avatar-card')).toHaveCount(7);
+  await expect(page.getByTestId('pose-frame')).toHaveCount(35);
   await expect(page.getByTestId('item-card')).toHaveCount(5);
   // The carry variants ship a hand overlay (the mitten-over-item layer).
-  await expect(page.getByTestId('hand-layer')).toHaveCount(2);
+  await expect(page.getByTestId('hand-layer')).toHaveCount(3);
 
   // The shipped manifests share one pose vocabulary, so the diff is clean —
   // and no integrity problem (missing PNG, duplicate id) is reported.
@@ -44,13 +45,19 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await expect(strip).toBeVisible();
   await expect(strip.getByTestId('walk-preview')).toHaveCount(2);
 
-  // The dress-up stage: default look is the first outfit (the basic boy)
-  // with empty hands; clicking an outfit swaps the whole body sheet, and
-  // clicking an item swaps to the outfit's carry variant with the item
-  // (plus the sheet's hand cutout) composited over it — the ①b(a)⑵
-  // one-decision rule. Clicking the item again puts it back.
+  // The dress-up stage: default look is the pants-only boy base (owner
+  // 2026-08-09) with empty hands; clicking an outfit swaps the whole body
+  // sheet, and clicking an item swaps to the outfit's carry variant with
+  // the item (plus the sheet's hand cutout) composited over it — the
+  // ①b(a)⑵ one-decision rule. Clicking the item again puts it back.
   const figure = page.getByTestId('stage-figure');
-  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic');
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants');
+  await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
+  await page.getByTestId('item-option-item.coffee-mug').click();
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants-carry');
+  await expect(page.getByTestId('stage-overlay')).toHaveCount(2);
+  await page.getByTestId('item-option-item.coffee-mug').click();
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants');
   await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
   await page.getByTestId('outfit-option-avatar.boy-basic-red').click();
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red');

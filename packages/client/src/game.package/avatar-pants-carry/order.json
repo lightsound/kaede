@@ -1,0 +1,26 @@
+{
+  "id": "avatar.boy-pants-carry",
+  "type": "avatar-body",
+  "name": "男の子（パンツ・持ち歩き）",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": {
+    "cols": 5,
+    "rows": 1
+  },
+  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "standHeightPx": 96,
+  "handLayer": true,
+  "references": [
+    "../canonical/style-reference.png",
+    "../avatar-pants/sheet-original.png",
+    "../avatar-carry/stand.png"
+  ],
+  "template": "avatar-carry-stand",
+  "vars": {},
+  "prompt": "Factory carry variant of avatar.boy-pants (2026-08-09 ①b mass-produce, take 2): nano-banana-2 carry-stand edit of the pants stand using avatar.boy-basic-carry as arm-pose reference (near-arm round mitten at waist, far arm hanging) + wan-2.7-i2v carry-walk (arms still, legs exaggerated stride) + foot-phase selection + pants-stand head composite for identity. Shirtless bodies use radius-capped handLayer flood fill.",
+  "originals": {
+    "../avatar-pants/sheet-original.png": "521de4d907d186c9385b2436514089afcac19083d0e2fd9cffb827b955c9b3df",
+    "sheet-original.png": "eb6a561e9f3425cc20e2dcd0f503bdf509cdc67399f4168ce55f1cd15b85e19c"
+  }
+}

@@ -1881,6 +1881,13 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   残リスク: neck 検出・脚分割ヒューリスティックの体型汎化（動物型・長身）、
   動画モデルのスタイルドリフト（アート lint のパレット距離検査で機械判定
   — asset-pipeline.md §3-3。ドリフトが実測されたら DP-3 スタイル学習）
+  ✅ **①b 本体＋量産通し運転（2026-08-09）**: 工程は
+  `scripts/factory/`＋[docs/asset-factory.md](./asset-factory.md)。通し 3 体 —
+  `avatar.boy-pants`（試着デフォルト）/ `avatar.girl-basic`（上インナー）/
+  `avatar.boy-pants-carry`。通常コーデは動画 **1 本/体**、carry は取り直しで
+  **2 本**。3 体合計 roughly **$2.7**（失敗込み）。記録は
+  [docs/factory-yield.md](./factory-yield.md)。**シート画像のオーナー目視
+  承認がこの PR の残ゲート**
 - **①c ジェスチャー＋ステータス視覚化**: ポーズの追加（座る・寝る・
   ダンス・手を振る — シートに絵を足すだけ）＋発動同期（reaction の前例:
   identity PK の upsert 公開行＋専用ガード・行イベント駆動）＋離席＝寝る・

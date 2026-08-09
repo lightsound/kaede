@@ -71,11 +71,21 @@ class AnchorTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             structure_neck(img)
 
-    def test_carry_hand_on_protrusion(self) -> None:
-        frame = _chibi(hand=(50, 64))
+    def test_carry_hand_on_waist_peak(self) -> None:
+        # Mitten pad widens the waist span; detector lands on that peak row.
+        frame = _chibi(hand=(32, 64))
         x, y = structure_hand_carry(frame)
-        self.assertGreater(x, 32)
-        self.assertTrue(52 <= y <= 72, f"hand y={y}")
+        self.assertTrue(24 <= x <= 40, f"hand x={x}")
+        self.assertTrue(54 <= y <= 72, f"hand y={y}")
+
+    def test_carry_hand_matches_basic_carry_sheet(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        stand = root / "packages/client/src/game.package/avatar-carry/stand.png"
+        if not stand.is_file():
+            self.skipTest("avatar-carry stand not in workspace")
+        x, y = structure_hand_carry(Image.open(stand))
+        # Owner-measured mitten top-center is (26, 64); allow a few px.
+        self.assertTrue(abs(x - 26) <= 3 and abs(y - 64) <= 3, f"hand={(x, y)}")
 
 
 class FootPhaseTests(unittest.TestCase):

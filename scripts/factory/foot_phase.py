@@ -95,56 +95,24 @@ def select_walk_indices(
     if len(frame_paths) < 16:
         raise SystemExit(f"need ≥16 frames for phase selection, got {len(frame_paths)}")
     signals = load_signals(frame_paths)
-    start = min(len(signals) - 8, int(skip_head_seconds * fps))
-    window = signals[start:]
+    start = min(len(signals) - 16, int(skip_head_seconds * fps))
     # One stride is ~0.4–0.8s at game cadence; at 30fps that is 12–24 frames.
-    period = _find_period(window, min_period=10, max_period=28)
-    # Prefer a window in the middle of the clip (avoid ease-in/out).
-    mid = start + len(window) // 2
-    lo = max(start, mid - period)
-    hi = min(len(signals), lo + period)
-    segment = list(enumerate(signals))[lo:hi]
-    if len(segment) < 8:
-        raise SystemExit("stride window too short after skip")
-
-    idx_max = max(segment, key=lambda iv: iv[1])[0]
-    idx_min = min(segment, key=lambda iv: iv[1])[0]
-
-    def nearest_zero_after(origin: int, toward: int) -> int:
-        step = 1 if toward >= origin else -1
-        best_i, best_abs = origin, abs(signals[origin])
-        i = origin
-        while i != toward:
-            i += step
-            if abs(signals[i]) < best_abs:
-                best_abs, best_i = abs(signals[i]), i
-        return best_i
-
-    # Order contacts so walk-a is the first contact in temporal order, then
-    # the passing toward the opposite contact, then that contact, then the
-    # return passing — matching the boy-basic committed cycle.
-    first, second = (idx_max, idx_min) if idx_max < idx_min else (idx_min, idx_max)
-    pass_ab = nearest_zero_after(first, second)
-    # Passing back: from second toward first+period (wrap inside segment).
-    end = hi - 1
-    pass_cd = nearest_zero_after(second, end if second < end else lo)
-    # Assign by sign: positive tip → walk-a family.
-    if signals[first] >= 0:
-        a, c = first, second
-        b, d = pass_ab, pass_cd
-    else:
-        a, c = second, first
-        b, d = pass_cd, pass_ab
-    chosen = {"walk-a": a, "walk-b": b, "walk-c": c, "walk-d": d}
-    if len(set(chosen.values())) < 4:
-        # Degenerate clip — fall back to equal spacing inside the period.
-        base = lo
-        chosen = {
-            "walk-a": base,
-            "walk-b": base + period // 4,
-            "walk-c": base + period // 2,
-            "walk-d": base + (3 * period) // 4,
-        }
+    period = _find_period(signals[start:], min_period=12, max_period=28)
+    # Stable mid-clip window of one period; pick the strongest contact as
+    # walk-a, then space the other three at period/4 — equal phase spacing
+    # survives noisy foot signals better than zero-crossing search.
+    search_lo = start
+    search_hi = min(len(signals), start + period * 3)
+    contact = max(range(search_lo, search_hi), key=lambda i: signals[i])
+    # Keep the whole cycle inside the clip.
+    if contact + period >= len(signals):
+        contact = max(search_lo, len(signals) - period - 1)
+    chosen = {
+        "walk-a": contact,
+        "walk-b": contact + period // 4,
+        "walk-c": contact + period // 2,
+        "walk-d": contact + (3 * period) // 4,
+    }
     return chosen
 
 

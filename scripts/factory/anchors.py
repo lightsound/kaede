@@ -107,9 +107,9 @@ def structure_neck(frame: Image.Image) -> tuple[int, int]:
         raise SystemExit(
             f"neck candidate @{neck_y} width {widths[neck_y]:.0f} exceeds pinch threshold"
         )
-    # Must sit in the upper-mid of the frame (true necks); a valley found
-    # only near the hips means we never saw a real neck.
-    if neck_y > int(h * 0.70):
+    # Must sit above the lower torso. High-res walk frames land near 0.70 of
+    # height with a real neck (chin bob); only reject clear hip minima.
+    if neck_y > int(h * 0.78):
         raise SystemExit(
             f"structure neck landed too low (y={neck_y}/{h}) — waist/hip minimum"
         )
@@ -120,60 +120,32 @@ def structure_neck(frame: Image.Image) -> tuple[int, int]:
 
 
 def structure_hand_carry(frame: Image.Image) -> tuple[int, int]:
-    """Carry hand ≈ top-center of the near-side waist protrusion (mitten).
+    """Carry hand ≈ center of the waist silhouette's widest row (mitten pad).
 
-    Facing-right art puts the near arm on the image-right of the torso.
-    Seeds from the rightmost waist pixel, flood-fills the skin/outline blob
-    connected to it inside the waist band, and returns that blob's
-    top-center — the item rest point on the mitten pad.
+    Facing-right carry art puts a round mitten in front of the waist; that
+    pad widens the opaque span at belt height. The item rest point is the
+    horizontal center of the peak-width row in the waist band — measured to
+    match avatar.boy-basic-carry's (26,64) / red-carry's (23,64) within a
+    couple of pixels, without skin-color heuristics.
+
+    (An earlier rightmost-protrusion flood fill landed on the waist-band
+    ceiling / neck row for every sheet, because the bent arm connects into
+    the shoulder silhouette.)
     """
     spans = opaque_spans(frame)
-    alpha = frame.getchannel("A").load()
-    w, h = frame.size
-    waist_lo, waist_hi = int(h * 0.52), int(h * 0.82)
-    # Torso midline ≈ center of the narrowest mid-body row (waist of the
-    # body proper); the mitten lives to the right of it.
-    mid_band = [
-        (y, spans[y])
-        for y in range(int(h * 0.45), int(h * 0.65))
+    h = frame.size[1]
+    # Stay above the crotch/stride flare: wide walk contacts otherwise win
+    # the peak-width search and park the item on a thigh.
+    waist_lo, waist_hi = int(h * 0.55), int(h * 0.70)
+    candidates = [
+        (y, spans[y][1] - spans[y][0], spans[y])
+        for y in range(waist_lo, waist_hi)
         if spans[y] is not None
     ]
-    if not mid_band:
-        raise SystemExit("no mid-body rows for carry hand")
-    mid_y, mid_span = min(mid_band, key=lambda ys: ys[1][1] - ys[1][0])
-    mid_x = (mid_span[0] + mid_span[1]) // 2
-
-    seed = None
-    for y in range(waist_lo, waist_hi):
-        span = spans[y]
-        if span is None or span[1] <= mid_x:
-            continue
-        candidate = (span[1], y)
-        if seed is None or candidate[0] > seed[0]:
-            seed = candidate
-    if seed is None:
-        raise SystemExit("no near-side protrusion in the waist band")
-
-    # Flood-fill only inside the waist band (do NOT climb into the head —
-    # the bent near arm connects through the shoulder silhouette).
-    y_min, y_max = waist_lo, waist_hi
-    seen: set[tuple[int, int]] = set()
-    stack = [seed]
-    seen.add(seed)
-    while stack:
-        x, y = stack.pop()
-        for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-            nx, ny = nb
-            if not (0 <= nx < w and y_min <= ny < y_max):
-                continue
-            if nb in seen or nx < mid_x + 2:
-                continue
-            if alpha[nx, ny] < OPAQUE:
-                continue
-            seen.add(nb)
-            stack.append(nb)
-    if len(seen) < 8:
-        raise SystemExit("carry-hand blob too small to be a mitten")
-    top_y = min(y for _, y in seen)
-    top_row = [x for x, y in seen if y == top_y]
-    return ((min(top_row) + max(top_row)) // 2, top_y)
+    if not candidates:
+        raise SystemExit("no opaque rows in the carry waist band")
+    peak_y, peak_w, peak_span = max(candidates, key=lambda t: t[1])
+    if peak_w < 8:
+        raise SystemExit("carry waist span too narrow to be a mitten pad")
+    x0, x1 = peak_span
+    return ((x0 + x1) // 2, peak_y)

@@ -4,7 +4,10 @@
   "name": "女の子（基本）",
   "sheet": "sheet-original.png",
   "outDir": ".",
-  "grid": { "cols": 5, "rows": 1 },
+  "grid": {
+    "cols": 5,
+    "rows": 1
+  },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
   "standHeightPx": 96,
   "references": ["../canonical/style-reference.png", "../canonical/stand-reference.png"],
@@ -14,8 +17,11 @@
     "appearance": "Soft black bob haircut with a small red hairclip on the near side, large shiny eyes, light blush, gentle smile.",
     "outfit": "a light peach sleeveless inner camisole top that fully covers the chest (NOT bare / NOT underwear-only — an inner top) and matching soft cream shorts, simple brown shoes"
   },
-  "prompt": "",
+  "prompt": "Factory template `avatar-stand` (2026-08-09 ①b mass-produce): A single full-body chibi girl game character, MapleStory-like 2D side-scroller style matching the reference image exactly (same line weight, soft cel shading, cute proportions, ~3-head-tall). Soft black bob haircut with a small red hairclip on the near side, large shiny eyes, light blush, gentle smile. Wearing a light peach sleeveless inner camisole top that fully covers the chest (NOT bare / NOT underwear-only — an inner top) and matching soft cream shorts, simple brown shoes. Facing right in 3/4 view, standing idle with arms relaxed at the sides, feet together on an invisible ground line. Flat pure green #00FF00 chroma-key background, no shadow, no ground, no props, no text. Centered, character fills most of the frame vertically.",
   "lint": {
     "contrastBase": "avatar/manifest.json"
+  },
+  "originals": {
+    "sheet-original.png": "42e7d69eb01edf6d1e44e5ce63595dcfbad6e57686983d213f0b1264c9ebadcb"
   }
 }
