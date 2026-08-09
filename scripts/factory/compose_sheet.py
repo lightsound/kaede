@@ -109,6 +109,102 @@ def paste_head(
     return out
 
 
+# Rows whose silhouette diverges this much from the stand belong to the
+# striding legs; above them the carry body is static by spec. Measured on
+# the pants-carry edit: head/torso rows ≤ 0.05 (outline jitter ~1px),
+# torso/mitten redraw noise 0.06–0.18, legs ≥ 0.28.
+CARRY_LEG_DIVERGENCE = 0.25
+
+
+def staticize_carry_sheet(sheet_path: Path) -> int:
+    """Unify a carry sheet's static-region shading across cells.
+
+    The carry spec holds the near arm, mitten and torso perfectly still —
+    only the legs move — yet a whole-sheet edit redraws each cell's belly
+    shading slightly differently, which flickers at play speed (owner
+    reject 2026-08-09). Fix: an INTERIOR COLOR TRANSPLANT — above the row
+    where the legs start diverging, every walk-cell pixel that is opaque
+    in both the walk cell and the (neck-aligned) stand takes the stand's
+    RGB. Each cell keeps its own alpha and outline, so no silhouette seam
+    is introduced (a whole-region replacement was measured to step the
+    outline by up to 18% of the row width at the junction). Returns the
+    leg-seam row (sheet-cell space) for logging.
+    """
+    sheet = Image.open(sheet_path).convert("RGBA")
+    cell_w = sheet.width // 5
+    cells = [
+        chroma_key(sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height)))
+        for i in range(5)
+    ]
+    trimmed = [c.crop(content_bbox(c)) for c in cells]
+    stand = trimmed[0]
+    stand_neck = structure_neck(stand)
+
+    # Align every walk cell to the stand by its structural neck; the carry
+    # pose keeps the neck static so offsets are a couple of pixels at most.
+    aligned: list[tuple[Image.Image, int, int]] = []
+    for body in trimmed[1:]:
+        neck = structure_neck(body)
+        aligned.append((body, neck[0] - stand_neck[0], neck[1] - stand_neck[1]))
+
+    def mask_row(img: Image.Image, y: int, dx: int) -> set[int]:
+        if not 0 <= y < img.height:
+            return set()
+        alpha = img.getchannel("A").load()
+        return {x - dx for x in range(img.width) if alpha[x, y] >= OPAQUE}
+
+    def row_diverges(y: int) -> bool:
+        stand_row = mask_row(stand, y, 0)
+        for body, dx, dy in aligned:
+            body_row = mask_row(body, y + dy, dx)
+            union = stand_row | body_row
+            if (
+                len(union) >= 10
+                and len(stand_row ^ body_row) / len(union) > CARRY_LEG_DIVERGENCE
+            ):
+                return True
+        return False
+
+    seam = stand.height
+    for y in range(stand.height - 1):
+        # Two consecutive divergent rows = the legs really start here.
+        if row_diverges(y) and row_diverges(y + 1):
+            seam = y
+            break
+    if seam < stand.height * 0.55:
+        raise SystemExit(
+            f"carry staticize: silhouettes diverge from row {seam}/{stand.height} "
+            "— this sheet is not upper-body-static; refusing to normalize"
+        )
+
+    stand_px = stand.load()
+    out_cells: list[Image.Image] = [stand]
+    for body, dx, dy in aligned:
+        merged = body.copy()
+        merged_px = merged.load()
+        for y in range(min(merged.height, seam + dy)):
+            sy = y - dy
+            if not 0 <= sy < stand.height:
+                continue
+            for x in range(merged.width):
+                sx = x - dx
+                if not 0 <= sx < stand.width:
+                    continue
+                r, g, b, a = merged_px[x, y]
+                sr, sg, sb, sa = stand_px[sx, sy]
+                if a >= OPAQUE and sa >= OPAQUE:
+                    merged_px[x, y] = (sr, sg, sb, a)
+        out_cells.append(merged)
+
+    out_w = max(cell_w, max(c.width for c in out_cells) + 8)
+    out_h = max(sheet.height, max(c.height for c in out_cells) + 8)
+    rebuilt = Image.new("RGBA", (out_w * 5, out_h), GREEN)
+    for i, cell in enumerate(out_cells):
+        rebuilt.paste(cell_on_green(cell, out_w, out_h), (i * out_w, 0))
+    rebuilt.convert("RGB").save(sheet_path)
+    return seam
+
+
 def cell_on_green(frame: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
     """Center-horizontally, feet on bottom, on a solid green cell."""
     cell = Image.new("RGBA", (cell_w, cell_h), GREEN)

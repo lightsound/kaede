@@ -21,7 +21,13 @@ from factory.art_lint import (
     lint_avatar,
     silhouette_iou,
 )
-from factory.compose_sheet import cut_head, paste_head
+from factory.compose_sheet import (
+    chroma_key,
+    content_bbox,
+    cut_head,
+    paste_head,
+    staticize_carry_sheet,
+)
 from factory.foot_phase import foot_signal, select_walk_indices
 
 
@@ -182,6 +188,46 @@ class ArtLintTests(unittest.TestCase):
         shifted.paste(a.crop((0, 0, 44, 100)), (20, 0))
         self.assertEqual(silhouette_iou(a, a), 1.0)
         self.assertLess(silhouette_iou(a, shifted), 0.8)
+
+
+class StaticizeTests(unittest.TestCase):
+    def _carry_sheet(self, path: Path) -> None:
+        """5 green cells: identical torso, striding legs, drifted walk bellies."""
+        cell_w, cell_h = 120, 120
+        sheet = Image.new("RGB", (cell_w * 5, cell_h), (0, 255, 0))
+        for i in range(5):
+            body = Image.new("RGBA", (64, 100), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(body)
+            draw.ellipse((8, 4, 56, 54), fill=(240, 200, 160, 255))  # head
+            draw.rectangle((28, 50, 36, 56), fill=(240, 200, 160, 255))  # neck
+            belly = (200, 150, 150, 255) if i else (240, 200, 160, 255)
+            draw.rectangle((20, 56, 44, 78), fill=belly)  # torso (drifts on walks)
+            stride = [0, 6, 0, -6, 0][i]
+            draw.rectangle((22 + stride, 78, 30 + stride, 98), fill=(240, 200, 160, 255))
+            draw.rectangle((34 - stride, 78, 42 - stride, 98), fill=(240, 200, 160, 255))
+            cell = Image.new("RGBA", (cell_w, cell_h), (0, 255, 0, 255))
+            cell.paste(body, ((cell_w - 64) // 2, cell_h - 100), body)
+            sheet.paste(cell.convert("RGB"), (i * cell_w, 0))
+        sheet.save(path)
+
+    def test_interior_transplant_unifies_the_torso(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            sheet_path = Path(temporary) / "sheet.png"
+            self._carry_sheet(sheet_path)
+            seam = staticize_carry_sheet(sheet_path)
+            out = Image.open(sheet_path).convert("RGBA")
+            cell_w = out.width // 5
+            # Sample a torso pixel per cell: all must now be the stand color.
+            def torso_sample(i: int) -> tuple[int, int, int]:
+                cell = chroma_key(out.crop((i * cell_w, 0, (i + 1) * cell_w, out.height)))
+                body = cell.crop(content_bbox(cell))
+                return body.getpixel((body.width // 2, int(body.height * 0.68)))[:3]
+
+            stand_color = torso_sample(0)
+            for i in range(1, 5):
+                self.assertEqual(torso_sample(i), stand_color, f"cell {i}")
+            # Legs (below the seam) keep their per-cell stride.
+            self.assertGreater(seam, 0)
 
 
 class ComposeTests(unittest.TestCase):

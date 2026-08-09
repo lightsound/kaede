@@ -47,8 +47,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 from factory import templates  # noqa: E402
 from factory.art_lint import lint_avatar, silhouette_iou  # noqa: E402
-from factory.compose_sheet import compose_walk_sheet  # noqa: E402
-from factory.foot_phase import select_walk_paths  # noqa: E402
+from factory.compose_sheet import compose_walk_sheet, staticize_carry_sheet  # noqa: E402
+from factory.cycle_scan import scan_clip  # noqa: E402
 from factory.montage import sheet_montage  # noqa: E402
 from r2_originals import resolve_original  # noqa: E402
 
@@ -283,6 +283,11 @@ def run_sheet_edit_lane(order_path: Path, order: dict, work: Path, args) -> None
         stills += 1
         cost += 0.10
         print(f"wrote {sheet_path}")
+        if order.get("handLayer"):
+            # Carry sheets are upper-body-static by spec; make that literal
+            # so the belly shading cannot flicker between cells.
+            seam = staticize_carry_sheet(sheet_path)
+            print(f"carry staticize: upper body unified above row {seam}")
     elif not sheet_path.is_file():
         raise SystemExit(f"no sheet at {sheet_path} — run without --from-stage import")
 
@@ -345,6 +350,13 @@ def main() -> None:
         help="override the walk template (default: the order's `walkTemplate`, "
         "then avatar-walk-i2v); the choice is persisted into the order",
     )
+    parser.add_argument(
+        "--contact",
+        type=int,
+        default=None,
+        help="pin the cycle scan to one contact frame index (visual-gate "
+        "override — e.g. the stride whose arm swing reads best)",
+    )
     args = parser.parse_args()
 
     order_path = args.order.resolve()
@@ -397,7 +409,8 @@ def main() -> None:
     stand_canvas = work / "stand_canvas.png"
     # Only walk (canvas) and compose (head source) consume the stand; a
     # resume from import/lint must not demand generation artifacts.
-    needs_stand = bool(active & {"stand", "walk", "compose"})
+    # select composes candidate cycles for its checks, so it needs the stand.
+    needs_stand = bool(active & {"stand", "walk", "select", "compose"})
     if "stand" in active:
         if not os.environ.get("CLOUDFLARE_API_TOKEN"):
             raise SystemExit("CLOUDFLARE_API_TOKEN required for generation")
@@ -432,7 +445,12 @@ def main() -> None:
 
     walk_map_path = work / "walk_selection.json"
     if "select" in active:
-        selected = select_walk_paths(frames_dir)
+        # Drift-aware scan over the whole clip (cycle_scan.py): every stride
+        # is a candidate cycle and failing slots try phase-equivalent
+        # substitutes, so one clean cycle anywhere in the clip suffices.
+        selected = scan_clip(
+            stand_raw, frames_dir, pinned_contact=args.contact
+        )
         walk_map_path.write_text(
             json.dumps(
                 {k: [str(p) for p in v] for k, v in selected.items()}, indent=2

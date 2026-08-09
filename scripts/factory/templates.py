@@ -53,6 +53,31 @@ TEMPLATES: dict[str, str] = {
         "as in the input image, constant even lighting, no shadows, no "
         "darkening of any body part or garment in any frame."
     ),
+    # Walk with the arm SWAP spelled out per step ({colorNotes} as above).
+    # The generic prompt let wan keep one arm forward through the whole
+    # stride on the girl (owner reject 2026-08-09: 手が交差していない);
+    # naming the swap on every step is what fixes it.
+    "avatar-walk-i2v-arms": (
+        "The chibi game character from the image walks in place, "
+        "treadmill-style, without moving across the frame. An exaggerated "
+        "cartoon game walk cycle like classic 2D side-scrolling games. The "
+        "arms swing naturally front and back in opposition to the legs and "
+        "MUST TRADE PLACES on every step: when the near leg strides "
+        "forward, the near arm swings behind the back while the far arm "
+        "comes forward; on the very next step they SWAP — the near arm "
+        "comes forward in front of the body and the far arm goes behind. "
+        "Never let the same arm stay in front for two steps. Relaxed "
+        "elbows, no flailing, NO MOTION BLUR — crisp clean line art on "
+        "the arms and legs in every frame. BIG strides, knees lifting "
+        "high, legs strictly alternating. Keep facing right in 3/4 view. "
+        "The camera "
+        "is completely static, no zoom, no pan. The flat pure green "
+        "#00FF00 chroma-key background stays perfectly unchanged and "
+        "empty. The character stays centered with feet returning to the "
+        "same ground line every step. {colorNotes} Flat cel colors exactly "
+        "as in the input image, constant even lighting, no shadows, no "
+        "darkening of any body part or garment in any frame."
+    ),
     # Carry stand: near-arm mitten at waist (①b(a)⑵ owner spec).
     "avatar-carry-stand": (
         "Edit ONLY the arms of this chibi game character on the pure green "
