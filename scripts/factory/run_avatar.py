@@ -234,14 +234,17 @@ def sheet_edit_iou_failures(order_path: Path, order: dict) -> list[str]:
     base = order_path.parent
     source_dir = (base / order["editSource"]).resolve().parent
     source_manifest = json.loads((source_dir / "manifest.json").read_text())
-    manifest = json.loads(manifest_path_of(order_path, order).read_text())
+    # Imported frames live next to the manifest (outDir), not the order.
+    manifest_path = manifest_path_of(order_path, order)
+    out_dir = manifest_path.parent
+    manifest = json.loads(manifest_path.read_text())
     failures: list[str] = []
     for pose, meta in manifest.get("poses", {}).items():
         source_meta = source_manifest.get("poses", {}).get(pose)
         if source_meta is None:
             failures.append(f"{pose}: edit source has no such pose")
             continue
-        edited = Image.open(base / meta["file"]).convert("RGBA")
+        edited = Image.open(out_dir / meta["file"]).convert("RGBA")
         source = Image.open(source_dir / source_meta["file"]).convert("RGBA")
         iou = silhouette_iou(edited, source)
         print(f"IoU {pose}: {iou:.3f} (vs {source_dir.name})")
@@ -336,7 +339,12 @@ def main() -> None:
         choices=["stand", "walk", "extract", "select", "compose", "import", "lint"],
     )
     parser.add_argument("--record-yield", action="store_true")
-    parser.add_argument("--walk-prompt-template", default="avatar-walk-i2v")
+    parser.add_argument(
+        "--walk-prompt-template",
+        default=None,
+        help="override the walk template (default: the order's `walkTemplate`, "
+        "then avatar-walk-i2v); the choice is persisted into the order",
+    )
     args = parser.parse_args()
 
     order_path = args.order.resolve()
@@ -365,19 +373,31 @@ def main() -> None:
         refs = [canonical, *refs]
 
     stand_prompt = expand_prompt(order)
-    walk_prompt = templates.expand(args.walk_prompt_template, order.get("vars") or {})
+    # The walk template is part of the recipe (color-locked characters need
+    # avatar-walk-i2v-locked), so the order's `walkTemplate` wins over the
+    # generic default and any choice is persisted back for reproducibility.
+    walk_template = (
+        args.walk_prompt_template or order.get("walkTemplate") or "avatar-walk-i2v"
+    )
+    walk_prompt = templates.expand(walk_template, order.get("vars") or {})
     # Persist the full expanded recipe into the order for reproducibility.
     recorded = (
         f"Factory template `{order['template']}` expanded "
         f"({time.strftime('%Y-%m-%d')}): {stand_prompt} | walk template "
-        f"`{args.walk_prompt_template}`: {walk_prompt}"
+        f"`{walk_template}`: {walk_prompt}"
     )
-    if order.get("template") and order.get("prompt") != recorded:
+    if order.get("template") and (
+        order.get("prompt") != recorded or order.get("walkTemplate") != walk_template
+    ):
         order["prompt"] = recorded
+        order["walkTemplate"] = walk_template
         order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
 
     stand_raw = work / "stand_raw.png"
     stand_canvas = work / "stand_canvas.png"
+    # Only walk (canvas) and compose (head source) consume the stand; a
+    # resume from import/lint must not demand generation artifacts.
+    needs_stand = bool(active & {"stand", "walk", "compose"})
     if "stand" in active:
         if not os.environ.get("CLOUDFLARE_API_TOKEN"):
             raise SystemExit("CLOUDFLARE_API_TOKEN required for generation")
@@ -386,14 +406,15 @@ def main() -> None:
         stills += 1
         cost += 0.10
         note_parts.append("stand:nano")
-    elif stand_raw.exists():
+    elif not needs_stand or stand_raw.exists():
         pass
     elif (base / "stand-seed.png").is_file():
         shutil.copy(base / "stand-seed.png", stand_raw)
     else:
         raise SystemExit(f"no stand at {stand_raw} — run with --from-stage stand")
 
-    prepare_stand_canvas(stand_raw, stand_canvas)
+    if needs_stand:
+        prepare_stand_canvas(stand_raw, stand_canvas)
 
     video_path = work / "walk.mp4"
     if "walk" in active:
@@ -419,7 +440,9 @@ def main() -> None:
             + "\n"
         )
         print("selected", {k: v[0].name for k, v in selected.items()})
-    else:
+    elif "compose" in active:
+        # Only compose consumes the selection; a resume from import/lint
+        # must not demand this artifact of an earlier select run.
         selected = {
             k: [Path(p) for p in v]
             for k, v in json.loads(walk_map_path.read_text()).items()

@@ -140,10 +140,18 @@ class FootPhaseTests(unittest.TestCase):
 class ArtLintTests(unittest.TestCase):
     def test_lint_passes_every_committed_sheet(self) -> None:
         # The head-consistency and palette-drift gates were calibrated on
-        # these four sheets; a threshold change that rejects shipped art
+        # the committed sheets; a threshold change that rejects shipped art
         # must fail here first.
         root = SCRIPTS.parent / "packages/client/src/game.package"
-        for name in ("avatar", "avatar-red", "avatar-carry", "avatar-red-carry"):
+        for name in (
+            "avatar",
+            "avatar-red",
+            "avatar-carry",
+            "avatar-red-carry",
+            "avatar-girl",
+            "avatar-pants",
+            "avatar-pants-carry",
+        ):
             failures = lint_avatar(root / name / "manifest.json")
             self.assertEqual(failures, [], name)
 
