@@ -187,6 +187,7 @@ def _recorded_sha256(path: Path, rel: str, originals: dict[str, str]) -> str:
             f"{path} is neither on disk nor in the order's originals map — "
             "run scripts/upload-asset-originals.py after generating"
         )
+    object_key(sha256)
     return sha256
 
 
@@ -213,8 +214,9 @@ def reference_sha256(
     return _recorded_sha256(path, rel, originals)
 
 
-def upload_original(path: Path) -> str:
+def upload_original(path: Path, asset_root: Path) -> str:
     """PUT the file at its content address; idempotent by construction."""
+    path = resolve_asset_path(path.parent, path.name, asset_root)
     if not path.is_file():
         raise SystemExit(f"{path} is not a regular file")
     body = path.read_bytes()

@@ -184,7 +184,9 @@ def main() -> None:
             paths.append(resolved)
     if not paths:
         return
-    hashes_by_path = {path: upload_original(path) for path in paths}
+    hashes_by_path = {
+        path: upload_original(path, ASSET_ROOT) for path in paths
+    }
     seed_path_set = set(seed_paths_found)
     for path, sha256 in hashes_by_path.items():
         if path not in seed_path_set:
