@@ -7,6 +7,7 @@ import type {
 } from '../src/studio.package/catalog';
 import {
   carryVariantOf,
+  DEFAULT_OUTFIT_ID,
   frameFor,
   maxFrameSize,
   outfitOptions,
@@ -51,8 +52,10 @@ describe('outfitOptions / carryVariantOf', () => {
     const basic = avatar('avatar.boy-basic');
     const carry = avatar('avatar.boy-basic-carry');
     const red = avatar('avatar.boy-basic-red');
-    const catalog = catalogOf([basic, carry, red]);
+    const pants = avatar(DEFAULT_OUTFIT_ID);
+    const catalog = catalogOf([basic, carry, red, pants]);
     expect(outfitOptions(catalog).map((o) => o.id)).toEqual([
+      DEFAULT_OUTFIT_ID,
       'avatar.boy-basic',
       'avatar.boy-basic-red',
     ]);
@@ -65,12 +68,18 @@ describe('resolveStageLook', () => {
   const basic = avatar('avatar.boy-basic');
   const carry = avatar('avatar.boy-basic-carry');
   const red = avatar('avatar.boy-basic-red');
+  const pants = avatar(DEFAULT_OUTFIT_ID);
+  const pantsCarry = avatar(`${DEFAULT_OUTFIT_ID}-carry`);
   const mug = item('item.mug');
 
-  it('defaults to the first outfit with empty hands', () => {
-    const look = resolveStageLook(catalogOf([basic, carry, red], [mug]), undefined, undefined);
-    expect(look?.outfit.id).toBe('avatar.boy-basic');
-    expect(look?.body.id).toBe('avatar.boy-basic');
+  it('defaults to the pants-only base outfit with empty hands', () => {
+    const look = resolveStageLook(
+      catalogOf([basic, carry, red, pants, pantsCarry], [mug]),
+      undefined,
+      undefined,
+    );
+    expect(look?.outfit.id).toBe(DEFAULT_OUTFIT_ID);
+    expect(look?.body.id).toBe(DEFAULT_OUTFIT_ID);
     expect(look?.item).toBeUndefined();
     expect(look?.note).toBeUndefined();
   });

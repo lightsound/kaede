@@ -36,11 +36,16 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.request
 
 GATEWAY = "kaede-assets"
 LIST_FIELDS = {"image_input", "images"}
 OUTPUT_KEYS = ("image", "images", "video", "videos", "output")
+# Upstream providers 503 intermittently (measured on nano-banana-2,
+# 2026-08-09); failed requests bill nothing, so retrying is free.
+MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 20
 
 
 def data_uri(path: str) -> str:
@@ -58,12 +63,26 @@ def run_model(account: str, token: str, gateway: str, model: str, model_input: d
             "cf-aig-gateway-id": gateway,
         },
     )
-    started = time.time()
-    with urllib.request.urlopen(req, timeout=900) as r:
-        response = json.load(r)
-    state = response.get("result", {}).get("state")
-    print(f"[{model}] {time.time() - started:.1f}s state={state}", file=sys.stderr)
-    return response
+    for attempt in range(MAX_ATTEMPTS):
+        started = time.time()
+        try:
+            with urllib.request.urlopen(req, timeout=900) as r:
+                response = json.load(r)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode(errors="replace")[:500]
+            print(
+                f"[{model}] attempt {attempt + 1}/{MAX_ATTEMPTS} failed after "
+                f"{time.time() - started:.1f}s: {error.code} {detail}",
+                file=sys.stderr,
+            )
+            if error.code < 500 or attempt == MAX_ATTEMPTS - 1:
+                raise
+            time.sleep(RETRY_DELAY_SECONDS)
+            continue
+        state = response.get("result", {}).get("state")
+        print(f"[{model}] {time.time() - started:.1f}s state={state}", file=sys.stderr)
+        return response
+    raise AssertionError("unreachable")
 
 
 def output_urls(response: dict) -> list[str]:

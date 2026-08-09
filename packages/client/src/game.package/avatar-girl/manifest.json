@@ -1,0 +1,57 @@
+{
+  "id": "avatar.girl-basic",
+  "type": "avatar-body",
+  "name": "女の子（基本）",
+  "author": "kaede",
+  "license": "kaede-internal",
+  "palette": ["#37373c", "#202024", "#ffe8cd", "#38383d", "#ffdfc3"],
+  "source": {
+    "prompt": "Factory template `avatar-stand` expanded (2026-08-09): A single full-body chibi girl game character, MapleStory-like 2D side-scroller style matching the reference image exactly (same line weight, soft cel shading, cute proportions, ~3-head-tall). Soft black bob haircut with a small red hairclip on the near side, large shiny eyes, light blush, gentle smile. Wearing a soft SKY-BLUE sleeveless camisole top that fully covers the chest and clearly reads as clothing (NOT skin-colored, NOT white, NOT bare — a distinctly blue inner top), soft cream shorts, and simple dark brown shoes. Facing right in 3/4 view, standing idle with arms relaxed at the sides, feet together on an invisible ground line. Flat pure green #00FF00 chroma-key background, no shadow, no ground, no props, no text. Centered, character fills most of the frame vertically. | walk template `avatar-walk-i2v`: The chibi game character from the image walks in place, treadmill-style, without moving across the frame. An exaggerated cartoon game walk cycle like classic 2D side-scrolling games: BIG strides with legs swinging far forward and far back, knees lifting high on each step, and arms swinging WIDELY — the near arm swings clearly in front of the chest, then far behind the back, opposite to the legs. Legs strictly alternate. Keep facing right in 3/4 view. The camera is completely static, no zoom, no pan. The flat pure green #00FF00 chroma-key background stays perfectly unchanged and empty. The character stays centered with feet returning to the same ground line every step. The character's clothes, hair, skin and shoes keep exactly the same colors in every frame. Constant even lighting, no shadows.",
+    "referenceHashes": [
+      "0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e",
+      "6d2187bb1cf836b3b922ac2378b9138a03239be73da11ef0a774f738e75dd93d"
+    ]
+  },
+  "poses": {
+    "stand": {
+      "file": "stand.png",
+      "size": [55, 96],
+      "anchors": {
+        "neck": [26, 50],
+        "hand": [27, 63]
+      }
+    },
+    "walk-a": {
+      "file": "walk-a.png",
+      "size": [57, 96],
+      "anchors": {
+        "neck": [27, 49],
+        "hand": [28, 63]
+      }
+    },
+    "walk-b": {
+      "file": "walk-b.png",
+      "size": [57, 95],
+      "anchors": {
+        "neck": [27, 50],
+        "hand": [28, 62]
+      }
+    },
+    "walk-c": {
+      "file": "walk-c.png",
+      "size": [56, 95],
+      "anchors": {
+        "neck": [27, 50],
+        "hand": [28, 62]
+      }
+    },
+    "walk-d": {
+      "file": "walk-d.png",
+      "size": [57, 95],
+      "anchors": {
+        "neck": [27, 49],
+        "hand": [28, 62]
+      }
+    }
+  }
+}

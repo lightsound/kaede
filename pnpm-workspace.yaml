@@ -9,6 +9,7 @@ packages:
 # v11 で onlyBuiltDependencies から allowBuilds(true=許可 / false=明示拒否)へ
 # 移行。false 行は「検討済みで不要」の記録を兼ねる。
 allowBuilds:
+  '@ffmpeg-installer/linux-x64': false
   '@posthog/cli': true
   # 以下は v10 時代から無効のままで動いている実績のある拒否(v11 の
   # strictDepBuilds は未判定のビルドスクリプトをエラーにするため明示する)。
@@ -16,6 +17,7 @@ allowBuilds:
   # 取得する方式なので postinstall 不要。sharp / msgpackr-extract も同様。
   # core-js の postinstall は寄付告知のみ。
   core-js: false
+  cpu-features: false
   esbuild: false
   msgpackr-extract: false
   sharp: false

@@ -78,10 +78,12 @@ def write_order(order_path: Path, order: dict) -> None:
         ) as handle:
             temporary = Path(handle.name)
             handle.write(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
-        # The order is committed data reviewed in PRs: keep it in the repo's
-        # one JSON style so this tool never trips `pnpm lint`.
-        subprocess.run(["pnpm", "exec", "biome", "format", "--write", str(temporary)], check=True)
         temporary.replace(order_path)
+        # Format the final path (tmp names are gitignored / ignored by biome).
+        subprocess.run(
+            ["pnpm", "exec", "biome", "format", "--write", str(order_path)],
+            check=True,
+        )
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)

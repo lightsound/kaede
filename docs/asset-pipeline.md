@@ -154,6 +154,11 @@
   セット・アート lint・manifest 生成を整備し「発注書だけでアセットが
   増える」状態を完成 → 以降の種類追加・⑦のオブジェクト・背景は
   **ラインの運転**であって開発ではない。
+- **運転手順（①b 本体）**: 工程の接続・コマンド・歩留まり記録は
+  [asset-factory.md](./asset-factory.md) / [factory-yield.md](./factory-yield.md)。
+  入口は `scripts/factory/run_avatar.py`（テンプレ展開 → 生成 →
+  足位置解析 → 頭部合成 → 取り込み → 構造ベース art lint）。アトラスは
+  `pnpm --filter @kaede/client assets:pack`（AssetPack、派生物）。
 
 ## 5. 販売・UGC への不変条件と決定ポイント
 

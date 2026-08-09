@@ -1,0 +1,28 @@
+{
+  "id": "avatar.boy-pants-carry",
+  "type": "avatar-body",
+  "name": "男の子（パンツ・持ち歩き）",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": {
+    "cols": 5,
+    "rows": 1
+  },
+  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "standHeightPx": 96,
+  "handLayer": true,
+  "references": ["../canonical/style-reference.png", "../avatar-carry/sheet-original.png"],
+  "template": "avatar-outfit-edit",
+  "editSource": "../avatar-carry/sheet-original.png",
+  "vars": {
+    "outfit": "turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — and keep the bent near arm and its round fingerless mitten hand EXACTLY as drawn, just bare skin instead of a sleeve on that arm"
+  },
+  "originals": {
+    "../avatar-carry/sheet-original.png": "6abf57a622035e7f7fa0a22ceb384a5220fcc414db228073d250614d5c3c09b7",
+    "sheet-original.png": "cef08e6bffb1b5011e765487538ca4f3d98b31992bd32d5f8d647a4970d1621c"
+  },
+  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-09): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — and keep the bent near arm and its round fingerless mitten hand EXACTLY as drawn, just bare skin instead of a sleeve on that arm. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "lint": {
+    "matchStand": "avatar-pants/manifest.json"
+  }
+}
