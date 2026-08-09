@@ -264,15 +264,23 @@ def run_sheet_edit_lane(order_path: Path, order: dict, work: Path, args) -> None
     cost = 0.0
 
     prompt = expand_prompt(order)
-    if order.get("template") and order.get("prompt") != prompt:
-        order["prompt"] = (
-            f"Factory template `{order['template']}` over "
-            f"{order['editSource']} ({time.strftime('%Y-%m-%d')}): {prompt}"
-        )
+    generates = args.from_stage in ("stand", "walk", "extract", "select", "compose")
+    recorded = (
+        f"Factory template `{order['template']}` over "
+        f"{order['editSource']} ({time.strftime('%Y-%m-%d')}): {prompt}"
+    )
+    # Persist only on generating runs — an import/lint resume must not
+    # clobber a hand-curated provenance record (video-lane rule).
+    if generates and order.get("template") and order.get("prompt") != recorded:
+        order["prompt"] = recorded
         order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
+        subprocess.run(
+            ["pnpm", "exec", "biome", "format", "--write", str(order_path)],
+            check=True,
+        )
 
     sheet_path = base / order["sheet"]
-    if args.from_stage in ("stand", "walk", "extract", "select", "compose"):
+    if generates:
         if not os.environ.get("CLOUDFLARE_API_TOKEN"):
             raise SystemExit("CLOUDFLARE_API_TOKEN required for generation")
         source = resolve_original(
@@ -392,18 +400,32 @@ def main() -> None:
         args.walk_prompt_template or order.get("walkTemplate") or "avatar-walk-i2v"
     )
     walk_prompt = templates.expand(walk_template, order.get("vars") or {})
-    # Persist the full expanded recipe into the order for reproducibility.
+    # Persist the full expanded recipe into the order for reproducibility —
+    # but only when this run actually GENERATES with it. Resumes (select /
+    # import / lint) must not clobber a hand-curated provenance record (the
+    # girl's order narrates the adopted take and frame selection; a lint-only
+    # rerun once overwrote it with the template expansion).
     recorded = (
         f"Factory template `{order['template']}` expanded "
         f"({time.strftime('%Y-%m-%d')}): {stand_prompt} | walk template "
         f"`{walk_template}`: {walk_prompt}"
     )
-    if order.get("template") and (
-        order.get("prompt") != recorded or order.get("walkTemplate") != walk_template
+    generates = bool(active & {"stand", "walk"})
+    if (
+        generates
+        and order.get("template")
+        and (
+            order.get("prompt") != recorded
+            or order.get("walkTemplate") != walk_template
+        )
     ):
         order["prompt"] = recorded
         order["walkTemplate"] = walk_template
         order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
+        subprocess.run(
+            ["pnpm", "exec", "biome", "format", "--write", str(order_path)],
+            check=True,
+        )
 
     stand_raw = work / "stand_raw.png"
     stand_canvas = work / "stand_canvas.png"
