@@ -23,17 +23,22 @@ classes (mug / notebook / umbrella / plush / spear): resting items use
 long shafted items use the measured shaft point where the hand carries
 them (umbrella mid-shaft [0.5, 0.5], spear lower-third [0.315, 0.7]).
 
+Generation originals (`*-original.png`) are not committed (①b⑶): the
+order's `originals` map records their sha256, and inputs absent from disk
+are fetched from the content-addressed R2 store and verified before use
+(r2_originals.py).
+
 Usage:
     python3 scripts/import-held-item.py <order.json>
 """
 
-import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 from PIL import Image
+from r2_originals import reference_sha256, resolve_original
 
 KEY_HARD = 60
 KEY_SOFT = 20
@@ -67,10 +72,6 @@ def palette_of(frame: Image.Image) -> list[str]:
     return [f"#{r:02x}{g:02x}{b:02x}" for (r, g, b), _ in counts.most_common(5)]
 
 
-def sha256_of(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
@@ -79,7 +80,10 @@ def main() -> None:
     base = order_path.parent
     out_dir = base / order["outDir"]
 
-    keyed = chroma_key(Image.open(base / order["sheet"]))
+    # Generation originals are not committed (①b⑶ — r2_originals.py):
+    # the order's `originals` map points at the R2 copy of anything absent.
+    originals = order.get("originals", {})
+    keyed = chroma_key(Image.open(resolve_original(base, order["sheet"], originals)))
     bbox = keyed.getchannel("A").point(lambda a: 255 if a >= OPAQUE else 0).getbbox()
     if bbox is None:
         raise SystemExit("empty item image after keying")
@@ -111,7 +115,7 @@ def main() -> None:
         "palette": palette_of(frame),
         "source": {
             "prompt": order["prompt"],
-            "referenceHashes": [sha256_of(base / ref) for ref in order["references"]],
+            "referenceHashes": [reference_sha256(base, ref, originals) for ref in order["references"]],
         },
         "frame": {
             "file": file_name,

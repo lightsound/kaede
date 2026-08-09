@@ -1614,7 +1614,9 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   asset-pipeline.md §2。neck/hand アンカーは①a 未使用でも最初から記録:
   neck は最細行検出、hand は暫定比率で、値の修正はシート再生成なしで
   できる）。生成原本・参照画像・発注書も同ディレクトリにコミット
-  （再現性 — §4。テンプレ・アート lint・基準セットの整備は①b）
+  （再現性 — §4。テンプレ・アート lint・基準セットの整備は①b。
+  → 生成原本のコミットは①b 着手順⑶で R2 移行済み — Git に残るのは
+  取り込み結果のみ）
   ②**描画**: `AvatarView` の薄い境界（`avatarView.ts` — update(x, dt) のみ。
   ①c が play(motion)、①d が setSkin を足す）を切り、GameApp の 1 枚絵
   Sprite をコマ切替に置き換え。スプライトは物理 AABB 下端に bottom-center
@@ -1790,6 +1792,40 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   1.3MB vs 取り込み後 5 コマ 60KB）→ ⑷ アセット作成画面（(b) の検品
   ビューア → 発注コンソール。規格確定後に作ることで画面自体の手戻りを
   防ぐ）
+  ✅ **⑶ アセット原本の R2 移行 実施（2026-08-09。生成なし —
+  クレジット消費ゼロ、残高 ~$3.9 のまま）**: 9 ディレクトリの生成原本
+  （sheet-original.png ×4・item-original.png ×5、計約 3.4MB）を R2 へ
+  移行して Git から削除（履歴からの完全削除はしない — 通常の rm で
+  今後の肥大だけ止める方針どおり）。設計の要点:
+  ①**バケット `kaede-asset-originals`（Alchemy IaC・retain）**:
+  kaede-recordings の前例に倣い removalPolicy retain（原本は再生成に
+  クレジット実費がかかる一点物）。移行アップロードのため API で先行
+  作成済みで、Alchemy の R2 リコンサイラは observe→create の順に既存
+  バケットをそのまま採用するため、マージ後の CI デプロイは 409 に
+  ならず収束する（beta.70 の実装読解で確認）
+  ②**内容アドレスストア**: key = `originals/<sha256>.png`。発注書
+  order.json の追加フィールド `originals`（発注書相対パス → sha256）が
+  唯一のポインタで、manifest の referenceHashes と同じハッシュ空間 —
+  同一内容は同一キーに畳まれる（avatar-carry / avatar-red が参照する
+  `../avatar/sheet-original.png` は移行時に自動で重複排除された）。
+  取得時は body の sha 照合で改竄・取り違えを fail loud
+  ③**解決規則**（`scripts/r2_originals.py` — 両 import スクリプト共用）:
+  ローカルにあればそれを使い（生成 → 取り込みのループはアップロード前も
+  従来どおり動く）、無ければ R2 から取得して gitignored なローカル
+  パス（`*-original.png`）へ書き戻す。references のハッシュは記録値で
+  短絡（ハッシュしか要らないものを MB 単位で DL しない）。アップロードは
+  `scripts/upload-asset-originals.py`（`*-original.*` 命名規約で自動
+  判別・内容アドレスゆえ冪等。発注 → アップロード → 取り込み → コミット、
+  の順が量産ラインの新しい定型）
+  ④**経路は Cloudflare REST API**（bearer = CLOUDFLARE_API_TOKEN。
+  R2 権限は Phase 4 増分④の見込みどおり同トークンで可 — VM 注入
+  トークンで PUT/GET/DELETE を実測 2026-08-09）。S3 資格情報・SigV4 は
+  不要で資格情報は増えない。ランタイム（クライアント・module）からは
+  参照しない開発時ストア — 配信の R2 移行（DP-1）とは別物のまま
+  ⑤**検証**: ローカル原本ゼロの状態から全 9 発注書の再取り込みで
+  manifest・コマ PNG・hand.png とも byte 同一（git clean — ⑵で確立した
+  再現性規約）。オーナー承認ゲートは不変（取り込み結果 PNG は Git に
+  残り、PR でシート画像が見える）
 - **①b の完了条件に歩留まり実測を含める（オーナー合意 2026-08-08 —
   「ベンチ 1 体の合格」と「量産に耐えるライン」は別物）**: ⑴⑵ で確立した
   レシピを工程として繋ぎ（コマ位相の自動選定 — 足位置解析 — を含む）、

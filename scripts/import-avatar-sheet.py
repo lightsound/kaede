@@ -48,10 +48,13 @@ Usage:
 The order file names the sheet, the output directory (both relative to the
 order file itself), the grid, the pose per cell, and the generation prompt;
 the prompt and the reference-image hashes land in manifest.source for
-reproducibility.
+reproducibility. Generation originals (`*-original.png`) are not committed
+(①b⑶): the order's `originals` map records their sha256, and inputs
+absent from disk are fetched from the content-addressed R2 store and
+verified before use (r2_originals.py — the manifest this script writes is
+byte-reproducible either way).
 """
 
-import hashlib
 import json
 import subprocess
 import sys
@@ -59,6 +62,7 @@ from collections import Counter
 from pathlib import Path
 
 from PIL import Image
+from r2_originals import reference_sha256, resolve_original
 
 # Chroma key: green dominance d = g - max(r, b). Fully transparent above
 # KEY_HARD, opaque below KEY_SOFT, linear ramp between (antialiased edges).
@@ -230,10 +234,6 @@ def palette_of(frames: list[Image.Image]) -> list[str]:
     return [f"#{r:02x}{g:02x}{b:02x}" for (r, g, b), _ in counts.most_common(PALETTE_COLORS)]
 
 
-def sha256_of(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
@@ -242,7 +242,10 @@ def main() -> None:
     base = order_path.parent
     out_dir = base / order["outDir"]
 
-    sheet = chroma_key(Image.open(base / order["sheet"]))
+    # Generation originals are not committed (①b⑶ — r2_originals.py):
+    # the order's `originals` map points at the R2 copy of anything absent.
+    originals = order.get("originals", {})
+    sheet = chroma_key(Image.open(resolve_original(base, order["sheet"], originals)))
     grid = order["grid"]
     frames = [cut_cell(sheet, grid["cols"], grid["rows"], i) for i in range(len(order["poses"]))]
 
@@ -278,7 +281,7 @@ def main() -> None:
         "palette": palette_of(frames),
         "source": {
             "prompt": order["prompt"],
-            "referenceHashes": [sha256_of(base / ref) for ref in order["references"]],
+            "referenceHashes": [reference_sha256(base, ref, originals) for ref in order["references"]],
         },
         "poses": poses,
     }
