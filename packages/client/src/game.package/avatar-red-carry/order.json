@@ -18,11 +18,11 @@
     "walk-d": [25, 49]
   },
   "handAnchors": {
-    "stand": [22, 63],
-    "walk-a": [22, 63],
-    "walk-b": [22, 63],
-    "walk-c": [22, 62],
-    "walk-d": [22, 63]
+    "stand": [23, 64],
+    "walk-a": [23, 64],
+    "walk-b": [23, 64],
+    "walk-c": [23, 63],
+    "walk-d": [23, 64]
   },
   "references": ["../avatar-carry/sheet-original.png"],
   "prompt": "Outfit swap of the near-arm mitten carry variant (v3 of this sheet — regenerated with each carry respec): avatar.boy-basic-carry restyled into the red-hoodie look via google/nano-banana-2 sheet edit (~$0.10, first try; silhouette IoU vs the carry sheet 0.950-0.965). Same keep-everything edit prompt as avatar.boy-basic-red plus clauses naming the bent near arm with its mitten and the wide strides (one earlier take softened the strides — the IoU gate catches that failure class). Neck anchors transfer from avatar.boy-basic-carry (heads identical by construction; the hood breaks the neck-pinch heuristic). Hand anchors were verified on THIS sheet (the per-sheet measurement rule: outfit edits move where the hand is drawn; this edit kept the mitten within a pixel of the white sheet's (22,63)). handLayer: true cuts this sheet's own bare mitten (long sleeves cover the forearm), rendered on top of held items.",
