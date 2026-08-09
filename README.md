@@ -264,7 +264,11 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      Domains API が DNS レコードと証明書ごと面倒を見るため、この権限で足りる
      — 2026-08-04 に現行トークンで attach 成功を実測。Zone / DNS:Edit は
      Workers には不要だが、**Clerk 用 CNAME（`clerk.kaede.town` 等）を API /
-     IaC で管理したい場合は別途必要**。R2 権限は不要）。
+     IaC で管理したい場合は別途必要**。R2 権限はデプロイ自体には不要 —
+     ただし現行トークンには録画バケットのため付与済みで（下の「Alchemy の
+     ステート管理」の注記）、アセット生成原本の R2 ストア
+     （`scripts/r2_originals.py` — ROADMAP Phase 5 ①b⑶）も同じトークンの
+     その権限を使う）。
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
      `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
    - **ローカル実行の認証（alchemy 2.0.0-beta.70 以降）**: 対話実行では

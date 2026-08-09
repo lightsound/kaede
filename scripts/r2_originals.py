@@ -19,7 +19,13 @@ missing file is fetched from R2 into its recorded local path (gitignored)
 so later runs are offline again. Reference hashing (reference_sha256)
 short-circuits to the recorded hash when the file is absent: hashing is
 the only thing a reference is needed for, so downloading megabytes just to
-re-derive a recorded value would be waste.
+re-derive a recorded value would be waste. Local-wins is only for entries
+the order does not record yet (the first generation of a new asset): a
+recorded original whose on-disk bytes drifted is an un-uploaded
+regeneration, and importing it would mint a manifest a fresh clone — which
+resolves the RECORDED bytes — can never reproduce (worst on shared
+references, where it silently rewrites ANOTHER asset's referenceHashes
+behind a gitignored image), so that mismatch fails loudly instead.
 
 Transport is the Cloudflare REST API (bearer CLOUDFLARE_API_TOKEN — the
 token this repo's tooling already holds; R2 object PUT/GET measured
@@ -59,7 +65,8 @@ def _token() -> str:
     if not token:
         raise SystemExit(
             "CLOUDFLARE_API_TOKEN is not set — the asset-original store on R2 "
-            "needs it (README「デプロイ」の R2 権限付きトークン)"
+            "needs the R2-granted deploy token (README「手動デプロイ（逃げ道）」の"
+            "前提を参照。R2 権限は録画バケットのため 2026-08-06 に付与済み)"
         )
     return token
 
@@ -94,10 +101,25 @@ def fetch_original(rel: str, sha256: str, dest: Path) -> Path:
     return dest
 
 
+def _verified_local_sha256(path: Path, rel: str, originals: dict[str, str]) -> str:
+    """The local file's sha256, failed loudly when it contradicts the order
+    (an un-uploaded regeneration — see the module doc's local-wins caveat)."""
+    digest = sha256_of(path)
+    recorded = originals.get(rel)
+    if recorded is not None and digest != recorded:
+        raise SystemExit(
+            f"{path} hashes to {digest} but the order records {recorded} — "
+            "regenerated original? run scripts/upload-asset-originals.py on every "
+            "order that names it to re-record, then re-import"
+        )
+    return digest
+
+
 def resolve_original(base: Path, rel: str, originals: dict[str, str]) -> Path:
     """The order input `rel` as a local path, fetched from R2 when absent."""
     path = base / rel
     if path.exists():
+        _verified_local_sha256(path, rel, originals)
         return path
     sha256 = originals.get(rel)
     if sha256 is None:
@@ -112,7 +134,7 @@ def reference_sha256(base: Path, rel: str, originals: dict[str, str]) -> str:
     """The reference's sha256 without a needless download (see module doc)."""
     path = base / rel
     if path.exists():
-        return sha256_of(path)
+        return _verified_local_sha256(path, rel, originals)
     sha256 = originals.get(rel)
     if sha256 is None:
         raise SystemExit(
