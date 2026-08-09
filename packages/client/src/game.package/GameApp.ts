@@ -375,31 +375,63 @@ interface DressUpPreview {
   held?: HeldItemDisplay;
 }
 
-/** The red-hoodie outfit sheet (avatar.boy-basic-red), loaded on demand. */
-async function loadRedSheet(): Promise<AvatarSheetTextures> {
-  const urls = await Promise.all([
-    import('./avatar-red/stand.png'),
-    import('./avatar-red/walk-a.png'),
-    import('./avatar-red/walk-b.png'),
-    import('./avatar-red/walk-c.png'),
-    import('./avatar-red/walk-d.png'),
-  ]);
+/** Builds one pose sheet from its five loaded frame modules, in pose order. */
+async function sheetFromModules(mods: { default: string }[]): Promise<AvatarSheetTextures> {
   const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
-    urls.map((m) => Assets.load(m.default)),
+    mods.map((m) => Assets.load(m.default)),
   );
   return { stand, 'walk-a': walkA, 'walk-b': walkB, 'walk-c': walkC, 'walk-d': walkD };
+}
+
+/** The red-hoodie outfit sheet (avatar.boy-basic-red), loaded on demand. */
+async function loadRedSheet(): Promise<AvatarSheetTextures> {
+  return sheetFromModules(
+    await Promise.all([
+      import('./avatar-red/stand.png'),
+      import('./avatar-red/walk-a.png'),
+      import('./avatar-red/walk-b.png'),
+      import('./avatar-red/walk-c.png'),
+      import('./avatar-red/walk-d.png'),
+    ]),
+  );
+}
+
+/**
+ * The carry-pose sheet variant (avatar.boy-basic-carry / -red-carry): the
+ * near arm hangs still through the whole stride, giving a held item a
+ * stable hand anchor — the ①b(a) verdict that a statically anchored item
+ * cannot ride the swing-walk sheets (see HeldItemDisplay).
+ */
+async function loadCarrySheet(redOutfit: boolean): Promise<AvatarSheetTextures> {
+  return sheetFromModules(
+    await (redOutfit
+      ? Promise.all([
+          import('./avatar-red-carry/stand.png'),
+          import('./avatar-red-carry/walk-a.png'),
+          import('./avatar-red-carry/walk-b.png'),
+          import('./avatar-red-carry/walk-c.png'),
+          import('./avatar-red-carry/walk-d.png'),
+        ])
+      : Promise.all([
+          import('./avatar-carry/stand.png'),
+          import('./avatar-carry/walk-a.png'),
+          import('./avatar-carry/walk-b.png'),
+          import('./avatar-carry/walk-c.png'),
+          import('./avatar-carry/walk-d.png'),
+        ])),
+  );
 }
 
 /**
  * The coffee-mug held item (item.coffee-mug), manifest-driven: the mug's
  * grip point comes from its own manifest, and the per-pose hand anchors
- * from the manifest of whichever body sheet is being worn — the anchors
- * are frame coordinates, so they must match the frames actually rendered.
+ * from the manifest of the carry sheet being worn — the anchors are frame
+ * coordinates, so they must match the frames actually rendered.
  */
 async function loadMugItem(redOutfit: boolean): Promise<HeldItemDisplay> {
   const [mugManifest, bodyManifest, mugUrl] = await Promise.all([
     import('./items/coffee-mug/manifest.json'),
-    redOutfit ? import('./avatar-red/manifest.json') : import('./avatar/manifest.json'),
+    redOutfit ? import('./avatar-red-carry/manifest.json') : import('./avatar-carry/manifest.json'),
     import('./items/coffee-mug/coffee-mug.png'),
   ]);
   const texture = await Assets.load(mugUrl.default);
@@ -421,14 +453,18 @@ async function loadMugItem(redOutfit: boolean): Promise<HeldItemDisplay> {
  * Reads the dev-only preview selection from the URL (?outfit=red,
  * ?held=mug). Dev builds only — the callers gate on import.meta.env.DEV,
  * so production bundles drop this code and the preview assets with it.
+ * Holding an item swaps the whole body sheet to the carry variant: which
+ * pose sheet a body wears and whether an item can ride it are one
+ * decision (the ①b(a) verdict), not two independent toggles.
  */
 async function loadDressUpPreview(): Promise<DressUpPreview> {
   const params = new URLSearchParams(window.location.search);
   const redOutfit = params.get('outfit') === 'red';
-  const preview: DressUpPreview = {};
-  if (redOutfit) preview.sheet = await loadRedSheet();
-  if (params.get('held') === 'mug') preview.held = await loadMugItem(redOutfit);
-  return preview;
+  if (params.get('held') === 'mug') {
+    return { sheet: await loadCarrySheet(redOutfit), held: await loadMugItem(redOutfit) };
+  }
+  if (redOutfit) return { sheet: await loadRedSheet() };
+  return {};
 }
 
 /**

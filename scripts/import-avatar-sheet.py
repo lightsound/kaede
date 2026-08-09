@@ -20,19 +20,18 @@ estimate, overridden per pose by the order's `handAnchors` (measured values —
 skin-tone blob detection plus visual confirmation; the override lives in the
 order so a re-run of this script reproduces the committed manifest instead
 of clobbering the measurements back to the estimate). The measured spec,
-revised across the ①b(a) spike's owner/video reviews: the STAND `hand` is
-the visible hanging hand at the character's side — a held item's baked
-gripping hand covers it and connects to the arm (anchoring at the barely
-drawn front-hip hand instead reads as a disembodied hand). The WALK values
-record the fist the art draws in front of the torso (kept as measurements),
-but statically composited items are NOT rendered during walk at all: the
+settled across the ①b(a) spike's owner/video reviews: `hand` is the center
+of the drawn hanging near hand, positioned so a held item's coverage box
+swallows the drawn fist with margin (anchor y = fist bottom - 4, or the
+fingertips peek out under the item as a double hand). Held items render
+ONLY on the carry pose sheets (avatar-carry / avatar-red-carry — both arms
+held still through the stride): on the standard swing-walk sheets the
 exaggerated arm swing that makes the leg alternation readable (①b(c))
 leaves both fists prominently empty every stride, so wherever an item is
-pinned, half the frames read as floating — the same-physical-hand track
-parks it at the hip, the front-fist track pins it to the chest while the
-near arm swings past (both measured, both rejected). Items during walk
-need a carry-pose body variant or an arm-included overlay layer — the ①e
-design decision recorded in ROADMAP ①b(a). `neckAnchors` overrides the neck
+pinned, half the frames read as floating (measured across three anchor
+schemes before the carry variant settled it). Hand anchors are per-sheet
+measurements, never inherited: an outfit edit redraws sleeves and moves
+where the hand is drawn by several pixels (measured on the red hoodie). `neckAnchors` overrides the neck
 detection the same way: the ①b(a) spike measured that the narrowest-row
 heuristic breaks on outfits that widen the neck silhouette (the red
 hoodie's hood makes the hip row the narrowest, landing the neck on the

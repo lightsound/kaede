@@ -1,0 +1,54 @@
+{
+  "id": "avatar.boy-basic-red-carry",
+  "type": "avatar-body",
+  "name": "男の子（赤パーカー・持ち歩き）",
+  "author": "kaede",
+  "license": "kaede-internal",
+  "palette": ["#985225", "#9a5325", "#9a5324", "#975123", "#e7c192"],
+  "source": {
+    "prompt": "Outfit swap of the carry-walk variant: avatar.boy-basic-carry restyled into the red-hoodie look of avatar.boy-basic-red, via Cloudflare AI Gateway (gateway kaede-assets) with google/nano-banana-2, image_input = the committed carry sheet (~$0.10/枚 ×3 — take 1 predates the both-arms-still carry respec, take 2 softened the strides (silhouette IoU fell to 0.815-0.846, caught by the mechanical gate) and a retry with an explicit keep-the-wide-strides clause restored 0.945-0.957 — the ①b(a) spike round 3, 2026-08-09). Same keep-everything edit prompt as avatar.boy-basic-red (red hoodie + beige chinos, hands bare, poses pixel-identical) with one added clause naming the still near arm so the sleeves follow it. Pose fidelity verified mechanically before import: per-frame silhouette IoU against the carry sheet 0.950-0.967 (the residual is the clothes' own silhouette). This sheet is the composition proof of the factory: pose variant (video line) × outfit (sheet edit) multiply as independent $0.50 + $0.10 steps, not as a re-shoot. The neck/hand anchors are transferred from avatar.boy-basic-carry's measured values (poses identical by construction; the hood breaks the neck-pinch heuristic and the beige chinos pollute skin-blob detection, the avatar.boy-basic-red precedent), then verified visually with the mug composited.",
+    "referenceHashes": ["eae204f7a932eef0af8c849dc936a008dbc04b2aa10ef7da2af08cc8bc4be777"]
+  },
+  "poses": {
+    "stand": {
+      "file": "stand.png",
+      "size": [52, 96],
+      "anchors": {
+        "neck": [25, 49],
+        "hand": [16, 73]
+      }
+    },
+    "walk-a": {
+      "file": "walk-a.png",
+      "size": [52, 97],
+      "anchors": {
+        "neck": [26, 49],
+        "hand": [17, 73]
+      }
+    },
+    "walk-b": {
+      "file": "walk-b.png",
+      "size": [52, 96],
+      "anchors": {
+        "neck": [25, 49],
+        "hand": [13, 71]
+      }
+    },
+    "walk-c": {
+      "file": "walk-c.png",
+      "size": [52, 96],
+      "anchors": {
+        "neck": [25, 49],
+        "hand": [24, 70]
+      }
+    },
+    "walk-d": {
+      "file": "walk-d.png",
+      "size": [52, 97],
+      "anchors": {
+        "neck": [25, 49],
+        "hand": [14, 71]
+      }
+    }
+  }
+}

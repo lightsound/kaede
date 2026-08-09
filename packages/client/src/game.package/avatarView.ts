@@ -27,15 +27,16 @@ export interface AvatarSheetTextures {
  * `hands` are the per-pose hand anchors. The keys mirror AvatarSheetTextures
  * so held items and pose frames can never disagree about which poses exist.
  *
- * Shown ONLY while standing — the ①b(a) spike's measured conclusion: the
- * walk sheets' exaggerated arm swing (the very thing that makes the leg
- * alternation readable, ①b(c)) structurally conflicts with a statically
- * anchored item. Both fists swing prominently and empty, so wherever the
- * item is pinned, half the frames read as "the arm swings past the
- * floating item" (owner review + zoomed video review, 2026-08-08 — anchor
- * precision cannot fix this). Items during WALK need a carry-pose body
- * variant or an arm-included overlay layer (the MapleStory weapon+arm
- * structure) — the ①e design decision recorded in ROADMAP ①b(a).
+ * The caller pairs a held item with a CARRY-pose sheet variant (the near
+ * arm hangs still at the side — avatar.boy-basic-carry), the ①b(a)
+ * spike's measured conclusion after owner review: on the standard walk
+ * sheets the exaggerated arm swing (the very thing that makes the leg
+ * alternation readable, ①b(c)) leaves both fists prominently empty, so a
+ * statically anchored item reads as floating wherever it is pinned —
+ * anchor precision cannot fix that. The carrier's still hand gives the
+ * item a stable anchor through the whole stride (the owner's direction,
+ * 2026-08-09), and the item sprite bakes in a gripping hand that covers
+ * the drawn hand so the fingers read as wrapping the item.
  */
 export interface HeldItemDisplay {
   texture: Texture;
@@ -65,11 +66,11 @@ const ASSET_SCALE = 0.5;
 
 /**
  * The held item as a sprite whose origin is its grip point: positioning it
- * at a pose's hand anchor is then a single coordinate conversion (see
- * placeHeldItem). Added to `body` after the avatar sprite, so the item
- * draws in front — the stand pose draws its front hand against the hip,
- * so one z-position suffices; no per-pose z or rotation field earned its
- * way into the manifest.
+ * at a pose's hand anchor is then a single coordinate conversion per frame
+ * (see placeHeldItem). Added to `body` after the avatar sprite, so the
+ * item draws in front — the carry sheets keep the holding hand on the
+ * viewer side in every pose, so one z-position suffices; no per-pose z or
+ * rotation field earned its way into the manifest.
  */
 function createHeldItemSprite(item: HeldItemDisplay): Sprite {
   const sprite = new Sprite(item.texture);
@@ -89,22 +90,6 @@ function placeHeldItem(item: Sprite, frame: Texture, hand: readonly number[]): v
   const [handX, handY] = hand;
   item.x = ((handX ?? 0) - frame.width / 2) * ASSET_SCALE;
   item.y = PLAYER_HALF_H - (frame.height - (handY ?? 0)) * ASSET_SCALE;
-}
-
-/**
- * Shows the held item while the avatar stands, stowed while it walks (the
- * stand-only rule — see HeldItemDisplay). The placement re-runs on every
- * shown frame because the stand texture is the placement's coordinate
- * space and stays constant, so this is idempotent, not per-frame drift.
- */
-function syncHeldItem(
-  item: Sprite,
-  sheet: AvatarSheetTextures,
-  held: HeldItemDisplay,
-  standing: boolean,
-): void {
-  item.visible = standing;
-  if (standing) placeHeldItem(item, sheet.stand, held.hands.stand);
 }
 
 /**
@@ -140,7 +125,7 @@ export function createAvatarView(
       walk = advanceWalk(walk, dx, dtMs);
       const pose = selectPose(walk);
       sprite.texture = sheet[pose];
-      if (item && held) syncHeldItem(item, sheet, held, pose === 'stand');
+      if (item && held) placeHeldItem(item, sheet[pose], held.hands[pose]);
     },
   };
 }

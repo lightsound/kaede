@@ -1,0 +1,22 @@
+{
+  "id": "avatar.boy-basic-carry",
+  "type": "avatar-body",
+  "name": "男の子（基本・持ち歩き）",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": {
+    "cols": 5,
+    "rows": 1
+  },
+  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "standHeightPx": 96,
+  "handAnchors": {
+    "stand": [15, 69],
+    "walk-a": [18, 70],
+    "walk-b": [13, 69],
+    "walk-c": [23, 68],
+    "walk-d": [14, 69]
+  },
+  "references": ["../avatar/sheet-original.png"],
+  "prompt": "Carry-walk pose variant of avatar.boy-basic (the ①b(a) spike round 3, 2026-08-09 — the owner's direction: a character holding an item keeps the holding arm STILL while walking, so a statically anchored item can ride it; the swing-walk sheet is structurally incompatible with held items, see ROADMAP ①b(a)). SPEC: BOTH arms hang still — the first take kept only the near arm still and let the far arm swing, and the red-hoodie outfit made that far arm loud enough to read as 'the holding arm abandoning the mug' at 96px (viewers cannot tell near from far); freezing both arms removes the ambiguity for every sleeve color. Same two-stage video line as the base walk sheet (ROADMAP ①b(c) recipe). Stage 1 input: the committed base sheet's stand cell placed on a 720x720 pure #00FF00 canvas (character ~470px tall, feet on y=640). Stage 2, model alibaba/wan-2.7-i2v ($0.50 per take, 2 takes, both obeyed), prompt: 'The chibi boy game character from the image walks in place, treadmill-style, without moving across the frame. An exaggerated cartoon game walk cycle like classic 2D side-scrolling games: BIG strides with legs swinging far forward and far back, knees lifting high on each step. IMPORTANT: BOTH of his arms stay PERFECTLY STILL the whole time, hanging straight down at his sides as if he is carrying heavy shopping bags in both hands — the arms and hands do not swing, do not bend, do not move at all; only his legs move. Legs strictly alternate: right leg steps forward, then left leg steps forward. He keeps facing right in 3/4 view. The camera is completely static, no zoom, no pan. The flat pure green #00FF00 chroma-key background stays perfectly unchanged and empty. The character stays centered with his feet returning to the same ground line every step. Constant even lighting, no shadows.' Output 5s 30fps 1440x1440; committed cells are the stand cell (copied pixel-identical from the base sheet) plus video frames n66 (contact), n72 (passing), n78 (opposite contact), n84 (opposite passing), each center-cropped 760px, downscaled 2x, shadowed-green flattened to solid green, and the stand cell's head (above its detected neck pinch, +14px chin overlap) composited at each frame's own neck anchor — the same post-composition as the base sheet, so the head stays pixel-identical across ALL of this character's sheets. The stand cell is shared with avatar.boy-basic on purpose: an item at the stand hand anchor stays put when the carrier stops, so the stand/walk transition does not move the item. handAnchors are the measured centers of the drawn hanging near hand per frame (skin-blob detection + visual confirmation); the item's baked gripping hand covers that drawn hand."
+}

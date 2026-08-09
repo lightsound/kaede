@@ -78,6 +78,11 @@ def main() -> None:
     if bbox is None:
         raise SystemExit("empty item image after keying")
     frame = keyed.crop(bbox)
+    # Held items are authored facing right with the grip hand on the LEFT
+    # (item body extends forward); `flip` mirrors a generation that came out
+    # the other way around instead of paying for a re-roll.
+    if order.get("flip"):
+        frame = frame.transpose(Image.FLIP_LEFT_RIGHT)
 
     scale = order["heightPx"] / frame.height
     frame = frame.resize(
