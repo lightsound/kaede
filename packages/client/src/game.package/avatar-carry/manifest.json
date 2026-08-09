@@ -4,9 +4,9 @@
   "name": "男の子（基本・持ち歩き）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#fdd8ac", "#9b572a", "#a05a2a", "#fdd6aa", "#a05a2b"],
+  "palette": ["#fdd8ab", "#995629", "#fdd9ac", "#fdd6a8", "#5e3317"],
   "source": {
-    "prompt": "Carry-walk pose variant of avatar.boy-basic, v3 — the bent-elbow respec (owner directions 2026-08-09: ①an item carrier bends the elbow, standing AND walking ②the mitten hand renders IN FRONT of the held item, MapleStory's hand-over-item layering — hence the handLayer cut below). Stage 0: the bent-arm STAND was made by a nano-banana-2 single-frame edit of the base stand ('bend his near arm at the elbow ~90°, forearm horizontal in front of his belly, palm up as if about to carry a small tray; everything else identical'), then cleaned through the standard post-composition (chroma flatten, key, scale to the base stand height, base stand's head composited at the neck pinch — the edit drifts face/hair, the head composite makes it pixel-identical again). Stage 1: that clean bent stand on a 720x720 pure #00FF00 canvas (feet y=640). Stage 2: alibaba/wan-2.7-i2v ($0.50, first try obeyed): 'The chibi boy game character from the image walks in place, treadmill-style, without moving across the frame. An exaggerated cartoon game walk cycle like classic 2D side-scrolling games: BIG strides with legs swinging far forward and far back, knees lifting high on each step. IMPORTANT: his near arm stays PERFECTLY STILL exactly as in the image - bent at the elbow, forearm horizontal in front of his belly, open hand palm-up as if carrying a small tray; that arm and hand do not swing, do not move, do not change shape at all. His far arm also stays still, hanging at his side. Only his legs move. Legs strictly alternate: right leg steps forward, then left leg steps forward. He keeps facing right in 3/4 view. The camera is completely static, no zoom, no pan. The flat pure green #00FF00 chroma-key background stays perfectly unchanged and empty. The character stays centered with his feet returning to the same ground line every step. Constant even lighting, no shadows.' Committed cells: the bent stand plus video frames n66 (contact) / n71 (passing) / n75 (opposite contact) / n80 (opposite passing), each center-cropped 760px, downscaled 2x, shadowed-green flattened, base head composited at each frame's own neck anchor. handAnchors = the palm's top-center per frame (the item rest point; the still arm keeps it within ±1px across the stride). handLayer: true cuts the bare hand+forearm (skin blob at the stand hand anchor + its outline ring) as hand.png, rendered ON TOP of the held item so the hand reads as in front (its grip aligns to each pose's hand anchor).",
+    "prompt": "Carry-walk pose variant of avatar.boy-basic, v5 — the near-arm mitten spec (owner directions 2026-08-09, final round: ①the carrying arm must be the NEAR arm, its shoulder/upper arm/elbow drawn visibly in front of the torso — earlier takes bent an arm that emerged from behind the torso and read as the far arm ②the hand is a complete round MITTEN with no fingers ③the mitten renders IN FRONT of the held item — the handLayer cut below; earlier: the elbow must be bent standing and walking, items rest on the hand as bare sprites). Stage 0 (bent-mitten STAND): nano-banana-2 single-frame edits of the base stand — three takes to land the pose (take 1 put the mitten at chest height so tall items covered the face; take 2 lowered it to the waist but bent both arms forward; take 3 edited take 2's far arm back down to hang behind the torso). Final wording: 'his NEAR arm — shoulder, upper arm and elbow FULLY VISIBLE drawn in front of his torso — bent at the elbow, forearm forward and slightly downward, the hand a SIMPLE ROUND MITTEN with NO fingers in front of his WAIST; his far arm hangs straight down behind his torso; everything else identical.' Cleaned through the standard post-composition (chroma flatten, key, scale to the base stand height, base stand's head composited at the neck pinch — pose edits drift face/hair, the head composite makes them pixel-identical again). Stage 1: the clean bent-mitten stand on a 720x720 pure #00FF00 canvas (feet y=640). Stage 2: alibaba/wan-2.7-i2v ($0.50, first try obeyed): walk-in-place with BIG strides, 'his near arm stays PERFECTLY STILL exactly as in the image — bent at the elbow with the round mitten hand held in front of his waist... His far arm also stays still, hanging at his side behind his body. Only his legs move.' Committed cells: the bent-mitten stand plus video frames n60 (contact) / n68 (passing) / n75 (opposite contact) / n82 (opposite passing), each center-cropped 760px, downscaled 2x, shadowed-green flattened, base head composited at each frame's own neck anchor. handAnchors = the mitten's top-center per frame (the item rest point; the still arm keeps it within ±1px across the stride — measured (22,63) on every frame). handLayer: true cuts the mitten+visible skin around the stand hand anchor as hand.png, rendered ON TOP of the held item (body → item → hand, the MapleStory hand-over-item layering).",
     "referenceHashes": ["52e71d22a278c873e743aed24b6eb8e494e6435179fbe1da718e20abed997171"]
   },
   "poses": {
@@ -15,47 +15,47 @@
       "size": [52, 96],
       "anchors": {
         "neck": [25, 49],
-        "hand": [45, 57]
+        "hand": [22, 63]
       }
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [52, 97],
+      "size": [52, 96],
       "anchors": {
         "neck": [25, 49],
-        "hand": [44, 56]
+        "hand": [22, 63]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [52, 97],
+      "size": [52, 96],
       "anchors": {
         "neck": [25, 49],
-        "hand": [44, 56]
+        "hand": [22, 63]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [52, 94],
+      "size": [52, 96],
       "anchors": {
         "neck": [25, 49],
-        "hand": [45, 55]
+        "hand": [22, 62]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [52, 98],
+      "size": [52, 96],
       "anchors": {
         "neck": [25, 49],
-        "hand": [45, 56]
+        "hand": [22, 63]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [17, 7],
+    "size": [16, 12],
     "anchors": {
-      "grip": [11, 0]
+      "grip": [10, 3]
     }
   }
 }

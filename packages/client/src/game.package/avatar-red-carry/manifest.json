@@ -4,10 +4,10 @@
   "name": "男の子（赤パーカー・持ち歩き）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#9c5425", "#9d5524", "#9b5324", "#9e5524", "#fedead"],
+  "palette": ["#914c22", "#975123", "#965022", "#fdd5a5", "#9c5324"],
   "source": {
-    "prompt": "Outfit swap of the bent-elbow carry variant (v2 of this sheet — regenerated after the carry respec of 2026-08-09: bent near arm, palm up, both arms still): avatar.boy-basic-carry restyled into the red-hoodie look via google/nano-banana-2 sheet edit (~$0.10, first try; silhouette IoU vs the carry sheet 0.945-0.955). Same keep-everything edit prompt as avatar.boy-basic-red plus clauses naming the bent near arm and wide strides (the earlier flat-arm red carry needed one retry after an edit softened the strides — the IoU gate catches that failure class). The neck anchors transfer from avatar.boy-basic-carry (heads identical by construction; the hood breaks the neck-pinch heuristic). The hand anchors were re-measured on THIS sheet (an outfit edit moves where the hand is drawn — the spike's per-sheet measurement rule) via skin-blob detection of the palm-up hand + visual confirmation. handLayer: true cuts this sheet's own bare mitten (long sleeves cover the forearm, so the overlay is the hand only), rendered on top of held items.",
-    "referenceHashes": ["282d8c6f00f953f75f34437201bc7d25c699417fd249faf208ce43b0d79cae7b"]
+    "prompt": "Outfit swap of the near-arm mitten carry variant (v3 of this sheet — regenerated with each carry respec): avatar.boy-basic-carry restyled into the red-hoodie look via google/nano-banana-2 sheet edit (~$0.10, first try; silhouette IoU vs the carry sheet 0.950-0.965). Same keep-everything edit prompt as avatar.boy-basic-red plus clauses naming the bent near arm with its mitten and the wide strides (one earlier take softened the strides — the IoU gate catches that failure class). Neck anchors transfer from avatar.boy-basic-carry (heads identical by construction; the hood breaks the neck-pinch heuristic). Hand anchors were verified on THIS sheet (the per-sheet measurement rule: outfit edits move where the hand is drawn; this edit kept the mitten within a pixel of the white sheet's (22,63)). handLayer: true cuts this sheet's own bare mitten (long sleeves cover the forearm), rendered on top of held items.",
+    "referenceHashes": ["6abf57a622035e7f7fa0a22ceb384a5220fcc414db228073d250614d5c3c09b7"]
   },
   "poses": {
     "stand": {
@@ -15,47 +15,47 @@
       "size": [52, 96],
       "anchors": {
         "neck": [25, 49],
-        "hand": [45, 57]
+        "hand": [22, 63]
       }
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [52, 97],
+      "size": [52, 96],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [44, 56]
+        "neck": [25, 49],
+        "hand": [22, 63]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [52, 97],
+      "size": [52, 96],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [44, 56]
+        "neck": [25, 49],
+        "hand": [22, 63]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [52, 94],
+      "size": [52, 96],
       "anchors": {
-        "neck": [26, 48],
-        "hand": [45, 55]
+        "neck": [25, 49],
+        "hand": [22, 62]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [52, 98],
+      "size": [52, 96],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [45, 56]
+        "neck": [25, 49],
+        "hand": [22, 63]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [9, 6],
+    "size": [8, 10],
     "anchors": {
-      "grip": [3, 0]
+      "grip": [3, 1]
     }
   }
 }

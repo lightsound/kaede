@@ -12,19 +12,19 @@
   "standHeightPx": 96,
   "neckAnchors": {
     "stand": [25, 49],
-    "walk-a": [26, 49],
-    "walk-b": [26, 49],
-    "walk-c": [26, 48],
-    "walk-d": [26, 49]
+    "walk-a": [25, 49],
+    "walk-b": [25, 49],
+    "walk-c": [25, 49],
+    "walk-d": [25, 49]
   },
   "handAnchors": {
-    "stand": [45, 57],
-    "walk-a": [44, 56],
-    "walk-b": [44, 56],
-    "walk-c": [45, 55],
-    "walk-d": [45, 56]
+    "stand": [22, 63],
+    "walk-a": [22, 63],
+    "walk-b": [22, 63],
+    "walk-c": [22, 62],
+    "walk-d": [22, 63]
   },
   "references": ["../avatar-carry/sheet-original.png"],
-  "prompt": "Outfit swap of the bent-elbow carry variant (v2 of this sheet — regenerated after the carry respec of 2026-08-09: bent near arm, palm up, both arms still): avatar.boy-basic-carry restyled into the red-hoodie look via google/nano-banana-2 sheet edit (~$0.10, first try; silhouette IoU vs the carry sheet 0.945-0.955). Same keep-everything edit prompt as avatar.boy-basic-red plus clauses naming the bent near arm and wide strides (the earlier flat-arm red carry needed one retry after an edit softened the strides — the IoU gate catches that failure class). The neck anchors transfer from avatar.boy-basic-carry (heads identical by construction; the hood breaks the neck-pinch heuristic). The hand anchors were re-measured on THIS sheet (an outfit edit moves where the hand is drawn — the spike's per-sheet measurement rule) via skin-blob detection of the palm-up hand + visual confirmation. handLayer: true cuts this sheet's own bare mitten (long sleeves cover the forearm, so the overlay is the hand only), rendered on top of held items.",
+  "prompt": "Outfit swap of the near-arm mitten carry variant (v3 of this sheet — regenerated with each carry respec): avatar.boy-basic-carry restyled into the red-hoodie look via google/nano-banana-2 sheet edit (~$0.10, first try; silhouette IoU vs the carry sheet 0.950-0.965). Same keep-everything edit prompt as avatar.boy-basic-red plus clauses naming the bent near arm with its mitten and the wide strides (one earlier take softened the strides — the IoU gate catches that failure class). Neck anchors transfer from avatar.boy-basic-carry (heads identical by construction; the hood breaks the neck-pinch heuristic). Hand anchors were verified on THIS sheet (the per-sheet measurement rule: outfit edits move where the hand is drawn; this edit kept the mitten within a pixel of the white sheet's (22,63)). handLayer: true cuts this sheet's own bare mitten (long sleeves cover the forearm), rendered on top of held items.",
   "handLayer": true
 }
