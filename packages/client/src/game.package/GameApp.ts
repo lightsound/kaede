@@ -423,22 +423,55 @@ async function loadCarrySheet(redOutfit: boolean): Promise<AvatarSheetTextures> 
 }
 
 /**
- * The coffee-mug held item (item.coffee-mug), manifest-driven: the mug's
- * grip point comes from its own manifest, and the per-pose hand anchors
- * from the manifest of the carry sheet being worn — the anchors are frame
- * coordinates, so they must match the frames actually rendered.
+ * The held-item catalog of the dev preview (the ①b(a) genericity check:
+ * one resting rule, five item classes — compact, flat, long-shafted,
+ * plush, and a spear taller than the character). Thunks so production
+ * DCE drops the chunks with the rest of the preview.
  */
-async function loadMugItem(redOutfit: boolean): Promise<HeldItemDisplay> {
-  const [mugManifest, bodyManifest, mugUrl] = await Promise.all([
-    import('./items/coffee-mug/manifest.json'),
+const HELD_ITEM_LOADERS = {
+  mug: () =>
+    Promise.all([
+      import('./items/coffee-mug/manifest.json'),
+      import('./items/coffee-mug/coffee-mug.png'),
+    ]),
+  notebook: () =>
+    Promise.all([
+      import('./items/notebook/manifest.json'),
+      import('./items/notebook/notebook.png'),
+    ]),
+  umbrella: () =>
+    Promise.all([
+      import('./items/umbrella/manifest.json'),
+      import('./items/umbrella/umbrella.png'),
+    ]),
+  plush: () =>
+    Promise.all([
+      import('./items/plush-bear/manifest.json'),
+      import('./items/plush-bear/plush-bear.png'),
+    ]),
+  spear: () =>
+    Promise.all([import('./items/spear/manifest.json'), import('./items/spear/spear.png')]),
+};
+
+/**
+ * One held item, manifest-driven: the item's grip point comes from its own
+ * manifest, and the per-pose hand anchors from the manifest of the carry
+ * sheet being worn — the anchors are frame coordinates, so they must match
+ * the frames actually rendered.
+ */
+async function loadHeldItem(
+  loader: (typeof HELD_ITEM_LOADERS)[keyof typeof HELD_ITEM_LOADERS],
+  redOutfit: boolean,
+): Promise<HeldItemDisplay> {
+  const [[itemManifest, itemUrl], bodyManifest] = await Promise.all([
+    loader(),
     redOutfit ? import('./avatar-red-carry/manifest.json') : import('./avatar-carry/manifest.json'),
-    import('./items/coffee-mug/coffee-mug.png'),
   ]);
-  const texture = await Assets.load(mugUrl.default);
+  const texture = await Assets.load(itemUrl.default);
   const poses = bodyManifest.default.poses;
   return {
     texture,
-    grip: mugManifest.default.frame.anchors.grip,
+    grip: itemManifest.default.frame.anchors.grip,
     hands: {
       stand: poses.stand.anchors.hand,
       'walk-a': poses['walk-a'].anchors.hand,
@@ -451,17 +484,20 @@ async function loadMugItem(redOutfit: boolean): Promise<HeldItemDisplay> {
 
 /**
  * Reads the dev-only preview selection from the URL (?outfit=red,
- * ?held=mug). Dev builds only — the callers gate on import.meta.env.DEV,
- * so production bundles drop this code and the preview assets with it.
- * Holding an item swaps the whole body sheet to the carry variant: which
- * pose sheet a body wears and whether an item can ride it are one
- * decision (the ①b(a) verdict), not two independent toggles.
+ * ?held=mug|notebook|umbrella|plush|spear). Dev builds only — the callers
+ * gate on import.meta.env.DEV, so production bundles drop this code and
+ * the preview assets with it. Holding an item swaps the whole body sheet
+ * to the carry variant: which pose sheet a body wears and whether an item
+ * can ride it are one decision (the ①b(a) verdict), not two independent
+ * toggles.
  */
 async function loadDressUpPreview(): Promise<DressUpPreview> {
   const params = new URLSearchParams(window.location.search);
   const redOutfit = params.get('outfit') === 'red';
-  if (params.get('held') === 'mug') {
-    return { sheet: await loadCarrySheet(redOutfit), held: await loadMugItem(redOutfit) };
+  const held = params.get('held');
+  const loader = held ? HELD_ITEM_LOADERS[held as keyof typeof HELD_ITEM_LOADERS] : undefined;
+  if (loader) {
+    return { sheet: await loadCarrySheet(redOutfit), held: await loadHeldItem(loader, redOutfit) };
   }
   if (redOutfit) return { sheet: await loadRedSheet() };
   return {};

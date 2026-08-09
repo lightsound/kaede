@@ -20,18 +20,19 @@ estimate, overridden per pose by the order's `handAnchors` (measured values —
 skin-tone blob detection plus visual confirmation; the override lives in the
 order so a re-run of this script reproduces the committed manifest instead
 of clobbering the measurements back to the estimate). The measured spec,
-settled across the ①b(a) spike's owner/video reviews: `hand` is the center
-of the drawn hanging near hand, positioned so a held item's coverage box
-swallows the drawn fist with margin (anchor y = fist bottom - 4, or the
-fingertips peek out under the item as a double hand). Held items render
-ONLY on the carry pose sheets (avatar-carry / avatar-red-carry — both arms
-held still through the stride): on the standard swing-walk sheets the
-exaggerated arm swing that makes the leg alternation readable (①b(c))
-leaves both fists prominently empty every stride, so wherever an item is
-pinned, half the frames read as floating (measured across three anchor
-schemes before the carry variant settled it). Hand anchors are per-sheet
-measurements, never inherited: an outfit edit redraws sleeves and moves
-where the hand is drawn by several pixels (measured on the red hoodie). `neckAnchors` overrides the neck
+settled across the ①b(a) spike's owner/video reviews: `hand` is the CARRY
+POINT of the drawn hanging near hand — the point where a held item's grip
+lands, in the hand's upper half so the drawn mitten peeks out beneath the
+resting item (the MapleStory-style held reading; items are bare sprites,
+docs/asset-pipeline.md §2 held-item). Held items render ONLY on the carry
+pose sheets (avatar-carry / avatar-red-carry — both arms held still
+through the stride): on the standard swing-walk sheets the exaggerated
+arm swing that makes the leg alternation readable (①b(c)) leaves both
+fists prominently empty every stride, so wherever an item is pinned, half
+the frames read as floating (measured across three anchor schemes before
+the carry variant settled it). Hand anchors are per-sheet measurements,
+never inherited: an outfit edit redraws sleeves and moves where the hand
+is drawn by several pixels (measured on the red hoodie). `neckAnchors` overrides the neck
 detection the same way: the ①b(a) spike measured that the narrowest-row
 heuristic breaks on outfits that widen the neck silhouette (the red
 hoodie's hood makes the hip row the narrowest, landing the neck on the

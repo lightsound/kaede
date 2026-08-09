@@ -13,9 +13,15 @@ not build that generalization — ROADMAP ①b 着手順⑵).
 A held-item's own anchor is `grip`: the point in the item image that lands
 on the body pose's `hand` anchor when composited (avatar-rig.md §2 — the
 spec hole this spike found: without a grip point the renderer can only
-guess the item's registration). Defaults to the image center; the order may
-override with fractions of the trimmed size (e.g. a mug grips slightly
-left of center because the handle side never sits in the fist).
+guess the item's registration). Items are BARE sprites that REST ON the
+body sheet's drawn hand, MapleStory-style (owner direction 2026-08-09 —
+baked-in gripping hands were rejected: too realistic for the chibi style
+and not generic across items): grip = the resting contact point, given as
+fractions of the trimmed size. The convention, verified across five item
+classes (mug / notebook / umbrella / plush / spear): resting items use
+[0.5, 0.95] (bottom-center, slight overlap so the mitten peeks beneath);
+long shafted items use the measured shaft point where the hand carries
+them (umbrella mid-shaft [0.5, 0.5], spear lower-third [0.315, 0.7]).
 
 Usage:
     python3 scripts/import-held-item.py <order.json>

@@ -27,16 +27,19 @@ export interface AvatarSheetTextures {
  * `hands` are the per-pose hand anchors. The keys mirror AvatarSheetTextures
  * so held items and pose frames can never disagree about which poses exist.
  *
- * The caller pairs a held item with a CARRY-pose sheet variant (the near
- * arm hangs still at the side — avatar.boy-basic-carry), the ①b(a)
- * spike's measured conclusion after owner review: on the standard walk
- * sheets the exaggerated arm swing (the very thing that makes the leg
- * alternation readable, ①b(c)) leaves both fists prominently empty, so a
- * statically anchored item reads as floating wherever it is pinned —
- * anchor precision cannot fix that. The carrier's still hand gives the
- * item a stable anchor through the whole stride (the owner's direction,
- * 2026-08-09), and the item sprite bakes in a gripping hand that covers
- * the drawn hand so the fingers read as wrapping the item.
+ * The caller pairs a held item with a CARRY-pose sheet variant (both arms
+ * hang still — avatar.boy-basic-carry), the ①b(a) spike's measured
+ * conclusion after owner review: on the standard walk sheets the
+ * exaggerated arm swing (the very thing that makes the leg alternation
+ * readable, ①b(c)) leaves both fists prominently empty, so a statically
+ * anchored item reads as floating wherever it is pinned — anchor
+ * precision cannot fix that. The item itself is a BARE sprite that RESTS
+ * ON the sheet's drawn hand, MapleStory-style (owner direction
+ * 2026-08-09): its grip point (bottom-center for resting items, the
+ * measured shaft point for long ones) lands on the hand anchor and the
+ * drawn mitten peeks out beneath — one rule for every item class, no
+ * per-item baked hands (rejected: too realistic for the chibi style and
+ * not generic).
  */
 export interface HeldItemDisplay {
   texture: Texture;
@@ -68,9 +71,11 @@ const ASSET_SCALE = 0.5;
  * The held item as a sprite whose origin is its grip point: positioning it
  * at a pose's hand anchor is then a single coordinate conversion per frame
  * (see placeHeldItem). Added to `body` after the avatar sprite, so the
- * item draws in front — the carry sheets keep the holding hand on the
- * viewer side in every pose, so one z-position suffices; no per-pose z or
- * rotation field earned its way into the manifest.
+ * item draws in front of the body with the drawn hand peeking beneath it —
+ * the carry sheets keep the holding hand on the viewer side in every
+ * pose, so one z-position suffices; no per-pose z or rotation field
+ * earned its way into the manifest (verified across five item classes,
+ * spear included).
  */
 function createHeldItemSprite(item: HeldItemDisplay): Sprite {
   const sprite = new Sprite(item.texture);
