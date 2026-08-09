@@ -15,8 +15,32 @@ the sheet; refining the VALUES later is just editing coordinates).
 
 Anchor coordinates are pixels in the emitted frame image (origin top-left,
 2x resolution). `neck` is detected as the narrowest opaque row of the frame's
-chin-to-hip band (the chibi neck pinch); `hand` is a proportional estimate
-(unused until 増分①d, which refines it without touching the sheet).
+chin-to-hip band (the chibi neck pinch); `hand` defaults to a proportional
+estimate, overridden per pose by the order's `handAnchors` (measured values —
+skin-tone blob detection plus visual confirmation; the override lives in the
+order so a re-run of this script reproduces the committed manifest instead
+of clobbering the measurements back to the estimate). The measured spec,
+settled across the ①b(a) spike's owner/video reviews: `hand` is the CARRY
+POINT — the top-center of the palm-up hand of the carry sheets' bent near
+arm, where a held item's grip lands (items are bare sprites resting on
+the palm, docs/asset-pipeline.md §2 held-item; the hand layer cut below
+then draws the hand back OVER the item — MapleStory's layering, the
+owner's z rule). Held items render ONLY on the carry pose sheets
+(avatar-carry / avatar-red-carry — near arm bent at the elbow and held
+still through the stride, per the owner's carry direction): on the
+standard swing-walk sheets the exaggerated arm swing that makes the leg
+alternation readable (①b(c)) leaves both fists prominently empty every
+stride, so wherever an item is pinned, half the frames read as floating
+(measured across three anchor schemes before the carry variant settled
+it). Hand anchors are per-sheet measurements, never inherited: an outfit
+edit redraws sleeves and moves where the hand is drawn by several pixels
+(measured on the red hoodie). `neckAnchors` overrides the neck
+detection the same way: the ①b(a) spike measured that the narrowest-row
+heuristic breaks on outfits that widen the neck silhouette (the red
+hoodie's hood makes the hip row the narrowest, landing the neck on the
+hips), so an outfit-swapped sheet transfers the base sheet's measured
+anchors instead (poses are identical by construction; only the frame trims
+shift by a pixel).
 
 Usage:
     python3 scripts/import-avatar-sheet.py <order.json>
@@ -145,6 +169,56 @@ def hand_anchor(frame: Image.Image) -> tuple[int, int]:
     return (frame.width // 2, int(frame.height * 0.66))
 
 
+def is_skin(px: tuple[int, int, int, int]) -> bool:
+    r, g, b, a = px
+    return a >= OPAQUE and r > 200 and 110 < g < 235 and 90 < b < 215 and r > g > b
+
+
+def is_outline(px: tuple[int, int, int, int]) -> bool:
+    r, g, b, a = px
+    return a >= OPAQUE and r < 120 and g < 100 and b < 100
+
+
+def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Image, list[int]]:
+    """The bare hand/arm as its own layer (MapleStory's hand-over-item):
+    the skin pixels 4-connected to the hand anchor, plus their dark outline
+    ring, alpha-masked and cropped. Rendered ON TOP of a held item so the
+    mitten reads as being in front of it (the ①b(a) spike's owner-decided
+    z rule); cut from the stand frame only — the carry sheets hold the arm
+    still, so one overlay serves every pose at its own hand anchor."""
+    w, h = frame.size
+    hx, hy = hand
+    seeds = [
+        (x, y)
+        for y in range(max(0, hy - 6), min(h, hy + 7))
+        for x in range(max(0, hx - 6), min(w, hx + 7))
+        if is_skin(frame.getpixel((x, y)))
+    ]
+    if not seeds:
+        raise SystemExit(f"no skin at the hand anchor ({hx},{hy}) to cut a hand layer from")
+    seen, stack = set(seeds), list(seeds)
+    while stack:
+        x, y = stack.pop()
+        for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nb[0] < w and 0 <= nb[1] < h and nb not in seen and is_skin(frame.getpixel(nb)):
+                seen.add(nb)
+                stack.append(nb)
+    ring = set()
+    for x, y in seen:
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                nb = (x + dx, y + dy)
+                if 0 <= nb[0] < w and 0 <= nb[1] < h and nb not in seen and is_outline(frame.getpixel(nb)):
+                    ring.add(nb)
+    keep = seen | ring
+    layer = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+    for x, y in keep:
+        layer.putpixel((x, y), frame.getpixel((x, y)))
+    bbox = layer.getchannel("A").getbbox()
+    layer = layer.crop(bbox)
+    return layer, [hx - bbox[0], hy - bbox[1]]
+
+
 def palette_of(frames: list[Image.Image]) -> list[str]:
     """The dominant opaque colors across all frames (art-lint input, §3-3)."""
     counts: Counter[tuple[int, int, int]] = Counter()
@@ -181,13 +255,17 @@ def main() -> None:
         for f in frames
     ]
 
+    hand_overrides = order.get("handAnchors", {})
+    neck_overrides = order.get("neckAnchors", {})
     poses = {}
     for name, frame in zip(order["poses"], frames):
         frame.save(out_dir / f"{name}.png")
+        hand = hand_overrides.get(name, list(hand_anchor(frame)))
+        neck = neck_overrides.get(name, list(neck_anchor(frame)))
         poses[name] = {
             "file": f"{name}.png",
             "size": [frame.width, frame.height],
-            "anchors": {"neck": list(neck_anchor(frame)), "hand": list(hand_anchor(frame))},
+            "anchors": {"neck": neck, "hand": hand},
         }
         print(f"{name}.png {frame.width}x{frame.height}")
 
@@ -204,6 +282,17 @@ def main() -> None:
         },
         "poses": poses,
     }
+    if order.get("handLayer"):
+        stand_frame = frames[order["poses"].index("stand")]
+        stand_hand = poses["stand"]["anchors"]["hand"]
+        layer, anchor = cut_hand_layer(stand_frame, (stand_hand[0], stand_hand[1]))
+        layer.save(out_dir / "hand.png")
+        manifest["handLayer"] = {
+            "file": "hand.png",
+            "size": [layer.width, layer.height],
+            "anchors": {"grip": anchor},
+        }
+        print(f"hand.png {layer.width}x{layer.height} grip={anchor}")
     manifest_path = out_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     # The manifest is committed data reviewed in PRs: keep it in the repo's

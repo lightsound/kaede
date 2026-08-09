@@ -20,6 +20,38 @@ export interface AvatarSheetTextures {
 }
 
 /**
+ * A held item composited onto the avatar's hand anchor (avatar-rig.md §2 —
+ * the held-item layer). All coordinates are pixels in the source frames
+ * (2x display resolution, origin top-left, straight from the manifests):
+ * `grip` is the point in the item frame that lands on the hand anchor, and
+ * `hands` are the per-pose hand anchors. The keys mirror AvatarSheetTextures
+ * so held items and pose frames can never disagree about which poses exist.
+ *
+ * The caller pairs a held item with a CARRY-pose sheet variant (the near
+ * arm bent at the elbow, palm up, held still — avatar.boy-basic-carry),
+ * the ①b(a) spike's owner-directed spec: on the standard walk sheets the
+ * exaggerated arm swing (the very thing that makes the leg alternation
+ * readable, ①b(c)) leaves both fists prominently empty, so a statically
+ * anchored item reads as floating wherever it is pinned — anchor
+ * precision cannot fix that. The item itself is a BARE sprite that RESTS
+ * ON the sheet's palm-up hand, MapleStory-style: its grip point
+ * (bottom-center for resting items, the measured shaft point for long
+ * ones) lands on the hand anchor — one rule for every item class, no
+ * per-item baked hands (rejected: too realistic for the chibi style and
+ * not generic). The `hand` layer (the sheet's own bare hand/forearm, cut
+ * by the import line) renders ON TOP of the item, so the mitten reads as
+ * being in front of what it carries — MapleStory's hand-over-item
+ * layering, the owner's z rule.
+ */
+export interface HeldItemDisplay {
+  texture: Texture;
+  grip: readonly number[];
+  hands: { readonly [P in keyof AvatarSheetTextures]: readonly number[] };
+  /** The carry sheet's hand overlay (manifest handLayer), drawn over the item. */
+  hand: { texture: Texture; grip: readonly number[] };
+}
+
+/**
  * The thin rendering boundary of docs/avatar-rig.md §4: the game side hands
  * over rendered positions and frame times, and how those become a posed
  * figure (today a pose-frame swap; a future DP-A could swap in Spine) stays
@@ -40,20 +72,77 @@ export interface AvatarView {
 const ASSET_SCALE = 0.5;
 
 /**
+ * A carried layer as a sprite whose origin is its grip point: positioning
+ * it at a pose's hand anchor is then a single coordinate conversion per
+ * frame (see placeHeldItem). Used for both the item and the hand overlay;
+ * the caller adds them to `body` after the avatar sprite in stacking
+ * order body → item → hand, so the item draws in front of the body and
+ * the mitten draws in front of the item (verified across five item
+ * classes, spear included — no per-pose z or rotation field earned its
+ * way into the manifest).
+ */
+function createGripSprite(texture: Texture, grip: readonly number[]): Sprite {
+  const sprite = new Sprite(texture);
+  const [gripX, gripY] = grip;
+  sprite.anchor.set((gripX ?? 0) / texture.width, (gripY ?? 0) / texture.height);
+  sprite.scale.set(ASSET_SCALE);
+  return sprite;
+}
+
+/**
+ * Parks the held item's grip on the pose's hand anchor. The anchor is in
+ * frame pixels (2x, origin top-left); the avatar sprite renders that frame
+ * bottom-centered at the AABB's bottom edge at ASSET_SCALE, so the same
+ * transform maps the anchor into body-local coordinates.
+ */
+function placeHeldItem(item: Sprite, frame: Texture, hand: readonly number[]): void {
+  const [handX, handY] = hand;
+  item.x = ((handX ?? 0) - frame.width / 2) * ASSET_SCALE;
+  item.y = PLAYER_HALF_H - (frame.height - (handY ?? 0)) * ASSET_SCALE;
+}
+
+/** The two carried sprites, stacked item-then-hand (see createGripSprite). */
+interface CarriedSprites {
+  item: Sprite;
+  hand: Sprite;
+}
+
+function createCarriedSprites(held: HeldItemDisplay): CarriedSprites {
+  return {
+    item: createGripSprite(held.texture, held.grip),
+    hand: createGripSprite(held.hand.texture, held.hand.grip),
+  };
+}
+
+/** Parks both carried sprites on the pose's hand anchor. */
+function placeCarried(carried: CarriedSprites, frame: Texture, hand: readonly number[]): void {
+  placeHeldItem(carried.item, frame, hand);
+  placeHeldItem(carried.hand, frame, hand);
+}
+
+/**
  * Builds the pose-frame avatar under `body` (the unit-scale container whose
  * scale.x carries the facing flip — unchanged from the one-sprite era) and
  * returns its per-frame animator. The sprite anchors bottom-center at the
  * physics AABB's bottom edge: the import line aligns every frame's ground
  * baseline to the frame bottom, so each pose stands grounded whatever its
  * trimmed size — the AABB stays the authority for collision and every
- * overlay anchor, and the frames are only how that box looks.
+ * overlay anchor, and the frames are only how that box looks. A held item
+ * (optional) rides the pose's hand anchor and flips with the body.
  */
-export function createAvatarView(body: Container, sheet: AvatarSheetTextures): AvatarView {
+export function createAvatarView(
+  body: Container,
+  sheet: AvatarSheetTextures,
+  held?: HeldItemDisplay,
+): AvatarView {
   const sprite = new Sprite(sheet.stand);
   sprite.anchor.set(0.5, 1);
   sprite.y = PLAYER_HALF_H;
   sprite.scale.set(ASSET_SCALE);
   body.addChild(sprite);
+
+  const carried = held ? createCarriedSprites(held) : undefined;
+  if (carried) body.addChild(carried.item, carried.hand);
 
   let walk: WalkState = IDLE_WALK_STATE;
   let lastX: number | undefined;
@@ -62,7 +151,9 @@ export function createAvatarView(body: Container, sheet: AvatarSheetTextures): A
       const dx = lastX === undefined ? 0 : xPx - lastX;
       lastX = xPx;
       walk = advanceWalk(walk, dx, dtMs);
-      sprite.texture = sheet[selectPose(walk)];
+      const pose = selectPose(walk);
+      sprite.texture = sheet[pose];
+      if (carried && held) placeCarried(carried, sheet[pose], held.hands[pose]);
     },
   };
 }
