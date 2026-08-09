@@ -125,16 +125,19 @@
   入れない（原本 1 枚 300KB〜1.3MB vs 取り込み結果 60KB — 再生成のたびに
   clone が永久に肥大する）。`*-original.png` は gitignore され、
   `scripts/upload-asset-originals.py` が R2 バケット
-  `kaede-asset-originals`（Alchemy IaC — infra/alchemy.run.ts）へ
-  **内容アドレス**（key = `originals/<sha256>.png`）で保存して、発注書
-  order.json の `originals` マップ（発注書相対パス → sha256）に記録する。
-  取り込みスクリプトはローカルに無い原本をこのマップ経由で取得し、
-  sha 照合してから使う（改竄・取り違えは fail loud）ため、**再取り込みは
-  常に committed manifest を byte 再現するか、大声で失敗するかの
-  どちらか**。ローカルに居る原本が記録値と食い違う場合（アップロード前の
-  再生成）も fail loud — 先に upload-asset-originals.py を**その原本を
-  名指す全発注書**に掛けて再記録してから取り込む（共有参照の黙った
-  書き換えを封じる。ローカル優先が無条件なのは未記録の初回生成だけ）。
+  `kaede-asset-originals`（Alchemy IaC — infra/alchemy.run.ts。**名前は
+  stagedName しない** — 録画と違い git ファクトリー共有の一点物）へ
+  **内容アドレス**（key = `originals/<sha256>.png`）で保存する。CLI 引数は
+  シードで、ディスク上の原本を 1 回 PUT したあと、同じファイルを指す
+  **全**発注書の `originals` マップ（発注書相対パス → sha256）を書き換える
+  （`sheet-original.png` と `../avatar/sheet-original.png` は resolve で
+  同一 — 共有参照の再記録を運用に頼らない）。取り込みスクリプトは
+  ローカルに無い原本をこのマップ経由で取得し、sha 照合してから使う
+  （改竄・取り違えは fail loud）ため、**再取り込みは常に committed
+  manifest を byte 再現するか、大声で失敗するかのどちらか**。ローカルに
+  居る原本が記録値と食い違う場合（アップロード前の再生成）も fail loud —
+  先に upload-asset-originals.py をその原本を名指す**いずれか**の発注書に
+  掛けてから取り込む（ローカル優先が無条件なのは未記録の初回生成だけ）。
   ストアは追記専用（再生成は新キーを増やし、参照されなくなった旧原本は
   R2 に残る — 今の分量では実害なく、棚卸しツールは量産期に必要になったら
   足す）。Git に残るのは取り込み結果 PNG・manifest・発注書・

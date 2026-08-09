@@ -56,7 +56,10 @@ def object_key(sha256: str, name: str) -> str:
 def _object_url(key: str) -> str:
     return (
         f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}"
-        f"/r2/buckets/{BUCKET}/objects/{urllib.parse.quote(key, safe='')}"
+        # Cloudflare's R2 object-key encoding keeps `/` literal (path
+        # separators); percent-encoding the slash works today but is outside
+        # the documented contract (thermos Low).
+        f"/r2/buckets/{BUCKET}/objects/{urllib.parse.quote(key, safe='/')}"
     )
 
 
@@ -109,10 +112,21 @@ def _verified_local_sha256(path: Path, rel: str, originals: dict[str, str]) -> s
     if recorded is not None and digest != recorded:
         raise SystemExit(
             f"{path} hashes to {digest} but the order records {recorded} — "
-            "regenerated original? run scripts/upload-asset-originals.py on every "
-            "order that names it to re-record, then re-import"
+            "regenerated original? run scripts/upload-asset-originals.py on any "
+            "order that names it (it re-records every order that shares the file), "
+            "then re-import"
         )
     return digest
+
+
+def _recorded_sha256(path: Path, rel: str, originals: dict[str, str]) -> str:
+    sha256 = originals.get(rel)
+    if sha256 is None:
+        raise SystemExit(
+            f"{path} is neither on disk nor in the order's originals map — "
+            "run scripts/upload-asset-originals.py after generating"
+        )
+    return sha256
 
 
 def resolve_original(base: Path, rel: str, originals: dict[str, str]) -> Path:
@@ -121,13 +135,7 @@ def resolve_original(base: Path, rel: str, originals: dict[str, str]) -> Path:
     if path.exists():
         _verified_local_sha256(path, rel, originals)
         return path
-    sha256 = originals.get(rel)
-    if sha256 is None:
-        raise SystemExit(
-            f"{path} is neither on disk nor in the order's originals map — "
-            "run scripts/upload-asset-originals.py after generating"
-        )
-    return fetch_original(rel, sha256, path)
+    return fetch_original(rel, _recorded_sha256(path, rel, originals), path)
 
 
 def reference_sha256(base: Path, rel: str, originals: dict[str, str]) -> str:
@@ -135,13 +143,7 @@ def reference_sha256(base: Path, rel: str, originals: dict[str, str]) -> str:
     path = base / rel
     if path.exists():
         return _verified_local_sha256(path, rel, originals)
-    sha256 = originals.get(rel)
-    if sha256 is None:
-        raise SystemExit(
-            f"{path} is neither on disk nor in the order's originals map — "
-            "run scripts/upload-asset-originals.py after generating"
-        )
-    return sha256
+    return _recorded_sha256(path, rel, originals)
 
 
 def upload_original(path: Path) -> str:

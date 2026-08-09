@@ -162,22 +162,28 @@ export default Alchemy.Stack(
     // CLOUDFLARE_API_TOKEN)で S3 資格情報は使わない。オブジェクトは
     // 内容アドレスゆえ不変・単発 PUT(〜1.3MB)なので、multipart 掃除等の
     // ライフサイクルルールは置かない。
+    // 名前は stagedName しない: 録画バケットと違い、これはステージ隔離する
+    // ランタイム資産ではなく git ファクトリー共有の一点物で、scripts /
+    // order.json / ROADMAP は常に裸の `kaede-asset-originals` を指す
+    // (ステージ付きにすると非 prod の空孤児バケットだけが生まれ、ツールは
+    // 本番を叩き続ける — thermos CQ)。
     // removalPolicy: retain — 原本は再生成にクレジット実費がかかる一点物
     // (kaede-recordings と同じ最終防衛線)。
     // 本番バケットは 2026-08-09 に API で先行作成済み(移行アップロードの
     // ため): このリコンサイラは observe→create の順で既存バケットを
     // そのまま採用するので、マージ後の CI デプロイは 409 にならず収束する。
     yield* Cloudflare.R2.Bucket('AssetOriginals', {
-      name: stagedName(stage, 'kaede-asset-originals'),
+      name: 'kaede-asset-originals',
     }).pipe(Alchemy.RemovalPolicy.retain());
 
     // 通話 API Worker `kaede-call` はここに居たが、増分⑥(ROADMAP Phase 4)で
     // 廃止した: 通話/録画 API は SpacetimeDB module の procedure に移り、
-    // Cloudflare 側に残る録画関連リソースは上の R2 バケットだけ。スタックから
-    // 外れた時点で Alchemy が Worker リソースを削除する(開きっぱなしの旧
-    // タブは通話系操作が失敗するが、リロードで回復 — ROADMAP 増分⑥ ④)。
-    // 録画バケットへのアクセスは module が S3 資格情報(owner が call_config
-    // 行へ播種)で行うため、Worker バインディングは元々存在しない。
+    // Cloudflare 側に残る録画関連リソースは上の R2 バケット群(録画＋
+    // アセット原本)だけ。スタックから外れた時点で Alchemy が Worker
+    // リソースを削除する(開きっぱなしの旧タブは通話系操作が失敗するが、
+    // リロードで回復 — ROADMAP 増分⑥ ④)。録画バケットへのアクセスは
+    // module が S3 資格情報(owner が call_config 行へ播種)で行うため、
+    // Worker バインディングは元々存在しない。
 
     return { url: client.url };
   }),

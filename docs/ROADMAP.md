@@ -1797,12 +1797,14 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   （sheet-original.png ×4・item-original.png ×5、計約 3.4MB）を R2 へ
   移行して Git から削除（履歴からの完全削除はしない — 通常の rm で
   今後の肥大だけ止める方針どおり）。設計の要点:
-  ①**バケット `kaede-asset-originals`（Alchemy IaC・retain）**:
+  ①**バケット `kaede-asset-originals`（Alchemy IaC・retain・名前固定）**:
   kaede-recordings の前例に倣い removalPolicy retain（原本は再生成に
-  クレジット実費がかかる一点物）。移行アップロードのため API で先行
-  作成済みで、Alchemy の R2 リコンサイラは observe→create の順に既存
-  バケットをそのまま採用するため、マージ後の CI デプロイは 409 に
-  ならず収束する（beta.70 の実装読解で確認）
+  クレジット実費がかかる一点物）。**stagedName は掛けない** — 録画と違い
+  git ファクトリー共有の一点物で、scripts は常に裸の名前を見る（thermos
+  CQ）。移行アップロードのため API で先行作成済みで、Alchemy の R2
+  リコンサイラは observe→create の順に既存バケットをそのまま採用する
+  ため、マージ後の CI デプロイは 409 にならず収束する（beta.70 の実装
+  読解で確認）
   ②**内容アドレスストア**: key = `originals/<sha256>.png`。発注書
   order.json の追加フィールド `originals`（発注書相対パス → sha256）が
   唯一のポインタで、manifest の referenceHashes と同じハッシュ空間 —
@@ -1819,9 +1821,10 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   黙った書き換え（fresh clone が再現できない manifest を鋳造する穴 —
   Pullfrog レビュー指摘で強化）を封じる。アップロードは
   `scripts/upload-asset-originals.py`（`*-original.*` 命名規約で自動
-  判別・内容アドレスゆえ冪等。発注 → アップロード → 取り込み → コミット、
-  の順が量産ラインの新しい定型。再生成時はその原本を名指す全発注書に
-  掛け直す）。ストアは追記専用 — 参照されなくなった旧原本は R2 に残る
+  判別・内容アドレスゆえ冪等。CLI 引数はシードで、同じ resolve 先を
+  指す全発注書の `originals` を書き換える — thermos CQ のパス正規化。
+  発注 → アップロード → 取り込み → コミット、の順が量産ラインの新しい
+  定型）。ストアは追記専用 — 参照されなくなった旧原本は R2 に残る
   （今の分量では実害なし。棚卸しツールは量産期に必要が出たら足す —
   レビュー指摘を記録）
   ④**経路は Cloudflare REST API**（bearer = CLOUDFLARE_API_TOKEN。
