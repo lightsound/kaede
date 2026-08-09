@@ -155,7 +155,8 @@ export default Alchemy.Stack(
     // アセット生成原本の置き場所(ROADMAP Phase 5 ①b⑶): グリーンバックの
     // 生成シート原本(*-original.png)は Git に入れず(1 枚 300KB〜1.3MB で
     // clone が肥大するため)、このバケットへ内容アドレス
-    // (originals/<sha256>.png)で保存する。書き手は
+    // (originals/<sha256> — 論理ファイル名・拡張子は key に含めない)で
+    // 保存する。書き手は
     // scripts/upload-asset-originals.py、読み手は取り込みスクリプトの
     // 再取り込み時のみ — ランタイム(クライアント/module)からは参照しない
     // 開発時ストア。経路は Cloudflare REST API(bearer =

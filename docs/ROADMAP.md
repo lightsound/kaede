@@ -1805,7 +1805,8 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   リコンサイラは observe→create の順に既存バケットをそのまま採用する
   ため、マージ後の CI デプロイは 409 にならず収束する（beta.70 の実装
   読解で確認）
-  ②**内容アドレスストア**: key = `originals/<sha256>.png`。発注書
+  ②**内容アドレスストア**: key = `originals/<sha256>`（論理ファイル名・
+  拡張子は key に含めない）。発注書
   order.json の追加フィールド `originals`（発注書相対パス → sha256）が
   唯一のポインタで、manifest の referenceHashes と同じハッシュ空間 —
   同一内容は同一キーに畳まれる（avatar-carry / avatar-red が参照する
@@ -1815,18 +1816,22 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   ローカルにあればそれを使い（生成 → 取り込みのループはアップロード前も
   従来どおり動く）、無ければ R2 から取得して gitignored なローカル
   パス（`*-original.png`）へ書き戻す。references のハッシュは記録値で
-  短絡（ハッシュしか要らないものを MB 単位で DL しない）。ローカル優先が
+  短絡（ハッシュしか要らないものを MB 単位で DL しない）。全 order の入力・
+  出力は canonical な asset root 配下に解決し、絶対パス・root 外 symlink・
+  root 外 `..` は read/write 前に拒否する。ローカル優先が
   無条件なのは**未記録の初回生成だけ**: 記録済み原本のローカル bytes が
   記録値と食い違う（アップロード前の再生成）場合は fail loud — 共有参照の
   黙った書き換え（fresh clone が再現できない manifest を鋳造する穴 —
   Pullfrog レビュー指摘で強化）を封じる。アップロードは
   `scripts/upload-asset-originals.py`（`*-original.*` 命名規約で自動
   判別・内容アドレスゆえ冪等。CLI 引数はシードで、同じ resolve 先を
-  指す全発注書の `originals` を書き換える — thermos CQ のパス正規化。
-  発注 → アップロード → 取り込み → コミット、の順が量産ラインの新しい
-  定型）。ストアは追記専用 — 参照されなくなった旧原本は R2 に残る
+  指す全発注書の `originals` を書き換え、影響する全 importer を再実行する
+  （manifest の referenceHashes も stale にしない）。各 order は一時ファイル
+  を format して atomic replace する。発注 → アップロード → 取り込み →
+  コミット、の順が量産ラインの新しい定型）。ストアは追記専用 — 参照されなくなった旧原本は R2 に残る
   （今の分量では実害なし。棚卸しツールは量産期に必要が出たら足す —
-  レビュー指摘を記録）
+  レビュー指摘を記録）。order 未参照の生成候補・ボツ案は
+  `upload-asset-originals.py --file` でポインタなし保管できる
   ④**経路は Cloudflare REST API**（bearer = CLOUDFLARE_API_TOKEN。
   R2 権限は Phase 4 増分④の見込みどおり同トークンで可 — VM 注入
   トークンで PUT/GET/DELETE を実測 2026-08-09）。S3 資格情報・SigV4 は

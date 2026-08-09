@@ -62,7 +62,12 @@ from collections import Counter
 from pathlib import Path
 
 from PIL import Image
-from r2_originals import reference_sha256, resolve_original
+from r2_originals import (
+    reference_sha256,
+    resolve_asset_path,
+    resolve_original,
+    validate_order_path,
+)
 
 # Chroma key: green dominance d = g - max(r, b). Fully transparent above
 # KEY_HARD, opaque below KEY_SOFT, linear ramp between (antialiased edges).
@@ -237,15 +242,16 @@ def palette_of(frames: list[Image.Image]) -> list[str]:
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
-    order_path = Path(sys.argv[1])
+    asset_root = Path(__file__).resolve().parent.parent / "packages/client/src/game.package"
+    order_path = validate_order_path(Path(sys.argv[1]), asset_root)
     order = json.loads(order_path.read_text())
     base = order_path.parent
-    out_dir = base / order["outDir"]
+    out_dir = resolve_asset_path(base, order["outDir"], asset_root)
 
     # Generation originals are not committed (①b⑶ — r2_originals.py):
     # the order's `originals` map points at the R2 copy of anything absent.
     originals = order.get("originals", {})
-    sheet = chroma_key(Image.open(resolve_original(base, order["sheet"], originals)))
+    sheet = chroma_key(Image.open(resolve_original(base, order["sheet"], originals, asset_root)))
     grid = order["grid"]
     frames = [cut_cell(sheet, grid["cols"], grid["rows"], i) for i in range(len(order["poses"]))]
 
@@ -262,7 +268,7 @@ def main() -> None:
     neck_overrides = order.get("neckAnchors", {})
     poses = {}
     for name, frame in zip(order["poses"], frames):
-        frame.save(out_dir / f"{name}.png")
+        frame.save(resolve_asset_path(out_dir, f"{name}.png", asset_root))
         hand = hand_overrides.get(name, list(hand_anchor(frame)))
         neck = neck_overrides.get(name, list(neck_anchor(frame)))
         poses[name] = {
@@ -281,7 +287,10 @@ def main() -> None:
         "palette": palette_of(frames),
         "source": {
             "prompt": order["prompt"],
-            "referenceHashes": [reference_sha256(base, ref, originals) for ref in order["references"]],
+            "referenceHashes": [
+                reference_sha256(base, ref, originals, asset_root)
+                for ref in order["references"]
+            ],
         },
         "poses": poses,
     }
@@ -289,7 +298,7 @@ def main() -> None:
         stand_frame = frames[order["poses"].index("stand")]
         stand_hand = poses["stand"]["anchors"]["hand"]
         layer, anchor = cut_hand_layer(stand_frame, (stand_hand[0], stand_hand[1]))
-        layer.save(out_dir / "hand.png")
+        layer.save(resolve_asset_path(out_dir, "hand.png", asset_root))
         manifest["handLayer"] = {
             "file": "hand.png",
             "size": [layer.width, layer.height],

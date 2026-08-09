@@ -127,7 +127,8 @@
   `scripts/upload-asset-originals.py` が R2 バケット
   `kaede-asset-originals`（Alchemy IaC — infra/alchemy.run.ts。**名前は
   stagedName しない** — 録画と違い git ファクトリー共有の一点物）へ
-  **内容アドレス**（key = `originals/<sha256>.png`）で保存する。CLI 引数は
+  **内容アドレス**（key = `originals/<sha256>`。論理ファイル名・拡張子は
+  key に含めない）で保存する。CLI 引数は
   シードで、ディスク上の原本を 1 回 PUT したあと、同じファイルを指す
   **全**発注書の `originals` マップ（発注書相対パス → sha256）を書き換える
   （`sheet-original.png` と `../avatar/sheet-original.png` は resolve で
@@ -137,12 +138,17 @@
   manifest を byte 再現するか、大声で失敗するかのどちらか**。ローカルに
   居る原本が記録値と食い違う場合（アップロード前の再生成）も fail loud —
   先に upload-asset-originals.py をその原本を名指す**いずれか**の発注書に
-  掛けてから取り込む（ローカル優先が無条件なのは未記録の初回生成だけ）。
+  掛けると、共有する全 order のマップを更新し、影響する全 importer も
+  自動再実行する（ローカル優先が無条件なのは未記録の初回生成だけ）。
+  各 order は一時ファイルを format してから atomic replace する。
   ストアは追記専用（再生成は新キーを増やし、参照されなくなった旧原本は
   R2 に残る — 今の分量では実害なく、棚卸しツールは量産期に必要になったら
   足す）。Git に残るのは取り込み結果 PNG・manifest・発注書・
   基準リファレンス — オーナー承認ゲート（§3-4「シート画像が見える PR」）は
   取り込み結果 PNG がそのまま担い、不変。
+  order にまだ採用していない生成候補・ボツ案は、発注書のポインタを
+  作らずに `upload-asset-originals.py --file <asset-root-relative-path>`
+  で同じ R2 ストアへ保管できる（CLI は asset root 外を拒否する）。
 - **段階的整備**（増分対応は ROADMAP Phase 5）: ①a で最小ライン
   （既存のクロマキー取り込みスクリプトの拡張）→ ①b でテンプレ・基準
   セット・アート lint・manifest 生成を整備し「発注書だけでアセットが
