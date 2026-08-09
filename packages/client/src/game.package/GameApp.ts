@@ -463,11 +463,15 @@ async function loadHeldItem(
   loader: (typeof HELD_ITEM_LOADERS)[keyof typeof HELD_ITEM_LOADERS],
   redOutfit: boolean,
 ): Promise<HeldItemDisplay> {
-  const [[itemManifest, itemUrl], bodyManifest] = await Promise.all([
+  const [[itemManifest, itemUrl], bodyManifest, handUrl] = await Promise.all([
     loader(),
     redOutfit ? import('./avatar-red-carry/manifest.json') : import('./avatar-carry/manifest.json'),
+    redOutfit ? import('./avatar-red-carry/hand.png') : import('./avatar-carry/hand.png'),
   ]);
-  const texture = await Assets.load(itemUrl.default);
+  const [texture, handTexture] = await Promise.all([
+    Assets.load(itemUrl.default),
+    Assets.load(handUrl.default),
+  ]);
   const poses = bodyManifest.default.poses;
   return {
     texture,
@@ -479,6 +483,7 @@ async function loadHeldItem(
       'walk-c': poses['walk-c'].anchors.hand,
       'walk-d': poses['walk-d'].anchors.hand,
     },
+    hand: { texture: handTexture, grip: bodyManifest.default.handLayer.anchors.grip },
   };
 }
 

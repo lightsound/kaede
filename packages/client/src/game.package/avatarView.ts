@@ -27,24 +27,28 @@ export interface AvatarSheetTextures {
  * `hands` are the per-pose hand anchors. The keys mirror AvatarSheetTextures
  * so held items and pose frames can never disagree about which poses exist.
  *
- * The caller pairs a held item with a CARRY-pose sheet variant (both arms
- * hang still — avatar.boy-basic-carry), the ①b(a) spike's measured
- * conclusion after owner review: on the standard walk sheets the
+ * The caller pairs a held item with a CARRY-pose sheet variant (the near
+ * arm bent at the elbow, palm up, held still — avatar.boy-basic-carry),
+ * the ①b(a) spike's owner-directed spec: on the standard walk sheets the
  * exaggerated arm swing (the very thing that makes the leg alternation
  * readable, ①b(c)) leaves both fists prominently empty, so a statically
  * anchored item reads as floating wherever it is pinned — anchor
  * precision cannot fix that. The item itself is a BARE sprite that RESTS
- * ON the sheet's drawn hand, MapleStory-style (owner direction
- * 2026-08-09): its grip point (bottom-center for resting items, the
- * measured shaft point for long ones) lands on the hand anchor and the
- * drawn mitten peeks out beneath — one rule for every item class, no
+ * ON the sheet's palm-up hand, MapleStory-style: its grip point
+ * (bottom-center for resting items, the measured shaft point for long
+ * ones) lands on the hand anchor — one rule for every item class, no
  * per-item baked hands (rejected: too realistic for the chibi style and
- * not generic).
+ * not generic). The `hand` layer (the sheet's own bare hand/forearm, cut
+ * by the import line) renders ON TOP of the item, so the mitten reads as
+ * being in front of what it carries — MapleStory's hand-over-item
+ * layering, the owner's z rule.
  */
 export interface HeldItemDisplay {
   texture: Texture;
   grip: readonly number[];
   hands: { readonly [P in keyof AvatarSheetTextures]: readonly number[] };
+  /** The carry sheet's hand overlay (manifest handLayer), drawn over the item. */
+  hand: { texture: Texture; grip: readonly number[] };
 }
 
 /**
@@ -68,19 +72,19 @@ export interface AvatarView {
 const ASSET_SCALE = 0.5;
 
 /**
- * The held item as a sprite whose origin is its grip point: positioning it
- * at a pose's hand anchor is then a single coordinate conversion per frame
- * (see placeHeldItem). Added to `body` after the avatar sprite, so the
- * item draws in front of the body with the drawn hand peeking beneath it —
- * the carry sheets keep the holding hand on the viewer side in every
- * pose, so one z-position suffices; no per-pose z or rotation field
- * earned its way into the manifest (verified across five item classes,
- * spear included).
+ * A carried layer as a sprite whose origin is its grip point: positioning
+ * it at a pose's hand anchor is then a single coordinate conversion per
+ * frame (see placeHeldItem). Used for both the item and the hand overlay;
+ * the caller adds them to `body` after the avatar sprite in stacking
+ * order body → item → hand, so the item draws in front of the body and
+ * the mitten draws in front of the item (verified across five item
+ * classes, spear included — no per-pose z or rotation field earned its
+ * way into the manifest).
  */
-function createHeldItemSprite(item: HeldItemDisplay): Sprite {
-  const sprite = new Sprite(item.texture);
-  const [gripX, gripY] = item.grip;
-  sprite.anchor.set((gripX ?? 0) / item.texture.width, (gripY ?? 0) / item.texture.height);
+function createGripSprite(texture: Texture, grip: readonly number[]): Sprite {
+  const sprite = new Sprite(texture);
+  const [gripX, gripY] = grip;
+  sprite.anchor.set((gripX ?? 0) / texture.width, (gripY ?? 0) / texture.height);
   sprite.scale.set(ASSET_SCALE);
   return sprite;
 }
@@ -95,6 +99,25 @@ function placeHeldItem(item: Sprite, frame: Texture, hand: readonly number[]): v
   const [handX, handY] = hand;
   item.x = ((handX ?? 0) - frame.width / 2) * ASSET_SCALE;
   item.y = PLAYER_HALF_H - (frame.height - (handY ?? 0)) * ASSET_SCALE;
+}
+
+/** The two carried sprites, stacked item-then-hand (see createGripSprite). */
+interface CarriedSprites {
+  item: Sprite;
+  hand: Sprite;
+}
+
+function createCarriedSprites(held: HeldItemDisplay): CarriedSprites {
+  return {
+    item: createGripSprite(held.texture, held.grip),
+    hand: createGripSprite(held.hand.texture, held.hand.grip),
+  };
+}
+
+/** Parks both carried sprites on the pose's hand anchor. */
+function placeCarried(carried: CarriedSprites, frame: Texture, hand: readonly number[]): void {
+  placeHeldItem(carried.item, frame, hand);
+  placeHeldItem(carried.hand, frame, hand);
 }
 
 /**
@@ -118,8 +141,8 @@ export function createAvatarView(
   sprite.scale.set(ASSET_SCALE);
   body.addChild(sprite);
 
-  const item = held ? createHeldItemSprite(held) : undefined;
-  if (item) body.addChild(item);
+  const carried = held ? createCarriedSprites(held) : undefined;
+  if (carried) body.addChild(carried.item, carried.hand);
 
   let walk: WalkState = IDLE_WALK_STATE;
   let lastX: number | undefined;
@@ -130,7 +153,7 @@ export function createAvatarView(
       walk = advanceWalk(walk, dx, dtMs);
       const pose = selectPose(walk);
       sprite.texture = sheet[pose];
-      if (item && held) placeHeldItem(item, sheet[pose], held.hands[pose]);
+      if (carried && held) placeCarried(carried, sheet[pose], held.hands[pose]);
     },
   };
 }
