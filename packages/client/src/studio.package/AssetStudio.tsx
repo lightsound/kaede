@@ -6,8 +6,13 @@ import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../the
 import { AvatarCard, CompareStrip, ItemCard, SectionHeading } from './cards';
 import { type AssetCatalog, buildCatalog } from './catalog';
 
+// The game shell disables document scrolling (index.html: html/body are
+// overflow:hidden for the canvas), so the studio root is its own scroll
+// container — height-bound with overflow auto — instead of relying on the
+// page to scroll.
 const pageStyle: CSSProperties = {
-  minHeight: '100vh',
+  height: '100vh',
+  overflowY: 'auto',
   background: '#10131b',
   color: UI_TEXT_COLOR,
   fontFamily: 'sans-serif',

@@ -200,6 +200,9 @@ export function buildCatalog(
       collect.problems.push(`${path}: 未知の type（${String(manifest.type)}）です`);
     }
   }
-  const { poseUnion, avatars } = diffPoses(collect.avatars);
-  return { avatars, items: collect.items, poseUnion, problems: collect.problems };
+  // Stable-id order (asset-pipeline.md §5: the id is the authority), not
+  // glob-path order — the path sort would lead with the carry variants.
+  const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
+  const { poseUnion, avatars } = diffPoses([...collect.avatars].sort(byId));
+  return { avatars, items: [...collect.items].sort(byId), poseUnion, problems: collect.problems };
 }
