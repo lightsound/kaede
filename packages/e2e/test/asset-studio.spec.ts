@@ -43,4 +43,21 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   const strip = page.getByTestId('compare-strip');
   await expect(strip).toBeVisible();
   await expect(strip.getByTestId('walk-preview')).toHaveCount(2);
+
+  // The dress-up stage: default look is the first outfit (the basic boy)
+  // with empty hands; clicking an outfit swaps the whole body sheet, and
+  // clicking an item swaps to the outfit's carry variant with the item
+  // (plus the sheet's hand cutout) composited over it — the ①b(a)⑵
+  // one-decision rule. Clicking the item again puts it back.
+  const figure = page.getByTestId('stage-figure');
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic');
+  await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
+  await page.getByTestId('outfit-option-avatar.boy-basic-red').click();
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red');
+  await page.getByTestId('item-option-item.coffee-mug').click();
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red-carry');
+  await expect(page.getByTestId('stage-overlay')).toHaveCount(2);
+  await page.getByTestId('item-option-item.coffee-mug').click();
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red');
+  await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
 });

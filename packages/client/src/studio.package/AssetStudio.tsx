@@ -5,6 +5,8 @@ import { advanceWalk, IDLE_WALK_STATE, loadAssetModules, selectPose } from '../g
 import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import { AvatarCard, CompareStrip, ItemCard, SectionHeading } from './cards';
 import { type AssetCatalog, buildCatalog } from './catalog';
+import { resolveStageLook } from './dressup';
+import { DressUpStage } from './stage';
 
 // The game shell disables document scrolling (index.html: html/body are
 // overflow:hidden for the canvas), so the studio root is its own scroll
@@ -151,6 +153,11 @@ export function AssetStudio() {
   const [playing, setPlaying] = useState(true);
   const [showAnchors, setShowAnchors] = useState(false);
   const [compareIds, setCompareIds] = useState<readonly string[]>([]);
+  // The try-on selections (owner feedback 2026-08-09): which outfit sheet
+  // the stage wears and which item it holds. Page state only — the studio
+  // stays read-only.
+  const [outfitId, setOutfitId] = useState<string>();
+  const [heldItemId, setHeldItemId] = useState<string>();
   const pose = useWalkPose(playing);
 
   useEffect(() => {
@@ -167,6 +174,8 @@ export function AssetStudio() {
   const compared = catalog.avatars.filter((avatar) => compareIds.includes(avatar.id));
   const toggleCompare = (id: string, on: boolean) =>
     setCompareIds((ids) => (on ? [...ids, id] : ids.filter((existing) => existing !== id)));
+  const look = resolveStageLook(catalog, outfitId, heldItemId);
+  const toggleItem = (id: string) => setHeldItemId((held) => (held === id ? undefined : id));
   return (
     <main style={pageStyle} data-testid="asset-studio">
       <h1 style={{ fontSize: 18, margin: '0 0 12px', color: UI_GOLD }}>
@@ -182,6 +191,18 @@ export function AssetStudio() {
         showAnchors={showAnchors}
         onShowAnchorsChange={setShowAnchors}
       />
+      {look && (
+        <>
+          <SectionHeading>試着ステージ（服と持ち物をクリックで着せ替え）</SectionHeading>
+          <DressUpStage
+            catalog={catalog}
+            look={look}
+            pose={pose}
+            onSelectOutfit={setOutfitId}
+            onToggleItem={toggleItem}
+          />
+        </>
+      )}
       {compared.length > 0 && (
         <>
           <SectionHeading>比較（同位相で再生中）</SectionHeading>

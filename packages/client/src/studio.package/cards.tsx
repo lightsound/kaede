@@ -2,6 +2,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import type { AssetFrame, AvatarAsset, ItemAsset } from './catalog';
+import { frameFor, maxFrameSize } from './dressup';
 
 /**
  * Anchor marker colors by anchor name (neck/hand from avatar-body poses,
@@ -128,16 +129,20 @@ function CardHeader(props: { name: string; id: string; children?: ReactNode }) {
 }
 
 /**
- * The frame to show while the walk clock says `pose`: an avatar missing
- * that pose falls back to stand (its gap is already flagged by the
- * missing-pose badge, so the preview degrades quietly).
+ * A fixed box that grounds its frame at the bottom edge: every preview
+ * reserves the sheet's largest frame footprint (maxFrameSize) so a pose
+ * swap can never resize the layout — the frames' ground baseline is their
+ * bottom edge (the import-line rule), exactly like the in-game AABB
+ * anchoring. The fix for the owner's 横揺れ feedback (2026-08-09).
  */
-function frameFor(avatar: AvatarAsset, pose: string) {
-  return (
-    avatar.poses.find((p) => p.pose === pose) ??
-    avatar.poses.find((p) => p.pose === 'stand') ??
-    avatar.poses[0]
-  );
+export function groundBoxStyle(size: readonly [number, number], scale: number): CSSProperties {
+  return {
+    width: size[0] * scale,
+    height: size[1] * scale,
+    display: 'inline-flex',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  };
 }
 
 /** The animated figure driven by the shared walk clock (data-pose carries the shown frame). */
@@ -146,7 +151,11 @@ function WalkPreview(props: { avatar: AvatarAsset; pose: string; showAnchors: bo
   const resolved = frameFor(avatar, pose);
   if (!resolved) return <span style={missingBoxStyle}>ポーズなし</span>;
   return (
-    <span data-testid="walk-preview" data-pose={resolved.pose}>
+    <span
+      data-testid="walk-preview"
+      data-pose={resolved.pose}
+      style={groundBoxStyle(maxFrameSize(avatar), 2)}
+    >
       <FrameImage
         frame={resolved.frame}
         scale={2}
@@ -194,12 +203,14 @@ export function AvatarCard(props: {
         </figure>
         {avatar.poses.map(({ pose: name, frame }) => (
           <figure key={name} style={figureStyle} data-testid="pose-frame">
-            <FrameImage
-              frame={frame}
-              scale={1}
-              showAnchors={showAnchors}
-              alt={`${avatar.id} ${name}`}
-            />
+            <span style={groundBoxStyle(maxFrameSize(avatar), 1)}>
+              <FrameImage
+                frame={frame}
+                scale={1}
+                showAnchors={showAnchors}
+                alt={`${avatar.id} ${name}`}
+              />
+            </span>
             <figcaption style={captionStyle}>
               {name}
               <br />
