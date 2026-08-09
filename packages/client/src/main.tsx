@@ -11,10 +11,25 @@ initTelemetry();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root element is missing from index.html');
-createRoot(root).render(
-  <StrictMode>
-    <ClerkGate>
-      <App />
-    </ClerkGate>
-  </StrictMode>,
-);
+
+// The dev-only asset studio (Phase 5 ①b⑷ — the read-only inspection
+// viewer): /assets renders it instead of the world. The same DEV gate as
+// the ?outfit dress-up preview, so production bundles drop the studio —
+// and the asset enumeration behind it — entirely.
+if (import.meta.env.DEV && window.location.pathname === '/assets') {
+  void import('./studio.package').then(({ AssetStudio }) => {
+    createRoot(root).render(
+      <StrictMode>
+        <AssetStudio />
+      </StrictMode>,
+    );
+  });
+} else {
+  createRoot(root).render(
+    <StrictMode>
+      <ClerkGate>
+        <App />
+      </ClerkGate>
+    </StrictMode>,
+  );
+}
