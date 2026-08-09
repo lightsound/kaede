@@ -51,14 +51,19 @@ function useWalkPose(playing: boolean): string {
     }
     let walk = IDLE_WALK_STATE;
     let last: number | undefined;
+    let cancelled = false;
     let raf = requestAnimationFrame(function tick(now: number) {
+      if (cancelled) return;
       const dt = last === undefined ? 0 : Math.min(now - last, 100);
       last = now;
       walk = advanceWalk(walk, (MOVE_SPEED * dt) / 1000, dt);
       setPose(selectPose(walk));
       raf = requestAnimationFrame(tick);
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
   }, [playing]);
   return pose;
 }
@@ -182,7 +187,7 @@ export function AssetStudio() {
       <div style={gridStyle}>
         {catalog.avatars.map((avatar) => (
           <AvatarCard
-            key={avatar.id}
+            key={avatar.dir}
             avatar={avatar}
             pose={pose}
             showAnchors={showAnchors}
@@ -194,7 +199,7 @@ export function AssetStudio() {
       <SectionHeading>手持ちアイテム（held-item）</SectionHeading>
       <div style={itemGridStyle}>
         {catalog.items.map((item) => (
-          <ItemCard key={item.id} item={item} showAnchors={showAnchors} />
+          <ItemCard key={item.dir} item={item} showAnchors={showAnchors} />
         ))}
       </div>
     </main>

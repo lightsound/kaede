@@ -238,7 +238,7 @@ export function CompareStrip(props: {
     <section style={{ ...cardStyle, borderColor: UI_GOLD }} data-testid="compare-strip">
       <div style={{ display: 'flex', gap: 32, alignItems: 'flex-end' }}>
         {avatars.map((avatar) => (
-          <figure key={avatar.id} style={figureStyle}>
+          <figure key={avatar.dir} style={figureStyle}>
             <WalkPreview avatar={avatar} pose={pose} showAnchors={showAnchors} />
             <figcaption style={captionStyle}>{avatar.name}</figcaption>
           </figure>
