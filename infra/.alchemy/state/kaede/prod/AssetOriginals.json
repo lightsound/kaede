@@ -1,0 +1,25 @@
+{
+  "status": "updated",
+  "fqn": "AssetOriginals",
+  "logicalId": "AssetOriginals",
+  "instanceId": "9c52579e177973d9a236f9fa1f2cb0a2",
+  "resourceType": "Cloudflare.R2.Bucket",
+  "props": {
+    "name": "kaede-asset-originals"
+  },
+  "attr": {
+    "bucketName": "kaede-asset-originals",
+    "storageClass": "Standard",
+    "jurisdiction": "default",
+    "location": "enam",
+    "accountId": "751c8a59858c9c04a8e722df7330444d",
+    "domains": [],
+    "lifecycleRules": [],
+    "cors": []
+  },
+  "bindings": [],
+  "providerVersion": 0,
+  "downstream": [],
+  "removalPolicy": "retain",
+  "providerMode": "live"
+}
