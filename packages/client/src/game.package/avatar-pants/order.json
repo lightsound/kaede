@@ -1,0 +1,23 @@
+{
+  "id": "avatar.boy-pants",
+  "type": "avatar-body",
+  "name": "男の子（パンツ）",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": { "cols": 5, "rows": 1 },
+  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "standHeightPx": 96,
+  "handAnchors": {
+    "stand": [15, 67],
+    "walk-a": [39, 57],
+    "walk-b": [37, 60],
+    "walk-c": [42, 58],
+    "walk-d": [37, 59]
+  },
+  "references": ["../canonical/style-reference.png", "../avatar/sheet-original.png"],
+  "template": "avatar-outfit-edit",
+  "vars": {
+    "outfit": "remove the white short-sleeved shirt completely so his chest and belly are bare skin, and replace the navy pants with plain simple white briefs (underpants) only — no shirt, no undershirt, just white briefs and his brown shoes"
+  },
+  "prompt": ""
+}

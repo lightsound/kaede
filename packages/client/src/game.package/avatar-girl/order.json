@@ -1,0 +1,21 @@
+{
+  "id": "avatar.girl-basic",
+  "type": "avatar-body",
+  "name": "女の子（基本）",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": { "cols": 5, "rows": 1 },
+  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "standHeightPx": 96,
+  "references": ["../canonical/style-reference.png", "../canonical/stand-reference.png"],
+  "template": "avatar-stand",
+  "vars": {
+    "subject": "girl",
+    "appearance": "Soft black bob haircut with a small red hairclip on the near side, large shiny eyes, light blush, gentle smile.",
+    "outfit": "a light peach sleeveless inner camisole top that fully covers the chest (NOT bare / NOT underwear-only — an inner top) and matching soft cream shorts, simple brown shoes"
+  },
+  "prompt": "",
+  "lint": {
+    "contrastBase": "avatar/manifest.json"
+  }
+}

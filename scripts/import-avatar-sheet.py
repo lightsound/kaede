@@ -62,6 +62,7 @@ from collections import Counter
 from pathlib import Path
 
 from PIL import Image
+from factory.anchors import structure_hand_carry, structure_neck
 from r2_originals import (
     reference_sha256,
     resolve_asset_path,
@@ -160,21 +161,19 @@ def opaque_row_span(frame: Image.Image, y: int) -> tuple[int, int] | None:
 
 
 def neck_anchor(frame: Image.Image) -> tuple[int, int]:
-    """The narrowest opaque row of the chin-to-hip band: the chibi neck pinch."""
-    lo, hi = (int(frame.height * f) for f in NECK_BAND)
-    best: tuple[int, tuple[int, int]] | None = None
-    for y in range(lo, hi):
-        span = opaque_row_span(frame, y)
-        if span and (best is None or span[1] - span[0] < best[1][1] - best[1][0]):
-            best = (y, span)
-    if best is None:
-        raise SystemExit("no opaque rows in the neck band")
-    y, (x0, x1) = best
-    return ((x0 + x1) // 2, y)
+    """Structure-based neck (silhouette width valley) — see factory/anchors.py.
+
+    Replaces the narrowest-row heuristic that the ①b(a)⑵ spike measured
+    failing on hoodies (the hood widens the neck row and the hip wins).
+    Color is never consulted.
+    """
+    return structure_neck(frame)
 
 
-def hand_anchor(frame: Image.Image) -> tuple[int, int]:
-    """Proportional estimate (hands ride at hip height on a chibi); 増分①d refines."""
+def hand_anchor(frame: Image.Image, *, carry: bool = False) -> tuple[int, int]:
+    """Carry sheets: structure protrusion at the waist. Else: hip-height estimate."""
+    if carry:
+        return structure_hand_carry(frame)
     return (frame.width // 2, int(frame.height * 0.66))
 
 
@@ -266,10 +265,11 @@ def main() -> None:
 
     hand_overrides = order.get("handAnchors", {})
     neck_overrides = order.get("neckAnchors", {})
+    carry_sheet = bool(order.get("handLayer"))
     poses = {}
     for name, frame in zip(order["poses"], frames):
         frame.save(resolve_asset_path(out_dir, f"{name}.png", asset_root))
-        hand = hand_overrides.get(name, list(hand_anchor(frame)))
+        hand = hand_overrides.get(name, list(hand_anchor(frame, carry=carry_sheet)))
         neck = neck_overrides.get(name, list(neck_anchor(frame)))
         poses[name] = {
             "file": f"{name}.png",

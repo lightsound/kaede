@@ -10,13 +10,6 @@
   },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
   "standHeightPx": 96,
-  "neckAnchors": {
-    "stand": [25, 49],
-    "walk-a": [25, 49],
-    "walk-b": [25, 49],
-    "walk-c": [25, 49],
-    "walk-d": [25, 49]
-  },
   "handAnchors": {
     "stand": [23, 64],
     "walk-a": [23, 64],
