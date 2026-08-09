@@ -4,6 +4,7 @@ coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+__pycache__/
 .DS_Store
 spacetime.local.json
 .fallow/
@@ -29,6 +30,14 @@ infra/.alchemy/state/*/*/
 !infra/.alchemy/state/*/prod/
 infra/.alchemy/log/
 infra/.alchemy/version-check.json
+
+# アセットの生成原本(グリーンバックのシート等 *-original.*)は Git に
+# 入れない(1 枚 300KB〜1.3MB で再生成のたびに clone が肥大するため —
+# ROADMAP Phase 5 ①b⑶)。正の置き場所は R2 バケット kaede-asset-originals
+# (scripts/upload-asset-originals.py がアップロードして order.json に
+# sha256 を記録し、取り込みスクリプトが必要時に取得してここへ書き戻す)。
+# パターンは upload スクリプトの `*-original.*` と揃える(thermos Low)。
+packages/client/src/**/*-original.*
 
 .projects/cache
 .projects/vault

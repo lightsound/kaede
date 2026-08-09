@@ -1614,7 +1614,9 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   asset-pipeline.md §2。neck/hand アンカーは①a 未使用でも最初から記録:
   neck は最細行検出、hand は暫定比率で、値の修正はシート再生成なしで
   できる）。生成原本・参照画像・発注書も同ディレクトリにコミット
-  （再現性 — §4。テンプレ・アート lint・基準セットの整備は①b）
+  （再現性 — §4。テンプレ・アート lint・基準セットの整備は①b。
+  → 生成原本のコミットは①b 着手順⑶で R2 移行済み — Git に残るのは
+  取り込み結果のみ）
   ②**描画**: `AvatarView` の薄い境界（`avatarView.ts` — update(x, dt) のみ。
   ①c が play(motion)、①d が setSkin を足す）を切り、GameApp の 1 枚絵
   Sprite をコマ切替に置き換え。スプライトは物理 AABB 下端に bottom-center
@@ -1790,6 +1792,55 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   1.3MB vs 取り込み後 5 コマ 60KB）→ ⑷ アセット作成画面（(b) の検品
   ビューア → 発注コンソール。規格確定後に作ることで画面自体の手戻りを
   防ぐ）
+  ✅ **⑶ アセット原本の R2 移行 実施（2026-08-09。生成なし —
+  クレジット消費ゼロ、残高 ~$3.9 のまま）**: 9 ディレクトリの生成原本
+  （sheet-original.png ×4・item-original.png ×5、計約 3.4MB）を R2 へ
+  移行して Git から削除（履歴からの完全削除はしない — 通常の rm で
+  今後の肥大だけ止める方針どおり）。設計の要点:
+  ①**バケット `kaede-asset-originals`（Alchemy IaC・retain・名前固定）**:
+  kaede-recordings の前例に倣い removalPolicy retain（原本は再生成に
+  クレジット実費がかかる一点物）。**stagedName は掛けない** — 録画と違い
+  git ファクトリー共有の一点物で、scripts は常に裸の名前を見る（thermos
+  CQ）。移行アップロードのため API で先行作成済みで、Alchemy の R2
+  リコンサイラは observe→create の順に既存バケットをそのまま採用する
+  ため、マージ後の CI デプロイは 409 にならず収束する（beta.70 の実装
+  読解で確認）
+  ②**内容アドレスストア**: key = `originals/<sha256>`（論理ファイル名・
+  拡張子は key に含めない）。発注書
+  order.json の追加フィールド `originals`（発注書相対パス → sha256）が
+  唯一のポインタで、manifest の referenceHashes と同じハッシュ空間 —
+  同一内容は同一キーに畳まれる（avatar-carry / avatar-red が参照する
+  `../avatar/sheet-original.png` は移行時に自動で重複排除された）。
+  取得時は body の sha 照合で改竄・取り違えを fail loud
+  ③**解決規則**（`scripts/r2_originals.py` — 両 import スクリプト共用）:
+  ローカルにあればそれを使い（生成 → 取り込みのループはアップロード前も
+  従来どおり動く）、無ければ R2 から取得して gitignored なローカル
+  パス（`*-original.png`）へ書き戻す。references のハッシュは記録値で
+  短絡（ハッシュしか要らないものを MB 単位で DL しない）。全 order の入力・
+  出力は canonical な asset root 配下に解決し、絶対パス・root 外 symlink・
+  root 外 `..` は read/write 前に拒否する。ローカル優先が
+  無条件なのは**未記録の初回生成だけ**: 記録済み原本のローカル bytes が
+  記録値と食い違う（アップロード前の再生成）場合は fail loud — 共有参照の
+  黙った書き換え（fresh clone が再現できない manifest を鋳造する穴 —
+  Pullfrog レビュー指摘で強化）を封じる。アップロードは
+  `scripts/upload-asset-originals.py`（`*-original.*` 命名規約で自動
+  判別・内容アドレスゆえ冪等。CLI 引数はシードで、同じ resolve 先を
+  指す全発注書の `originals` を書き換え、影響する全 importer を再実行する
+  （manifest の referenceHashes も stale にしない）。各 order は一時ファイル
+  を format して atomic replace する。発注 → アップロード → 取り込み →
+  コミット、の順が量産ラインの新しい定型）。ストアは追記専用 — 参照されなくなった旧原本は R2 に残る
+  （今の分量では実害なし。棚卸しツールは量産期に必要が出たら足す —
+  レビュー指摘を記録）。order 未参照の生成候補・ボツ案は
+  `upload-asset-originals.py --file` でポインタなし保管できる
+  ④**経路は Cloudflare REST API**（bearer = CLOUDFLARE_API_TOKEN。
+  R2 権限は Phase 4 増分④の見込みどおり同トークンで可 — VM 注入
+  トークンで PUT/GET/DELETE を実測 2026-08-09）。S3 資格情報・SigV4 は
+  不要で資格情報は増えない。ランタイム（クライアント・module）からは
+  参照しない開発時ストア — 配信の R2 移行（DP-1）とは別物のまま
+  ⑤**検証**: ローカル原本ゼロの状態から全 9 発注書の再取り込みで
+  manifest・コマ PNG・hand.png とも byte 同一（git clean — ⑵で確立した
+  再現性規約）。オーナー承認ゲートは不変（取り込み結果 PNG は Git に
+  残り、PR でシート画像が見える）
 - **①b の完了条件に歩留まり実測を含める（オーナー合意 2026-08-08 —
   「ベンチ 1 体の合格」と「量産に耐えるライン」は別物）**: ⑴⑵ で確立した
   レシピを工程として繋ぎ（コマ位相の自動選定 — 足位置解析 — を含む）、
