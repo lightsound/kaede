@@ -50,7 +50,7 @@ from factory.art_lint import lint_avatar, silhouette_iou  # noqa: E402
 from factory.compose_sheet import compose_walk_sheet, staticize_carry_sheet  # noqa: E402
 from factory.cycle_scan import scan_clip  # noqa: E402
 from factory.montage import sheet_montage  # noqa: E402
-from r2_originals import resolve_original  # noqa: E402
+from r2_originals import resolve_asset_path, resolve_original  # noqa: E402
 
 # A keep-everything outfit edit keeps poses: the red hoodie measured IoU
 # 0.916–0.956 per pose; bare-skin edits shed sleeve/pant silhouette and sit
@@ -388,10 +388,19 @@ def main() -> None:
     cost = 0.0
     note_parts: list[str] = []
 
-    # Resolve references (canonical style refs preferred).
+    # Resolve references (canonical style refs preferred). resolve_asset_path
+    # rejects absolute paths and root escapes (a crafted order must not be
+    # able to read arbitrary local files into an external API call — security
+    # review 2026-08-10) and returns canonical paths, so the dedup below
+    # actually fires when an order already lists the canonical reference
+    # (raw `base / r` never equalled the absolute canonical path, silently
+    # dropping the order's second reference from the [:2] send window).
     base = order_path.parent
-    refs = [base / r for r in order.get("references", [])]
-    canonical = ASSET_ROOT / "canonical" / "style-reference.png"
+    refs = [
+        resolve_asset_path(base, r, ASSET_ROOT)
+        for r in order.get("references", [])
+    ]
+    canonical = (ASSET_ROOT / "canonical" / "style-reference.png").resolve()
     if canonical.is_file() and canonical not in refs:
         refs = [canonical, *refs]
 

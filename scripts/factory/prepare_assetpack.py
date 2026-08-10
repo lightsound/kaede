@@ -10,6 +10,7 @@ source of truth remains the individual PNGs.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -17,6 +18,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_ROOT = ROOT / "packages/client/src/game.package"
 STAGE = ROOT / "packages/client/raw-assets" / "avatars{tps}"
+
+# Manifest ids are lowercase dotted slugs (asset-pipeline.md §2); anything
+# else must not reach a Path join (an absolute or dotted id would escape the
+# staging dir — security review 2026-08-10).
+ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]*\Z")
+
+
+def _contained(path: Path, root: Path, what: str) -> Path:
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError:
+        raise SystemExit(f"{what} escapes {root}: {path}") from None
+    return resolved
 
 
 def main() -> None:
@@ -28,18 +43,21 @@ def main() -> None:
         manifest = json.loads(manifest_path.read_text())
         if manifest.get("type") != "avatar-body":
             continue
-        dest = STAGE / manifest["id"].replace(".", "_")
+        asset_id = manifest.get("id", "")
+        if ID_PATTERN.fullmatch(asset_id) is None:
+            raise SystemExit(f"invalid manifest id {asset_id!r} in {manifest_path}")
+        dest = _contained(STAGE / asset_id.replace(".", "_"), STAGE, "staging dir")
         dest.mkdir(parents=True)
         base = manifest_path.parent
         for pose, meta in (manifest.get("poses") or {}).items():
-            src = base / meta["file"]
+            src = _contained(base / meta["file"], ASSET_ROOT, "pose file")
             if not src.is_file():
                 raise SystemExit(f"missing {src}")
             shutil.copy(src, dest / f"{pose}.png")
             count += 1
         hand = manifest.get("handLayer")
         if hand:
-            src = base / hand["file"]
+            src = _contained(base / hand["file"], ASSET_ROOT, "hand layer")
             if src.is_file():
                 shutil.copy(src, dest / "hand.png")
                 count += 1

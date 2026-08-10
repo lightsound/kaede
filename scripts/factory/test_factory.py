@@ -17,6 +17,7 @@ from factory import templates
 from factory.anchors import structure_hand_carry, structure_neck
 from factory.art_lint import (
     check_head_consistency,
+    check_leg_phase,
     check_palette_drift,
     lint_avatar,
     silhouette_iou,
@@ -196,6 +197,52 @@ class ArtLintTests(unittest.TestCase):
         shifted.paste(a.crop((0, 0, 44, 100)), (20, 0))
         self.assertEqual(silhouette_iou(a, a), 1.0)
         self.assertLess(silhouette_iou(a, shifted), 0.8)
+
+
+class LegPhaseTests(unittest.TestCase):
+    def _walker(self, lead: int) -> Image.Image:
+        """Chibi with the feet-band mass pushed forward (+1) or back (−1)."""
+        frame = _chibi(neck_y=50)
+        draw = ImageDraw.Draw(frame)
+        if lead > 0:
+            draw.rectangle((44, 88, 60, 98), fill=(240, 200, 160, 255))
+        elif lead < 0:
+            draw.rectangle((4, 88, 20, 98), fill=(240, 200, 160, 255))
+        return frame
+
+    def test_opposite_contacts_pass(self) -> None:
+        frames = {
+            "stand": _chibi(neck_y=50),
+            "walk-a": self._walker(1),
+            "walk-b": _chibi(neck_y=50),
+            "walk-c": self._walker(-1),
+            "walk-d": self._walker(0),
+        }
+        failures = check_leg_phase(frames)
+        self.assertFalse(any("opposite legs" in f for f in failures), failures)
+
+    def test_same_side_contacts_fail(self) -> None:
+        frames = {
+            "stand": _chibi(neck_y=50),
+            "walk-a": self._walker(1),
+            "walk-b": _chibi(neck_y=50),
+            "walk-c": self._walker(1),
+            "walk-d": self._walker(0),
+        }
+        failures = check_leg_phase(frames)
+        self.assertTrue(any("opposite legs" in f for f in failures), failures)
+
+    def test_clone_pair_fails(self) -> None:
+        walker = self._walker(1)
+        frames = {
+            "stand": _chibi(neck_y=50),
+            "walk-a": walker,
+            "walk-b": _chibi(neck_y=50),
+            "walk-c": self._walker(-1),
+            "walk-d": walker.copy(),
+        }
+        failures = check_leg_phase(frames)
+        self.assertTrue(any("near-clones" in f for f in failures), failures)
 
 
 class StaticizeTests(unittest.TestCase):

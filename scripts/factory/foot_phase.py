@@ -74,6 +74,14 @@ def _find_period(signals: list[float], min_period: int, max_period: int) -> int:
     wins.
     """
     n = len(signals)
+    if n < min_period * 2:
+        # An empty lag range would raise a bare ValueError below; fail with
+        # the actual requirement instead (the ≥16-frame guard upstream only
+        # covers the anchor search, not the period search).
+        raise SystemExit(
+            f"clip too short for stride-period search: {n} frames after the "
+            f"warm-up skip, need ≥ {min_period * 2}"
+        )
     mean = sum(signals) / n
     centered = [s - mean for s in signals]
     scores: dict[int, float] = {}
