@@ -129,7 +129,12 @@ def _significant_colors(
         return 0 <= x < w and 0 <= y < h and alpha[x, y] >= OPAQUE
 
     def interior(x: int, y: int) -> bool:
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        # Radius-2 erosion: antialiasing blend bands on high-contrast art
+        # (black bob against skin/sky-blue) are 2–3px wide, and a 1-ring
+        # test still let their quantized clusters reach the 4% share floor
+        # on some frames (false drift on a visually clean frame, measured
+        # 2026-08-10). Genuinely repainted regions are solid and survive.
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (2, 0), (-2, 0), (0, 2), (0, -2)):
             if not opaque(x + dx, y + dy):
                 return False
             if _dist(colors[x + dx, y + dy], colors[x, y]) > 60:
@@ -255,15 +260,30 @@ def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
     return failures
 
 
-def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
-    """No significant frame color may sit far from every stand color."""
+def check_palette_drift(
+    stand: Image.Image,
+    frame: Image.Image,
+    acknowledged: list[str] | None = None,
+) -> list[str]:
+    """No significant frame color may sit far from every stand color.
+
+    `acknowledged` lists specific hex colors an order explicitly accepts for
+    this pose after a human looked at the frame (the ImportLint suppression
+    policy: never by default, always narrow, always with a recorded reason
+    in the order). First use: the girl's walk-c under-chin camisole shading
+    — real paint from the source clip, exposed by an owner-requested head
+    shift, visually clean but absent from her stand's 16-color palette.
+    """
     stand_colors = _significant_colors(stand, DRIFT_STAND_MIN_SHARE)
     if not stand_colors:
         return ["stand has no significant colors to compare against"]
+    acknowledged_rgb = [_parse_hex(c) for c in acknowledged or []]
     failures = []
     for color in _significant_colors(frame, DRIFT_MIN_SHARE, interior_only=True):
         nearest = min(_dist(color, sc) for sc in stand_colors)
         if nearest > DRIFT_DISTANCE_MAX:
+            if any(_dist(color, ack) < 12 for ack in acknowledged_rgb):
+                continue
             failures.append(
                 f"color #{color[0]:02x}{color[1]:02x}{color[2]:02x} drifted "
                 f"{nearest:.0f} from the stand palette (> {DRIFT_DISTANCE_MAX}) "
@@ -278,6 +298,7 @@ def lint_avatar(
     base_palette: list[str] | None = None,
     expect_carry_hand: bool = False,
     expect_leg_phase: bool = False,
+    acknowledged_drift: dict[str, list[str]] | None = None,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -324,7 +345,12 @@ def lint_avatar(
                     )
                 ]
             failures += [
-                f"{name}: {f}" for f in check_palette_drift(stand_frame, frame)
+                f"{name}: {f}"
+                for f in check_palette_drift(
+                    stand_frame,
+                    frame,
+                    (acknowledged_drift or {}).get(name),
+                )
             ]
 
         recorded_neck = pose.get("anchors", {}).get("neck")

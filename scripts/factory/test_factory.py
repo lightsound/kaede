@@ -145,9 +145,15 @@ class FootPhaseTests(unittest.TestCase):
 
 class ArtLintTests(unittest.TestCase):
     def test_lint_passes_every_committed_sheet(self) -> None:
-        # The head-consistency and palette-drift gates were calibrated on
-        # the committed sheets; a threshold change that rejects shipped art
-        # must fail here first.
+        # The head-consistency, palette-drift and leg-phase gates were
+        # calibrated on the committed sheets; a threshold change that
+        # rejects shipped art must fail here first. Uses the production
+        # run_lint path so order-level lint options (carry/leg expectations,
+        # acknowledged drift colors) apply exactly as in the factory.
+        import json
+
+        from factory.run_avatar import run_lint
+
         root = SCRIPTS.parent / "packages/client/src/game.package"
         for name in (
             "avatar",
@@ -158,7 +164,9 @@ class ArtLintTests(unittest.TestCase):
             "avatar-pants",
             "avatar-pants-carry",
         ):
-            failures = lint_avatar(root / name / "manifest.json")
+            order_path = root / name / "order.json"
+            order = json.loads(order_path.read_text())
+            failures = run_lint(order_path, order)
             self.assertEqual(failures, [], name)
 
     def test_head_consistency_catches_double_head(self) -> None:
