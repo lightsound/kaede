@@ -178,6 +178,11 @@ export async function connect(
             tables.chatMessage.where((c) => c.scope.eq(CHAT_SCOPE_GROUP)),
             tables.dmMessage,
             tables.reaction,
+            // Gestures (Phase 5 ①c): whole-table like reactions/statuses —
+            // bounded by the world population. State poses (sit / sleep /
+            // dance) display from this seed; the transient wave from row
+            // events only (see gestureFeed.ts).
+            tables.gesture,
             tables.playerStatus,
             tables.conversationGroup,
             tables.groupMember,

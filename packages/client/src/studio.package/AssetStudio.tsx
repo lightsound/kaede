@@ -3,7 +3,7 @@ import { MOVE_SPEED } from '@kaede/shared';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { advanceWalk, IDLE_WALK_STATE, loadAssetModules, selectPose } from '../game.package';
 import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
-import { AvatarCard, CompareStrip, ItemCard, SectionHeading } from './cards';
+import { AvatarCard, CompareStrip, GestureCard, ItemCard, SectionHeading } from './cards';
 import { type AssetCatalog, buildCatalog } from './catalog';
 import { resolveStageLook } from './dressup';
 import { DressUpStage } from './stage';
@@ -222,10 +222,22 @@ export function AssetStudio() {
           />
         ))}
       </div>
+      <SectionHeading>ジェスチャーシート（avatar-gesture — ①c）</SectionHeading>
+      <div style={gridStyle}>
+        {catalog.gestures.map((avatar) => (
+          <GestureCard key={avatar.dir} avatar={avatar} showAnchors={showAnchors} />
+        ))}
+      </div>
       <SectionHeading>手持ちアイテム（held-item）</SectionHeading>
       <div style={itemGridStyle}>
         {catalog.items.map((item) => (
           <ItemCard key={item.dir} item={item} showAnchors={showAnchors} />
+        ))}
+      </div>
+      <SectionHeading>ヘッドギア（headgear — 取り込み中の視覚化）</SectionHeading>
+      <div style={itemGridStyle}>
+        {catalog.headgear.map((item) => (
+          <ItemCard key={item.dir} item={item} showAnchors={showAnchors} testId="headgear-card" />
         ))}
       </div>
     </main>

@@ -46,6 +46,7 @@ import JoinReducer from "./join_reducer";
 import JoinHuddleReducer from "./join_huddle_reducer";
 import LeaveHuddleReducer from "./leave_huddle_reducer";
 import MoveZoneReducer from "./move_zone_reducer";
+import PlayGestureReducer from "./play_gesture_reducer";
 import RejectMemberReducer from "./reject_member_reducer";
 import SendAnnouncementReducer from "./send_announcement_reducer";
 import SendChatMessageReducer from "./send_chat_message_reducer";
@@ -71,6 +72,7 @@ import CallRecordingRow from "./call_recording_table";
 import ChatMessageRow from "./chat_message_table";
 import ConversationGroupRow from "./conversation_group_table";
 import DmMessageRow from "./dm_message_table";
+import GestureRow from "./gesture_table";
 import GroupCallRow from "./group_call_table";
 import GroupMemberRow from "./group_member_table";
 import PlayerRow from "./player_table";
@@ -143,6 +145,17 @@ const tablesSchema = __schema({
       { name: 'dm_message_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, DmMessageRow),
+  gesture: __table({
+    name: 'gesture',
+    indexes: [
+      { accessor: 'identity', name: 'gesture_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'gesture_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, GestureRow),
   groupCall: __table({
     name: 'group_call',
     indexes: [
@@ -253,6 +266,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_huddle", JoinHuddleReducer),
   __reducerSchema("leave_huddle", LeaveHuddleReducer),
   __reducerSchema("move_zone", MoveZoneReducer),
+  __reducerSchema("play_gesture", PlayGestureReducer),
   __reducerSchema("reject_member", RejectMemberReducer),
   __reducerSchema("send_announcement", SendAnnouncementReducer),
   __reducerSchema("send_chat_message", SendChatMessageReducer),

@@ -20,15 +20,31 @@ import {
 } from '@kaede/shared';
 import { Application, Assets, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
+import avatarManifest from './avatar/manifest.json';
 import standUrl from './avatar/stand.png';
 import walkAUrl from './avatar/walk-a.png';
 import walkBUrl from './avatar/walk-b.png';
 import walkCUrl from './avatar/walk-c.png';
 import walkDUrl from './avatar/walk-d.png';
+import danceAUrl from './avatar-gestures/dance-a.png';
+import danceBUrl from './avatar-gestures/dance-b.png';
+import danceCUrl from './avatar-gestures/dance-c.png';
+import danceDUrl from './avatar-gestures/dance-d.png';
+import danceEUrl from './avatar-gestures/dance-e.png';
+import danceFUrl from './avatar-gestures/dance-f.png';
+import danceGUrl from './avatar-gestures/dance-g.png';
+import danceHUrl from './avatar-gestures/dance-h.png';
+import gestureManifest from './avatar-gestures/manifest.json';
+import sitUrl from './avatar-gestures/sit.png';
+import sleepUrl from './avatar-gestures/sleep.png';
+import waveUrl from './avatar-gestures/wave.png';
 import {
   type AvatarSheetTextures,
   type AvatarView,
   createAvatarView,
+  type GestureKit,
+  type GestureSheetTextures,
+  type HeadgearDisplay,
   type HeldItemDisplay,
 } from './avatarView';
 import {
@@ -46,6 +62,8 @@ import {
 import { cameraOffset } from './camera';
 import { createHuddleLayer, type HuddleRender } from './huddleLayer';
 import { createInput } from './input';
+import headphonesUrl from './items/headphones/headphones.png';
+import headphonesManifest from './items/headphones/manifest.json';
 import { mergeInputs } from './mergeInputs';
 import { createTouchControls } from './touchControls';
 import { renderZoneLayer, type ZoneRender } from './zoneLayer';
@@ -80,6 +98,33 @@ export interface PlayerLabel {
   status: string | undefined;
   /** The composed occupancy tag (zoneTagLabel in @kaede/shared), or undefined. */
   zone: string | undefined;
+  /**
+   * The player's STATE gesture directive (増分①c — 'sit' | 'sleep' |
+   * 'dance' from the gesture row), or undefined. Plain strings rather
+   * than shared union types on purpose (the fallow type-coupling budget);
+   * avatarView narrows at the display boundary. The transient wave never
+   * rides a label — it is an event (showLocalWave / showRemoteWave).
+   */
+  gesture: string | undefined;
+  /**
+   * The player's availability ('online' | 'away' | 'busy' — the
+   * player_status row), or undefined for the default. Drives the derived
+   * poses of VISION 体験の核 2: away renders the sleep pose, busy the
+   * headphones overlay — no schema of their own (①c 設計).
+   */
+  availability: string | undefined;
+}
+
+/**
+ * The standing-still pose an avatar should hold: the explicit gesture
+ * outranks the status-derived sleep (the ①c priority rule; rendered
+ * motion outranks both, inside avatarView).
+ */
+function poseDirective(
+  gesture: string | undefined,
+  availability: string | undefined,
+): string | undefined {
+  return gesture ?? (availability === 'away' ? 'sleep' : undefined);
 }
 
 export interface GameApp {
@@ -159,6 +204,22 @@ export interface GameApp {
   showLocalReaction(emoji: ReactionEmoji): void;
   /** Same, above the remote player `id`; a no-op while that player has no sprite. */
   showRemoteReaction(id: string, emoji: ReactionEmoji): void;
+  /**
+   * Sets the local avatar's state-gesture directive (増分①c — the gesture
+   * row's value, undefined when the row is gone). Persistent like the
+   * status lines; rendered motion overrides it visually (avatarView).
+   */
+  setLocalGesture(gesture: string | undefined): void;
+  /**
+   * Sets the local availability ('online' | 'away' | 'busy') for the
+   * derived poses: away = sleep pose, busy = headphones overlay. The
+   * composed status LINE stays setLocalStatus's business.
+   */
+  setLocalAvailability(availability: string | undefined): void;
+  /** Plays the transient wave on the local avatar (増分①c row event). */
+  showLocalWave(): void;
+  /** Same, on the remote player `id`; a no-op while that player has no sprite. */
+  showRemoteWave(id: string): void;
 }
 
 interface PlayerView {
@@ -220,10 +281,11 @@ function createPlayerView(
   name: string,
   sheet: AvatarSheetTextures,
   held?: HeldItemDisplay,
+  kit?: GestureKit,
 ): PlayerView {
   const root = new Container();
   const body = new Container();
-  const avatar = createAvatarView(body, sheet, held);
+  const avatar = createAvatarView(body, sheet, held, kit);
   const label = new Text({ text: name, style: NAME_STYLE });
   label.anchor.set(0.5, 1);
   label.y = -PLAYER_HALF_H - 4;
@@ -255,7 +317,12 @@ function setUnderline(line: Text, value: string | undefined): void {
  * fallow enforces.
  */
 function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
-  const snap: E2EPlayerSnapshot = { x: view.root.x, y: view.root.y, name: view.label.text };
+  const snap: E2EPlayerSnapshot = {
+    x: view.root.x,
+    y: view.root.y,
+    name: view.label.text,
+    pose: view.avatar.pose(),
+  };
   const bubble = visibleBubbleText(view.bubble);
   if (bubble !== undefined) snap.bubble = bubble;
   const reaction = visibleReactionEmoji(view.reaction);
@@ -373,6 +440,59 @@ function renderResolution(): number {
 interface DressUpPreview {
   sheet?: AvatarSheetTextures;
   held?: HeldItemDisplay;
+}
+
+/**
+ * Loads the ①c gesture assets every player view shares: the gesture pose
+ * sheet (avatar.boy-basic-gestures) and the busy headgear with its
+ * per-pose neck anchors — the base manifest's for the walk poses, the
+ * gesture manifest's for the gesture poses (the base wins the shared
+ * `stand`: it is the frame actually rendered). Bundled statically like the
+ * base sheet: gestures are a core feature on every avatar, not a preview.
+ */
+async function loadGestureKit(): Promise<GestureKit> {
+  const [sit, sleep, wave, a, b, c, d, e, f, g, h, headphones] = await Promise.all(
+    [
+      sitUrl,
+      sleepUrl,
+      waveUrl,
+      danceAUrl,
+      danceBUrl,
+      danceCUrl,
+      danceDUrl,
+      danceEUrl,
+      danceFUrl,
+      danceGUrl,
+      danceHUrl,
+      headphonesUrl,
+    ].map((url) => Assets.load(url)),
+  );
+  const sheet: GestureSheetTextures = {
+    sit,
+    sleep,
+    wave,
+    'dance-a': a,
+    'dance-b': b,
+    'dance-c': c,
+    'dance-d': d,
+    'dance-e': e,
+    'dance-f': f,
+    'dance-g': g,
+    'dance-h': h,
+  };
+  const necks: Record<string, readonly number[]> = {};
+  for (const [pose, meta] of Object.entries(gestureManifest.poses)) {
+    necks[pose] = meta.anchors.neck;
+  }
+  for (const [pose, meta] of Object.entries(avatarManifest.poses)) {
+    necks[pose] = meta.anchors.neck;
+  }
+  const headgear: HeadgearDisplay = {
+    texture: headphones,
+    grip: headphonesManifest.frame.anchors.grip,
+    necks,
+  };
+  return { sheet, headgear };
 }
 
 /** Builds one pose sheet from its five loaded frame modules, in pose order. */
@@ -553,6 +673,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   // Dev-only dress-up preview (the ①b(a) spike): swapped sheet / held item
   // for EVERY view in this tab — selection is per-player only from 増分①e.
   const { sheet: avatarSheet, held: heldItem } = await resolveAvatarLook(baseSheet);
+  // The ①c gesture assets, shared by every view like the base sheet. The
+  // gesture frames are the BASE outfit's; a dev-preview outfit swap keeps
+  // them (the gesture sheets for other outfits are a later factory run).
+  const gestureKit = await loadGestureKit();
 
   const world = new Container();
   app.stage.addChild(world);
@@ -576,8 +700,18 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const huddleLayerRoot = new Container();
   world.addChild(huddleLayerRoot);
 
-  const local = createPlayerView(world, 'You', avatarSheet, heldItem);
+  const local = createPlayerView(world, 'You', avatarSheet, heldItem, gestureKit);
   const remotes = new Map<string, PlayerView>();
+  // The local avatar's pose inputs (the remote ones ride PlayerLabel):
+  // the state gesture from the own gesture row, the availability from the
+  // own status row — combined by poseDirective on every change.
+  let localGesture: string | undefined;
+  let localAvailability: string | undefined;
+
+  function applyLocalPose(): void {
+    local.avatar.play(poseDirective(localGesture, localAvailability));
+    local.avatar.setBusy(localAvailability === 'busy');
+  }
 
   /** The member sprites a huddle circle anchors on this frame. */
   function huddleMemberPositions(huddle: HuddleRender): { x: number; y: number }[] {
@@ -803,12 +937,14 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     upsertRemotePlayer(id, label, x, y, facing) {
       let view = remotes.get(id);
       if (!view) {
-        view = createPlayerView(world, label.name, avatarSheet, heldItem);
+        view = createPlayerView(world, label.name, avatarSheet, heldItem, gestureKit);
         remotes.set(id, view);
       }
       view.label.text = label.name;
       setUnderline(view.status, label.status);
       setUnderline(view.zone, label.zone);
+      view.avatar.play(poseDirective(label.gesture, label.availability));
+      view.avatar.setBusy(label.availability === 'busy');
       view.root.position.set(x, y);
       // Flip only the body; flipping the root would mirror the name label.
       view.body.scale.x = facing;
@@ -829,5 +965,15 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     showLocalReaction: (emoji) => showReaction(local.reaction, emoji, performance.now()),
     showRemoteReaction: (id, emoji) =>
       withRemoteView(id, (view) => showReaction(view.reaction, emoji, performance.now())),
+    setLocalGesture(gesture) {
+      localGesture = gesture;
+      applyLocalPose();
+    },
+    setLocalAvailability(availability) {
+      localAvailability = availability;
+      applyLocalPose();
+    },
+    showLocalWave: () => local.avatar.wave(),
+    showRemoteWave: (id) => withRemoteView(id, (view) => view.avatar.wave()),
   };
 }

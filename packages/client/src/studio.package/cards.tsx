@@ -266,10 +266,10 @@ function itemScale(size: readonly [number, number] | undefined): number {
 }
 
 /** One held-item: the bare sprite with its grip point (the rest point on the carry mitten). */
-export function ItemCard(props: { item: ItemAsset; showAnchors: boolean }) {
+export function ItemCard(props: { item: ItemAsset; showAnchors: boolean; testId?: string }) {
   const { item, showAnchors } = props;
   return (
-    <section style={cardStyle} data-testid="item-card" data-asset-id={item.id}>
+    <section style={cardStyle} data-testid={props.testId ?? 'item-card'} data-asset-id={item.id}>
       <CardHeader name={item.name} id={item.id} />
       <figure style={figureStyle}>
         <FrameImage
@@ -280,6 +280,44 @@ export function ItemCard(props: { item: ItemAsset; showAnchors: boolean }) {
         />
         <figcaption style={captionStyle}>{anchorCaption(item.frame)}</figcaption>
       </figure>
+    </section>
+  );
+}
+
+/**
+ * One gesture sheet (avatar-gesture — Phase 5 ①c): every gesture frame with
+ * its anchors. No walk preview — the sheet has no walk cycle — and its own
+ * test ids so the avatar-body counts the studio spec pins stay stable.
+ */
+export function GestureCard(props: { avatar: AvatarAsset; showAnchors: boolean }) {
+  const { avatar, showAnchors } = props;
+  return (
+    <section style={cardStyle} data-testid="gesture-card" data-asset-id={avatar.id}>
+      <CardHeader name={avatar.name} id={avatar.id} />
+      {avatar.missingPoses.length > 0 && (
+        <div style={missingBadgeStyle} data-testid="missing-badge">
+          ⚠ 欠落ポーズ: {avatar.missingPoses.join(', ')}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        {avatar.poses.map(({ pose: name, frame }) => (
+          <figure key={name} style={figureStyle} data-testid="gesture-frame">
+            <span style={groundBoxStyle(maxFrameSize(avatar), 1)}>
+              <FrameImage
+                frame={frame}
+                scale={1}
+                showAnchors={showAnchors}
+                alt={`${avatar.id} ${name}`}
+              />
+            </span>
+            <figcaption style={captionStyle}>
+              {name}
+              <br />
+              {anchorCaption(frame)}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
     </section>
   );
 }

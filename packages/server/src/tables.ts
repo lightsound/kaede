@@ -304,6 +304,58 @@ export const spacetimedb = schema({
       sentAt: t.timestamp(),
     },
   ),
+  // The sender's current pose gesture (ROADMAP Phase 5 ①c): sit / sleep /
+  // dance / wave, rendered as the avatar's pose. The reaction table's
+  // shape — one UPSERT row per identity, bounded by the world population,
+  // deleted by removePlayer — but a THIRD display convention, between
+  // reaction (events only) and player_status (seed + events): the split
+  // lives in the shared vocabulary (isTransientGesture), not here. STATE
+  // gestures (sit / sleep / dance) render from the subscription seed too,
+  // because a sitting player must still be sitting after a reload or to a
+  // late joiner; the TRANSIENT wave renders from row events only, so a
+  // seeded wave row is history that must not replay (its row lingering
+  // until the next gesture or movement is harmless — one row of entry
+  // egress, never displayed from seed).
+  //
+  // The row is cleared SERVER-SIDE when its owner moves (the ①c schema
+  // review's decision, over client-side conventions that misrender to
+  // late joiners and explicit clear calls that hostile clients omit):
+  // every authoritative-position write path deletes the sender's row on
+  // displacement — the accepted-batch replay and enter_portal, the same
+  // places the group-occupancy pass hooks (clearGestureOnMove in
+  // world.ts). The cost is one PK lookup per accepted batch, only while
+  // a gesture row exists. `sentAt` exists for the reaction reason: a
+  // repeat of the SAME gesture still changes the row, so it still fires
+  // an update event (how a second wave re-plays); clients never compare
+  // it against their own clock.
+  //
+  // Status-derived poses (離席 = sleep, 取り込み中 = headphones — VISION
+  // 体験の核 2) deliberately need NO columns here: clients derive them
+  // from the existing player_status row. An explicit gesture outranks the
+  // status-derived pose; rendered motion outranks both (rig.ts).
+  // Like every realtime table: the single space's data, no tenant/org
+  // column (the scaling invariant). The ⑦③ "sit ON an object" extension
+  // arrives additively as a target column, not a new table.
+  gesture: table(
+    { name: 'gesture', public: true },
+    {
+      identity: t.identity().primaryKey(),
+      gesture: t.string(), // GestureKind in @kaede/shared: 'sit' | 'sleep' | 'dance' | 'wave'
+      sentAt: t.timestamp(),
+    },
+  ),
+  // The gesture rate limit's token-bucket marker — chat_guard's shape, for
+  // play_gesture. Its own bucket for the standing reason (buckets shared
+  // across features drift from their client-side mirrors), same lifecycle
+  // as the other lazy guards: created on first use, deleted with the
+  // player rows (removePlayer).
+  gestureGuard: table(
+    { name: 'gesture_guard' },
+    {
+      identity: t.identity().primaryKey(),
+      allowanceMicros: t.i64(),
+    },
+  ),
   // The reaction rate limit's token-bucket marker — chat_guard's shape, for
   // send_reaction. Deliberately NOT the chat bucket: ChatPanel mirrors
   // chat_guard client-side (allowanceRef) for instant feedback, and a

@@ -80,6 +80,63 @@ describe('buildCatalog', () => {
     expect(catalog.problems).toEqual([]);
   });
 
+  it('collects gesture sheets and headgear apart, outside the avatar pose diff', () => {
+    const catalog = buildCatalog(
+      {
+        './a/manifest.json': avatarManifest('avatar.a', { stand: pose('stand.png') }),
+        './a-gestures/manifest.json': {
+          id: 'avatar.a-gestures',
+          type: 'avatar-gesture',
+          name: 'ジェスチャー',
+          poses: { sit: pose('sit.png'), sleep: pose('sleep.png') },
+        },
+        './items/headphones/manifest.json': {
+          id: 'item.headphones',
+          type: 'headgear',
+          name: 'ヘッドホン',
+          frame: { file: 'headphones.png', size: [52, 46], anchors: { grip: [25, 50] } },
+        },
+      },
+      {
+        './a/stand.png': 'u',
+        './a-gestures/sit.png': 'u',
+        './a-gestures/sleep.png': 'u',
+        './items/headphones/headphones.png': 'u',
+      },
+    );
+    expect(catalog.problems).toEqual([]);
+    // The gesture sheet neither joins the avatar list nor widens the
+    // avatar pose union (its frames are per-character production status,
+    // not a gap every walk sheet must fill).
+    expect(catalog.avatars.map((a) => a.id)).toEqual(['avatar.a']);
+    expect(catalog.poseUnion).toEqual(['stand']);
+    expect(catalog.avatars[0]?.missingPoses).toEqual([]);
+    expect(catalog.gestures.map((g) => g.id)).toEqual(['avatar.a-gestures']);
+    expect(catalog.gestures[0]?.poses.map(({ pose: name }) => name)).toEqual(['sit', 'sleep']);
+    expect(catalog.headgear.map((h) => h.id)).toEqual(['item.headphones']);
+    expect(catalog.items).toEqual([]);
+  });
+
+  it('diffs gesture sheets against each other, within the type', () => {
+    const gestureManifest = (id: string, poses: Record<string, unknown>) => ({
+      id,
+      type: 'avatar-gesture',
+      name: id,
+      poses,
+    });
+    const catalog = buildCatalog(
+      {
+        './a/manifest.json': gestureManifest('avatar.a-gestures', {
+          sit: pose('sit.png'),
+          sleep: pose('sleep.png'),
+        }),
+        './b/manifest.json': gestureManifest('avatar.b-gestures', { sit: pose('sit.png') }),
+      },
+      { './a/sit.png': 'u', './a/sleep.png': 'u', './b/sit.png': 'u' },
+    );
+    expect(catalog.gestures.map((g) => g.missingPoses)).toEqual([[], ['sleep']]);
+  });
+
   it('reports a referenced PNG that is not bundled, keeping the frame with url undefined', () => {
     const catalog = buildCatalog(
       { './a/manifest.json': avatarManifest('avatar.a', { stand: pose('stand.png') }) },

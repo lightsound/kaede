@@ -110,6 +110,19 @@ export const DmMessage = __t.object("DmMessage", {
 });
 export type DmMessage = __Infer<typeof DmMessage>;
 
+export const Gesture = __t.object("Gesture", {
+  identity: __t.identity(),
+  gesture: __t.string(),
+  sentAt: __t.timestamp(),
+});
+export type Gesture = __Infer<typeof Gesture>;
+
+export const GestureGuard = __t.object("GestureGuard", {
+  identity: __t.identity(),
+  allowanceMicros: __t.i64(),
+});
+export type GestureGuard = __Infer<typeof GestureGuard>;
+
 export const GroupCall = __t.object("GroupCall", {
   groupId: __t.u64(),
   meetingId: __t.string(),

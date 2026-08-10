@@ -29,6 +29,7 @@ import {
   subscribeMapRows,
   target,
 } from './connection';
+import { cachedStateGesture, wireGestures } from './gestureFeed';
 import { createHeartbeat } from './heartbeat';
 import {
   createIdleMonitor,
@@ -366,6 +367,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     }
     lastOwnStatus = view;
     gameApp.setLocalStatus(statusLabel(view));
+    // The derived poses (away = sleep, busy = headphones — ①c) read the
+    // raw availability; the composed line above stays the text display.
+    gameApp.setLocalAvailability(view.availability);
     hooks.onOwnStatus(view);
   }
 
@@ -425,6 +429,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       name: nameOf(identity),
       status: statusLabel(cachedStatusView(c, identity)),
       zone: cachedZoneTag(c, identity),
+      // The ①c pose inputs ride the label like the status seed: a view
+      // (re)created for a sitting or busy player must start posed.
+      gesture: cachedStateGesture(c, identity),
+      availability: cachedStatusView(c, identity).availability,
     });
 
     // Our row appears (or already exists, when resuming an identity) via join
@@ -434,8 +442,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       publishOwnName(nameOf(row.identity));
       // The seed half of the status display (a status is state, so unlike
       // reactions the subscribed cache restores it on entry/reload); row
-      // events keep it fresh from here (wireStatuses).
+      // events keep it fresh from here (wireStatuses). The own state
+      // gesture seeds the same way (①c — a reload must restore the pose).
       publishOwnStatus(cachedStatusView(c, row.identity));
+      gameApp.setLocalGesture(cachedStateGesture(c, row.identity));
       // Announce liveness once per session start, unconditionally. Resuming
       // a surviving row skips join, so nothing server-side flips its offline
       // flag back or refreshes its updatedAt — and the send gate means no
@@ -571,7 +581,20 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     wireStatuses(c, myIdHex, {
       isStale: stale,
       applyOwn: publishOwnStatus,
-      applyRemote: (idHex, view) => remoteViews.setStatus(idHex, statusLabel(view)),
+      applyRemote: (idHex, view) =>
+        remoteViews.setStatus(idHex, statusLabel(view), view.availability),
+    });
+
+    // Gestures (Phase 5 ①c): the third display convention — state poses
+    // (sit / sleep / dance) seed + events like statuses, the transient
+    // wave events-only like reactions; the split lives in gestureFeed.ts.
+    // The seed half rides labelOf and handleOwnRow.
+    wireGestures(c, myIdHex, {
+      isStale: stale,
+      applyOwn: (gesture) => gameApp.setLocalGesture(gesture),
+      applyRemote: (idHex, gesture) => remoteViews.setGesture(idHex, gesture),
+      waveOwn: () => gameApp.showLocalWave(),
+      waveRemote: (idHex) => gameApp.showRemoteWave(idHex),
     });
 
     // Zones (ROADMAP Phase 3 増分②): the rendered zone layer, the occupancy

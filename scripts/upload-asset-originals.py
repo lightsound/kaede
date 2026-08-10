@@ -45,7 +45,9 @@ ORIGINAL_NAME_PATTERN = "*-original.*"
 ASSET_ROOT = Path(__file__).resolve().parent.parent / "packages/client/src/game.package"
 IMPORTERS = {
     "avatar-body": "import-avatar-sheet.py",
+    "avatar-gesture": "import-avatar-sheet.py",
     "held-item": "import-held-item.py",
+    "headgear": "import-held-item.py",
 }
 
 

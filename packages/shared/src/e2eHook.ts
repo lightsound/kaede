@@ -60,6 +60,12 @@ export interface E2EPlayerSnapshot {
   x: number;
   y: number;
   name: string;
+  /**
+   * The pose frame the avatar shows this frame ('stand', a walk frame, or
+   * a ①c gesture pose — avatarView.pose()). Always present: the gesture
+   * spec asserts both that a pose appears and that it reverts.
+   */
+  pose: string;
   bubble?: string;
   reaction?: string;
   status?: string;

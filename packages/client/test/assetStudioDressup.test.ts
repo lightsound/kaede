@@ -43,6 +43,8 @@ const item = (id: string, grip: readonly [number, number] = [5, 12]): ItemAsset 
 const catalogOf = (avatars: AvatarAsset[], items: ItemAsset[] = []): AssetCatalog => ({
   avatars,
   items,
+  gestures: [],
+  headgear: [],
   poseUnion: ['stand'],
   problems: [],
 });

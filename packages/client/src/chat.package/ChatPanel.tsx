@@ -7,6 +7,9 @@ import {
   type ChatScope,
   evaluateChatSend,
   fallbackChatScope,
+  GESTURE_LABELS,
+  GESTURES,
+  type GestureKind,
   type PlannedSend,
   REACTION_EMOJIS,
   type ReactionEmoji,
@@ -128,6 +131,14 @@ const reactionButtonStyle: CSSProperties = {
   background: 'transparent',
   fontSize: 15,
   cursor: 'pointer',
+};
+
+/** The gesture buttons carry words, not emoji — smaller type, same shape. */
+const gestureButtonStyle: CSSProperties = {
+  ...reactionButtonStyle,
+  fontSize: 11,
+  color: UI_TEXT_COLOR,
+  fontFamily: UI_FONT,
 };
 
 /** The sender name lead-in; the local player's own lines get the gold accent. */
@@ -277,6 +288,43 @@ function ReactionRow({
 }
 
 /**
+ * The gesture palette row (Phase 5 ①c): one button per pose gesture,
+ * riding under the reaction row — the same fire-and-forget contract
+ * (no mirror, no refusal notice; the pose appearing on the avatar IS the
+ * feedback, and moving cancels it server-side). Sitting or sleeping ends
+ * by walking; the buttons stay enabled while posed, so re-striking or
+ * switching gestures is one click. play_gesture('') — standing up
+ * without moving — deliberately has no button here: a tap of any arrow
+ * key already is the stand-up, and a fifth 立つ button would spend row
+ * space on the rare case until real demand shows up (the reducer keeps
+ * the clear path so adding one later is UI-only).
+ */
+function GestureRow({
+  disabled,
+  onPlayGesture,
+}: {
+  disabled: boolean;
+  onPlayGesture: (gesture: GestureKind) => void;
+}) {
+  return (
+    <div style={reactionRowStyle}>
+      {GESTURES.map((gesture) => (
+        <button
+          key={gesture}
+          type="button"
+          style={gestureButtonStyle}
+          aria-label={`ジェスチャー ${GESTURE_LABELS[gesture]}`}
+          disabled={disabled}
+          onClick={blurringClick(() => onPlayGesture(gesture))}
+        >
+          {GESTURE_LABELS[gesture]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The input's placeholder: the picked scope names the destination there
  * too, because the eye is in the input while the message is typed, not on
  * the highlighted pill above it.
@@ -314,6 +362,7 @@ export function ChatPanel({
   planDraft,
   onSendPlan,
   onSendReaction,
+  onPlayGesture,
 }: {
   connected: boolean;
   /** The authoritative name from the own player row; undefined without one. */
@@ -335,6 +384,8 @@ export function ChatPanel({
   onSendPlan: (plan: PlannedSend, scope: ChatScope) => void;
   /** Sends one palette-emoji reaction (fire-and-forget; see ReactionRow). */
   onSendReaction: (emoji: ReactionEmoji) => void;
+  /** Plays one pose gesture (fire-and-forget; see GestureRow — ①c). */
+  onPlayGesture: (gesture: GestureKind) => void;
 }) {
   // The client-side mirror of the server's chat_guard token bucket.
   const allowanceRef = useRef(0n);
@@ -427,6 +478,7 @@ export function ChatPanel({
         </div>
       )}
       <ReactionRow disabled={disabled} onSendReaction={onSendReaction} />
+      <GestureRow disabled={disabled} onPlayGesture={onPlayGesture} />
       <ScopeRow scopes={scopes} selected={scope} disabled={disabled} onSelect={setPicked} />
       <DraftForm
         disabled={disabled}

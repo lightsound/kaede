@@ -53,9 +53,9 @@ describe('createRemoteViews', () => {
     return { x, y: 0, vx, vy: 0, facing: 1, updatedAtMs };
   }
 
-  /** The display attributes record() expects; status and zone default to "none". */
+  /** The display attributes record() expects; everything but the name defaults to "none". */
   function label(name: string, status?: string, zone?: string) {
-    return { name, status, zone };
+    return { name, status, zone, gesture: undefined, availability: undefined };
   }
 
   /** Collect draw() calls for one renderFrame. */
@@ -64,11 +64,21 @@ describe('createRemoteViews', () => {
       id: string;
       status: string | undefined;
       zone: string | undefined;
+      gesture: string | undefined;
+      availability: string | undefined;
       x: number;
       y: number;
     }[] = [];
     views.renderFrame(nowMs, (id, l, x, y) =>
-      drawn.push({ id, status: l.status, zone: l.zone, x, y }),
+      drawn.push({
+        id,
+        status: l.status,
+        zone: l.zone,
+        gesture: l.gesture,
+        availability: l.availability,
+        x,
+        y,
+      }),
     );
     return drawn;
   }
@@ -104,13 +114,34 @@ describe('createRemoteViews', () => {
     const views = createRemoteViews();
     views.record('a', label('A', '🟢 もくもく'), row(0, 0), 40);
     expect(render(views, 240)[0].status).toBe('🟢 もくもく');
-    views.setStatus('a', '🔴 取り込み中');
+    views.setStatus('a', '🔴 取り込み中', 'busy');
     expect(render(views, 250)[0].status).toBe('🔴 取り込み中');
-    views.setStatus('a', undefined);
+    views.setStatus('a', undefined, undefined);
     expect(render(views, 260)[0].status).toBeUndefined();
     // A view that does not exist is skipped, not created (the setName rule).
-    views.setStatus('ghost', '🟡 離席');
+    views.setStatus('ghost', '🟡 離席', 'away');
     expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
+  });
+
+  it('carries the recorded gesture into draw() and follows setGesture updates', () => {
+    const views = createRemoteViews();
+    views.record('a', { ...label('A'), gesture: 'sit' }, row(0, 0), 40);
+    expect(render(views, 240)[0].gesture).toBe('sit');
+    views.setGesture('a', 'dance');
+    expect(render(views, 250)[0].gesture).toBe('dance');
+    // The server clears the row on movement; the delete must clear the pose.
+    views.setGesture('a', undefined);
+    expect(render(views, 260)[0].gesture).toBeUndefined();
+    // A view that does not exist is skipped, not created (the setName rule).
+    views.setGesture('ghost', 'sleep');
+    expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
+  });
+
+  it('carries availability through setStatus for the derived poses', () => {
+    const views = createRemoteViews();
+    views.record('a', label('A'), row(0, 0), 40);
+    views.setStatus('a', '🟡 離席', 'away');
+    expect(render(views, 250)[0].availability).toBe('away');
   });
 
   it('carries the recorded zone tag into draw() and follows setZone updates', () => {
