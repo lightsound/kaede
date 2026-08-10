@@ -17,9 +17,21 @@ import type { AssetCatalog, AssetFrame, AvatarAsset, ItemAsset } from './catalog
 /** The carry variant naming rule: `<outfit id>-carry` (avatar.boy-basic-carry). */
 const CARRY_SUFFIX = '-carry';
 
+/**
+ * Try-on stage default (owner 2026-08-09): the pants-only boy base outfit.
+ * Falls back to the first non-carry sheet when that id is not in the roster
+ * (e.g. unit tests with synthetic catalogs).
+ */
+export const DEFAULT_OUTFIT_ID = 'avatar.boy-pants';
+
 /** The body sheets offered as outfits: everything that is not itself a carry variant. */
 export function outfitOptions(catalog: AssetCatalog): readonly AvatarAsset[] {
-  return catalog.avatars.filter((avatar) => !avatar.id.endsWith(CARRY_SUFFIX));
+  const outfits = catalog.avatars.filter((avatar) => !avatar.id.endsWith(CARRY_SUFFIX));
+  return [...outfits].sort((a, b) => {
+    if (a.id === DEFAULT_OUTFIT_ID) return -1;
+    if (b.id === DEFAULT_OUTFIT_ID) return 1;
+    return 0;
+  });
 }
 
 /** The carry sheet paired with an outfit, when the roster ships one. */
@@ -52,7 +64,10 @@ export function resolveStageLook(
   heldItemId: string | undefined,
 ): StageLook | undefined {
   const outfits = outfitOptions(catalog);
-  const outfit = outfits.find((option) => option.id === outfitId) ?? outfits[0];
+  const outfit =
+    outfits.find((option) => option.id === outfitId) ??
+    outfits.find((option) => option.id === DEFAULT_OUTFIT_ID) ??
+    outfits[0];
   if (!outfit) return undefined;
   const item = catalog.items.find((candidate) => candidate.id === heldItemId);
   if (!item) return { outfit, body: outfit, item: undefined, note: undefined };

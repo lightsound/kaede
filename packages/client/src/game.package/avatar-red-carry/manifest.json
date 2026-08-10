@@ -14,7 +14,7 @@
       "file": "stand.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [25, 49],
+        "neck": [24, 49],
         "hand": [23, 64]
       }
     },
@@ -22,7 +22,7 @@
       "file": "walk-a.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [25, 49],
+        "neck": [23, 49],
         "hand": [23, 64]
       }
     },
@@ -30,7 +30,7 @@
       "file": "walk-b.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [25, 49],
+        "neck": [24, 49],
         "hand": [23, 64]
       }
     },
@@ -38,7 +38,7 @@
       "file": "walk-c.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [25, 49],
+        "neck": [23, 49],
         "hand": [23, 63]
       }
     },
@@ -46,7 +46,7 @@
       "file": "walk-d.png",
       "size": [52, 96],
       "anchors": {
-        "neck": [25, 49],
+        "neck": [23, 49],
         "hand": [23, 64]
       }
     }
