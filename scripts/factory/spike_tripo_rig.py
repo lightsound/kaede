@@ -28,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -85,8 +86,10 @@ class Spike:
             status = data["status"]
             if status == "success":
                 spent = data.get("credits_consumed")
-                if spent:
+                metered = self.state.setdefault("metered", [])
+                if spent and task_id not in metered:
                     self.state["spent"] += float(spent)
+                    metered.append(task_id)
                     self.save()
                 return data
             if status in ("failed", "cancelled", "banned", "expired"):
@@ -112,6 +115,16 @@ class Spike:
         self.state[key] = run()
         self.save()
         return self.state[key]
+
+    def submit(self, key: str, request) -> str:
+        """Persist a task id the moment it is submitted, so a crash later in the
+        step (e.g. during download) resumes the same task instead of paying for
+        a new one."""
+        tasks = self.state.setdefault("tasks", {})
+        if key not in tasks:
+            tasks[key] = request()
+            self.save()
+        return tasks[key]
 
     def download_outputs(self, key: str, task: dict) -> None:
         """Save every *_url in a task's output next to the state file."""
@@ -143,83 +156,111 @@ def main() -> None:
     args.workdir.mkdir(parents=True, exist_ok=True)
     spike = Spike(args.workdir, args.budget)
 
+    # Step keys carry a fingerprint of their inputs, so re-running with a
+    # different image (or animation list, below) never reuses a stale cache.
+    image_bytes = args.image.read_bytes()
+    digest = hashlib.sha256(image_bytes).hexdigest()[:12]
+
     upload = spike.step(
-        "upload",
+        f"upload_{digest}",
         lambda: api(
             "POST",
             "/files",
-            files={"file": (args.image.name, args.image.read_bytes(), "image/png")},
+            files={"file": (args.image.name, image_bytes, "image/png")},
         ),
     )
 
+    model_key = f"model_{digest}"
+
     def make_model() -> dict:
-        task_id = api(
-            "POST",
-            "/generation/image-to-model",
-            json={
-                "input": upload["file_token"],
-                "model": IMAGE_MODEL,
-                "texture": True,
-                # Flat colors are re-lit at render time with emission; PBR maps
-                # would only add CG shading (the exact risk this spike probes).
-                "pbr": False,
-                "texture_alignment": "original_image",
-            },
-        )["task_id"]
+        task_id = spike.submit(
+            model_key,
+            lambda: api(
+                "POST",
+                "/generation/image-to-model",
+                json={
+                    "input": upload["file_token"],
+                    "model": IMAGE_MODEL,
+                    "texture": True,
+                    # Flat colors are re-lit at render time with emission; PBR maps
+                    # would only add CG shading (the exact risk this spike probes).
+                    "pbr": False,
+                    "texture_alignment": "original_image",
+                },
+            )["task_id"],
+        )
         print(f"[model] task {task_id}")
         task = spike.poll(task_id)
-        spike.download_outputs("model", task)
+        spike.download_outputs(model_key, task)
         return {"task_id": task_id, "output_keys": list(task.get("output", {}))}
 
-    model = spike.step("model", make_model)
+    model = spike.step(model_key, make_model)
+
+    rig_check_key = f"rig_check_{digest}"
 
     def make_rig_check() -> dict:
         # rig-check is async like every other V3 task (free, ~seconds).
-        task_id = api("POST", "/animations/rig-check", json={"input": model["task_id"]})["task_id"]
+        task_id = spike.submit(
+            rig_check_key,
+            lambda: api("POST", "/animations/rig-check", json={"input": model["task_id"]})[
+                "task_id"
+            ],
+        )
         return spike.poll(task_id)["output"]
 
-    rig_check = spike.step("rig_check", make_rig_check)
+    rig_check = spike.step(rig_check_key, make_rig_check)
     print(f"[rig-check] {json.dumps(rig_check)}")
     if not rig_check.get("riggable", False):
         raise SystemExit("rig-check says the model is not riggable — stopping before paid rig")
 
+    rig_key = f"rig_{digest}"
+
     def make_rig() -> dict:
-        task_id = api(
-            "POST",
-            "/animations/rig",
-            json={
-                "input": model["task_id"],
-                "model": RIG_MODEL,
-                "rig_type": rig_check.get("rig_type") or "biped",
-                "spec": "tripo",
-                "out_format": "glb",
-            },
-        )["task_id"]
+        task_id = spike.submit(
+            rig_key,
+            lambda: api(
+                "POST",
+                "/animations/rig",
+                json={
+                    "input": model["task_id"],
+                    "model": RIG_MODEL,
+                    "rig_type": rig_check.get("rig_type") or "biped",
+                    "spec": "tripo",
+                    "out_format": "glb",
+                },
+            )["task_id"],
+        )
         print(f"[rig] task {task_id}")
         task = spike.poll(task_id)
-        spike.download_outputs("rig", task)
+        spike.download_outputs(rig_key, task)
         return {"task_id": task_id}
 
-    rig = spike.step("rig", make_rig)
+    rig = spike.step(rig_key, make_rig)
+
+    animations_digest = hashlib.sha256(" ".join(args.animations).encode()).hexdigest()[:12]
+    retarget_key = f"retarget_{digest}_{animations_digest}"
 
     def make_retarget() -> dict:
-        task_id = api(
-            "POST",
-            "/animations/retarget",
-            json={
-                "input": rig["task_id"],
-                "animations": args.animations,
-                "out_format": "glb",
-                "bake_animation": True,
-                "animate_in_place": True,
-            },
-        )["task_id"]
+        task_id = spike.submit(
+            retarget_key,
+            lambda: api(
+                "POST",
+                "/animations/retarget",
+                json={
+                    "input": rig["task_id"],
+                    "animations": args.animations,
+                    "out_format": "glb",
+                    "bake_animation": True,
+                    "animate_in_place": True,
+                },
+            )["task_id"],
+        )
         print(f"[retarget] task {task_id}")
         task = spike.poll(task_id)
-        spike.download_outputs("retarget", task)
+        spike.download_outputs(retarget_key, task)
         return {"task_id": task_id, "animations": args.animations}
 
-    spike.step("retarget", make_retarget)
+    spike.step(retarget_key, make_retarget)
     print(f"DONE — credits spent this run (metered): {spike.state['spent']}")
 
 
