@@ -223,20 +223,55 @@ def main() -> None:
 
     model = spike.step(model_key, make_model)
 
+    remesh_key = f"remesh_{digest}"
+
+    def make_remesh() -> dict:
+        # meshy-6 outputs can exceed rigging's 320k face limit (363,714
+        # measured 2026-08-10); the rigging error itself prescribes a remesh
+        # (5 credits) to <= 300k before rigging.
+        task_id = spike.submit(
+            remesh_key,
+            lambda: api(
+                "POST",
+                "/remesh",
+                json={
+                    "input_task_id": model["task_id"],
+                    "target_polycount": 300000,
+                    "target_formats": ["glb"],
+                },
+            )["result"],
+        )
+        print(f"[remesh] task {task_id}")
+        task = spike.poll("remesh", task_id)
+        spike.download_urls(remesh_key, {"glb": task["model_urls"].get("glb", "")})
+        return {"task_id": task_id, "consumed_credits": task.get("consumed_credits")}
+
+    def submit_rig(input_task_id: str) -> str:
+        return api(
+            "POST",
+            "/rigging",
+            json={"input_task_id": input_task_id, "height_meters": args.height_meters},
+        )["result"]
+
+    def submit_rig_with_remesh_fallback() -> str:
+        if remesh_key in spike.state:
+            return submit_rig(spike.state[remesh_key]["task_id"])
+        try:
+            return submit_rig(model["task_id"])
+        except SystemExit as error:
+            if "face" not in str(error) or "limit" not in str(error):
+                raise
+            print(f"[rig] face limit hit — remeshing first: {error}")
+            remesh = spike.step(remesh_key, make_remesh)
+            return submit_rig(remesh["task_id"])
+
     # height_meters scales the rig skeleton, so it is part of the rig
     # fingerprint — and of every animation derived from that rig.
     rig_digest = f"{digest}_h{args.height_meters:g}"
     rig_key = f"rig_{rig_digest}"
 
     def make_rig() -> dict:
-        task_id = spike.submit(
-            rig_key,
-            lambda: api(
-                "POST",
-                "/rigging",
-                json={"input_task_id": model["task_id"], "height_meters": args.height_meters},
-            )["result"],
-        )
+        task_id = spike.submit(rig_key, submit_rig_with_remesh_fallback)
         print(f"[rig] task {task_id}")
         task = spike.poll("rigging", task_id)
         result = task["result"]

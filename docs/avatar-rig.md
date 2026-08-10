@@ -249,6 +249,23 @@ v1 は「頭・胴・腕・脚を別画像で持ち、PixiJS Container の階層
   モンタージュ・並列ループ動画）は本スパイクの draft PR に添付。
   生成物（GLB 9 点・シート 3 点）は R2 保管（ハッシュは
   factory-yield.md）
+  **✅ 改善ラウンド（同日 — オーナー承認の 3 段構え「meshy-6 →
+  輪郭 → ハイブリッド」、判定待ち）**: ①彩度は **meshy-6 +
+  remove_lighting で源流解消**（髪 RGB が原画とほぼ一致 — meshy-6 は
+  面数超過で Remesh 5 クレジットの自動フォールバックを追加）②輪郭は
+  両案とも負の知見（Freestyle は高密度メッシュで暴発・96px ポスト
+  縁取りはジャギー悪化）— エッジ対策は高解像度レンダー＋LANCZOS が
+  現状最良 ③**ハイブリッド（Meshy レンダーを motion reference に
+  seedance-2.0-fast で 2D 清書）が最大の発見**: on-model・squash &
+  stretch・表情つきで 3D 振り付けを忠実追従し、videoReview ランクは
+  video lane > **hybrid** > 純 3D 各レーン。継ぎ目指摘は実測で反証
+  （閉包 IoU 0.977 = 採用水準超 — レビュー AI 不安定の再実測、
+  asset-factory 運転知見 14）。**含意: 3D モーション資産（決定論・
+  全キャラ使い回し）×動画モデルの絵**という第 3 レーンが成立し得る。
+  残差は生成ゆらぎ（服のしわ・手のモーフ）と video レーン比の
+  エッジ安定。コストは 3D 側 49 クレジット＋清書 $0.66/本
+  （**AI Gateway 上限 $0.50 を $0.16 超過** — fast 480p の実勢は
+  見積もりの ~5 倍。reference_video は Web URL 必須で data URI 不可）
 - 配信の R2 移行・マーケットプレイス・スタイル学習は asset-pipeline.md の
   DP-1/DP-2/DP-3。
 
