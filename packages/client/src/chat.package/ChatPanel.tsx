@@ -293,7 +293,11 @@ function ReactionRow({
  * (no mirror, no refusal notice; the pose appearing on the avatar IS the
  * feedback, and moving cancels it server-side). Sitting or sleeping ends
  * by walking; the buttons stay enabled while posed, so re-striking or
- * switching gestures is one click.
+ * switching gestures is one click. play_gesture('') — standing up
+ * without moving — deliberately has no button here: a tap of any arrow
+ * key already is the stand-up, and a fifth 立つ button would spend row
+ * space on the rare case until real demand shows up (the reducer keeps
+ * the clear path so adding one later is UI-only).
  */
 function GestureRow({
   disabled,

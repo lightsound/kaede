@@ -500,9 +500,12 @@ export const enterPortal = spacetimedb.reducer({ portalId: t.u32() }, (ctx, { po
   // occupancy pass leaves the origin map's zone — or huddle: a huddle
   // lives on its founding map, so teleporting off it is leaving
   // (keepsHuddleMembership) — and rules on the landing spot (an admin may
-  // well place a zone over a portal mouth). The gesture clear rides along
-  // (Phase 5 ①c): a teleport is a displacement like any other.
-  clearGestureOnMove(ctx, ctx.sender, { x: row.x, y: row.y }, verdict.target);
+  // well place a zone over a portal mouth). The gesture clears
+  // UNCONDITIONALLY (Phase 5 ①c), not via clearGestureOnMove's coordinate
+  // comparison: a teleport is a departure whatever the numbers say, and a
+  // portal whose landing happened to coincide with the departure point
+  // would otherwise carry a seated pose across maps (review finding).
+  ctx.db.gesture.identity.delete(ctx.sender);
   syncGroupOccupancy(ctx, ctx.sender, verdict.target, verdict.target.mapId);
 });
 
