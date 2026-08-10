@@ -260,30 +260,22 @@ def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
     return failures
 
 
-def check_palette_drift(
-    stand: Image.Image,
-    frame: Image.Image,
-    acknowledged: list[str] | None = None,
-) -> list[str]:
+def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
     """No significant frame color may sit far from every stand color.
 
-    `acknowledged` lists specific hex colors an order explicitly accepts for
-    this pose after a human looked at the frame (the ImportLint suppression
-    policy: never by default, always narrow, always with a recorded reason
-    in the order). First use: the girl's walk-c under-chin camisole shading
-    — real paint from the source clip, exposed by an owner-requested head
-    shift, visually clean but absent from her stand's 16-color palette.
+    Deliberately has NO suppression hook: an acknowledged-colors exemption
+    existed for one day and its only use — the agent judging an off-palette
+    under-chin shadow "visually clean" — was owner-rejected (2026-08-10,
+    目視では影がおかしい). The calibrated gate outranks the operator's eye;
+    a frame that fails must be replaced, not excused.
     """
     stand_colors = _significant_colors(stand, DRIFT_STAND_MIN_SHARE)
     if not stand_colors:
         return ["stand has no significant colors to compare against"]
-    acknowledged_rgb = [_parse_hex(c) for c in acknowledged or []]
     failures = []
     for color in _significant_colors(frame, DRIFT_MIN_SHARE, interior_only=True):
         nearest = min(_dist(color, sc) for sc in stand_colors)
         if nearest > DRIFT_DISTANCE_MAX:
-            if any(_dist(color, ack) < 12 for ack in acknowledged_rgb):
-                continue
             failures.append(
                 f"color #{color[0]:02x}{color[1]:02x}{color[2]:02x} drifted "
                 f"{nearest:.0f} from the stand palette (> {DRIFT_DISTANCE_MAX}) "
@@ -298,7 +290,6 @@ def lint_avatar(
     base_palette: list[str] | None = None,
     expect_carry_hand: bool = False,
     expect_leg_phase: bool = False,
-    acknowledged_drift: dict[str, list[str]] | None = None,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -345,12 +336,7 @@ def lint_avatar(
                     )
                 ]
             failures += [
-                f"{name}: {f}"
-                for f in check_palette_drift(
-                    stand_frame,
-                    frame,
-                    (acknowledged_drift or {}).get(name),
-                )
+                f"{name}: {f}" for f in check_palette_drift(stand_frame, frame)
             ]
 
         recorded_neck = pose.get("anchors", {}).get("neck")
