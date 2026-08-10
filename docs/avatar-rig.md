@@ -228,6 +228,27 @@ v1 は「頭・胴・腕・脚を別画像で持ち、PixiJS Container の階層
   Meshy**（同型の image→3D→auto-rig→アニメ経路・プリセット 600+ —
   Tripo で確立した検証手順・判定材料の作り方・bpy レンダーラインは
   そのまま流用可能）
+  **✅ Meshy スパイク実施（2026-08-10 — オーナー判定待ち）**: Tripo
+  ラウンド③と同じ高解像度 A ポーズ入力から image-to-3d（meshy-5 =
+  texture 込み 15 クレジットの最安構成）→ rigging（5 — walking/running
+  無料付属）→ Animation Library 5 本（ダンス 3＋cheer 2・3 クレジット/
+  本）を**一発完走**（35 クレジット・~50 分。再現ツール
+  `scripts/factory/spike_meshy_rig.py`、レンダー/ループ解析は
+  `spike_tripo_render.py` を無改造流用。実測は factory-yield.md）。
+  **Tripo 棄却 3 弱点の再測**: ①彩度 — Tripo と逆に「明るく薄い」
+  （髪彩度 −9%・明度 +5% — Tripo は暗く沈む −22%）。24 色パレット
+  スナップで動画レーンの暖色に接近（videoReview）②エッジの毎コマ煮え —
+  **大幅改善**（videoReview: Tripo「severe」→ Meshy「minor pixel
+  crawl」。動画レーンの完全安定には未達）③squash & stretch の欠如 —
+  **残存**（3D メッシュの剛体感は構造的で Meshy でも同じ）。**新規
+  実測**: cheer 系プリセットは 2 本とも頭が下向き区間あり — 選定ガチャ
+  は Meshy でも存続（ただし 3 クレジット/本で Tripo の 1/3 以下）。
+  ループは機械発見でクリーン（Cheer 相対閉包 0.042・Gangnam 0.076）。
+  videoReview 総合ランク: video lane > Meshy snap > Meshy raw >
+  Tripo r3（補助 — 最終はオーナー目視）。判定材料（4 レーン並列
+  モンタージュ・並列ループ動画）は本スパイクの draft PR に添付。
+  生成物（GLB 9 点・シート 3 点）は R2 保管（ハッシュは
+  factory-yield.md）
 - 配信の R2 移行・マーケットプレイス・スタイル学習は asset-pipeline.md の
   DP-1/DP-2/DP-3。
 
