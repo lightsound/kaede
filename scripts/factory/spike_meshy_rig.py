@@ -223,7 +223,10 @@ def main() -> None:
 
     model = spike.step(model_key, make_model)
 
-    rig_key = f"rig_{digest}"
+    # height_meters scales the rig skeleton, so it is part of the rig
+    # fingerprint — and of every animation derived from that rig.
+    rig_digest = f"{digest}_h{args.height_meters:g}"
+    rig_key = f"rig_{rig_digest}"
 
     def make_rig() -> dict:
         task_id = spike.submit(
@@ -253,7 +256,7 @@ def main() -> None:
     actions = resolve_action_ids(args.animations)
     print(f"[actions] {json.dumps(actions)}")
     for name, action_id in actions.items():
-        anim_key = f"anim_{digest}_{name}"
+        anim_key = f"anim_{rig_digest}_{name}"
 
         def make_animation(name: str = name, action_id: int = action_id, anim_key: str = anim_key) -> dict:
             task_id = spike.submit(
