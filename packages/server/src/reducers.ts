@@ -30,6 +30,7 @@ import { spacetimedb } from './tables';
 import {
   type Ctx,
   chargeSendAllowance,
+  clearGestureOnMove,
   findAdmittedWorldRows,
   guestsAllowed,
   membershipOf,
@@ -431,7 +432,9 @@ function applyAcceptedBatch(
   // Group occupancy follows the authoritative position (ROADMAP Phase 3
   // 増分②③ — the server-side judgment; see zone.ts in @kaede/shared for
   // why not the portal pattern). The heartbeat branch above skips it: no
-  // movement, no transition to rule on.
+  // movement, no transition to rule on. The gesture clear rides the same
+  // spot (Phase 5 ①c 「歩き出したら解除」 — see clearGestureOnMove).
+  clearGestureOnMove(ctx, ctx.sender, { x: row.x, y: row.y }, { x: s.x, y: s.y });
   syncGroupOccupancy(ctx, ctx.sender, { x: s.x, y: s.y }, row.mapId);
 }
 
@@ -497,7 +500,9 @@ export const enterPortal = spacetimedb.reducer({ portalId: t.u32() }, (ctx, { po
   // occupancy pass leaves the origin map's zone — or huddle: a huddle
   // lives on its founding map, so teleporting off it is leaving
   // (keepsHuddleMembership) — and rules on the landing spot (an admin may
-  // well place a zone over a portal mouth).
+  // well place a zone over a portal mouth). The gesture clear rides along
+  // (Phase 5 ①c): a teleport is a displacement like any other.
+  clearGestureOnMove(ctx, ctx.sender, { x: row.x, y: row.y }, verdict.target);
   syncGroupOccupancy(ctx, ctx.sender, verdict.target, verdict.target.mapId);
 });
 

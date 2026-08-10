@@ -303,8 +303,19 @@ def main() -> None:
     poses = {}
     for name, frame in zip(order["poses"], frames):
         frame.save(resolve_asset_path(out_dir, f"{name}.png", asset_root))
-        hand = hand_overrides.get(name, list(hand_anchor(frame, carry=carry_sheet)))
-        neck = neck_overrides.get(name, list(neck_anchor(frame)))
+        # Overrides must SHORT-CIRCUIT the detectors, not just win over
+        # them: dict.get(k, default) evaluates the default eagerly, and the
+        # structural detectors RAISE on poses they cannot read (a lying
+        # sleeper, arms over the head — the ①c gesture sheet), so the old
+        # one-liner failed the whole import even with every override
+        # present (harmless before ①c only because the hoodie-class
+        # failures returned wrong values instead of raising).
+        hand = hand_overrides.get(name)
+        if hand is None:
+            hand = list(hand_anchor(frame, carry=carry_sheet))
+        neck = neck_overrides.get(name)
+        if neck is None:
+            neck = list(neck_anchor(frame))
         poses[name] = {
             "file": f"{name}.png",
             "size": [frame.width, frame.height],

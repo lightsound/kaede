@@ -1981,6 +1981,42 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   4 候補（椅子系 2・地べた系 2 — オーナー指摘「A/B は椅子に座って
   見える」を反映）、スキーマは複数案比較を PR に掲示 — 本実装はその
   確認後
+  ✅ **①c 本実装（2026-08-10 — オーナー裁定: 動画ライン勝者・スキーマ
+  案 1 承認・床座り=動画 C / 椅子座り=A は⑦③用に保管）**。要点:
+  ①**スキーマは additive 2 テーブル**: 公開 `gesture`（identity PK の
+  upsert 行＋sentAt — reaction の前例）＋非公開 `gesture_guard`。
+  リデューサー `play_gesture`（語彙は shared の完全一致検証・'' で明示
+  解除・専用バケット）。**解除はサーバー権威**: 受理バッチのリプレイ
+  直後と enter_portal で変位が出たら行削除（`clearGestureOnMove` —
+  syncGroupOccupancy と同じ write path）。行の寿命は player 行と同じ
+  （removePlayer）。旧スキーマ DB への再 publish リハーサル済み（行
+  存続・gesture 新設を実測）
+  ②**表示規約は「reaction と player_status の中間」**: sit/sleep/dance
+  は状態（seed からも表示 — リロード・後入りで復元）、wave は一過性
+  （行イベントのみ・4 秒 — seed 再生なし）。区別は shared の
+  `isTransientGesture`（スキーマに持たせない）。表示優先は 描画される
+  移動 > wave > 明示ジェスチャー > ステータス由来ポーズ > stand
+  ③**ステータス視覚化はスキーマ追加なし**: 離席= sleep ポーズ・
+  取り込み中=ヘッドホンを既存 `player_status` 行から導出。ヘッドホンは
+  着用編集との**差分抽出**で headgear 資産化（`extract_headgear.py` —
+  grip = stand の neck 実測値）し、AvatarView が各ポーズの neck
+  アンカーに合成（歩行の頭の上下にも追従・sleep では非表示）
+  ④**AvatarView に play(motion) 追加**（①a 予告の薄い境界 — walk 優先・
+  ダンスは 8 コマ 100ms ループ・wave タイマー・headgear を内包）。
+  発動 UI はチャットパネルのジェスチャー行（リアクション行の下）
+  ⑤**アセットは新レーン `compose_gesture_sheet.py`**: ベンチ合格
+  テイクから 12 セルシート（stand+sit+sleep+wave+dance×8、$0 —
+  再生成なし）を構成し標準 importer で取り込み。構造 neck 検出が
+  ジェスチャーで壊れる実測（腕上げ・横倒れ）への対応は髪ブロブ推定の
+  発注書オーバーライド。**他キャラのジェスチャーシートは工場の運転と
+  して後続**（Tripo/Meshy 画像→自動リギング経路のオーナー判断待ち —
+  DP-B 追記参照）
+  ⑥E2E `gesture.spec.ts`（座る同期・リロード復元・移動解除・ダンス・
+  wave 自動復帰・離席=寝る、2 ブラウザ実測）。スキーマ・物理・
+  ネットコードの既存不変条件は維持（fallow 型カップリング 40 エッジ
+  ちょうども不変 — 語彙は reaction.ts 同居・レートラッパーはサーバー
+  ローカル関数の前例踏襲）。**新ポーズシートのオーナー目視ゲートは
+  PR のモンタージュで実施**
 - **①d 頭グループ分離＋髪・顔の着せ替え**: 頭を体コマの neck アンカーに
   合成するレイヤーへ分離し、髪・顔（表情）を 1 枚絵の差し替えで着せ替え
   可能に。選択は account へ永続化（在席ディレクトリ `player_name` の前例の

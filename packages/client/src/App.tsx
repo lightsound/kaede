@@ -294,6 +294,7 @@ export function App() {
           netRef.current?.sendPlanned(plan, scope);
         }}
         onSendReaction={(emoji) => netRef.current?.sendReaction(emoji)}
+        onPlayGesture={(gesture) => netRef.current?.playGesture(gesture)}
       />
     </div>
   );

@@ -1,0 +1,19 @@
+{
+  "id": "item.headphones",
+  "type": "headgear",
+  "name": "ヘッドホン",
+  "author": "kaede",
+  "license": "kaede-internal",
+  "palette": ["#dd443e", "#851718", "#b12224", "#ad1d21", "#4f1b0d"],
+  "source": {
+    "prompt": "取り込み中 status headgear (Phase 5 ①c — VISION 体験の核 2: 取り込み中＝ヘッドホンをして作業しているアバター). Extracted by scripts/factory/extract_headgear.py from a keep-everything nano-banana-2 wearing edit of the base stand frame (①c bench, 2026-08-10, $0.10 one take): 'put a pair of chunky over-ear HEADPHONES on his head — a red headband over the hair and round red ear cups over both ears, game-icon style, clearly readable at small size; keep everything else EXACTLY pixel-identical'. The gear pixels are the diff against the base stand (restricted to head rows, largest components kept), so their registration against the head is measured, not guessed: grip is the stand's NECK anchor expressed in the cut image — the overlay rides every pose's neck anchor the way held items ride the hand anchor (rendered by AvatarView whenever the wearer's availability is busy, hidden on the sleep pose whose head lies sideways).",
+    "referenceHashes": ["6d2187bb1cf836b3b922ac2378b9138a03239be73da11ef0a774f738e75dd93d"]
+  },
+  "frame": {
+    "file": "headphones.png",
+    "size": [52, 46],
+    "anchors": {
+      "grip": [25, 50]
+    }
+  }
+}

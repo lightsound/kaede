@@ -1,0 +1,52 @@
+{
+  "id": "avatar.boy-basic-gestures",
+  "type": "avatar-gesture",
+  "name": "男の子（基本）ジェスチャー",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": {
+    "cols": 12,
+    "rows": 1
+  },
+  "poses": [
+    "stand",
+    "sit",
+    "sleep",
+    "wave",
+    "dance-a",
+    "dance-b",
+    "dance-c",
+    "dance-d",
+    "dance-e",
+    "dance-f",
+    "dance-g",
+    "dance-h"
+  ],
+  "standHeightPx": 96,
+  "standSource": "../avatar/stand.png",
+  "references": ["../avatar/reference.png"],
+  "gestureSources": {
+    "sit-clip-original.mp4": "a0f14cf035046d484055ec0d5fa89428802e12ab56708c01b824e103140034f4",
+    "sleep-original.png": "e3b6060d9b3288f02c3142659dc2c1668842bc90c98847512b573399995b4c19",
+    "wave-original.png": "d15f54709e28625c312199c2c7f2041b98573fb5fbe23a06c0c2f3a71f95d1b3",
+    "dance-clip-original.mp4": "0003299a53ba398bada77fafe279400fd3bfcf12221f0ea7aaeb0df3026dded9"
+  },
+  "prompt": "Phase 5 ①c gesture sheet, composed by scripts/factory/compose_gesture_sheet.py from the bench-approved takes (2026-08-10, PR #96; owner picks: floor sit = the video-lane settled sit, sleep/wave = the reference+instruction nano takes, dance = the wan loop). Sources, all generated via Cloudflare AI Gateway (kaede-assets) from the committed stand frame on a 720px green canvas (character ~470px tall): sit = frame 120 of the wan-2.7-i2v sit-down clip (prompt: sits down on the ground and then stays perfectly still, bottom on the ground line, knees bent, hands on knees; motionless from ~frame 80); sleep = nano-banana-2 pose edit (lies asleep on his side ON the ground line, head right, eyes closed, one arm folded, knees slightly bent); wave = nano-banana-2 pose edit (near arm raised high, elbow bent, open palm waving, far arm relaxed); dance-a..h = frames 34/37/40/43/46/49/52/55 of the wan-2.7-i2v dance clip (prompt: cheerful perfectly-looping dance cycle, bounces to a steady beat stepping side to side, arms swinging overhead and down, hips swaying; adopted 24-frame cycle from frame 34, loop-closure IoU 0.932, 100ms per sampled frame = DANCE_FRAME_MS). Scale normalization back to the 720 canvas: nano stills x720/1024, wan frames x720/1440, verified per cell by hair-blob width against the stand (fail loud). Neck anchors are hair-blob estimates persisted as neckAnchors overrides — the structural neck detector breaks on arms-over-head dance frames and the lying sleeper (both measured in the ①c bench); the sleep anchor is approximate by design (nothing renders from it: the busy headgear overlay hides on sleep). NO head composite on the dance frames — erase-then-paste erases arms crossing above the neck line (measured); the video-native heads passed the calibrated per-frame palette-drift gate and videoReview (minor wobble, judged acceptable at game scale).",
+  "originals": {
+    "sheet-original.png": "08610b80959b17d32234f73921738455955984b0d83108fe11fa4f049ee1a580"
+  },
+  "neckAnchors": {
+    "stand": [26, 51],
+    "sit": [26, 51],
+    "sleep": [75, 50],
+    "wave": [26, 50],
+    "dance-a": [25, 50],
+    "dance-b": [26, 50],
+    "dance-c": [25, 50],
+    "dance-d": [26, 50],
+    "dance-e": [25, 50],
+    "dance-f": [25, 50],
+    "dance-g": [25, 50],
+    "dance-h": [25, 50]
+  }
+}

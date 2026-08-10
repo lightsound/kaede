@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, mention resolution, rate limits, retention) are delegated to normalizeChatText / planChatDraft / isReactionEmoji / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (validation, mention resolution, rate limits, retention) are delegated to normalizeChatText / planChatDraft / isReactionEmoji / isGestureKind / isAvailability / normalizeStatusText / evaluateChatSend / evaluateReactionSend / evaluateStatusSend / chatOverflowIds in @kaede/shared and unit-tested there
 
 // The posting reducers (ROADMAP Phase 2): what someone in the world says,
 // gestures or claims about themselves — the global-scope chat, the
@@ -15,8 +15,12 @@ import {
   DM_HISTORY_MAX,
   evaluateChatSend,
   evaluateReactionSend,
+  evaluateSendAllowance,
   evaluateStatusSend,
+  GESTURE_BURST_SENDS,
+  GESTURE_SEND_COST_MICROS,
   isAvailability,
+  isGestureKind,
   isReactionEmoji,
   normalizeChatText,
   normalizeStatusText,
@@ -315,6 +319,49 @@ export const sendReaction = spacetimedb.reducer({ emoji: t.string() }, (ctx, { e
     sentAt: ctx.timestamp,
   }));
 });
+
+/**
+ * The gesture rate rule at the shared cost and burst — kept a LOCAL
+ * function rather than a shared export (the 増分③ rate-wrapper rule:
+ * another shared function whose public signature references the
+ * sendAllowance types would add type-coupling evidence edges at the cap).
+ */
+function evaluateGestureSend(request: SendAllowanceRequest): SendAllowanceVerdict {
+  return evaluateSendAllowance(request, GESTURE_SEND_COST_MICROS, GESTURE_BURST_SENDS);
+}
+
+// Plays (or, with an empty string, clears) the sender's pose gesture
+// (ROADMAP Phase 5 ①c): sit / sleep / dance / wave, rendered as the
+// avatar's pose by every client. Everything about send_reaction —
+// eligibility, guests, the loud/silent rule, the vocabulary validation by
+// exact match — applies verbatim; the differences are the display
+// convention (see the gesture table comment) and the empty-string clear:
+// standing up WITHOUT moving is a legitimate intent (movement is the
+// other clear path — clearGestureOnMove), and clearing writes/deletes a
+// public row, so it is charged like any other send. Clearing when no row
+// exists is a no-op that still pays: refusing it loudly would make
+// double-clicking a cancel button an error, which is worse than the
+// wasted bucket token.
+export const playGesture = spacetimedb.reducer({ gesture: t.string() }, (ctx, { gesture }) => {
+  if (gesture !== '' && !isGestureKind(gesture)) {
+    throw new SenderError('play_gesture refused (unknown-gesture)');
+  }
+  if (!admitGuardedSend(ctx, 'play_gesture', ctx.db.gestureGuard, evaluateGestureSend)) return;
+  writeGestureRow(ctx, gesture);
+});
+
+/** The row half of play_gesture: '' deletes (the clear), a gesture upserts. */
+function writeGestureRow(ctx: Ctx, gesture: string): void {
+  if (gesture === '') {
+    ctx.db.gesture.identity.delete(ctx.sender);
+    return;
+  }
+  upsertByIdentity(ctx.db.gesture, ctx.sender, () => ({
+    identity: ctx.sender,
+    gesture,
+    sentAt: ctx.timestamp,
+  }));
+}
 
 /** One VALIDATED column of the status row, as either reducer writes it. */
 type StatusPatch = { availability: Availability } | { text: string };

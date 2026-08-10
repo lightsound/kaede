@@ -94,9 +94,25 @@ export function createRemoteViews() {
    * without the hot row moving). Skipped like setName while the view does
    * not exist: the next record() call supplies the current status anyway.
    */
-  function setStatus(idHex: string, status: string | undefined): void {
+  function setStatus(
+    idHex: string,
+    status: string | undefined,
+    availability: string | undefined,
+  ): void {
     const view = views.get(idHex);
-    if (view) view.label = { ...view.label, status };
+    if (view) view.label = { ...view.label, status, availability };
+  }
+
+  /**
+   * Updates an existing view's state-gesture directive (a gesture row
+   * changed without the hot row moving — the normal case: gestures are
+   * struck standing still, and the server clears the row on movement).
+   * Skipped like setName while the view does not exist: the next record()
+   * call supplies the cached gesture anyway.
+   */
+  function setGesture(idHex: string, gesture: string | undefined): void {
+    const view = views.get(idHex);
+    if (view) view.label = { ...view.label, gesture };
   }
 
   /**
@@ -154,7 +170,7 @@ export function createRemoteViews() {
     }
   }
 
-  return { record, setName, setStatus, setZone, remove, clear, renderFrame };
+  return { record, setName, setStatus, setGesture, setZone, remove, clear, renderFrame };
 }
 
 /** Euclidean distance between two points. */

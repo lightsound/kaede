@@ -44,6 +44,16 @@ export interface ItemAsset {
 export interface AssetCatalog {
   avatars: readonly AvatarAsset[];
   items: readonly ItemAsset[];
+  /**
+   * The ①c gesture sheets (type avatar-gesture) — the AvatarAsset shape,
+   * but deliberately OUTSIDE the avatar pose-diff: their vocabulary (sit /
+   * sleep / dance frames) is per-character production status, not a gap
+   * every walk sheet must fill. Their own missingPoses diff runs within
+   * the type once more characters gain gesture sheets.
+   */
+  gestures: readonly AvatarAsset[];
+  /** The worn overlays (type headgear — the busy headphones), item-shaped. */
+  headgear: readonly ItemAsset[];
   /** Every pose name any avatar-body declares, in first-seen order — the diff baseline. */
   poseUnion: readonly string[];
   /** Human-readable integrity findings; empty when every manifest checks out. */
@@ -75,6 +85,8 @@ function parseAnchors(value: unknown): Record<string, readonly [number, number]>
 interface Collect {
   avatars: AvatarAsset[];
   items: ItemAsset[];
+  gestures: AvatarAsset[];
+  headgear: ItemAsset[];
   problems: string[];
   seenIds: Map<string, string>;
 }
@@ -125,7 +137,7 @@ interface ManifestSite {
   imageUrls: Readonly<Record<string, string>>;
 }
 
-function parseAvatar(site: ManifestSite, collect: Collect): void {
+function parseAvatar(site: ManifestSite, collect: Collect, into: AvatarAsset[]): void {
   const { manifest, path, dir, imageUrls } = site;
   const header = parseHeader(manifest, path, collect);
   if (!header) return;
@@ -140,15 +152,15 @@ function parseAvatar(site: ManifestSite, collect: Collect): void {
     manifest.handLayer === undefined
       ? undefined
       : parseFrame(manifest.handLayer, dir, imageUrls, collect.problems, `${path} handLayer`);
-  collect.avatars.push({ ...header, dir, poses, handLayer, missingPoses: [] });
+  into.push({ ...header, dir, poses, handLayer, missingPoses: [] });
 }
 
-function parseItem(site: ManifestSite, collect: Collect): void {
+function parseItem(site: ManifestSite, collect: Collect, into: ItemAsset[]): void {
   const header = parseHeader(site.manifest, site.path, collect);
   if (!header) return;
   const label = `${site.path} frame`;
   const frame = parseFrame(site.manifest.frame, site.dir, site.imageUrls, collect.problems, label);
-  if (frame) collect.items.push({ ...header, dir: site.dir, frame });
+  if (frame) into.push({ ...header, dir: site.dir, frame });
 }
 
 /**
@@ -186,16 +198,27 @@ export function buildCatalog(
   manifests: Readonly<Record<string, unknown>>,
   imageUrls: Readonly<Record<string, string>>,
 ): AssetCatalog {
-  const collect: Collect = { avatars: [], items: [], problems: [], seenIds: new Map() };
+  const collect: Collect = {
+    avatars: [],
+    items: [],
+    gestures: [],
+    headgear: [],
+    problems: [],
+    seenIds: new Map(),
+  };
   for (const path of Object.keys(manifests).sort()) {
     const manifest = manifests[path];
     const dir = path.slice(0, path.length - '/manifest.json'.length);
     if (!isRecord(manifest)) {
       collect.problems.push(`${path}: JSON がオブジェクトではありません`);
     } else if (manifest.type === 'avatar-body') {
-      parseAvatar({ manifest, path, dir, imageUrls }, collect);
+      parseAvatar({ manifest, path, dir, imageUrls }, collect, collect.avatars);
+    } else if (manifest.type === 'avatar-gesture') {
+      parseAvatar({ manifest, path, dir, imageUrls }, collect, collect.gestures);
     } else if (manifest.type === 'held-item') {
-      parseItem({ manifest, path, dir, imageUrls }, collect);
+      parseItem({ manifest, path, dir, imageUrls }, collect, collect.items);
+    } else if (manifest.type === 'headgear') {
+      parseItem({ manifest, path, dir, imageUrls }, collect, collect.headgear);
     } else {
       collect.problems.push(`${path}: 未知の type（${String(manifest.type)}）です`);
     }
@@ -204,5 +227,16 @@ export function buildCatalog(
   // glob-path order — the path sort would lead with the carry variants.
   const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
   const { poseUnion, avatars } = diffPoses([...collect.avatars].sort(byId));
-  return { avatars, items: [...collect.items].sort(byId), poseUnion, problems: collect.problems };
+  // Gesture sheets diff within their own type: once several characters
+  // carry gesture sheets, a missing dance frame shows up here the way a
+  // missing walk frame shows up for the bodies.
+  const gestureDiff = diffPoses([...collect.gestures].sort(byId));
+  return {
+    avatars,
+    items: [...collect.items].sort(byId),
+    gestures: gestureDiff.avatars,
+    headgear: [...collect.headgear].sort(byId),
+    poseUnion,
+    problems: collect.problems,
+  };
 }

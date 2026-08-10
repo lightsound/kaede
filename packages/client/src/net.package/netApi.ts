@@ -175,6 +175,14 @@ export interface NetApi {
    */
   sendReaction(emoji: ReactionEmoji): void;
   /**
+   * Plays one pose gesture (play_gesture — Phase 5 ①c), or clears it with
+   * ''. Success arrives as a gesture row event — the sender's own pose
+   * comes from it, so the sender sees exactly what everyone else received
+   * (the sendReaction convention). Failures only log: a refused gesture
+   * simply not playing is feedback enough.
+   */
+  playGesture(gesture: string): void;
+  /**
    * Sets the sender's availability (set_availability) or free-text status
    * line (set_status_text; '' clears). Success arrives as a player_status
    * row event — the line under the avatar and the control's highlight both
@@ -355,6 +363,9 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     },
     sendReaction: forward('send_reaction', (c, emoji: ReactionEmoji) =>
       c.reducers.sendReaction({ emoji }),
+    ),
+    playGesture: forward('play_gesture', (c, gesture: string) =>
+      c.reducers.playGesture({ gesture }),
     ),
     setAvailability: forward('set_availability', (c, availability: Availability) =>
       c.reducers.setAvailability({ availability }),

@@ -122,6 +122,8 @@ export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
     ctx.db.chatGuard,
     ctx.db.reaction,
     ctx.db.reactionGuard,
+    ctx.db.gesture,
+    ctx.db.gestureGuard,
     ctx.db.playerStatus,
     ctx.db.statusGuard,
     ctx.db.portalGuard,
@@ -502,6 +504,31 @@ export function syncGroupOccupancy(
     }
   }
   syncZoneOccupancy(ctx, identity, position, mapId, member);
+}
+
+/**
+ * Clears the mover's pose gesture when the authoritative position actually
+ * changed (Phase 5 ①c —「歩き出したら解除」, MapleStory's sit rule). Runs
+ * beside syncGroupOccupancy on every authoritative-movement write path
+ * (the accepted-batch replay, enter_portal), which is what makes the rule
+ * server-authoritative: a late joiner can never see a walked-away sitter
+ * still sitting, and no hostile client can keep a stale pose by omitting
+ * a clear call. Exact comparison, no epsilon: the deterministic replay of
+ * a quiescent player reproduces the position bit-for-bit, and any real
+ * input moves it. Cost: one PK lookup per accepted batch — only the
+ * delete is conditional on it, and only movers with a live gesture row
+ * pay the delete.
+ */
+export function clearGestureOnMove(
+  ctx: Ctx,
+  identity: SenderIdentity,
+  before: { x: number; y: number },
+  after: { x: number; y: number },
+): void {
+  if (before.x === after.x && before.y === after.y) return;
+  if (ctx.db.gesture.identity.find(identity) !== null) {
+    ctx.db.gesture.identity.delete(identity);
+  }
 }
 
 /** A group_member row as this schema returns it. */
