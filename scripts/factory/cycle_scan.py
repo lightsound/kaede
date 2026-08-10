@@ -27,7 +27,11 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from factory.anchors import structure_neck  # noqa: E402
-from factory.art_lint import check_head_consistency, check_palette_drift  # noqa: E402
+from factory.art_lint import (  # noqa: E402
+    check_head_consistency,
+    check_leg_phase,
+    check_palette_drift,
+)
 from factory.compose_sheet import (  # noqa: E402
     chroma_key,
     compose_walk_sheet,
@@ -38,8 +42,11 @@ from factory.foot_phase import _find_period, load_signals  # noqa: E402
 POSES = ("walk-a", "walk-b", "walk-c", "walk-d")
 SKIP_HEAD_SECONDS = 1.5
 FPS = 30.0
-# Phase-equivalent strides to try per failing slot, then ±1 jitter.
-SUBSTITUTE_STRIDES = (1, -1, 2, -2, 3, -3)
+# Phase-equivalent strides to try per failing slot, then ±1 jitter. Only
+# the NEIGHBORING stride: a substitution from a far part of the clip once
+# passed the pixel gates while carrying a different rendering style (pink
+# legs, near-clone mid poses) — style coherence decays with distance.
+SUBSTITUTE_STRIDES = (1, -1)
 MAX_CYCLE_ATTEMPTS = 12
 
 
@@ -80,6 +87,10 @@ def _evaluate(stand_raw: Path, frames: list[Path], idx: dict[str, int]) -> list[
                 for f in check_head_consistency(stand, stand_neck[1], cell, neck[1])
             ]
             failures += [f"{pose}: {f}" for f in check_palette_drift(stand, cell)]
+        # Leg-phase gate (the owner-caught failure shapes): tag the contact
+        # slots so the substitution loop retries them.
+        for failure in check_leg_phase({"stand": stand, **dict(zip(POSES, cells[1:]))}):
+            failures.append(f"walk-c: {failure}" if "opposite legs" in failure else f"walk-d: {failure}")
         return failures
 
 

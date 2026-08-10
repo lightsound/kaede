@@ -47,7 +47,19 @@ HEAD_NECK_ROW_DELTA_MAX = 3
 HEAD_WIDTH_RATIO_MAX = 1.05
 HEAD_PIXEL_RATIO_RANGE = (0.90, 1.05)
 
-# Cross-frame palette drift (vs the stand frame). Video models repaint the
+# Leg-phase gates for swing (non-carry) walk cycles, calibrated on the
+# approved boy sheets vs the owner-rejected girl cycles (2026-08-09 round 3):
+# the two contact frames must read as OPPOSITE legs leading — foot-band
+# signals RELATIVE TO THE STAND of opposite sign and meaningful magnitude —
+# and walk-a/walk-d must not be near-clones (boy IoU 0.78; rejected girl
+# 0.92 — the "no midpoint" read). Stand-relative because the raw signal
+# carries a per-character offset (the girl's foot band measures +2.2 on her
+# symmetric idle stand where the boy's measures +0.4): approved swing
+# sheets measure a' ≈ -2.2..-2.6 / c' ≈ +2.4..+2.7, the rejected girl
+# a' +2.2 / c' 0.0. Carry sheets stride gently and are excluded
+# (approved carry measures same-sign a' +2.0 / c' +1.5).
+CONTACT_SIGNAL_MIN = 1.2
+WALK_A_D_IOU_MAX = 0.90
 # body every frame; a walk frame must not grow a significant INTERIOR color
 # far from everything in the stand (interior_only — see
 # _significant_colors). Calibrated 2026-08-09: every committed sheet's
@@ -202,6 +214,47 @@ def silhouette_iou(a: Image.Image, b: Image.Image) -> float:
     return intersection / union
 
 
+def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
+    """Swing-walk cycle sanity: opposite contacts, distinct second passing.
+
+    The owner-facing failure shapes this encodes (both shipped past every
+    other gate before being caught by eye): contacts whose legs never trade
+    (one-foot shuffle) and a walk-d so close to walk-a that the second half
+    of the stride has no midpoint.
+    """
+    from factory.foot_phase import foot_signal
+
+    required = {"stand", "walk-a", "walk-c", "walk-d"}
+    if not required <= frames.keys():
+        return []
+    failures = []
+    baseline = foot_signal(frames["stand"])
+    sig_a = foot_signal(frames["walk-a"]) - baseline
+    sig_c = foot_signal(frames["walk-c"]) - baseline
+    if abs(sig_a) < CONTACT_SIGNAL_MIN or abs(sig_c) < CONTACT_SIGNAL_MIN or (
+        (sig_a > 0) == (sig_c > 0)
+    ):
+        failures.append(
+            f"contacts do not read as opposite legs (foot signals "
+            f"walk-a {sig_a:+.1f} / walk-c {sig_c:+.1f}; need opposite signs, "
+            f"|signal| ≥ {CONTACT_SIGNAL_MIN})"
+        )
+    # No pair of walk frames may be near-clones. Calibrated: the approved
+    # swing sheets peak at IoU(b,d) 0.87; a same-leg contact pair measured
+    # 0.97 and a scrambled substitution's (b,c) measured 0.95 — both read
+    # as skipped/missing midpoints at play speed.
+    walk_names = [n for n in ("walk-a", "walk-b", "walk-c", "walk-d") if n in frames]
+    for i, first in enumerate(walk_names):
+        for second in walk_names[i + 1 :]:
+            iou = silhouette_iou(frames[first], frames[second])
+            if iou > WALK_A_D_IOU_MAX:
+                failures.append(
+                    f"{first} and {second} are near-clones (IoU {iou:.2f} > "
+                    f"{WALK_A_D_IOU_MAX}) — a stride midpoint is missing"
+                )
+    return failures
+
+
 def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
     """No significant frame color may sit far from every stand color."""
     stand_colors = _significant_colors(stand, DRIFT_STAND_MIN_SHARE)
@@ -224,6 +277,7 @@ def lint_avatar(
     *,
     base_palette: list[str] | None = None,
     expect_carry_hand: bool = False,
+    expect_leg_phase: bool = False,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -248,12 +302,14 @@ def lint_avatar(
     )
     stand_neck = stand.get("anchors", {}).get("neck")
 
+    loaded: dict[str, Image.Image] = {}
     for name, pose in poses.items():
         frame_path = base / pose["file"]
         if not frame_path.is_file():
             failures.append(f"{name}: missing file {pose['file']}")
             continue
         frame = Image.open(frame_path).convert("RGBA")
+        loaded[name] = frame
         residue = chroma_residue_ratio(frame)
         if residue > 0.01:
             failures.append(f"{name}: chroma residue {residue:.2%} > 1%")
@@ -304,6 +360,9 @@ def lint_avatar(
                         f"{name}: hand anchor {recorded_hand} is transparent "
                         f"(not on the mitten — structural presence check)"
                     )
+
+    if expect_leg_phase:
+        failures += check_leg_phase(loaded)
 
     if base_palette:
         sheet_palette = [_parse_hex(c) for c in manifest.get("palette", [])]

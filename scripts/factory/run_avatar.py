@@ -200,6 +200,9 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
         manifest_path_of(order_path, order),
         base_palette=palette,
         expect_carry_hand=bool(order.get("handLayer")),
+        # Carry sheets stride gently by spec; every other walk cycle must
+        # show opposite-leg contacts and a real second passing.
+        expect_leg_phase=not order.get("handLayer"),
     )
     # Variant sheets (carry) must keep their paired outfit's colors: the
     # try-on stage swaps outfit ⇄ carry when an item is picked up, so a

@@ -117,7 +117,11 @@ def main() -> None:
         model_input[args.field] = uris if args.field in LIST_FIELDS else uris[0]
     for param in args.param:
         key, _, value = param.partition("=")
-        model_input[key] = value
+        try:
+            # Booleans/numbers must arrive typed (seedance validates types).
+            model_input[key] = json.loads(value)
+        except json.JSONDecodeError:
+            model_input[key] = value
 
     response = run_model(account, token, args.gateway, args.model, model_input)
     urls = output_urls(response)
