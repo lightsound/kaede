@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -50,7 +51,11 @@ from factory.art_lint import lint_avatar, silhouette_iou  # noqa: E402
 from factory.compose_sheet import compose_walk_sheet, staticize_carry_sheet  # noqa: E402
 from factory.cycle_scan import scan_clip  # noqa: E402
 from factory.montage import sheet_montage  # noqa: E402
-from r2_originals import resolve_asset_path, resolve_original  # noqa: E402
+from r2_originals import (  # noqa: E402
+    resolve_asset_path,
+    resolve_original,
+    validate_order_path,
+)
 
 # A keep-everything outfit edit keeps poses: the red hoodie measured IoU
 # 0.916–0.956 per pose; bare-skin edits shed sleeve/pant silhouette and sit
@@ -61,6 +66,27 @@ ASSET_ROOT = ROOT / "packages/client/src/game.package"
 BASE_MANIFEST = ASSET_ROOT / "avatar" / "manifest.json"
 GENERATE = SCRIPTS / "generate-via-ai-gateway.py"
 IMPORT = SCRIPTS / "import-avatar-sheet.py"
+# Order ids are lowercase dotted slugs (asset-pipeline.md §2). The default
+# scratch path joins this under SCRATCH_ROOT; rejecting non-slugs stops a
+# crafted `../` id from escaping /tmp/kaede-factory.
+ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]*\Z")
+SCRATCH_ROOT = Path("/tmp/kaede-factory").resolve()
+
+
+def resolve_scratch_dir(order_id: str, work: Path | None) -> Path:
+    """Default scratch under /tmp/kaede-factory/<id>; reject escaping ids."""
+    if work is not None:
+        return work.resolve()
+    if ID_PATTERN.fullmatch(order_id) is None:
+        raise SystemExit(f"invalid order id for scratch dir: {order_id!r}")
+    scratch = (SCRATCH_ROOT / order_id).resolve()
+    try:
+        scratch.relative_to(SCRATCH_ROOT)
+    except ValueError as error:
+        raise SystemExit(
+            f"scratch dir escapes {SCRATCH_ROOT}: {order_id!r}"
+        ) from error
+    return scratch
 
 
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -282,7 +308,7 @@ def run_sheet_edit_lane(order_path: Path, order: dict, work: Path, args) -> None
             check=True,
         )
 
-    sheet_path = base / order["sheet"]
+    sheet_path = resolve_asset_path(base, order["sheet"], ASSET_ROOT)
     if generates:
         if not os.environ.get("CLOUDFLARE_API_TOKEN"):
             raise SystemExit("CLOUDFLARE_API_TOKEN required for generation")
@@ -370,9 +396,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    order_path = args.order.resolve()
+    # Same gate as import-avatar-sheet.py: order.json must live under the
+    # asset root before we read it or later rewrite provenance into it.
+    order_path = validate_order_path(args.order, ASSET_ROOT)
     order = json.loads(order_path.read_text())
-    work = args.work or Path(f"/tmp/kaede-factory/{order['id']}")
+    work = resolve_scratch_dir(order["id"], args.work)
     work.mkdir(parents=True, exist_ok=True)
 
     if order.get("template") == "avatar-outfit-edit":
@@ -500,7 +528,7 @@ def main() -> None:
             for k, v in json.loads(walk_map_path.read_text()).items()
         }
 
-    sheet_path = base / order["sheet"]
+    sheet_path = resolve_asset_path(base, order["sheet"], ASSET_ROOT)
     if "compose" in active:
         # Import re-detects anchors on the final frames (structure_neck),
         # so compose only needs to write the sheet.

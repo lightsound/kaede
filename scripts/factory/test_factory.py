@@ -285,6 +285,23 @@ class StaticizeTests(unittest.TestCase):
             self.assertGreater(seam, 0)
 
 
+class ScratchDirTests(unittest.TestCase):
+    def test_default_scratch_stays_under_factory_root(self) -> None:
+        from factory.run_avatar import SCRATCH_ROOT, resolve_scratch_dir
+
+        scratch = resolve_scratch_dir("avatar.girl-basic", None)
+        self.assertEqual(scratch, SCRATCH_ROOT / "avatar.girl-basic")
+        scratch.relative_to(SCRATCH_ROOT)
+
+    def test_scratch_rejects_path_escaping_order_id(self) -> None:
+        from factory.run_avatar import resolve_scratch_dir
+
+        with self.assertRaises(SystemExit):
+            resolve_scratch_dir("../escape", None)
+        with self.assertRaises(SystemExit):
+            resolve_scratch_dir("/tmp/elsewhere", None)
+
+
 class ComposeTests(unittest.TestCase):
     def test_paste_head_replaces_the_video_head(self) -> None:
         # A body whose own (video-drawn) head is wider than the stand head:
