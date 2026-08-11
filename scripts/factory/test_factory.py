@@ -29,6 +29,7 @@ from factory.art_lint import (
 )
 from factory.compose_sheet import (
     chroma_key,
+    chroma_key_greenwear,
     content_bbox,
     cut_head,
     paste_head,
@@ -376,18 +377,22 @@ class BlinkTests(unittest.TestCase):
         self.assertEqual(phase_candidates(40, 30, 97), [10, 40, 70])
 
     def test_select_cells_avoids_blink_frames(self) -> None:
-        # 60 frames, period 20, blink at frames 25 and 47: every slot must
-        # resolve to a phase-equivalent frame that keeps the eyes open.
+        # 60 frames, period 20, blinks at frames 25 and 45 — both on slot
+        # phase 5, so only frame 5 keeps the eyes open there and the
+        # selection is pinned (a blink off every slot phase would never be
+        # a candidate and would test nothing).
         scores = [100.0] * 60
-        scores[25] = scores[47] = 30.0
+        scores[25] = scores[45] = 30.0
         chosen, suspects = select_cells(scores, start=0, period=20, cells=4)
         self.assertEqual(suspects, [])
         self.assertEqual(len(chosen), 4)
         for frame in chosen:
             self.assertGreater(scores[frame], 90.0)
-        # Phase preserved: each pick sits on its slot's phase.
+        # Phase preserved, and the double-blinked phase resolved to the one
+        # open-eyed instance.
         for i, frame in enumerate(chosen):
             self.assertEqual(frame % 20, round(i * 20 / 4) % 20)
+        self.assertIn(5, chosen)
 
     def test_select_cells_flags_unavoidable_blinks(self) -> None:
         # Every instance of slot phase 5 blinks — the winner is a suspect.
@@ -397,6 +402,69 @@ class BlinkTests(unittest.TestCase):
         chosen, suspects = select_cells(scores, start=0, period=20, cells=4)
         self.assertEqual(len(chosen), 4)
         self.assertEqual(len(suspects), 1)
+
+
+class GreenwearKeyTests(unittest.TestCase):
+    def _take_frame(self) -> Image.Image:
+        """Green screen + character wearing a garment green (dominance ~40)."""
+        img = Image.new("RGB", (80, 80), (0, 255, 0))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((30, 10, 50, 30), fill=(250, 214, 180))  # head skin
+        draw.rectangle((28, 30, 52, 60), fill=(60, 110, 70))  # plaid shirt green
+        draw.rectangle((32, 60, 48, 76), fill=(120, 120, 130))  # pants
+        return img
+
+    def test_background_keyed_and_green_garment_kept(self) -> None:
+        keyed = chroma_key_greenwear(self._take_frame())
+        self.assertEqual(keyed.getpixel((2, 2))[3], 0)  # background gone
+        shirt = keyed.getpixel((40, 45))
+        self.assertEqual(shirt[3], 255)  # garment survives
+        self.assertEqual(shirt[:3], (60, 110, 70))  # not despilled to gray
+        # The walk line's key would have eaten it (regression contrast).
+        old = chroma_key(self._take_frame())
+        self.assertEqual(old.getpixel((40, 45))[3], 0)
+
+
+class GestureCellGateTests(unittest.TestCase):
+    def _stand(self) -> Image.Image:
+        # The head band (above 70% of the neck) must be dominated by one
+        # hair color: hair_reference averages that band, and a half-hair /
+        # half-face mix would sit far from both (the real reference cells
+        # are hair-topped, so the band is hair).
+        img = Image.new("RGBA", (64, 100), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.ellipse((12, 2, 52, 46), fill=(40, 30, 30, 255))  # hair-capped head
+        draw.rectangle((28, 46, 36, 54), fill=(250, 214, 180, 255))  # neck
+        draw.rectangle((20, 54, 44, 78), fill=(120, 140, 220, 255))  # torso
+        draw.rectangle((24, 78, 40, 98), fill=(60, 70, 90, 255))  # legs
+        return img
+
+    def test_identical_cell_passes_and_estimates_neck(self) -> None:
+        from factory.anchors import hair_reference, hair_stats
+        from factory.art_lint import check_gesture_cell
+
+        stand = self._stand()
+        hair_mean, head_depth = hair_reference(stand)
+        stand_hair = hair_stats(stand, hair_mean)
+        failures, neck = check_gesture_cell(
+            stand, stand_hair[2], hair_mean, head_depth, 1.0, "dance-a", stand
+        )
+        self.assertEqual(failures, [])
+        # Neck estimate = hair centroid x, hair top + head depth.
+        self.assertEqual(neck, [stand_hair[0], stand_hair[1] + head_depth])
+
+    def test_wrong_scale_cell_fails(self) -> None:
+        from factory.anchors import hair_reference, hair_stats
+        from factory.art_lint import check_gesture_cell
+
+        stand = self._stand()
+        hair_mean, head_depth = hair_reference(stand)
+        stand_hair = hair_stats(stand, hair_mean)
+        shrunk = stand.resize((32, 50))
+        failures, _ = check_gesture_cell(
+            stand, stand_hair[2], hair_mean, head_depth, 1.0, "dance-a", shrunk
+        )
+        self.assertTrue(any("scale normalization broke" in f for f in failures))
 
 
 class ComposeTests(unittest.TestCase):

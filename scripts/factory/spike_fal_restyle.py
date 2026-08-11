@@ -29,7 +29,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from factory.fal_client import FalJobs, estimate_cost, print_costs, video_probe  # noqa: E402
+from factory.fal_client import FalJobs, estimate_cost, print_costs  # noqa: E402
+from factory.video import probe  # noqa: E402
 
 
 def cmd_run(jobs: FalJobs, args: argparse.Namespace) -> None:
@@ -40,7 +41,7 @@ def cmd_run(jobs: FalJobs, args: argparse.Namespace) -> None:
             payload[name] = json.loads(raw)
         except json.JSONDecodeError:
             payload[name] = raw
-    frames, duration = video_probe(args.video)
+    frames, duration, _ = probe(args.video)
     payload["video_url"] = jobs.upload(args.video)
     payload["image_url"] = jobs.upload(args.image)
     if args.model.startswith("fal-ai/wan/"):
@@ -89,4 +90,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    sys.exit(0)

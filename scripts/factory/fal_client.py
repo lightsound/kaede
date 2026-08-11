@@ -22,7 +22,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -73,20 +72,6 @@ def gateway(method: str, target_url: str, body: dict | None = None) -> requests.
     )
 
 
-def video_probe(path: Path) -> tuple[int, float]:
-    """(frame count, duration seconds) of a local video."""
-    out = subprocess.run(
-        [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-count_frames", "-show_entries", "stream=nb_read_frames,duration",
-            "-of", "json", str(path),
-        ],
-        capture_output=True, text=True, check=True,
-    )
-    stream = json.loads(out.stdout)["streams"][0]
-    return int(stream["nb_read_frames"]), float(stream["duration"])
-
-
 def sniff_content_type(data: bytes) -> str:
     """R2 originals are content-addressed (no extension) — sniff the bytes."""
     if data[:8] == b"\x89PNG\r\n\x1a\n":
@@ -126,7 +111,11 @@ class FalJobs:
         self.state.setdefault("spent_estimated", 0.0)
 
     def save(self) -> None:
-        self.state_path.write_text(json.dumps(self.state, indent=1))
+        # Atomic replace: state.json is the money ledger — a crash inside a
+        # truncate-then-write would force a delete-and-re-pay recovery.
+        scratch = self.state_path.with_suffix(".json.tmp")
+        scratch.write_text(json.dumps(self.state, indent=1))
+        os.replace(scratch, self.state_path)
 
     def upload(self, path: Path) -> str:
         """Host a file on the fal CDN once; the URL is persistent and cached."""
@@ -180,7 +169,10 @@ class FalJobs:
                     f"{json.dumps(status)[:800]}"
                 )
             if time.time() > deadline:
-                raise SystemExit(f"request {run['request_id']} still {status} after {POLL_TIMEOUT_SECONDS}s")
+                raise SystemExit(
+                    f"request {run['request_id']} still "
+                    f"{status.get('status')} after {POLL_TIMEOUT_SECONDS}s"
+                )
             print(f"  {run['request_id']}: {status.get('status')} qpos={status.get('queue_position')}", flush=True)
             time.sleep(POLL_SECONDS)
 
@@ -229,7 +221,14 @@ class FalJobs:
     def download(self, key: str, url: str) -> Path:
         dest = self.work / f"{key}.mp4"
         if not dest.exists():
-            dest.write_bytes(requests.get(url, timeout=300).content)
+            # This file is the artifact real money bought and the exists()
+            # guard makes it final: status-check + temp-then-rename so an
+            # error body or a truncated transfer can never be cached as it.
+            response = requests.get(url, timeout=300)
+            response.raise_for_status()
+            scratch = dest.with_suffix(".mp4.partial")
+            scratch.write_bytes(response.content)
+            os.replace(scratch, dest)
         print(f"[{key}] output {dest} ({dest.stat().st_size} bytes)")
         return dest
 

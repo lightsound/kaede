@@ -28,9 +28,9 @@ healthy generations.
 
 Period preference mirrors foot_phase's fundamental-period rule: a walk's
 double stride scores the same consistency (girl walk: 24 -> 0.993 vs
-48 -> 0.992), so the smallest period within FUNDAMENTAL_MARGIN wins. Start
-preference is the earliest within START_MARGIN — an early start leaves the
-longest trim window (more substitution instances per replace dollar).
+48 -> 0.992), so the smallest period within FUNDAMENTAL_MARGIN wins.
+Among starts within START_MARGIN of the best consistency, the strongest
+wrap closure wins, earliest on ties (best_loop_start).
 """
 
 from __future__ import annotations

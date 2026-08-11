@@ -49,6 +49,61 @@ def chroma_key(img: Image.Image) -> Image.Image:
     return out
 
 
+# Green-wear-safe chroma key (fal replace lane, 2026-08-11). key_pixel above
+# assumes the character never wears green; the otaku's plaid shirt broke that
+# (its greens sit in the 20-60 dominance band the soft zone keys out, and the
+# unconditional despill grays the rest). Measured separation on replace
+# outputs: background green dominance ≥ 150, garment greens ≤ 60, edge mixes
+# thinly in between — so definite background keys at 100+, the soft zone
+# (20-100) only within the KEY_RING_PX edge ring next to definite background,
+# and despill only touches that same ring. The importer's key_pixel still
+# destroys green clothes at import time (asset-factory.md 運転知見 15) — this
+# key is the compose-side half of that fix.
+KEY_DEFINITE = 100
+KEY_RING_PX = 2
+
+
+def _shift(mask, dx: int, dy: int):
+    """Zero-filled shift (np.roll wraps around edges — a character touching
+    one border must not leak its ring onto the opposite border)."""
+    import numpy as np
+
+    out = np.zeros_like(mask)
+    h, w = mask.shape
+    out[max(0, dy) : h + min(0, dy), max(0, dx) : w + min(0, dx)] = mask[
+        max(0, -dy) : h + min(0, -dy), max(0, -dx) : w + min(0, -dx)
+    ]
+    return out
+
+
+def _dilate(mask, iterations: int):
+    out = mask.copy()
+    for _ in range(iterations):
+        grown = out.copy()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            grown |= _shift(out, dx, dy)
+        out = grown
+    return out
+
+
+def chroma_key_greenwear(img: Image.Image) -> Image.Image:
+    """Key the green screen without eating green clothes (see KEY_DEFINITE)."""
+    import numpy as np
+
+    rgba = np.asarray(img.convert("RGBA")).copy()
+    r, g, b = (rgba[:, :, i].astype(int) for i in range(3))
+    dominance = g - np.maximum(r, b)
+    definite = dominance >= KEY_DEFINITE
+    ring = _dilate(definite, KEY_RING_PX) & ~definite
+    keyed = definite | (ring & (dominance > KEY_SOFT))
+    rgba[:, :, 3] = np.where(keyed, 0, rgba[:, :, 3])
+    despill = ring & ~keyed
+    rgba[:, :, 1] = np.where(despill, np.minimum(g, np.maximum(r, b)), g).astype(
+        rgba.dtype
+    )
+    return Image.fromarray(rgba)
+
+
 def content_bbox(img: Image.Image) -> tuple[int, int, int, int]:
     """BBox of opaque pixels (green already keyed to alpha 0)."""
     bbox = img.getchannel("A").point(lambda a: 255 if a >= OPAQUE else 0).getbbox()

@@ -435,7 +435,7 @@ v1 は「頭・胴・腕・脚を別画像で持ち、PixiJS Container の階層
   Kling v2.6 MC（$0.31/本）は identity 最忠実だが追従がソフト —
   モーション決定論の要件では replace 優位。**副産物**: fal CDN
   （rest.fal.ai を x-fal-target-url 指定）が BYOK のまま使え、参照動画
-  ホスティングの単一障害点（外部一時ホスト）解消を実証。  再現ツール
+  ホスティングの単一障害点（外部一時ホスト）解消を実証。再現ツール
   `scripts/factory/spike_fal_restyle.py`、実測・R2 ハッシュは
   factory-yield.md、判定材料（並列モンタージュ・ループ動画）は
   本スパイクの draft PR に添付

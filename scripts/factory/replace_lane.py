@@ -12,7 +12,7 @@ ledger key includes the family).
 The ledger's registration requirements (enforced by `register`):
 1. green background (chroma-key contract — machine-checked on the frames)
 2. owner approval (--approval provenance note, required)
-3. machine-verified loop closure (silhouette IoU ≥ loop_scan.CLOSURE_MIN)
+3. machine-verified loop closure (loop_scan gates)
 The canonical master is the ffmpeg-TRIMMED version (one loop + substitution
 margin, ≤ 97 frames ≈ $0.24/replace at 480p): billing is output frames =
 input frames ($0.04 per 16 frames at 480p), so a 5-second source is never
@@ -29,7 +29,7 @@ Subcommands:
     register  trim + machine-gate + upload an approved take as a master
     produce   run one order (発注書 JSON) end to end: ledger lookup →
               replace → chroma key → loop verify → blink-aware cells →
-              green sheet + neck anchors + verdict material
+              transparent sheet + neck anchors + verdict material
     costs     fal balance (the real spend meter) + recent gateway requests
 
 Usage:
@@ -49,7 +49,6 @@ standSource (same — the sheet's reference cell), optional resolution
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -58,16 +57,16 @@ import time
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from factory import fal_client  # noqa: E402
-from factory.anchors import structure_neck  # noqa: E402
-from factory.art_lint import check_palette_drift  # noqa: E402
+from factory.anchors import hair_reference, hair_stats  # noqa: E402
+from factory.art_lint import check_gesture_cell  # noqa: E402
 from factory.blink import eye_openness_score, select_cells  # noqa: E402
-from factory.compose_sheet import content_bbox  # noqa: E402
+from factory.compose_sheet import chroma_key_greenwear, content_bbox  # noqa: E402
 from factory.loop_scan import (  # noqa: E402
     CLOSURE_MIN,
     LOOP_MEAN_MIN,
@@ -77,15 +76,35 @@ from factory.loop_scan import (  # noqa: E402
     silhouette_mask,
     verify_loop,
 )
-from r2_originals import _request, object_key, sha256_of  # noqa: E402
+from factory.verdict_material import (  # noqa: E402
+    CELL_PAD,
+    face_strip,
+    loop_video,
+    montage_rows,
+    preview_cells,
+    scaled,
+)
+from factory.video import extract_frames, probe, trim  # noqa: E402
+from r2_originals import get_object, put_object, sha256_of  # noqa: E402
 
 LEDGER_PATH = Path(__file__).resolve().parent / "master_takes.json"
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
-OPAQUE = 128
+# Order ids are lowercase dotted slugs (run_avatar's rule): the id names the
+# order's workdir and its download stem, so a crafted id must not traverse
+# out of --workdir, and it must not collide with the lane's own file names
+# (an order literally named "master" would make the cached master.mp4 pass
+# as the "downloaded output" and skip the paid fetch entirely).
+ORDER_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]*\Z")
+RESERVED_ORDER_IDS = frozenset(
+    {"master", "identity", "identity_square", "stand", "state",
+     "sheet-original", "lane-report", "loop_96px", "face_strip",
+     "montage_master_vs_output", "frames", "frames_master"}
+)
 
 # One loop + substitution margin: 97 frames = 6.0625 billed video-seconds
-# ($0.2425 at 480p). The margin must hold ≥ 2 loop instances so every cell
-# slot has a phase-equivalent substitute (blink.py).
+# ($0.2425 at 480p). The window must hold ≥ 2 loop instances so every cell
+# slot has a phase-equivalent substitute (blink.py), which caps the periods
+# a master may have — slow cycles need a deliberate TRIM_MAX_FRAMES raise.
 TRIM_MAX_FRAMES = 97
 TRIM_MIN_MARGIN = 4
 
@@ -99,53 +118,22 @@ TRIM_MIN_MARGIN = 4
 OUTPUT_LOOP_MEAN_MIN = 0.89
 OUTPUT_CLOSURE_MIN = 0.92
 
-# Sheet composition (the gesture lane's working scale and gates).
+# Sheet composition (the gesture lane's working scale).
 STAND_WORK_HEIGHT = 400
 STAND_HEIGHT_PX = 96
-CELL_PAD = 8
-# Generative takes redraw hair slightly (~9% linear measured on the wave
-# take); the tolerance catches scale mistakes, not redraw noise.
-HAIR_SCALE_TOLERANCE = 0.15
-HAIR_COLOR_DISTANCE = 60
-# Border pixels of a green-screen take that must be green-dominant.
+# Border pixels of a green-screen clip that must be green-dominant.
 GREEN_BORDER_MIN = 0.95
 BACKGROUND_KEY_DISTANCE = 40
 
 DEFAULT_CELLS = 8
 DEFAULT_RESOLUTION = "480p"
-PREVIEW_SCALE = 3
-PREVIEW_BACKGROUND = (240, 240, 245)
-PREVIEW_FRAME_MS = 100
-
-# Green-wear-safe chroma key. The walk line's key (hard 60 / soft 20 +
-# global despill) assumes the character never wears green; the otaku's
-# plaid shirt broke that (e2e 2026-08-11: shirt dominance 20-60 was eaten,
-# despill grayed the rest). Measured separation on replace outputs:
-# background green dominance ≥ 150, garment greens ≤ 60, edge mixes thinly
-# in between — so definite background keys at 100+, the soft zone (20-100)
-# only within the edge ring next to definite background, and despill only
-# touches that same ring.
-KEY_DEFINITE = 100
-KEY_SOFT = 20
-KEY_RING_PX = 2
-
-
-def run(cmd: list[str]) -> None:
-    print("+", " ".join(cmd), flush=True)
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise SystemExit(f"{cmd[0]} failed: {result.stderr[-800:]}")
 
 
 def fetch_r2(sha256: str, dest: Path) -> Path:
-    """Content-addressed fetch from the originals bucket, hash-verified."""
+    """Content-addressed fetch into the workdir (get_object verifies)."""
     if dest.exists() and sha256_of(dest) == sha256:
         return dest
-    body = _request(object_key(sha256))
-    digest = hashlib.sha256(body).hexdigest()
-    if digest != sha256:
-        raise SystemExit(f"R2 object {sha256} hashed to {digest} — refusing to use")
-    dest.write_bytes(body)
+    dest.write_bytes(get_object(sha256))
     return dest
 
 
@@ -159,92 +147,45 @@ def resolve_input(value: str, work: Path, name: str) -> Path:
     return path
 
 
-def extract_frames(video: Path, out_dir: Path) -> list[Path]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob("frame_*.png"):
-        old.unlink()
-    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video), "-vsync", "0",
-         str(out_dir / "frame_%04d.png")])
-    frames = sorted(out_dir.glob("frame_*.png"))
-    if not frames:
-        raise SystemExit(f"no frames extracted from {video}")
-    return frames
-
-
-def probe_fps(video: Path) -> float:
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-         "stream=r_frame_rate", "-of", "csv=p=0", str(video)],
-        capture_output=True, text=True, check=True,
-    )
-    num, _, den = out.stdout.strip().partition("/")
-    return float(num) / float(den or 1)
+def border_pixels(a: np.ndarray) -> np.ndarray:
+    """The image's outer 1px frame as an (n, channels) array."""
+    return np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
 
 
 def assert_green_background(frames: list[Path]) -> None:
-    """Registration requirement 1: the take is a green-screen clip."""
+    """The clip is a green-screen take (the chroma-key contract). Checked on
+    masters at registration and on every replace output: an off-green
+    generation would key nothing, making every silhouette mask the full
+    frame and the loop gate vacuously green-lit."""
     for path in (frames[0], frames[len(frames) // 2], frames[-1]):
         a = np.asarray(Image.open(path).convert("RGB")).astype(int)
-        border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+        border = border_pixels(a)
         green = (border[:, 1] - np.maximum(border[:, 0], border[:, 2])) >= 40
         if green.mean() < GREEN_BORDER_MIN:
             raise SystemExit(
                 f"{path.name}: only {green.mean():.0%} of the border is green "
-                f"— masters must be green-screen takes (chroma-key contract)"
+                f"— not a green-screen clip (chroma-key contract)"
             )
-
-
-def _dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
-    out = mask.copy()
-    for _ in range(iterations):
-        grown = out.copy()
-        for axis, shift in ((0, 1), (0, -1), (1, 1), (1, -1)):
-            grown |= np.roll(out, shift, axis=axis)
-        out = grown
-    return out
-
-
-def chroma_key_greenwear(img: Image.Image) -> Image.Image:
-    """Key the green screen without eating green clothes (see KEY_DEFINITE)."""
-    rgba = np.asarray(img.convert("RGBA")).copy()
-    r, g, b = (rgba[:, :, i].astype(int) for i in range(3))
-    dominance = g - np.maximum(r, b)
-    definite = dominance >= KEY_DEFINITE
-    ring = _dilate(definite, KEY_RING_PX) & ~definite
-    keyed = definite | (ring & (dominance > KEY_SOFT))
-    rgba[:, :, 3] = np.where(keyed, 0, rgba[:, :, 3])
-    # Despill only the surviving edge ring — a global despill grays out
-    # green garments (the importer-side key still does; known limitation).
-    despill = ring & ~keyed
-    rgba[:, :, 1] = np.where(despill, np.minimum(g, np.maximum(r, b)), g).astype(
-        rgba.dtype
-    )
-    return Image.fromarray(rgba)
 
 
 def keyed_frames(paths: list[Path]) -> list[Image.Image]:
     return [chroma_key_greenwear(Image.open(p)) for p in paths]
 
 
+def trim_cell(keyed: Image.Image) -> Image.Image:
+    return keyed.crop(content_bbox(keyed))
+
+
 # ---------------------------------------------------------------- register
 
 
 def load_ledger() -> dict:
-    if LEDGER_PATH.exists():
-        return json.loads(LEDGER_PATH.read_text())
-    return {
-        "registrationRequirements": [
-            "緑背景(クロマキー前提 — register が機械確認)",
-            "オーナー承認済み(approval に承認の出所を記録)",
-            "ループ閉包の機械確認済み(シルエット IoU ≥ 0.93 — loop_scan.py)",
-        ],
-        "canonicalForm": (
-            "masterSha256 はトリム済み(1 ループ+位相等価差し替えマージン・"
-            "最大 97 コマ ≈ 480p $0.24/replace)の R2 原本。sourceSha256 は"
-            "承認テイクの元動画(トレーサビリティ用)。"
-        ),
-        "masters": {},
-    }
+    if not LEDGER_PATH.exists():
+        raise SystemExit(
+            f"{LEDGER_PATH} is missing — the master-take ledger is committed "
+            "with the factory; restore it before registering or producing"
+        )
+    return json.loads(LEDGER_PATH.read_text())
 
 
 def cmd_register(args: argparse.Namespace) -> None:
@@ -252,6 +193,7 @@ def cmd_register(args: argparse.Namespace) -> None:
     work.mkdir(parents=True, exist_ok=True)
     if not args.approval.strip():
         raise SystemExit("--approval must record where the owner approved this take")
+    ledger = load_ledger()
     source = resolve_input(args.source, work, "source")
     source_sha = sha256_of(source)
 
@@ -260,10 +202,17 @@ def cmd_register(args: argparse.Namespace) -> None:
     masks = [silhouette_mask(img) for img in keyed_frames(frames)]
     _, period, score, closure = find_loop(masks)
     print(f"source loop: period={period} loop-mean={score:.3f} closure={closure:.3f}")
+    needed = 2 * period + TRIM_MIN_MARGIN
+    if needed > TRIM_MAX_FRAMES:
+        raise SystemExit(
+            f"period {period} needs a {needed}-frame trim window for two "
+            f"instances + substitution margin, over the TRIM_MAX_FRAMES "
+            f"{TRIM_MAX_FRAMES} cost cap — slow cycles need a deliberate "
+            f"TRIM_MAX_FRAMES raise, not a silent longer bill"
+        )
 
-    # Anchor the trim on a loop start that leaves substitution headroom
-    # beyond the two instances the consistency scan already guarantees.
-    start_max = len(frames) - 2 * period - TRIM_MIN_MARGIN
+    # Anchor the trim on a loop start that leaves the full window.
+    start_max = len(frames) - needed
     if start_max < 0:
         raise SystemExit(
             f"clip of {len(frames)} frames cannot hold 2 loops of period "
@@ -279,15 +228,9 @@ def cmd_register(args: argparse.Namespace) -> None:
     length = min(TRIM_MAX_FRAMES, len(frames) - start)
     print(f"trim: start={start} length={length} loop-mean={score:.3f}")
 
-    fps = probe_fps(source)
+    fps = probe(source).fps
     master = work / f"master_{args.motion}_{args.family}.mp4"
-    end = start + length - 1
-    run([
-        "ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
-        "-vf", f"select=between(n\\,{start}\\,{end}),setpts=N/{fps:g}/TB",
-        "-r", f"{fps:g}", "-an", "-c:v", "libx264", "-crf", "12",
-        "-pix_fmt", "yuv420p", str(master),
-    ])
+    trim(source, start, start + length - 1, fps, master)
 
     trimmed = extract_frames(master, work / "frames_master")
     if len(trimmed) != length:
@@ -302,11 +245,9 @@ def cmd_register(args: argparse.Namespace) -> None:
     with Image.open(trimmed[0]) as first:
         width, height = first.size
 
-    master_sha = sha256_of(master)
-    _request(object_key(master_sha), body=master.read_bytes())
+    master_sha = put_object(master.read_bytes())
     print(f"uploaded master to R2: {master_sha}")
 
-    ledger = load_ledger()
     ledger["masters"][f"{args.motion}/{args.family}"] = {
         "motion": args.motion,
         "family": args.family,
@@ -338,12 +279,17 @@ def cmd_register(args: argparse.Namespace) -> None:
 
 
 def key_background(img: Image.Image) -> Image.Image:
-    """Alpha out the background: chroma key for green takes, border-connected
-    flood fill otherwise (an A-pose on white must keep its white shirt —
-    only border-reachable background pixels may go transparent)."""
+    """Alpha out a reference cell's background, whichever kind it is.
+
+    Green-dominant border → the lane's green-wear-safe chroma key (a stand
+    cell rebuilt from a green take). Anything else → border-connected flood
+    fill on color distance to the border median: an A-pose on white must
+    keep its white shirt, so only border-REACHABLE background pixels may go
+    transparent (a global distance threshold would erase the shirt too).
+    """
     rgba = img.convert("RGBA")
     a = np.asarray(rgba).astype(int)
-    border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+    border = border_pixels(a)
     if ((border[:, 1] - np.maximum(border[:, 0], border[:, 2])) >= 40).mean() > 0.5:
         return chroma_key_greenwear(rgba)
     background = np.median(border[:, :3], axis=0)
@@ -382,9 +328,9 @@ def key_background(img: Image.Image) -> Image.Image:
 def squarify_identity(path: Path, dest: Path) -> Path:
     """Pad the identity image square with its own background color (recipe)."""
     img = Image.open(path).convert("RGB")
-    a = np.asarray(img).astype(int)
-    border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
-    background = tuple(int(v) for v in np.median(border, axis=0))
+    background = tuple(
+        int(v) for v in np.median(border_pixels(np.asarray(img).astype(int)), axis=0)
+    )
     side = max(img.size)
     canvas = Image.new("RGB", (side, side), background)
     canvas.paste(img, ((side - img.width) // 2, (side - img.height) // 2))
@@ -392,119 +338,26 @@ def squarify_identity(path: Path, dest: Path) -> Path:
     return dest
 
 
-def hair_reference(stand: Image.Image) -> tuple[np.ndarray, int]:
-    """(mean hair RGB, head depth px) from the reference cell's head band."""
-    neck = structure_neck(stand)
-    a = np.asarray(stand)
-    head_rows = slice(0, int(neck[1] * 0.7))
-    opaque = a[head_rows][:, :, 3] > OPAQUE
-    hair_px = a[head_rows][:, :, :3][opaque].astype(int)
-    if len(hair_px) < 50:
-        raise SystemExit("reference cell has no head content above the neck")
-    return hair_px.mean(axis=0), neck[1]
-
-
-def hair_stats(cell: Image.Image, hair_mean: np.ndarray) -> tuple[int, int, float]:
-    """(centroid x, top y, sqrt pixel count) of the cell's hair blob —
-    rotation-invariant scale signal (the gesture lane's verified metric)."""
-    a = np.asarray(cell)
-    opaque = a[:, :, 3] > OPAQUE
-    rgb = a[:, :, :3].astype(int)
-    distance = np.sqrt(((rgb - hair_mean) ** 2).sum(axis=2))
-    hairish = opaque & (distance < HAIR_COLOR_DISTANCE)
-    ys, xs = np.where(hairish)
-    if len(xs) < 50:
-        raise SystemExit("hair blob too small — wrong colors or wrong scale")
-    return int(xs.mean()), int(ys.min()), float(len(xs)) ** 0.5
-
-
-def trim_cell(keyed: Image.Image) -> Image.Image:
-    return keyed.crop(content_bbox(keyed))
-
-
-def scaled(cell: Image.Image, scale: float) -> Image.Image:
-    if scale == 1.0:
-        return cell
-    return cell.resize(
-        (max(1, round(cell.width * scale)), max(1, round(cell.height * scale))),
-        Image.LANCZOS,
-    )
-
-
-def preview_cells(cells: list[Image.Image], height: int = STAND_HEIGHT_PX) -> list[Image.Image]:
-    """Game-scale (96px) then nearest-upscaled cells for verdict material."""
-    out = []
-    reference = max(c.height for c in cells)
-    for cell in cells:
-        small = scaled(cell, height / reference)
-        out.append(
-            small.resize(
-                (small.width * PREVIEW_SCALE, small.height * PREVIEW_SCALE),
-                Image.NEAREST,
-            )
+def validated_order(path: Path) -> dict:
+    order = json.loads(path.read_text())
+    order_id = order["id"]
+    if ORDER_ID_PATTERN.fullmatch(order_id) is None or order_id in RESERVED_ORDER_IDS:
+        raise SystemExit(
+            f"invalid order id {order_id!r} — lowercase slug ([a-z0-9.-]), "
+            f"not one of the lane's reserved file stems"
         )
-    return out
-
-
-def montage_rows(rows: list[list[Image.Image]], out_path: Path) -> None:
-    cell_w = max(c.width for row in rows for c in row) + CELL_PAD
-    cell_h = max(c.height for row in rows for c in row) + CELL_PAD
-    columns = max(len(row) for row in rows)
-    canvas = Image.new("RGB", (cell_w * columns, cell_h * len(rows)), PREVIEW_BACKGROUND)
-    for row_i, row in enumerate(rows):
-        for col_i, cell in enumerate(row):
-            x = col_i * cell_w + (cell_w - cell.width) // 2
-            y = row_i * cell_h + (cell_h - cell.height)
-            canvas.paste(cell, (x, y), cell if cell.mode == "RGBA" else None)
-    canvas.save(out_path)
-
-
-def face_strip(
-    frames: list[Image.Image], indices: list[int], scores: list[float], out_path: Path
-) -> None:
-    """Head crops of the chosen cells with eye scores — the blink visual gate."""
-    tiles = []
-    for index in indices:
-        keyed = frames[index]
-        x0, y0, x1, y1 = content_bbox(keyed)
-        head = keyed.crop((x0, y0, x1, y0 + int((y1 - y0) * 0.5)))
-        tiles.append((index, head.resize((160, round(head.height * 160 / head.width)))))
-    tile_h = max(t.height for _, t in tiles)
-    canvas = Image.new("RGB", (164 * len(tiles), tile_h + 18), (255, 255, 255))
-    draw = ImageDraw.Draw(canvas)
-    for i, (index, tile) in enumerate(tiles):
-        canvas.paste(tile, (i * 164 + 2, 18), tile)
-        draw.text((i * 164 + 2, 2), f"f{index} eye={scores[index]:.0f}", fill=(0, 0, 0))
-    canvas.save(out_path)
-
-
-def loop_video(cells: list[Image.Image], out_path: Path, loops: int = 3) -> None:
-    scratch = out_path.parent / f"{out_path.stem}_frames"
-    scratch.mkdir(parents=True, exist_ok=True)
-    for old in scratch.glob("*.png"):
-        old.unlink()
-    previews = preview_cells(cells)
-    # libx264 requires even dimensions.
-    cell_w = (max(c.width for c in previews) + CELL_PAD + 1) // 2 * 2
-    cell_h = (max(c.height for c in previews) + CELL_PAD + 1) // 2 * 2
-    counter = 0
-    for _ in range(loops):
-        for cell in previews:
-            canvas = Image.new("RGB", (cell_w, cell_h), PREVIEW_BACKGROUND)
-            canvas.paste(cell, ((cell_w - cell.width) // 2, cell_h - cell.height), cell)
-            canvas.save(scratch / f"loop_{counter:04d}.png")
-            counter += 1
-    run([
-        "ffmpeg", "-y", "-loglevel", "error",
-        "-framerate", f"{1000 / PREVIEW_FRAME_MS:g}",
-        "-i", str(scratch / "loop_%04d.png"),
-        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", str(out_path),
-    ])
+    resolution = order.get("resolution", DEFAULT_RESOLUTION)
+    if resolution not in fal_client.WAN_ANIMATE_RATES:
+        raise SystemExit(
+            f"unsupported resolution {resolution!r} — one of "
+            f"{sorted(fal_client.WAN_ANIMATE_RATES)}"
+        )
+    return order
 
 
 def cmd_produce(args: argparse.Namespace) -> None:
     t0 = time.time()
-    order = json.loads(args.order.read_text())
+    order = validated_order(args.order)
     work = args.workdir / order["id"]
     work.mkdir(parents=True, exist_ok=True)
 
@@ -517,7 +370,6 @@ def cmd_produce(args: argparse.Namespace) -> None:
             f"(available: {sorted(ledger['masters'])})"
         )
     period = master_meta["loop"]["period"]
-    loop_start = master_meta["loop"]["start"]
 
     master = fetch_r2(master_meta["masterSha256"], work / "master.mp4")
     identity_raw = resolve_input(order["identity"], work, "identity")
@@ -554,19 +406,27 @@ def cmd_produce(args: argparse.Namespace) -> None:
 
     frame_paths = extract_frames(replace_mp4, work / "frames")
     if len(frame_paths) != master_meta["frames"]:
+        # Hard gate: every downstream step (phase candidates, the montage's
+        # per-index master comparison) assumes the 1:1 frame correspondence
+        # replace promises; a longer output would even index past the
+        # master's frames after all quality gates passed.
         raise SystemExit(
-            f"output has {len(frame_paths)} frames vs master "
-            f"{master_meta['frames']} — timing inheritance broke, so loop "
-            f"anchors and cell indices cannot be trusted; retake"
+            f"replace output has {len(frame_paths)} frames vs master "
+            f"{master_meta['frames']} — timing inheritance broke; retake "
+            "under a new key"
         )
+    assert_green_background(frame_paths)
     frames = keyed_frames(frame_paths)
     masks = [silhouette_mask(img) for img in frames]
 
     # Loop verification: the period is inherited from the master; only the
-    # quality needs re-proving on the generated frames.
+    # quality needs re-proving on the generated frames. verify_loop's best
+    # start is the GATE anchor; its consistency scan spans one full period,
+    # so every phase's pair is measured and the gate covers the whole cycle
+    # regardless of where the cells anchor.
     start, loop_mean, closure = verify_loop(masks, period)
-    print(f"loop verify: start={start} (master {loop_start}) period={period} "
-          f"loop-mean={loop_mean:.3f} closure={closure:.3f}")
+    print(f"loop verify: start={start} (master {master_meta['loop']['start']}) "
+          f"period={period} loop-mean={loop_mean:.3f} closure={closure:.3f}")
     if loop_mean < OUTPUT_LOOP_MEAN_MIN or closure < OUTPUT_CLOSURE_MIN:
         raise SystemExit(
             f"replace output scores loop-mean {loop_mean:.3f} / closure "
@@ -577,17 +437,21 @@ def cmd_produce(args: argparse.Namespace) -> None:
     scores = [eye_openness_score(img) for img in frames]
     cells_n = order.get("cells", DEFAULT_CELLS)
     # Cells anchor on the MASTER's registered loop start: the output is
-    # frame-synced to the master, and anchoring on verify_loop's start
-    # would rotate the pose phases whenever the two starts differ.
-    chosen, suspects = select_cells(scores, loop_start, period, cells_n)
+    # frame-synced to the master, so this keeps the pose grid canonical —
+    # every character produced from one master gets the same pose per slot
+    # (anchoring on verify_loop's start would rotate the cycle whenever the
+    # two starts differ).
+    chosen, suspects = select_cells(
+        scores, master_meta["loop"]["start"], period, cells_n
+    )
     print(f"cells: {chosen}")
     if suspects:
         print(f"blink suspects (visual gate must confirm): {suspects}")
 
+    # Normalize the video cells to the reference cell's scale by the median
+    # hair-blob ratio (rotation-invariant), then gate each cell.
     raw_cells = [trim_cell(frames[i]) for i in chosen]
-    ratios = []
-    for cell in raw_cells:
-        ratios.append(hair_stats(cell, hair_mean)[2] / stand_hair[2])
+    ratios = [hair_stats(c, hair_mean)[2] / stand_hair[2] for c in raw_cells]
     normalize = 1.0 / float(np.median(ratios))
     cells = [scaled(c, normalize) for c in raw_cells]
 
@@ -602,18 +466,11 @@ def cmd_produce(args: argparse.Namespace) -> None:
         round((stand_top + head_depth) * import_scale),
     ]
     for pose, cell in zip(pose_names, cells):
-        cx, top, hair_scale = hair_stats(cell, hair_mean)
-        ratio = hair_scale / stand_hair[2]
-        print(f"{pose}: hair scale ratio {ratio:.3f}")
-        if abs(ratio - 1.0) > HAIR_SCALE_TOLERANCE:
-            failures.append(
-                f"{pose}: hair scale ratio {ratio:.3f} — normalization broke"
-            )
-        failures += [f"{pose}: {f}" for f in check_palette_drift(stand, cell)]
-        necks[pose] = [
-            round(cx * import_scale),
-            round((top + head_depth) * import_scale),
-        ]
+        cell_failures, neck = check_gesture_cell(
+            stand, stand_hair[2], hair_mean, head_depth, import_scale, pose, cell
+        )
+        failures += cell_failures
+        necks[pose] = neck
     if failures:
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)

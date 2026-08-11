@@ -51,6 +51,7 @@ from factory.art_lint import lint_avatar, silhouette_iou  # noqa: E402
 from factory.compose_sheet import compose_walk_sheet, staticize_carry_sheet  # noqa: E402
 from factory.cycle_scan import scan_clip  # noqa: E402
 from factory.montage import sheet_montage  # noqa: E402
+from factory.video import extract_frames  # noqa: E402
 from r2_originals import (  # noqa: E402
     resolve_asset_path,
     resolve_original,
@@ -146,24 +147,6 @@ def generate_video(prompt: str, image: Path, out_prefix: Path) -> Path:
     if not paths:
         raise SystemExit(f"no mp4 from generator:\n{result.stdout}\n{result.stderr}")
     return Path(paths[0])
-
-
-def extract_frames(video: Path, out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob("frame_*.png"):
-        old.unlink()
-    run(
-        [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(video),
-            "-vsync",
-            "0",
-            str(out_dir / "frame_%04d.png"),
-        ],
-        capture_output=True,
-    )
 
 
 def prepare_stand_canvas(stand_src: Path, canvas_path: Path, size: int = 720) -> None:

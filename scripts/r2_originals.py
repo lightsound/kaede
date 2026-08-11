@@ -148,16 +148,37 @@ def resolve_asset_path(base: Path, rel: str, asset_root: Path) -> Path:
     return resolved
 
 
+def get_object(sha256: str) -> bytes:
+    """Fetch one content-addressed object, hash-verified before returning.
+
+    The public byte-level API for tooling that works outside the canonical
+    asset tree (the fal replace lane's master takes live in /tmp workdirs);
+    asset imports keep using fetch_original/resolve_original, which resolve
+    order-relative paths on top of this same verification.
+    """
+    key = object_key(sha256)
+    body = _request(key)
+    digest = hashlib.sha256(body).hexdigest()
+    if digest != sha256:
+        raise SystemExit(
+            f"R2 object {key} hashed to {digest}, expected {sha256} — refusing to use"
+        )
+    return body
+
+
+def put_object(body: bytes) -> str:
+    """PUT bytes at their content address; idempotent, returns the sha256."""
+    sha256 = hashlib.sha256(body).hexdigest()
+    _request(object_key(sha256), body=body)
+    return sha256
+
+
 def fetch_original(
     base: Path, rel: str, sha256: str, asset_root: Path
 ) -> Path:
     dest = resolve_asset_path(base, rel, asset_root)
-    key = object_key(sha256)
-    print(f"fetching {rel} from R2 ({key})")
-    fetched = _request(key)
-    digest = hashlib.sha256(fetched).hexdigest()
-    if digest != sha256:
-        raise SystemExit(f"R2 object {key} hashed to {digest}, expected {sha256} — refusing to import")
+    print(f"fetching {rel} from R2 ({object_key(sha256)})")
+    fetched = get_object(sha256)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(fetched)
     return dest
@@ -219,7 +240,4 @@ def upload_original(path: Path, asset_root: Path) -> str:
     path = resolve_asset_path(path.parent, path.name, asset_root)
     if not path.is_file():
         raise SystemExit(f"{path} is not a regular file")
-    body = path.read_bytes()
-    sha256 = hashlib.sha256(body).hexdigest()
-    _request(object_key(sha256), body=body)
-    return sha256
+    return put_object(path.read_bytes())

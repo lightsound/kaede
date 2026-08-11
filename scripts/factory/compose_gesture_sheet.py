@@ -51,11 +51,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from factory.anchors import structure_neck  # noqa: E402
-from factory.art_lint import check_palette_drift  # noqa: E402
+from factory.anchors import hair_reference, hair_stats  # noqa: E402
+from factory.art_lint import check_gesture_cell  # noqa: E402
 from factory.compose_sheet import (  # noqa: E402
     cell_on_green,
     chroma_key,
@@ -73,14 +72,9 @@ CANVAS_CHAR_H = 470
 NANO_SIZE = 1024
 WAN_SIZE = 1440
 
-# Hair-blob scale verification tolerance, on sqrt(pixel count) — width was
-# the first idea but breaks on the sleep pose (a lying head's horizontal
-# hair extent is its front-to-back depth, 1.9x the upright width —
-# measured); the area square root is rotation-invariant. Generative takes
-# redraw the hair slightly (the wave take grew it ~9% linear — measured),
-# so the tolerance is looser than a resize error would need but far
-# tighter than the 1.42x/2x mistakes it exists to catch.
-HAIR_SCALE_TOLERANCE = 0.15
+# Hair-blob scale machinery (reference, stats, tolerance) is shared with
+# the fal replace lane: factory.anchors (hair_reference / hair_stats) and
+# factory.art_lint (check_gesture_cell / HAIR_SCALE_TOLERANCE).
 
 # The adopted dance cycle (①c bench: clip frame 34 + 24-frame period,
 # closure IoU 0.932, sampled every 3rd frame = DANCE_FRAME_MS cells).
@@ -122,19 +116,6 @@ def keyed_cell(img: Image.Image, scale: float) -> Image.Image:
     return keyed.crop(content_bbox(keyed))
 
 
-def hair_stats(cell: Image.Image, hair_mean: np.ndarray) -> tuple[int, int, float]:
-    """(centroid x, top y, sqrt of pixel count) of the cell's hair blob."""
-    a = np.asarray(cell)
-    opaque = a[:, :, 3] > 128
-    rgb = a[:, :, :3].astype(int)
-    dist = np.sqrt(((rgb - hair_mean) ** 2).sum(axis=2))
-    hairish = opaque & (dist < 60)
-    ys, xs = np.where(hairish)
-    if len(xs) < 50:
-        raise SystemExit("hair blob too small — wrong colors or wrong scale")
-    return int(xs.mean()), int(ys.min()), float(len(xs)) ** 0.5
-
-
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
@@ -160,13 +141,7 @@ def main() -> None:
 
     # Hair reference from the stand head (above the structural neck — the
     # stand is upright, where the structural detector is calibrated).
-    stand_neck = structure_neck(stand)
-    sa = np.asarray(stand)
-    head_rows = slice(0, int(stand_neck[1] * 0.7))
-    opaque_head = sa[head_rows][:, :, 3][..., None] > 128
-    hair_px = sa[head_rows][:, :, :3][opaque_head[:, :, 0]].astype(int)
-    hair_mean = hair_px.mean(axis=0)
-    head_h = stand_neck[1]
+    hair_mean, head_h = hair_reference(stand)
     stand_hair = hair_stats(stand, hair_mean)
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -192,23 +167,18 @@ def main() -> None:
     if list(cells) != list(order["poses"]):
         raise SystemExit(f"pose mismatch: composed {list(cells)} vs order {order['poses']}")
 
-    # Compose-time gates: scale verification (hair width vs stand) and the
-    # calibrated per-cell palette drift vs the stand.
+    # Compose-time gates: scale verification (hair blob vs stand) and the
+    # calibrated per-cell palette drift vs the stand (check_gesture_cell;
+    # the sleep neck estimate is approximate by design — see module doc).
     failures: list[str] = []
     necks: dict[str, list[int]] = {}
     import_scale = order["standHeightPx"] / stand.height
     for pose, cell in cells.items():
-        cx, top, hair_scale = hair_stats(cell, hair_mean)
-        ratio = hair_scale / stand_hair[2]
-        print(f"{pose}: hair scale ratio {ratio:.3f}")
-        if abs(ratio - 1.0) > HAIR_SCALE_TOLERANCE:
-            failures.append(f"{pose}: hair scale ratio {ratio:.3f} — scale normalization broke")
-        drift = check_palette_drift(stand, cell)
-        failures += [f"{pose}: {f}" for f in drift]
-        # Neck estimate: the head is rigid, so its depth below the hair top
-        # is the stand's (upright poses; sleep is approximate — see module
-        # doc). Persisted in IMPORTED-frame coordinates.
-        necks[pose] = [round(cx * import_scale), round((top + head_h) * import_scale)]
+        cell_failures, neck = check_gesture_cell(
+            stand, stand_hair[2], hair_mean, head_h, import_scale, pose, cell
+        )
+        failures += cell_failures
+        necks[pose] = neck
     if failures:
         for f in failures:
             print(f"  - {f}", file=sys.stderr)

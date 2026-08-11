@@ -119,6 +119,51 @@ def structure_neck(frame: Image.Image) -> tuple[int, int]:
     return ((x0 + x1) // 2, neck_y)
 
 
+def hair_reference(stand: Image.Image) -> tuple["object", int]:
+    """(mean hair RGB, head depth px) from a reference cell's head band.
+
+    The gesture lanes' shared scale/anchor reference: everything above 70%
+    of the structural neck is head (hair + face crown), and its mean color
+    seeds the hair-blob detection below. Head depth (the neck row) is what
+    turns a cell's hair-top into a neck-anchor estimate.
+    """
+    import numpy as np
+
+    neck = structure_neck(stand)
+    a = np.asarray(stand)
+    head_rows = slice(0, int(neck[1] * 0.7))
+    opaque = a[head_rows][:, :, 3] > OPAQUE
+    hair_px = a[head_rows][:, :, :3][opaque].astype(int)
+    if len(hair_px) < 50:
+        raise SystemExit("reference cell has no head content above the neck")
+    return hair_px.mean(axis=0), neck[1]
+
+
+# Pixels within this RGB distance of the reference hair mean count as hair.
+HAIR_COLOR_DISTANCE = 60
+
+
+def hair_stats(cell: Image.Image, hair_mean) -> tuple[int, int, float]:
+    """(centroid x, top y, sqrt pixel count) of the cell's hair blob.
+
+    The sqrt of the blob's area is the lanes' scale signal: width was the
+    first idea but breaks on lying poses (a sideways head's horizontal hair
+    extent is its front-to-back depth — measured on the sleep pose); the
+    area square root is rotation-invariant.
+    """
+    import numpy as np
+
+    a = np.asarray(cell)
+    opaque = a[:, :, 3] > OPAQUE
+    rgb = a[:, :, :3].astype(int)
+    distance = np.sqrt(((rgb - hair_mean) ** 2).sum(axis=2))
+    hairish = opaque & (distance < HAIR_COLOR_DISTANCE)
+    ys, xs = np.where(hairish)
+    if len(xs) < 50:
+        raise SystemExit("hair blob too small — wrong colors or wrong scale")
+    return int(xs.mean()), int(ys.min()), float(len(xs)) ** 0.5
+
+
 def structure_hand_carry(frame: Image.Image) -> tuple[int, int]:
     """Carry hand ≈ center of the waist silhouette's widest row (mitten pad).
 
