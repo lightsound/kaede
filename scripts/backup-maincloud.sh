@@ -17,7 +17,9 @@
 #
 # 設計メモ:
 #   - テーブル一覧は `describe --json` から動的に取るので、スキーマにテーブルを
-#     足してもこのスクリプトの更新は不要(取り忘れが起きない)。
+#     足してもこのスクリプトの更新は不要(取り忘れが起きない)。describe は
+#     UNSTABLE で JSON の形が CLI バージョンで変わるため、パースは
+#     describe-table-names.mjs に分離(対応形式と実測日はそちらのコメント参照)。
 #   - `sql` はデータベースオーナーとして実行され、RLS も public フラグも
 #     受けない(非公開テーブルも全部読める)。JSON はスキーマ+行の自己記述形式。
 #   - CLI の WARNING は stderr、JSON は stdout に分かれる(2026-08-04 実測)。
@@ -38,9 +40,11 @@ OUT="${1:-backups/$(date -u +%Y%m%dT%H%M%SZ)}"
 
 mkdir -p "$OUT"
 
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+
 tables=$(
   "$SPACETIME_BIN" describe "$DATABASE" --server "$SERVER" --no-config --json \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const t of JSON.parse(s).tables)console.log(t.name)})'
+    | node "$SCRIPT_DIR/describe-table-names.mjs"
 )
 
 if [ -z "$tables" ]; then
