@@ -122,8 +122,9 @@ class Spike:
         self.state: dict = (
             json.loads(self.state_path.read_text())
             if self.state_path.exists()
-            else {"spent_estimated": 0.0}
+            else {}
         )
+        self.state.setdefault("spent_estimated", 0.0)
 
     def save(self) -> None:
         self.state_path.write_text(json.dumps(self.state, indent=1))
@@ -167,6 +168,11 @@ class Spike:
                         f"{response.status_code} {response.text[:800]}"
                     )
                 return response.json()
+            if status.get("status") in ("FAILED", "CANCELED"):
+                raise SystemExit(
+                    f"request {run['request_id']} ended {status.get('status')}: "
+                    f"{json.dumps(status)[:800]}"
+                )
             if time.time() > deadline:
                 raise SystemExit(f"request {run['request_id']} still {status} after {POLL_TIMEOUT_SECONDS}s")
             print(f"  {run['request_id']}: {status.get('status')} qpos={status.get('queue_position')}", flush=True)
@@ -175,6 +181,11 @@ class Spike:
     def run(self, key: str, model: str, payload: dict, est_cost: float) -> dict:
         runs = self.state.setdefault("runs", {})
         record = runs.get(key)
+        if record and (record.get("model") != model or record.get("payload") != payload):
+            raise SystemExit(
+                f"[{key}] was already run with a different model or inputs — "
+                "pick a new --key instead of reusing this one"
+            )
         if record and "result" in record:
             print(f"[{key}] cached: {json.dumps(record['result'])[:160]}")
             return record["result"]
