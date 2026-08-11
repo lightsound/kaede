@@ -13,7 +13,12 @@
 // SQL・除外リスト(EXCLUDE_TABLES)・出力ファイル名・docs/backup-restore.md は
 // すべて snake_case の canonical 名で揃えているため、v10 では ExplicitNames の
 // canonical_name を引く(source_name は TS の camelCase フィールド名)。
-// どちらの形にも当てはまらなければ、次の断絶に気づけるよう診断付きで失敗する。
+// 対応行が無いテーブルは source_name にフォールバックせず失敗する(fail closed):
+// camelCase 名を通すと EXCLUDE_TABLES の完全一致(call_config)をすり抜けて
+// 秘密テーブルを artifact に書き出しかねない。ローカル実測では 25 テーブル
+// すべてに対応行があるので、失敗 = describe の形が再び変わったサイン。
+// どちらの形にも当てはまらない・JSON ですらない場合も、次の断絶に気づける
+// よう診断付きで失敗する。
 
 function findSection(sections, key) {
   for (const section of sections) {
@@ -23,8 +28,6 @@ function findSection(sections, key) {
 }
 
 // ExplicitNames セクションから source_name → canonical_name の対応表を作る。
-// ローカル実測ではテーブル 25 件すべてに対応行があった。無いテーブルは
-// 呼び出し側で source_name にフォールバックする。
 function canonicalNames(sections) {
   const explicit = findSection(sections, 'ExplicitNames');
   const names = new Map();
@@ -35,11 +38,26 @@ function canonicalNames(sections) {
   return names;
 }
 
+function failMissingCanonicalName(sourceName) {
+  console.error(
+    'describe-table-names: no ExplicitNames canonical_name for table ' +
+      `${JSON.stringify(sourceName)}.\n` +
+      '  refusing to fall back to the camelCase source_name: EXCLUDE_TABLES in\n' +
+      '  backup-maincloud.sh matches exact snake_case names, so a fallback could\n' +
+      '  leak a secret table into the backup artifact (fail closed).',
+  );
+  process.exit(1);
+}
+
 function tableNamesV10(sections) {
   const tables = findSection(sections, 'Tables');
   if (!Array.isArray(tables)) return null;
   const canonical = canonicalNames(sections);
-  return tables.map((t) => canonical.get(t.source_name) ?? t.source_name);
+  return tables.map((t) => {
+    const name = canonical.get(t.source_name);
+    if (name === undefined) failMissingCanonicalName(t.source_name);
+    return name;
+  });
 }
 
 function tableNames(doc) {
@@ -64,12 +82,24 @@ function failUnexpectedShape(doc) {
   process.exit(1);
 }
 
+function parseJson(input) {
+  try {
+    return JSON.parse(input);
+  } catch (error) {
+    console.error(
+      `describe-table-names: stdin is not valid JSON (${error.message}).\n` +
+        `  input head: ${JSON.stringify(input.slice(0, 300))}`,
+    );
+    process.exit(1);
+  }
+}
+
 let input = '';
 process.stdin.on('data', (chunk) => {
   input += chunk;
 });
 process.stdin.on('end', () => {
-  const doc = JSON.parse(input);
+  const doc = parseJson(input);
   const names = tableNames(doc);
   if (names === null || !allNonEmptyStrings(names)) failUnexpectedShape(doc);
   console.log(names.join('\n'));
