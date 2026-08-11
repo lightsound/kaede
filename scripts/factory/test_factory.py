@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 import tempfile
 import unittest
@@ -13,8 +14,12 @@ from PIL import Image, ImageDraw
 SCRIPTS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS))
 
+import numpy as np
+
 from factory import templates
 from factory.anchors import structure_hand_carry, structure_neck
+from factory.blink import eye_openness_score, phase_candidates, select_cells
+from factory.loop_scan import find_loop, verify_loop
 from factory.art_lint import (
     check_head_consistency,
     check_leg_phase,
@@ -300,6 +305,98 @@ class ScratchDirTests(unittest.TestCase):
             resolve_scratch_dir("../escape", None)
         with self.assertRaises(SystemExit):
             resolve_scratch_dir("/tmp/elsewhere", None)
+
+
+class LoopScanTests(unittest.TestCase):
+    def _masks(self, period: int, count: int, *, noise_at: set[int] | None = None):
+        """Synthetic in-place motion: a block sliding on a sine of `period`."""
+        masks = []
+        for i in range(count):
+            mask = np.zeros((60, 40), dtype=bool)
+            offset = round(10 * math.sin(2 * math.pi * i / period))
+            mask[10:50, 12 + offset : 24 + offset] = True
+            if noise_at and i in noise_at:
+                mask[:, :] = False
+                mask[20:30, 0:8] = True
+            masks.append(mask)
+        return masks
+
+    def test_find_loop_recovers_period(self) -> None:
+        start, period, loop_mean, closure = find_loop(
+            self._masks(20, 90), min_period=12, max_period=40
+        )
+        self.assertEqual(period, 20)
+        self.assertGreater(loop_mean, 0.94)
+        self.assertGreater(closure, 0.93)
+        self.assertLessEqual(start + 2 * period, 90)
+
+    def test_find_loop_prefers_fundamental_over_harmonic(self) -> None:
+        # A 40-frame harmonic of a 20-frame cycle scores the same
+        # consistency; the smaller period must win (girl-walk shape).
+        _, period, _, _ = find_loop(self._masks(20, 100), min_period=12, max_period=45)
+        self.assertEqual(period, 20)
+
+    def test_find_loop_rejects_broken_cycle(self) -> None:
+        masks = self._masks(20, 60, noise_at=set(range(25, 35)))
+        with self.assertRaises(SystemExit):
+            find_loop(masks, min_period=12, max_period=24)
+
+    def test_verify_loop_scores_known_period(self) -> None:
+        start, loop_mean, closure = verify_loop(self._masks(20, 90), 20)
+        self.assertGreater(loop_mean, 0.94)
+        self.assertGreater(closure, 0.93)
+        self.assertLessEqual(start + 2 * 20, 90)
+
+
+class BlinkTests(unittest.TestCase):
+    def _face(self, *, eyes_open: bool) -> Image.Image:
+        """Chibi bust: dark hair cap, skin face, dark eyes (wide or thin)."""
+        img = Image.new("RGBA", (64, 96), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.ellipse((8, 2, 56, 44), fill=(250, 214, 180, 255))  # head skin
+        draw.chord((8, 2, 56, 30), 180, 360, fill=(40, 30, 30, 255))  # hair
+        eye_h = 8 if eyes_open else 1
+        for cx in (22, 42):
+            draw.ellipse(
+                (cx - 4, 26 - eye_h // 2, cx + 4, 26 + eye_h // 2 + 1),
+                fill=(30, 30, 35, 255),
+            )
+        draw.rectangle((24, 44, 40, 92), fill=(120, 140, 220, 255))  # torso
+        return img
+
+    def test_eye_score_drops_on_closed_eyes(self) -> None:
+        open_score = eye_openness_score(self._face(eyes_open=True))
+        closed_score = eye_openness_score(self._face(eyes_open=False))
+        self.assertGreater(open_score, 0)
+        # Calibrated split: blinks measure ≤ 0.65 of the open-eye level
+        # (PR #101 girl 720p walk); the synthetic blink must sit below it.
+        self.assertLess(closed_score, open_score * 0.65)
+
+    def test_phase_candidates_cover_every_instance(self) -> None:
+        self.assertEqual(phase_candidates(40, 30, 97), [10, 40, 70])
+
+    def test_select_cells_avoids_blink_frames(self) -> None:
+        # 60 frames, period 20, blink at frames 25 and 47: every slot must
+        # resolve to a phase-equivalent frame that keeps the eyes open.
+        scores = [100.0] * 60
+        scores[25] = scores[47] = 30.0
+        chosen, suspects = select_cells(scores, start=0, period=20, cells=4)
+        self.assertEqual(suspects, [])
+        self.assertEqual(len(chosen), 4)
+        for frame in chosen:
+            self.assertGreater(scores[frame], 90.0)
+        # Phase preserved: each pick sits on its slot's phase.
+        for i, frame in enumerate(chosen):
+            self.assertEqual(frame % 20, round(i * 20 / 4) % 20)
+
+    def test_select_cells_flags_unavoidable_blinks(self) -> None:
+        # Every instance of slot phase 5 blinks — the winner is a suspect.
+        scores = [100.0] * 60
+        for frame in (4, 5, 6, 24, 25, 26, 44, 45, 46):
+            scores[frame] = 30.0
+        chosen, suspects = select_cells(scores, start=0, period=20, cells=4)
+        self.assertEqual(len(chosen), 4)
+        self.assertEqual(len(suspects), 1)
 
 
 class ComposeTests(unittest.TestCase):

@@ -1,0 +1,64 @@
+{
+  "registrationRequirements": [
+    "緑背景(クロマキー前提 — register が機械確認)",
+    "オーナー承認済み(approval に承認の出所を記録)",
+    "ループ閉包の機械確認済み(シルエット IoU ≥ 0.93 — loop_scan.py)"
+  ],
+  "canonicalForm": "masterSha256 はトリム済み(1 ループ+位相等価差し替えマージン・最大 97 コマ ≈ 480p $0.24/replace)の R2 原本。sourceSha256 は承認テイクの元動画(トレーサビリティ用)。",
+  "masters": {
+    "gangnam/boy": {
+      "motion": "gangnam",
+      "family": "boy",
+      "masterSha256": "beccb87535239c92e63f8d3c8b99b40910564abd031bddbf0821bf992ded32b1",
+      "sourceSha256": "9d1f4f40e05047b5edcb05ed6f5ca3bfd1c14e451f1c0f4bbf8bfd7ec65333b9",
+      "frames": 97,
+      "fps": 24.0,
+      "width": 640,
+      "height": 640,
+      "loop": {
+        "start": 0,
+        "period": 35,
+        "loopMeanIou": 0.972,
+        "closureIou": 0.972
+      },
+      "approval": "ハイブリッド v2 gangnam 承認テイク(PR #97 系・factory-yield 2026-08-10)— PR #101 fal replace スパイクの元動画(オーナー実見済み)",
+      "registeredAt": "2026-08-11"
+    },
+    "walk/boy": {
+      "motion": "walk",
+      "family": "boy",
+      "masterSha256": "672dc63cf6ffc3fc263f9f1724e089f48bb6d37dc41aee44e9651e80923fc956",
+      "sourceSha256": "d83d580bd1932de01438f9f179ebef7d8fd9752754f1fded51b07a429f20efd8",
+      "frames": 62,
+      "fps": 24.0,
+      "width": 640,
+      "height": 640,
+      "loop": {
+        "start": 0,
+        "period": 24,
+        "loopMeanIou": 0.986,
+        "closureIou": 0.988
+      },
+      "approval": "ハイブリッド実動作検証 walk 承認テイク(videoReview「massive upgrade」・factory-yield 2026-08-10)— PR #101 replace 元動画",
+      "registeredAt": "2026-08-11"
+    },
+    "walk/girl": {
+      "motion": "walk",
+      "family": "girl",
+      "masterSha256": "0afe6d1cc2afe39dae23297f005b94668de8b8583cfe2ebb287479be105bd0dd",
+      "sourceSha256": "58067618c73a0a3ecd95733d84a2bca34c9177a74ac22b8cf795877f651c35d3",
+      "frames": 85,
+      "fps": 24.0,
+      "width": 640,
+      "height": 640,
+      "loop": {
+        "start": 31,
+        "period": 24,
+        "loopMeanIou": 0.993,
+        "closureIou": 0.995
+      },
+      "approval": "crosschar girl walk テイク(factory-yield 2026-08-11)— girl 枠 self-replace の元動画。オーナー実見「品質は今までの中で最も良い」(PR #101 追試②)",
+      "registeredAt": "2026-08-11"
+    }
+  }
+}
