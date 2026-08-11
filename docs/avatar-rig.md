@@ -435,10 +435,28 @@ v1 は「頭・胴・腕・脚を別画像で持ち、PixiJS Container の階層
   Kling v2.6 MC（$0.31/本）は identity 最忠実だが追従がソフト —
   モーション決定論の要件では replace 優位。**副産物**: fal CDN
   （rest.fal.ai を x-fal-target-url 指定）が BYOK のまま使え、参照動画
-  ホスティングの単一障害点（外部一時ホスト）解消を実証。再現ツール
+  ホスティングの単一障害点（外部一時ホスト）解消を実証。  再現ツール
   `scripts/factory/spike_fal_restyle.py`、実測・R2 ハッシュは
   factory-yield.md、判定材料（並列モンタージュ・ループ動画）は
   本スパイクの draft PR に添付
+  **✅ 工場組み込み（2026-08-11 — ①c 後続・清書工程の本採用、オーナー
+  判定待ち）**: スパイクの再現ツールを生産レーン
+  `scripts/factory/replace_lane.py` に昇格（fal クライアントは
+  `fal_client.py` へ共通化）。**マスターテイク方式を台帳
+  `master_takes.json` に機械可読化** — 登録条件（緑背景・オーナー承認・
+  ループ閉包の機械確認）を register が強制し、正は ffmpeg トリム済み
+  ≤97 コマ（1 ループ＋位相等価差し替えマージン。boy gangnam $0.2425/
+  boy walk $0.155/girl walk $0.2125 — 5 秒 $0.3025 から短縮）。登録済みは
+  boy gangnam・boy walk・girl walk の 3 本。**girl gangnam 清書候補は
+  R2 で完全ハッシュを解決したがループ整合 0.926 で機械ゲート不合格 →
+  登録見送り**（girl 系ダンスは新規マスターテイクが必要 — 実施は
+  オーナー判断）。e2e（オタク×boy gangnam・発注書 1 枚）は replace→
+  瞬き回避セル選定（眼開度スコアの位相等価コマ選定 — 瞬きコマ 0.35〜
+  0.65 vs 開眼 ≈1.0 で較正）→透過シート→標準インポータ取り込み
+  （/tmp worktree）まで完走、$0.245・videoReview「振り付け完全一致・
+  identity 安定・瞬きゼロ・実用品質」。**残課題**: 緑主体の衣装は
+  標準インポータの全画素 despill が灰化する（レーン側は緑服セーフキーで
+  解決済み — asset-factory 運転知見 15）
 - 配信の R2 移行・マーケットプレイス・スタイル学習は asset-pipeline.md の
   DP-1/DP-2/DP-3。
 
