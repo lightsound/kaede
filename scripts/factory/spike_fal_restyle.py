@@ -62,8 +62,10 @@ KLING_V26_STANDARD_MC_RATE_PER_SECOND = 0.07
 
 
 class RunFailed(SystemExit):
-    """Terminal queue failure (FAILED/CANCELED or an error response) — these
-    bill nothing on fal, unlike a timeout where the job may still complete."""
+    """Terminal FAILED/CANCELED queue status — bills nothing on fal. Only
+    these release the run key and refund the estimate: a COMPLETED job has
+    already billed even when its response fetch errors, and a timed-out job
+    may still complete and bill."""
 
 
 def token() -> str:
@@ -170,9 +172,16 @@ class Spike:
             if status.get("status") == "COMPLETED":
                 response = gateway("GET", run["response_url"])
                 if response.status_code != 200:
-                    raise RunFailed(
-                        f"request {run['request_id']} failed: "
-                        f"{response.status_code} {response.text[:800]}"
+                    # COMPLETED means the job may have billed, so keep the
+                    # record (a re-run re-fetches this response instead of
+                    # paying for a new submission). Permanent 4xx here is a
+                    # validation error that billed nothing, but the estimate
+                    # stays charged — over-counting the budget is the safe
+                    # direction.
+                    raise SystemExit(
+                        f"request {run['request_id']} response fetch failed: "
+                        f"{response.status_code} {response.text[:800]} — "
+                        "re-run with the same --key to re-fetch"
                     )
                 return response.json()
             if status.get("status") in ("FAILED", "CANCELED"):
@@ -214,10 +223,11 @@ class Spike:
         try:
             result = self.poll(record)
         except RunFailed:
-            # fal bills nothing on FAILED/CANCELED (and on an error response),
-            # so release the key and refund its estimate — a retry under the
-            # same key submits fresh. Timeouts are NOT refunded: the job may
-            # still complete and bill, and the record lets a re-run resume it.
+            # fal bills nothing on FAILED/CANCELED, so release the key and
+            # refund its estimate — a retry under the same key submits fresh.
+            # Timeouts and response-fetch errors are NOT refunded: the job
+            # may have billed (or may still bill), and keeping the record
+            # lets a re-run resume instead of re-paying.
             self.state["spent_estimated"] -= record.get("est_cost", 0.0)
             del runs[key]
             self.save()
@@ -262,6 +272,7 @@ def cmd_costs(args: argparse.Namespace) -> None:
     2026-08-11), so the balance delta is the only true cost reading.
     """
     balance = gateway("GET", "https://rest.fal.ai/billing/user_balance")
+    balance.raise_for_status()
     print(f"fal balance: ${balance.text.strip()} (spend = starting balance - this)")
     response = requests.get(
         f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}"
