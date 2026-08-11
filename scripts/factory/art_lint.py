@@ -24,7 +24,7 @@ from PIL import Image
 # scripts/ on sys.path when run as a module from repo root.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from factory.anchors import structure_neck  # noqa: E402
+from factory.anchors import HairReference, structure_neck  # noqa: E402
 
 OPAQUE = 128
 # 2x-resolution pixels. A 4px miss at source = 2 logical px on screen.
@@ -258,6 +258,45 @@ def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
                     f"{WALK_A_D_IOU_MAX}) — a stride midpoint is missing"
                 )
     return failures
+
+
+# Hair-blob scale verification tolerance, on sqrt(pixel count). Generative
+# takes redraw the hair slightly (the wave take grew it ~9% linear —
+# measured), so the tolerance is looser than a resize error would need but
+# far tighter than the 1.42x/2x canvas-scale mistakes it exists to catch.
+HAIR_SCALE_TOLERANCE = 0.15
+
+
+def check_gesture_cell(
+    reference: HairReference,
+    import_scale: float,
+    pose: str,
+    cell: Image.Image,
+) -> tuple[list[str], list[int]]:
+    """(failures, neck anchor) — one cell of the gesture lanes' compose gate.
+
+    Shared by compose_gesture_sheet and the fal replace lane, driven by the
+    stand's HairReference (factory.anchors): hair-blob scale verification
+    against the stand, the calibrated palette-drift check, and the
+    hair-blob neck estimate (the head is rigid, so its depth below the
+    hair top is the stand's), persisted in imported-frame coordinates.
+    """
+    from factory.anchors import hair_stats
+
+    cx, top, hair_scale = hair_stats(cell, reference.mean)
+    ratio = hair_scale / reference.scale
+    print(f"{pose}: hair scale ratio {ratio:.3f}")
+    failures: list[str] = []
+    if abs(ratio - 1.0) > HAIR_SCALE_TOLERANCE:
+        failures.append(
+            f"{pose}: hair scale ratio {ratio:.3f} — scale normalization broke"
+        )
+    failures += [f"{pose}: {f}" for f in check_palette_drift(reference.stand, cell)]
+    neck = [
+        round(cx * import_scale),
+        round((top + reference.head_depth) * import_scale),
+    ]
+    return failures, neck
 
 
 def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
