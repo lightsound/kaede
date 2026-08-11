@@ -19,8 +19,10 @@ the response fetch — the sync API (no x-fal-target-url) rejects immediately.
 
 Every paid run is keyed by model + input digests in <workdir>/state.json so
 re-runs never re-spend, and the run aborts when the estimated total would
-exceed --budget. Actual billed cost is read back from the gateway logs
-(`costs` subcommand).
+exceed --budget. Note the gateway logs report cost=0 for every BYOK request
+(measured 2026-08-11 — factory-yield.md), so actual spend is reconciled
+against the fal balance API; the `costs` subcommand prints that balance
+first, then the recent request statuses.
 
 Usage:
     export CLOUDFLARE_API_TOKEN=...
@@ -57,6 +59,11 @@ POLL_TIMEOUT_SECONDS = 30 * 60
 # model llms.txt (fal.ai/models/<model_id>/llms.txt, checked 2026-08-11).
 WAN_ANIMATE_RATES = {"480p": 0.04, "580p": 0.06, "720p": 0.08}
 KLING_V26_STANDARD_MC_RATE_PER_SECOND = 0.07
+
+
+class RunFailed(SystemExit):
+    """Terminal queue failure (FAILED/CANCELED or an error response) — these
+    bill nothing on fal, unlike a timeout where the job may still complete."""
 
 
 def token() -> str:
@@ -163,13 +170,13 @@ class Spike:
             if status.get("status") == "COMPLETED":
                 response = gateway("GET", run["response_url"])
                 if response.status_code != 200:
-                    raise SystemExit(
+                    raise RunFailed(
                         f"request {run['request_id']} failed: "
                         f"{response.status_code} {response.text[:800]}"
                     )
                 return response.json()
             if status.get("status") in ("FAILED", "CANCELED"):
-                raise SystemExit(
+                raise RunFailed(
                     f"request {run['request_id']} ended {status.get('status')}: "
                     f"{json.dumps(status)[:800]}"
                 )
@@ -200,11 +207,21 @@ class Spike:
                 raise SystemExit(f"submit {key} failed: {submit.status_code} {submit.text[:800]}")
             # Persist the request id (and meter the spend) the moment it is
             # submitted, so a crash while polling resumes instead of re-paying.
-            record = runs[key] = {"model": model, "payload": payload, **submit.json()}
+            record = runs[key] = {"model": model, "payload": payload, "est_cost": est_cost, **submit.json()}
             self.state["spent_estimated"] += est_cost
             self.save()
             print(f"[{key}] submitted {record['request_id']} (est ${est_cost:.3f})")
-        result = self.poll(record)
+        try:
+            result = self.poll(record)
+        except RunFailed:
+            # fal bills nothing on FAILED/CANCELED (and on an error response),
+            # so release the key and refund its estimate — a retry under the
+            # same key submits fresh. Timeouts are NOT refunded: the job may
+            # still complete and bill, and the record lets a re-run resume it.
+            self.state["spent_estimated"] -= record.get("est_cost", 0.0)
+            del runs[key]
+            self.save()
+            raise
         record["result"] = result
         self.save()
         return result
@@ -239,7 +256,13 @@ def cmd_run(spike: Spike, args: argparse.Namespace) -> None:
 
 
 def cmd_costs(args: argparse.Namespace) -> None:
-    """Read actual billed cost per request back from the gateway logs."""
+    """Print the fal balance (the real spend meter) + recent request statuses.
+
+    The gateway log `cost` field is always 0 for BYOK requests (measured
+    2026-08-11), so the balance delta is the only true cost reading.
+    """
+    balance = gateway("GET", "https://rest.fal.ai/billing/user_balance")
+    print(f"fal balance: ${balance.text.strip()} (spend = starting balance - this)")
     response = requests.get(
         f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}"
         "/ai-gateway/gateways/kaede-assets/logs",
