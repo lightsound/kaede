@@ -24,7 +24,7 @@ from PIL import Image
 # scripts/ on sys.path when run as a module from repo root.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from factory.anchors import structure_neck  # noqa: E402
+from factory.anchors import HairReference, structure_neck  # noqa: E402
 
 OPAQUE = 128
 # 2x-resolution pixels. A 4px miss at source = 2 logical px on screen.
@@ -268,7 +268,7 @@ HAIR_SCALE_TOLERANCE = 0.15
 
 
 def check_gesture_cell(
-    reference,
+    reference: HairReference,
     import_scale: float,
     pose: str,
     cell: Image.Image,
