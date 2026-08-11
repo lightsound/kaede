@@ -268,34 +268,34 @@ HAIR_SCALE_TOLERANCE = 0.15
 
 
 def check_gesture_cell(
-    stand: Image.Image,
-    stand_hair_scale: float,
-    hair_mean,
-    head_depth: int,
+    reference,
     import_scale: float,
     pose: str,
     cell: Image.Image,
 ) -> tuple[list[str], list[int]]:
     """(failures, neck anchor) — one cell of the gesture lanes' compose gate.
 
-    Shared by compose_gesture_sheet and the fal replace lane: hair-blob
-    scale verification against the stand, the calibrated palette-drift
-    check, and the hair-blob neck estimate (the head is rigid, so its
-    depth below the hair top is the stand's), persisted in imported-frame
-    coordinates.
+    Shared by compose_gesture_sheet and the fal replace lane, driven by the
+    stand's HairReference (factory.anchors): hair-blob scale verification
+    against the stand, the calibrated palette-drift check, and the
+    hair-blob neck estimate (the head is rigid, so its depth below the
+    hair top is the stand's), persisted in imported-frame coordinates.
     """
     from factory.anchors import hair_stats
 
-    cx, top, hair_scale = hair_stats(cell, hair_mean)
-    ratio = hair_scale / stand_hair_scale
+    cx, top, hair_scale = hair_stats(cell, reference.mean)
+    ratio = hair_scale / reference.scale
     print(f"{pose}: hair scale ratio {ratio:.3f}")
     failures: list[str] = []
     if abs(ratio - 1.0) > HAIR_SCALE_TOLERANCE:
         failures.append(
             f"{pose}: hair scale ratio {ratio:.3f} — scale normalization broke"
         )
-    failures += [f"{pose}: {f}" for f in check_palette_drift(stand, cell)]
-    neck = [round(cx * import_scale), round((top + head_depth) * import_scale)]
+    failures += [f"{pose}: {f}" for f in check_palette_drift(reference.stand, cell)]
+    neck = [
+        round(cx * import_scale),
+        round((top + reference.head_depth) * import_scale),
+    ]
     return failures, neck
 
 

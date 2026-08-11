@@ -8,6 +8,7 @@ lane's phase math assumes extraction is 1 png per stream frame — `-vsync 0`).
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import NamedTuple
@@ -29,8 +30,6 @@ def run_quiet(cmd: list[str]) -> str:
 
 def probe(video: Path) -> VideoInfo:
     """(frame count, duration seconds, fps) of a local video."""
-    import json
-
     out = run_quiet([
         "ffprobe", "-v", "error", "-select_streams", "v:0",
         "-count_frames", "-show_entries",

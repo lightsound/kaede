@@ -53,7 +53,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 from PIL import Image  # noqa: E402
 
-from factory.anchors import hair_reference, hair_stats  # noqa: E402
+from factory.anchors import hair_reference  # noqa: E402
 from factory.art_lint import check_gesture_cell  # noqa: E402
 from factory.compose_sheet import (  # noqa: E402
     cell_on_green,
@@ -141,8 +141,7 @@ def main() -> None:
 
     # Hair reference from the stand head (above the structural neck — the
     # stand is upright, where the structural detector is calibrated).
-    hair_mean, head_h = hair_reference(stand)
-    stand_hair = hair_stats(stand, hair_mean)
+    reference = hair_reference(stand)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
@@ -174,9 +173,7 @@ def main() -> None:
     necks: dict[str, list[int]] = {}
     import_scale = order["standHeightPx"] / stand.height
     for pose, cell in cells.items():
-        cell_failures, neck = check_gesture_cell(
-            stand, stand_hair[2], hair_mean, head_h, import_scale, pose, cell
-        )
+        cell_failures, neck = check_gesture_cell(reference, import_scale, pose, cell)
         failures += cell_failures
         necks[pose] = neck
     if failures:

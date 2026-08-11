@@ -218,8 +218,12 @@ class FalJobs:
         self.save()
         return result
 
-    def download(self, key: str, url: str) -> Path:
-        dest = self.work / f"{key}.mp4"
+    def download(self, key: str, url: str, dest: Path | None = None) -> Path:
+        """Fetch a run's output once. Callers with their own file inventory
+        (the replace lane) pass an explicit dest so no caller-chosen key can
+        collide with — and silently shadow — one of their existing files."""
+        if dest is None:
+            dest = self.work / f"{key}.mp4"
         if not dest.exists():
             # This file is the artifact real money bought and the exists()
             # guard makes it final: status-check + temp-then-rename so an

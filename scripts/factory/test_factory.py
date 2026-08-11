@@ -440,30 +440,24 @@ class GestureCellGateTests(unittest.TestCase):
         return img
 
     def test_identical_cell_passes_and_estimates_neck(self) -> None:
-        from factory.anchors import hair_reference, hair_stats
+        from factory.anchors import hair_reference
         from factory.art_lint import check_gesture_cell
 
-        stand = self._stand()
-        hair_mean, head_depth = hair_reference(stand)
-        stand_hair = hair_stats(stand, hair_mean)
-        failures, neck = check_gesture_cell(
-            stand, stand_hair[2], hair_mean, head_depth, 1.0, "dance-a", stand
-        )
+        reference = hair_reference(self._stand())
+        failures, neck = check_gesture_cell(reference, 1.0, "dance-a", reference.stand)
         self.assertEqual(failures, [])
         # Neck estimate = hair centroid x, hair top + head depth.
-        self.assertEqual(neck, [stand_hair[0], stand_hair[1] + head_depth])
+        self.assertEqual(
+            neck, [reference.centroid_x, reference.top_y + reference.head_depth]
+        )
 
     def test_wrong_scale_cell_fails(self) -> None:
-        from factory.anchors import hair_reference, hair_stats
+        from factory.anchors import hair_reference
         from factory.art_lint import check_gesture_cell
 
-        stand = self._stand()
-        hair_mean, head_depth = hair_reference(stand)
-        stand_hair = hair_stats(stand, hair_mean)
-        shrunk = stand.resize((32, 50))
-        failures, _ = check_gesture_cell(
-            stand, stand_hair[2], hair_mean, head_depth, 1.0, "dance-a", shrunk
-        )
+        reference = hair_reference(self._stand())
+        shrunk = reference.stand.resize((32, 50))
+        failures, _ = check_gesture_cell(reference, 1.0, "dance-a", shrunk)
         self.assertTrue(any("scale normalization broke" in f for f in failures))
 
 

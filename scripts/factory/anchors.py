@@ -13,7 +13,12 @@ a chin-to-hip band — that is what picked the waist on hoodies). Hand
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, NamedTuple
+
 from PIL import Image
+
+if TYPE_CHECKING:
+    import numpy as np
 
 OPAQUE = 128
 # A chibi neck is a deep pinch relative to the head (boy-basic: 12/51 ≈ 0.24).
@@ -119,13 +124,25 @@ def structure_neck(frame: Image.Image) -> tuple[int, int]:
     return ((x0 + x1) // 2, neck_y)
 
 
-def hair_reference(stand: Image.Image) -> tuple["object", int]:
-    """(mean hair RGB, head depth px) from a reference cell's head band.
+class HairReference(NamedTuple):
+    """A reference cell's hair yardstick — one derivation, shared by both
+    gesture lanes (compose_gesture_sheet and the fal replace lane)."""
 
-    The gesture lanes' shared scale/anchor reference: everything above 70%
-    of the structural neck is head (hair + face crown), and its mean color
-    seeds the hair-blob detection below. Head depth (the neck row) is what
-    turns a cell's hair-top into a neck-anchor estimate.
+    stand: Image.Image
+    mean: "np.ndarray"  # reference hair RGB
+    head_depth: int  # structural neck row (hair top + this = neck estimate)
+    centroid_x: int  # stand hair blob centroid
+    top_y: int  # stand hair blob top
+    scale: float  # stand hair blob sqrt pixel count (the scale yardstick)
+
+
+def hair_reference(stand: Image.Image) -> HairReference:
+    """The stand cell's hair reference (see HairReference).
+
+    Everything above 70% of the structural neck is head (hair + face
+    crown), and its mean color seeds the hair-blob detection below. Head
+    depth (the neck row) is what turns a cell's hair-top into a
+    neck-anchor estimate.
     """
     import numpy as np
 
@@ -136,14 +153,16 @@ def hair_reference(stand: Image.Image) -> tuple["object", int]:
     hair_px = a[head_rows][:, :, :3][opaque].astype(int)
     if len(hair_px) < 50:
         raise SystemExit("reference cell has no head content above the neck")
-    return hair_px.mean(axis=0), neck[1]
+    mean = hair_px.mean(axis=0)
+    centroid_x, top_y, scale = hair_stats(stand, mean)
+    return HairReference(stand, mean, neck[1], centroid_x, top_y, scale)
 
 
 # Pixels within this RGB distance of the reference hair mean count as hair.
 HAIR_COLOR_DISTANCE = 60
 
 
-def hair_stats(cell: Image.Image, hair_mean) -> tuple[int, int, float]:
+def hair_stats(cell: Image.Image, hair_mean: "np.ndarray") -> tuple[int, int, float]:
     """(centroid x, top y, sqrt pixel count) of the cell's hair blob.
 
     The sqrt of the blob's area is the lanes' scale signal: width was the

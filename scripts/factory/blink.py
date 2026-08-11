@@ -56,6 +56,10 @@ def eye_openness_score(keyed: Image.Image) -> float:
     skin = alpha & (luma > SKIN_LUMA_MIN) & (r >= g) & (g >= b - 10)
     flank_left = np.zeros_like(alpha)
     flank_right = np.zeros_like(alpha)
+    # np.roll wraps at the borders (a right-edge skin pixel can "flank" a
+    # left-edge dark pixel) — negligible here: the takes center a single
+    # character on a 640px canvas, and scores are only compared within one
+    # clip, so any wrap bias is constant across its frames.
     for d in FLANK_RANGE:
         flank_left |= np.roll(skin, d, axis=1)
         flank_right |= np.roll(skin, -d, axis=1)

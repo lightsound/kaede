@@ -90,16 +90,12 @@ from r2_originals import get_object, put_object, sha256_of  # noqa: E402
 LEDGER_PATH = Path(__file__).resolve().parent / "master_takes.json"
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 # Order ids are lowercase dotted slugs (run_avatar's rule): the id names the
-# order's workdir and its download stem, so a crafted id must not traverse
-# out of --workdir, and it must not collide with the lane's own file names
-# (an order literally named "master" would make the cached master.mp4 pass
-# as the "downloaded output" and skip the paid fetch entirely).
+# order's workdir under --workdir, so a crafted id must not traverse out of
+# it, and it must not shadow a register workdir (register-<motion>-<family>).
+# Every file INSIDE the workdir is lane-named (the paid download included —
+# see jobs.download's explicit dest), so ids cannot collide with them.
 ORDER_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]*\Z")
-RESERVED_ORDER_IDS = frozenset(
-    {"master", "identity", "identity_square", "stand", "state",
-     "sheet-original", "lane-report", "loop_96px", "face_strip",
-     "montage_master_vs_output", "frames", "frames_master"}
-)
+REGISTER_WORKDIR_PREFIX = "register-"
 
 # One loop + substitution margin: 97 frames = 6.0625 billed video-seconds
 # ($0.2425 at 480p). The window must hold ≥ 2 loop instances so every cell
@@ -341,12 +337,17 @@ def squarify_identity(path: Path, dest: Path) -> Path:
 def validated_order(path: Path) -> dict:
     order = json.loads(path.read_text())
     order_id = order["id"]
-    if ORDER_ID_PATTERN.fullmatch(order_id) is None or order_id in RESERVED_ORDER_IDS:
+    if (
+        ORDER_ID_PATTERN.fullmatch(order_id) is None
+        or order_id.startswith(REGISTER_WORKDIR_PREFIX)
+    ):
         raise SystemExit(
-            f"invalid order id {order_id!r} — lowercase slug ([a-z0-9.-]), "
-            f"not one of the lane's reserved file stems"
+            f"invalid order id {order_id!r} — lowercase slug ([a-z0-9.-]) "
+            f"not starting with {REGISTER_WORKDIR_PREFIX!r}"
         )
-    resolution = order.get("resolution", DEFAULT_RESOLUTION)
+    # The validated default becomes the used value by construction — and the
+    # report's embedded order then records what actually ran.
+    resolution = order.setdefault("resolution", DEFAULT_RESOLUTION)
     if resolution not in fal_client.WAN_ANIMATE_RATES:
         raise SystemExit(
             f"unsupported resolution {resolution!r} — one of "
@@ -381,10 +382,9 @@ def cmd_produce(args: argparse.Namespace) -> None:
     stand_raw = resolve_input(order["standSource"], work, "stand")
     stand = trim_cell(key_background(Image.open(stand_raw)))
     stand = scaled(stand, STAND_WORK_HEIGHT / stand.height)
-    hair_mean, head_depth = hair_reference(stand)
-    stand_hair = hair_stats(stand, hair_mean)
+    reference = hair_reference(stand)
 
-    resolution = order.get("resolution", DEFAULT_RESOLUTION)
+    resolution = order["resolution"]
     est = fal_client.estimate_cost(
         fal_client.WAN_ANIMATE_REPLACE,
         resolution,
@@ -402,7 +402,9 @@ def cmd_produce(args: argparse.Namespace) -> None:
     print(f"[{order['id']}] replace {ledger_key} — {master_meta['frames']} frames, "
           f"est ${est:.3f}")
     result = jobs.run(order["id"], fal_client.WAN_ANIMATE_REPLACE, payload, est)
-    replace_mp4 = jobs.download(order["id"], result["video"]["url"])
+    replace_mp4 = jobs.download(
+        order["id"], result["video"]["url"], dest=work / "replace-output.mp4"
+    )
 
     frame_paths = extract_frames(replace_mp4, work / "frames")
     if len(frame_paths) != master_meta["frames"]:
@@ -421,9 +423,9 @@ def cmd_produce(args: argparse.Namespace) -> None:
 
     # Loop verification: the period is inherited from the master; only the
     # quality needs re-proving on the generated frames. verify_loop's best
-    # start is the GATE anchor; its consistency scan spans one full period,
-    # so every phase's pair is measured and the gate covers the whole cycle
-    # regardless of where the cells anchor.
+    # start is the GATE anchor; its consistency scan samples the whole
+    # cycle (every CONSISTENCY_STRIDE-th phase pair over one full period),
+    # so the gate covers the cycle regardless of where the cells anchor.
     start, loop_mean, closure = verify_loop(masks, period)
     print(f"loop verify: start={start} (master {master_meta['loop']['start']}) "
           f"period={period} loop-mean={loop_mean:.3f} closure={closure:.3f}")
@@ -451,7 +453,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
     # Normalize the video cells to the reference cell's scale by the median
     # hair-blob ratio (rotation-invariant), then gate each cell.
     raw_cells = [trim_cell(frames[i]) for i in chosen]
-    ratios = [hair_stats(c, hair_mean)[2] / stand_hair[2] for c in raw_cells]
+    ratios = [hair_stats(c, reference.mean)[2] / reference.scale for c in raw_cells]
     normalize = 1.0 / float(np.median(ratios))
     cells = [scaled(c, normalize) for c in raw_cells]
 
@@ -460,15 +462,12 @@ def cmd_produce(args: argparse.Namespace) -> None:
     failures: list[str] = []
     necks: dict[str, list[int]] = {}
     import_scale = STAND_HEIGHT_PX / stand.height
-    stand_cx, stand_top, _ = stand_hair
     necks["stand"] = [
-        round(stand_cx * import_scale),
-        round((stand_top + head_depth) * import_scale),
+        round(reference.centroid_x * import_scale),
+        round((reference.top_y + reference.head_depth) * import_scale),
     ]
     for pose, cell in zip(pose_names, cells):
-        cell_failures, neck = check_gesture_cell(
-            stand, stand_hair[2], hair_mean, head_depth, import_scale, pose, cell
-        )
+        cell_failures, neck = check_gesture_cell(reference, import_scale, pose, cell)
         failures += cell_failures
         necks[pose] = neck
     if failures:
