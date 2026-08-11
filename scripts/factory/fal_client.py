@@ -100,6 +100,11 @@ def sniff_content_type(data: bytes) -> str:
 
 def estimate_cost(model: str, resolution: str, frames: int, duration: float) -> float:
     if model.startswith("fal-ai/wan/v2.2-14b/animate/"):
+        if resolution not in WAN_ANIMATE_RATES:
+            raise SystemExit(
+                f"no pricing rule for resolution {resolution!r} — "
+                f"expected one of {sorted(WAN_ANIMATE_RATES)}"
+            )
         return frames / 16 * WAN_ANIMATE_RATES[resolution]
     if model == "fal-ai/kling-video/v2.6/standard/motion-control":
         return duration * KLING_V26_STANDARD_MC_RATE_PER_SECOND

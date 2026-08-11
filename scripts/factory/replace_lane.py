@@ -554,8 +554,11 @@ def cmd_produce(args: argparse.Namespace) -> None:
 
     frame_paths = extract_frames(replace_mp4, work / "frames")
     if len(frame_paths) != master_meta["frames"]:
-        print(f"note: output has {len(frame_paths)} frames vs master "
-              f"{master_meta['frames']} — timing inheritance broke?")
+        raise SystemExit(
+            f"output has {len(frame_paths)} frames vs master "
+            f"{master_meta['frames']} — timing inheritance broke, so loop "
+            f"anchors and cell indices cannot be trusted; retake"
+        )
     frames = keyed_frames(frame_paths)
     masks = [silhouette_mask(img) for img in frames]
 
@@ -573,7 +576,10 @@ def cmd_produce(args: argparse.Namespace) -> None:
 
     scores = [eye_openness_score(img) for img in frames]
     cells_n = order.get("cells", DEFAULT_CELLS)
-    chosen, suspects = select_cells(scores, start, period, cells_n)
+    # Cells anchor on the MASTER's registered loop start: the output is
+    # frame-synced to the master, and anchoring on verify_loop's start
+    # would rotate the pose phases whenever the two starts differ.
+    chosen, suspects = select_cells(scores, loop_start, period, cells_n)
     print(f"cells: {chosen}")
     if suspects:
         print(f"blink suspects (visual gate must confirm): {suspects}")
