@@ -1,0 +1,53 @@
+{
+  "id": "avatar.girl-basic-gestures",
+  "type": "avatar-gesture",
+  "name": "女の子（基本）ジェスチャー",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": {
+    "cols": 12,
+    "rows": 1
+  },
+  "poses": [
+    "stand",
+    "sit",
+    "sleep",
+    "wave",
+    "dance-a",
+    "dance-b",
+    "dance-c",
+    "dance-d",
+    "dance-e",
+    "dance-f",
+    "dance-g",
+    "dance-h"
+  ],
+  "standHeightPx": 96,
+  "standSource": "../avatar-girl/stand.png",
+  "references": ["../canonical/style-reference.png"],
+  "danceMaster": "gangnam/girl",
+  "gestureSources": {
+    "sit-original.png": "b339da4d98666200c52fabecec5804e9bb3cef7fc952c046a08e0fbb6fd3db64",
+    "sleep-original.png": "110edc69b3d8805f6ee11c920a018b46f7d399498ffca663aa92a39a415208e9",
+    "wave-original.png": "32389e31f809c848a1034b664f26bf768193c4d503b7f7b6748593f30716bd62",
+    "dance-master-original.mp4": "9649b9d2de918c055ca6e30d4e430d30f17b5fc87019d144a6214890600802e2"
+  },
+  "prompt": "Phase 5 ①c gesture sheet for the girl (composed by scripts/factory/compose_gesture_sheet.py, 2026-08-12 — the boy sheet's 12-cell layout, avatar.boy-basic-gestures precedent). Sources: sit/sleep/wave = nano-banana-2 reference+instruction pose edits of the committed avatar-girl stand cell on the 720px green canvas (character ~470px tall), generated via Cloudflare AI Gateway (kaede-assets, ~$0.10/still): sit = cross-legged floor sit directly ON the ground line, legs folded in front, hands on knees, back upright (the 2026-08-10 candidate-D cross-legged one-shot precedent held — no wan-i2v fallback needed); sleep = lies asleep on her side, head right, eyes closed, one arm folded, knees slightly bent (take 2 of 3 adopted: take 1 drew a literal ground line under her, take 3 oversized the character past the hair-scale gate at ratio 1.158); wave = near arm raised high, elbow bent, open palm waving, far arm relaxed (one-shot; same raised-far-arm read as the committed boy wave). dance-a..h = 0-based frames 0/74/9/48/18/22/26/31 of the REGISTERED gangnam/girl master take (master_takes.json master 9649b9d2…, 496×496 79 frames — owner-approved by the PR #104 merge; cut directly from the master, no replace call, no charge): 8 phase-even slots over the 35-frame loop from the registered start 0, each slot's frame picked blink-aware from its phase-equivalent candidates (blink.py — zero residual suspects; loop re-verified on the extracted frames at loop-mean 0.970 / closure 0.982 = the ledger values), 100ms per sampled cell = DANCE_FRAME_MS. Scale normalization back to the 720 canvas: nano stills x720/1024, master cells by the median hair-blob ratio against the stand (the master's own canvas scale is not the bench canvas's — the replace lane's rule), every cell re-verified by hair-blob area against the stand (fail loud). Neck anchors are hair-blob estimates persisted as neckAnchors overrides — the structural neck detector breaks on arms-over-head dance frames and the lying sleeper (boy-precedent measurements); the sleep anchor is approximate by design (nothing renders from it: the busy headgear overlay hides on sleep). NO head composite anywhere: dance frames keep the master's video-native heads (erase-then-paste erases arms crossing above the neck line — boy-precedent measurement), the nano stills keep their own redrawn heads, all gated by the calibrated per-cell palette-drift check. The sheet is committed factory-ready but UNCONSUMED, like the avatar-girl walk cells: wiring the girl skin into AvatarView is 増分①d (setSkin).",
+  "neckAnchors": {
+    "stand": [27, 50],
+    "sit": [27, 49],
+    "sleep": [98, 49],
+    "wave": [27, 49],
+    "dance-a": [29, 49],
+    "dance-b": [31, 49],
+    "dance-c": [31, 49],
+    "dance-d": [29, 49],
+    "dance-e": [26, 49],
+    "dance-f": [26, 49],
+    "dance-g": [26, 49],
+    "dance-h": [26, 49]
+  },
+  "originals": {
+    "sheet-original.png": "7b12976f900fca80c6af3c86c6d076c0238a3126eac80811a8f7aad81e5d9cd7"
+  }
+}
