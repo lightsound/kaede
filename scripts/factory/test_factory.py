@@ -203,13 +203,13 @@ class ArtLintTests(unittest.TestCase):
         self.assertEqual(check_neck_junction(_chibi(neck_y=50), [32, 50]), [])
 
     def test_neck_junction_catches_semi_transparent_bridge(self) -> None:
-        # The owner-rejected girl walk junction: a wide α130–170 halo around
-        # a thin solid core (soft/solid well past the 1.5 calibration line).
+        # The self-masked-paste decay shape: the junction rows' core drops to
+        # α150 — no solid pixel left in the anchor window, all-soft bridge.
         frame = _chibi(neck_y=50)
         for y in range(50, 57):
             for x in range(22, 44):
                 r, g, b, a = frame.getpixel((x, y))
-                if a and not 30 <= x <= 34:
+                if a:
                     frame.putpixel((x, y), (r, g, b, 150))
         failures = check_neck_junction(frame, [32, 50])
         self.assertTrue(any("semi-transparent bridge" in f for f in failures))
