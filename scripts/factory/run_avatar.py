@@ -428,19 +428,15 @@ def main() -> None:
     # import / lint) must not clobber a hand-curated provenance record (the
     # girl's order narrates the adopted take and frame selection; a lint-only
     # rerun once overwrote it with the template expansion).
+    generates = bool(active & {"stand", "walk"})
     recorded = (
         f"Factory template `{order['template']}` expanded "
         f"({time.strftime('%Y-%m-%d')}): {stand_prompt} | walk template "
         f"`{walk_template}`: {walk_prompt}"
-    )
-    generates = bool(active & {"stand", "walk"})
-    if (
-        generates
-        and order.get("template")
-        and (
-            order.get("prompt") != recorded
-            or order.get("walkTemplate") != walk_template
-        )
+    ) if generates and order.get("template") else None
+    if recorded is not None and (
+        order.get("prompt") != recorded
+        or order.get("walkTemplate") != walk_template
     ):
         order["prompt"] = recorded
         order["walkTemplate"] = walk_template

@@ -235,36 +235,52 @@ class ArtLintTests(unittest.TestCase):
 
 class LegPhaseTests(unittest.TestCase):
     def _walker(self, lead: int) -> Image.Image:
-        """Chibi with the feet-band mass pushed forward (+1) or back (−1)."""
+        """Chibi whose leg silhouette differs per stride phase.
+
+        The gate is pixel-geometric (pairwise IoU), so the fixtures encode
+        pose distinctness the way real strides do: clearly different leg
+        masses, not a small foot nudge.
+        """
         frame = _chibi(neck_y=50)
         draw = ImageDraw.Draw(frame)
-        if lead > 0:
-            draw.rectangle((44, 88, 60, 98), fill=(240, 200, 160, 255))
-        elif lead < 0:
-            draw.rectangle((4, 88, 20, 98), fill=(240, 200, 160, 255))
+        skin = (240, 200, 160, 255)
+        # Erase the base narrow legs, then draw the phase's own.
+        draw.rectangle((0, 78, 63, 99), fill=(0, 0, 0, 0))
+        if lead == 1:  # contact, near leg forward: wide symmetric spread
+            draw.polygon([(20, 78), (4, 98), (20, 98)], fill=skin)
+            draw.polygon([(44, 78), (60, 98), (44, 98)], fill=skin)
+            draw.rectangle((20, 78, 44, 98), fill=skin)
+        elif lead < 0:  # contact, far leg forward: narrow stance, raised heel
+            draw.rectangle((18, 78, 28, 98), fill=skin)
+            draw.rectangle((36, 78, 46, 88), fill=skin)
+        elif lead == 0:  # passing: legs together, one straight column
+            draw.rectangle((26, 78, 40, 98), fill=skin)
+        else:  # second passing: legs crossing, narrow backward shear
+            draw.polygon([(26, 78), (38, 78), (18, 98), (4, 98)], fill=skin)
         return frame
 
-    def test_opposite_contacts_pass(self) -> None:
+    def test_distinct_cycle_passes(self) -> None:
         frames = {
             "stand": _chibi(neck_y=50),
             "walk-a": self._walker(1),
-            "walk-b": _chibi(neck_y=50),
+            "walk-b": self._walker(2),
             "walk-c": self._walker(-1),
             "walk-d": self._walker(0),
         }
-        failures = check_leg_phase(frames)
-        self.assertFalse(any("opposite legs" in f for f in failures), failures)
+        self.assertEqual(check_leg_phase(frames), [])
 
-    def test_same_side_contacts_fail(self) -> None:
+    def test_one_foot_shuffle_fails_as_near_clones(self) -> None:
+        # Contacts that never trade legs are pixel-near-identical frames —
+        # the owner-rejected shuffle measured IoU 0.92-0.97 on its contact pair.
         frames = {
             "stand": _chibi(neck_y=50),
             "walk-a": self._walker(1),
-            "walk-b": _chibi(neck_y=50),
+            "walk-b": self._walker(2),
             "walk-c": self._walker(1),
             "walk-d": self._walker(0),
         }
         failures = check_leg_phase(frames)
-        self.assertTrue(any("opposite legs" in f for f in failures), failures)
+        self.assertTrue(any("near-clones" in f for f in failures), failures)
 
     def test_clone_pair_fails(self) -> None:
         walker = self._walker(1)

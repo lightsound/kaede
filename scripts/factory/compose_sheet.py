@@ -23,12 +23,17 @@ OPAQUE = 128
 GREEN = (0, 255, 0, 255)
 # Overlap below the neck so the chin composite doesn't leave a seam.
 CHIN_OVERLAP = 14
-# A walk frame's neck must sit where the stand's does, measured from the
-# ground (feet are planted; only the head bobs). A larger gap means the
-# structural detection latched onto something else (hair pinch, waist) and
-# the head composite would stack a second head — fail loud and retake
-# instead of committing a PR #94-class sheet.
-NECK_FROM_GROUND_TOLERANCE = 0.06
+# Walk bodies are scaled so the NECK-FROM-GROUND matches the stand's (feet
+# planted, head pasted at the stand's own scale): a master take carries its
+# own body proportions — the boy walk master's neck sits 7% higher from the
+# ground than the committed stand's (221 vs 193 at the 400 working height,
+# measured 2026-08-12) and extract/replace both inherit that frame verbatim
+# (運転知見 18), so a fixed-height normalization would grow the character
+# whenever he starts walking. The implied height ratio (scaled body height /
+# stand height) must stay in this band: a misdetected neck (hair pinch,
+# waist) implies a wildly wrong scale — fail the candidate loud and try the
+# next frame instead of compositing a PR #94-class sheet.
+NECK_SCALE_BAND = (0.80, 1.20)
 
 
 def key_pixel(r: int, g: int, b: int, a: int) -> tuple[int, int, int, int]:
@@ -347,24 +352,31 @@ def compose_walk_sheet(
         rejects: list[str] = []
         for candidate in candidates:
             body = trim_grounded(Image.open(candidate))
-            if body.height > target_h:
-                scale = target_h / body.height
-                body = body.resize(
-                    (max(1, round(body.width * scale)), target_h), Image.LANCZOS
-                )
             try:
                 body_neck = structure_neck(body)
             except SystemExit as exc:
                 rejects.append(f"{candidate.name}: {exc}")
                 body_neck = None
                 continue
-            neck_gap = abs((body.height - body_neck[1]) - stand_neck_from_ground)
-            if neck_gap > stand.height * NECK_FROM_GROUND_TOLERANCE:
+            # Neck-relative normalization (see NECK_SCALE_BAND): the body's
+            # neck-from-ground lands exactly on the stand's, so the pasted
+            # stand head keeps its own scale on every source proportion.
+            scale = stand_neck_from_ground / max(1, body.height - body_neck[1])
+            implied = scale * body.height / stand.height
+            if not NECK_SCALE_BAND[0] <= implied <= NECK_SCALE_BAND[1]:
                 # An arm swung across the chin fills the neck valley on some
                 # frames; the adjacent frame usually clears it.
-                rejects.append(f"{candidate.name}: neck {neck_gap}px off ground-relative")
+                rejects.append(
+                    f"{candidate.name}: neck-normalized height ratio "
+                    f"{implied:.2f} outside {NECK_SCALE_BAND}"
+                )
                 body_neck = None
                 continue
+            body = body.resize(
+                (max(1, round(body.width * scale)), max(1, round(body.height * scale))),
+                Image.LANCZOS,
+            )
+            body_neck = structure_neck(body)
             if candidate is not candidates[0]:
                 print(f"{pose}: fell back to {candidate.name}")
             break

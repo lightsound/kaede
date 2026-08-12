@@ -47,18 +47,20 @@ HEAD_NECK_ROW_DELTA_MAX = 3
 HEAD_WIDTH_RATIO_MAX = 1.05
 HEAD_PIXEL_RATIO_RANGE = (0.90, 1.05)
 
-# Leg-phase gates for swing (non-carry) walk cycles, calibrated on the
+# Leg-phase gate for swing (non-carry) walk cycles, calibrated on the
 # approved boy sheets vs the owner-rejected girl cycles (2026-08-09 round 3):
-# the two contact frames must read as OPPOSITE legs leading — foot-band
-# signals RELATIVE TO THE STAND of opposite sign and meaningful magnitude —
-# and walk-a/walk-d must not be near-clones (boy IoU 0.78; rejected girl
-# 0.92 — the "no midpoint" read). Stand-relative because the raw signal
-# carries a per-character offset (the girl's foot band measures +2.2 on her
-# symmetric idle stand where the boy's measures +0.4): approved swing
-# sheets measure a' ≈ -2.2..-2.6 / c' ≈ +2.4..+2.7, the rejected girl
-# a' +2.2 / c' 0.0. Carry sheets stride gently and are excluded
-# (approved carry measures same-sign a' +2.0 / c' +1.5).
-CONTACT_SIGNAL_MIN = 1.2
+# no two walk frames may be near-clones. The owner-caught failure shapes —
+# the one-foot shuffle (contacts that never trade legs) and the missing
+# stride midpoint — both manifest as a near-clone pair (rejected girl
+# contact pair IoU 0.92-0.97; approved sheets peak at 0.87, the boy master
+# cycle at 0.85). A foot-band-signal "opposite signs / wide spread" test
+# was tried twice and retired (2026-08-12): opposite contacts of a side-view
+# chibi are near-mirror silhouettes, so the signal's left/right separation is
+# a rendering accident — the committed boy's renders spread 5.2 while the
+# boy MASTER's genuine opposite contacts (verified by eye) spread 0.3, below
+# any line that still catches the rejected shuffle (2.2). Carry sheets
+# stride gently with near-static legs by spec and are excluded from this
+# gate (the run_lint rule).
 WALK_A_D_IOU_MAX = 0.90
 # body every frame; a walk frame must not grow a significant INTERIOR color
 # far from everything in the stand (interior_only — see
@@ -220,30 +222,17 @@ def silhouette_iou(a: Image.Image, b: Image.Image) -> float:
 
 
 def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
-    """Swing-walk cycle sanity: opposite contacts, distinct second passing.
+    """Swing-walk cycle sanity: every walk frame must be a distinct pose.
 
     The owner-facing failure shapes this encodes (both shipped past every
     other gate before being caught by eye): contacts whose legs never trade
     (one-foot shuffle) and a walk-d so close to walk-a that the second half
-    of the stride has no midpoint.
+    of the stride has no midpoint — both read as near-clone frame pairs.
     """
-    from factory.foot_phase import foot_signal
-
-    required = {"stand", "walk-a", "walk-c", "walk-d"}
+    required = {"walk-a", "walk-b", "walk-c", "walk-d"}
     if not required <= frames.keys():
         return []
-    failures = []
-    baseline = foot_signal(frames["stand"])
-    sig_a = foot_signal(frames["walk-a"]) - baseline
-    sig_c = foot_signal(frames["walk-c"]) - baseline
-    if abs(sig_a) < CONTACT_SIGNAL_MIN or abs(sig_c) < CONTACT_SIGNAL_MIN or (
-        (sig_a > 0) == (sig_c > 0)
-    ):
-        failures.append(
-            f"contacts do not read as opposite legs (foot signals "
-            f"walk-a {sig_a:+.1f} / walk-c {sig_c:+.1f}; need opposite signs, "
-            f"|signal| ≥ {CONTACT_SIGNAL_MIN})"
-        )
+    failures: list[str] = []
     # No pair of walk frames may be near-clones. Calibrated: the approved
     # swing sheets peak at IoU(b,d) 0.87; a same-leg contact pair measured
     # 0.97 and a scrambled substitution's (b,c) measured 0.95 — both read
