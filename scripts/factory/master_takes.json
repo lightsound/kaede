@@ -63,19 +63,19 @@
     "gangnam/girl": {
       "motion": "gangnam",
       "family": "girl",
-      "masterSha256": "7008596b8c0c5a8dc13cab78a77be94136b2fd428eff188d3eb3eb91fc985f88",
+      "masterSha256": "9649b9d2de918c055ca6e30d4e430d30f17b5fc87019d144a6214890600802e2",
       "sourceSha256": "88674e99b0d37d460aac8d0abc4c10c2d81f04fa6c6ac54dcfda84d62a876e5b",
       "frames": 79,
       "fps": 24.0,
-      "width": 864,
+      "width": 496,
       "height": 496,
       "loop": {
         "start": 0,
         "period": 35,
-        "loopMeanIou": 0.969,
-        "closureIou": 0.983
+        "loopMeanIou": 0.97,
+        "closureIou": 0.982
       },
-      "approval": "girl 系ダンスマスター確立ラウンド(factory-yield 2026-08-12)— boy 3D gangnam 緑参照(0667b6…)×girl 原本 stand セルの seedance 清書(crosschar 方式)。本 PR のオーナーマージ = 承認",
+      "approval": "girl 系ダンスマスター確立ラウンド(factory-yield 2026-08-12)— boy 3D gangnam 緑参照(0667b6…)×girl 原本 stand セルの seedance 清書(crosschar 方式)。16:9 生成(864×496)を内容中心の 496×496 に正方形クロップ(replace レシピの正方形 identity 前提に整合 — 全コマのシルエットはクロップ内・登録ゲート再合格)。本 PR のオーナーマージ = 承認",
       "registeredAt": "2026-08-12"
     }
   }
