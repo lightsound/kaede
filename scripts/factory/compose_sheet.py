@@ -207,26 +207,33 @@ def paste_head(
     return out
 
 
-# Rows whose silhouette diverges this much from the stand belong to the
-# striding legs; above them the carry body is static by spec. Measured on
-# the pants-carry edit: head/torso rows ≤ 0.05 (outline jitter ~1px),
+# Rows whose silhouette diverges this much from the donor cell belong to
+# the striding legs; above them the carry body is static by spec. Measured
+# on the pants-carry edit: head/torso rows ≤ 0.05 (outline jitter ~1px),
 # torso/mitten redraw noise 0.06–0.18, legs ≥ 0.28.
 CARRY_LEG_DIVERGENCE = 0.25
 
 
 def staticize_carry_sheet(sheet_path: Path) -> int:
-    """Unify a carry sheet's static-region shading across cells.
+    """Unify a carry sheet's static-region shading across WALK cells.
 
-    The carry spec holds the near arm, mitten and torso perfectly still —
-    only the legs move — yet a whole-sheet edit redraws each cell's belly
-    shading slightly differently, which flickers at play speed (owner
-    reject 2026-08-09). Fix: an INTERIOR COLOR TRANSPLANT — above the row
-    where the legs start diverging, every walk-cell pixel that is opaque
-    in both the walk cell and the (neck-aligned) stand takes the stand's
-    RGB. Each cell keeps its own alpha and outline, so no silhouette seam
-    is introduced (a whole-region replacement was measured to step the
-    outline by up to 18% of the row width at the junction). Returns the
-    leg-seam row (sheet-cell space) for logging.
+    The carry spec holds the arms and torso still while walking — only the
+    legs move — yet a whole-sheet edit redraws each cell's belly shading
+    slightly differently, which flickers at play speed (owner reject
+    2026-08-09). Fix: an INTERIOR COLOR TRANSPLANT — above the row where
+    the legs start diverging, every walk-cell pixel that is opaque in both
+    the walk cell and the (neck-aligned) donor takes the donor's RGB. Each
+    cell keeps its own alpha and outline, so no silhouette seam is
+    introduced (a whole-region replacement was measured to step the outline
+    by up to 18% of the row width at the junction).
+
+    The donor is WALK-A, not the stand (changed 2026-08-12, the preset-
+    motion carry): the master-lane carry walk carries with both arms out
+    front while the committed stand keeps the near-arm mitten idle, so the
+    stand's upper body no longer matches the walk cells'. The flicker the
+    transplant kills is between consecutive WALK frames at play speed; the
+    stand↔walk transition is a pose change and reads as one. Returns the
+    leg-seam row (donor-cell space) for logging.
     """
     sheet = Image.open(sheet_path).convert("RGBA")
     cell_w = sheet.width // 5
@@ -236,14 +243,15 @@ def staticize_carry_sheet(sheet_path: Path) -> int:
     ]
     trimmed = [c.crop(content_bbox(c)) for c in cells]
     stand = trimmed[0]
-    stand_neck = structure_neck(stand)
+    donor = trimmed[1]
+    donor_neck = structure_neck(donor)
 
-    # Align every walk cell to the stand by its structural neck; the carry
+    # Align the other walk cells to the donor by structural neck; the carry
     # pose keeps the neck static so offsets are a couple of pixels at most.
     aligned: list[tuple[Image.Image, int, int]] = []
-    for body in trimmed[1:]:
+    for body in trimmed[2:]:
         neck = structure_neck(body)
-        aligned.append((body, neck[0] - stand_neck[0], neck[1] - stand_neck[1]))
+        aligned.append((body, neck[0] - donor_neck[0], neck[1] - donor_neck[1]))
 
     def mask_row(img: Image.Image, y: int, dx: int) -> set[int]:
         if not 0 <= y < img.height:
@@ -252,44 +260,54 @@ def staticize_carry_sheet(sheet_path: Path) -> int:
         return {x - dx for x in range(img.width) if alpha[x, y] >= OPAQUE}
 
     def row_diverges(y: int) -> bool:
-        stand_row = mask_row(stand, y, 0)
+        donor_row = mask_row(donor, y, 0)
         for body, dx, dy in aligned:
             body_row = mask_row(body, y + dy, dx)
-            union = stand_row | body_row
+            union = donor_row | body_row
             if (
                 len(union) >= 10
-                and len(stand_row ^ body_row) / len(union) > CARRY_LEG_DIVERGENCE
+                and len(donor_row ^ body_row) / len(union) > CARRY_LEG_DIVERGENCE
             ):
                 return True
         return False
 
-    seam = stand.height
-    for y in range(stand.height - 1):
-        # Two consecutive divergent rows = the legs really start here.
-        if row_diverges(y) and row_diverges(y + 1):
+    # The legs are the BOTTOM contiguous divergent run (small gaps allowed —
+    # mirrored contacts can momentarily overlap). Scanning top-down for the
+    # first divergent pair instead found hair-top noise rows: a nano sheet
+    # edit jitters each cell's head outline by a few px, and on a 10px-wide
+    # hair-tip row that already crosses the divergence line (measured on the
+    # preset-motion pants-carry, 2026-08-12 — seam misdetected at row 1).
+    seam = donor.height
+    gap = 0
+    for y in range(donor.height - 1, -1, -1):
+        if row_diverges(y):
             seam = y
-            break
-    if seam < stand.height * 0.55:
+            gap = 0
+        else:
+            gap += 1
+            if gap > 3:
+                break
+    if seam < donor.height * 0.55:
         raise SystemExit(
-            f"carry staticize: silhouettes diverge from row {seam}/{stand.height} "
+            f"carry staticize: silhouettes diverge from row {seam}/{donor.height} "
             "— this sheet is not upper-body-static; refusing to normalize"
         )
 
-    stand_px = stand.load()
-    out_cells: list[Image.Image] = [stand]
+    donor_px = donor.load()
+    out_cells: list[Image.Image] = [stand, donor]
     for body, dx, dy in aligned:
         merged = body.copy()
         merged_px = merged.load()
         for y in range(min(merged.height, seam + dy)):
             sy = y - dy
-            if not 0 <= sy < stand.height:
+            if not 0 <= sy < donor.height:
                 continue
             for x in range(merged.width):
                 sx = x - dx
-                if not 0 <= sx < stand.width:
+                if not 0 <= sx < donor.width:
                     continue
                 r, g, b, a = merged_px[x, y]
-                sr, sg, sb, sa = stand_px[sx, sy]
+                sr, sg, sb, sa = donor_px[sx, sy]
                 if a >= OPAQUE and sa >= OPAQUE:
                     merged_px[x, y] = (sr, sg, sb, a)
         out_cells.append(merged)

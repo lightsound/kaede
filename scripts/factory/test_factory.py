@@ -297,16 +297,29 @@ class LegPhaseTests(unittest.TestCase):
 
 class StaticizeTests(unittest.TestCase):
     def _carry_sheet(self, path: Path) -> None:
-        """5 green cells: identical torso, striding legs, drifted walk bellies."""
+        """5 green cells: striding legs, per-cell drifted walk bellies.
+
+        The walk cells' bellies each drift to their OWN color (the
+        whole-sheet-edit flicker); the transplant must unify them onto
+        walk-a's shading. The stand keeps a distinct color untouched — the
+        preset-motion carry stand poses differently from the walk cells, so
+        it is no longer the donor.
+        """
         cell_w, cell_h = 120, 120
         sheet = Image.new("RGB", (cell_w * 5, cell_h), (0, 255, 0))
+        bellies = [
+            (240, 200, 160, 255),  # stand — its own idle shading
+            (200, 150, 150, 255),  # walk-a — the donor
+            (190, 160, 140, 255),  # walk-b..d — per-cell drift to unify
+            (210, 140, 155, 255),
+            (195, 155, 145, 255),
+        ]
         for i in range(5):
             body = Image.new("RGBA", (64, 100), (0, 0, 0, 0))
             draw = ImageDraw.Draw(body)
             draw.ellipse((8, 4, 56, 54), fill=(240, 200, 160, 255))  # head
             draw.rectangle((28, 50, 36, 56), fill=(240, 200, 160, 255))  # neck
-            belly = (200, 150, 150, 255) if i else (240, 200, 160, 255)
-            draw.rectangle((20, 56, 44, 78), fill=belly)  # torso (drifts on walks)
+            draw.rectangle((20, 56, 44, 78), fill=bellies[i])  # torso
             stride = [0, 6, 0, -6, 0][i]
             draw.rectangle((22 + stride, 78, 30 + stride, 98), fill=(240, 200, 160, 255))
             draw.rectangle((34 - stride, 78, 42 - stride, 98), fill=(240, 200, 160, 255))
@@ -322,15 +335,18 @@ class StaticizeTests(unittest.TestCase):
             seam = staticize_carry_sheet(sheet_path)
             out = Image.open(sheet_path).convert("RGBA")
             cell_w = out.width // 5
-            # Sample a torso pixel per cell: all must now be the stand color.
+            # Sample a torso pixel per cell.
             def torso_sample(i: int) -> tuple[int, int, int]:
                 cell = chroma_key(out.crop((i * cell_w, 0, (i + 1) * cell_w, out.height)))
                 body = cell.crop(content_bbox(cell))
                 return body.getpixel((body.width // 2, int(body.height * 0.68)))[:3]
 
-            stand_color = torso_sample(0)
-            for i in range(1, 5):
-                self.assertEqual(torso_sample(i), stand_color, f"cell {i}")
+            # Walk cells all take walk-a's shading; the stand keeps its own.
+            donor_color = torso_sample(1)
+            for i in range(2, 5):
+                self.assertEqual(torso_sample(i), donor_color, f"cell {i}")
+            self.assertEqual(torso_sample(0), (240, 200, 160))
+            self.assertNotEqual(donor_color, (240, 200, 160))
             # Legs (below the seam) keep their per-cell stride.
             self.assertGreater(seam, 0)
 

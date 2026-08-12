@@ -15,13 +15,13 @@
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry/sheet-original.png",
   "vars": {
-    "outfit": "turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — and keep the bent near arm and its round fingerless mitten hand EXACTLY as drawn, just bare skin instead of a sleeve on that arm"
+    "outfit": "turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the arms held out in front on the walking frames), just bare skin instead of sleeves"
   },
   "originals": {
     "../avatar-carry/sheet-original.png": "766bc09aa34d2a8d8ba840a65c28d28821c97baeb888b5454d3fc0bbdd5b9973",
-    "sheet-original.png": "7aaf9b16af829fa5cc9f276b2b1ab559eb413426322af74c0a89b11605b2e29a"
+    "sheet-original.png": "98384cf7b0895f7ffc4bb83c3c516f985bc8c0a15d130850ebe607921f6d8fd4"
   },
-  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-09): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — and keep the bent near arm and its round fingerless mitten hand EXACTLY as drawn, just bare skin instead of a sleeve on that arm. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the arms held out in front on the walking frames), just bare skin instead of sleeves. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "lint": {
     "matchStand": "avatar-pants/manifest.json"
   }
