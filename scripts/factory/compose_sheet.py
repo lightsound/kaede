@@ -127,24 +127,62 @@ def cut_head(stand: Image.Image, neck: tuple[int, int]) -> tuple[Image.Image, in
     return head, neck_y
 
 
+# A component above the neck row is the OLD HEAD if it reaches up past
+# this fraction of the neck height; body parts that merely poke above the
+# row (a leaning stride's shoulder line rises a few px) stay well below it.
+HEAD_REACH_FRAC = 0.6
+
+
+def erase_old_head(body: Image.Image, neck_y: int) -> Image.Image:
+    """Erase the old head above the neck row, KEEPING body pixels there.
+
+    A full-row erase above the neck opened a 1-2px neck gap on the girl's
+    walk-c (owner-reported, ①d round 2): the forward-leaning stride's
+    shoulder line rises above the neck row, the erase ate it, and the head
+    crop's chin overlap could not reach it. Component erase fixes it: only
+    the connected component(s) that reach the head zone (HEAD_REACH_FRAC)
+    are the old head; shoulder bumps stay. Measured caveat, deliberate:
+    hair hanging BELOW the neck row (the girl's bob tips) is not erased —
+    the replacement head's own below-neck hair pastes over it."""
+    import numpy as np
+    from scipy import ndimage
+
+    rgba = np.asarray(body.convert("RGBA")).copy()
+    above = rgba[:neck_y, :, 3] > 0
+    labels, count = ndimage.label(above)
+    if count:
+        erase = np.zeros_like(above)
+        for i, bounds in enumerate(ndimage.find_objects(labels)):
+            if bounds is not None and bounds[0].start < neck_y * HEAD_REACH_FRAC:
+                erase |= labels == i + 1
+        rgba[:neck_y][erase] = 0
+    return Image.fromarray(rgba)
+
+
 def paste_head(
     body: Image.Image, head: Image.Image, stand_neck_y: int, body_neck: tuple[int, int]
 ) -> Image.Image:
     """REPLACE the body's head with the stand head at the body's neck anchor.
 
-    Erase-then-paste: everything above the body's neck row is cleared before
-    the stand head lands there. Pasting alone (PR #94) leaves the video-drawn
-    head visible wherever the stand head's alpha does not cover it — the
-    double-head reject on avatar.boy-pants walk-a and the bob-hair remnants
-    on avatar.girl-basic.
+    Erase-then-paste: the old-head component above the body's neck row is
+    cleared before the stand head lands there. Pasting alone (PR #94) leaves
+    the video-drawn head visible wherever the stand head's alpha does not
+    cover it — the double-head reject on avatar.boy-pants walk-a and the
+    bob-hair remnants on avatar.girl-basic.
+
+    Composites with alpha_composite, never self-masked paste:
+    `paste(im, box, im)` squares the alpha of every anti-aliased pixel
+    (α86→29, measured in bench_head_swap), which collapsed the girl's neck
+    junction into the semi-transparent bridge art_lint's junction gate now
+    rejects (①d 論点 6). The erase is by component (erase_old_head), not by
+    full rows: the full-row erase ate the rising shoulder line and opened
+    the walk-c neck gap.
     """
     bx, by = body_neck
     # Head image's neck is at y=stand_neck_y within the head crop.
     paste_x = bx - head.width // 2
     paste_y = by - stand_neck_y
-    out = body.copy()
-    if by > 0:
-        out.paste((0, 0, 0, 0), (0, 0, out.width, by))
+    out = erase_old_head(body, by) if by > 0 else body.copy()
     # Ensure canvas is large enough for a bobbing head.
     pad_top = max(0, -paste_y)
     pad_left = max(0, -paste_x)
@@ -156,11 +194,11 @@ def paste_head(
             (out.width + pad_left + pad_right, out.height + pad_top + pad_bottom),
             (0, 0, 0, 0),
         )
-        canvas.paste(out, (pad_left, pad_top), out)
+        canvas.alpha_composite(out, (pad_left, pad_top))
         out = canvas
         paste_x += pad_left
         paste_y += pad_top
-    out.paste(head, (paste_x, paste_y), head)
+    out.alpha_composite(head, (paste_x, paste_y))
     return out
 
 
@@ -261,11 +299,15 @@ def staticize_carry_sheet(sheet_path: Path) -> int:
 
 
 def cell_on_green(frame: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
-    """Center-horizontally, feet on bottom, on a solid green cell."""
+    """Center-horizontally, feet on bottom, on a solid green cell.
+
+    alpha_composite, not self-masked paste — same α-squared rule as
+    paste_head (identical RGB on the opaque green, but the rule is uniform
+    so no future caller inherits the decay by copy-paste)."""
     cell = Image.new("RGBA", (cell_w, cell_h), GREEN)
     x = (cell_w - frame.width) // 2
     y = cell_h - frame.height
-    cell.paste(frame, (x, max(0, y)), frame)
+    cell.alpha_composite(frame.convert("RGBA"), (x, max(0, y)))
     return cell
 
 

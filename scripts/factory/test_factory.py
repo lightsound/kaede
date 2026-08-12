@@ -23,6 +23,7 @@ from factory.loop_scan import find_loop, verify_loop
 from factory.art_lint import (
     check_head_consistency,
     check_leg_phase,
+    check_neck_junction,
     check_palette_drift,
     lint_avatar,
     silhouette_iou,
@@ -196,6 +197,33 @@ class ArtLintTests(unittest.TestCase):
         ImageDraw.Draw(drifted).rectangle((20, 56, 44, 78), fill=(255, 0, 200, 255))
         self.assertEqual(check_palette_drift(stand, stand), [])
         self.assertNotEqual(check_palette_drift(stand, drifted), [])
+
+    def test_neck_junction_passes_solid_bridge(self) -> None:
+        # The chibi's neck pinch is a fully opaque 9px bridge — healthy.
+        self.assertEqual(check_neck_junction(_chibi(neck_y=50), [32, 50]), [])
+
+    def test_neck_junction_catches_semi_transparent_bridge(self) -> None:
+        # The owner-rejected girl walk junction: a wide α130–170 halo around
+        # a thin solid core (soft/solid well past the 1.5 calibration line).
+        frame = _chibi(neck_y=50)
+        for y in range(50, 57):
+            for x in range(22, 44):
+                r, g, b, a = frame.getpixel((x, y))
+                if a and not 30 <= x <= 34:
+                    frame.putpixel((x, y), (r, g, b, 150))
+        failures = check_neck_junction(frame, [32, 50])
+        self.assertTrue(any("semi-transparent bridge" in f for f in failures))
+
+    def test_neck_junction_catches_gap(self) -> None:
+        # The girl walk-c shape: the junction row is fully transparent at
+        # the anchor column — a literal head-body disconnect.
+        frame = _chibi(neck_y=50)
+        for y in range(50, 54):
+            for x in range(frame.width):
+                r, g, b, _a = frame.getpixel((x, y))
+                frame.putpixel((x, y), (r, g, b, 0))
+        failures = check_neck_junction(frame, [32, 50])
+        self.assertTrue(any("gap" in f for f in failures))
 
     def test_silhouette_iou_orders_similarity(self) -> None:
         a = _chibi(neck_y=50)

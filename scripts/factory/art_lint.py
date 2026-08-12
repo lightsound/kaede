@@ -260,6 +260,78 @@ def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
     return failures
 
 
+# Neck-junction gates for walk cells (①d 論点 6 — the girl neck-break
+# reproduction, 2026-08-12). The junction is judged row by row over the band
+# around the recorded neck anchor: the contiguous alpha run containing the
+# anchor column must not be a semi-transparent bridge. Two calibrated
+# signals on the committed sheets:
+# - soft/solid ratio (soft = alpha 64..229, solid = alpha ≥ 230) of the
+#   worst band row: the owner-rejected girl walk cells measure 1.89-3.17
+#   (10-19 semi-transparent px over a 4-9px solid core), every boy-family
+#   walk cell ≤ 1.33. The self-masked-paste alpha-squared decay
+#   (bench_head_swap: α230 → 207) collapses the solid count the same way,
+#   so this gate also enforces the alpha_composite rule end to end.
+# - effective alpha width (Σα/255 of the run): the girl walk-c junction is
+#   fully transparent at the anchor column (E = 0 — a literal gap); healthy
+#   cells measure ≥ 7.7.
+# Stand cells are exempt: the junction flicker is a play-speed artifact of
+# the walk cycle, and the committed stands are the identity anchors every
+# other lane measures against.
+JUNCTION_BAND = (-4, 2)
+JUNCTION_SOFT_ALPHA = 64
+JUNCTION_SOLID_ALPHA = 230
+JUNCTION_SOFT_RATIO_MAX = 1.5
+JUNCTION_WIDTH_MIN = 3.0
+
+
+def _junction_run(row: list[int], nx: int) -> list[int]:
+    """The contiguous alpha≥SOFT run containing (or within 3px of) column nx."""
+    w = len(row)
+    if row[nx] < JUNCTION_SOFT_ALPHA:
+        for d in range(1, 4):
+            if nx - d >= 0 and row[nx - d] >= JUNCTION_SOFT_ALPHA:
+                nx -= d
+                break
+            if nx + d < w and row[nx + d] >= JUNCTION_SOFT_ALPHA:
+                nx += d
+                break
+        else:
+            return []
+    lo = hi = nx
+    while lo - 1 >= 0 and row[lo - 1] >= JUNCTION_SOFT_ALPHA:
+        lo -= 1
+    while hi + 1 < w and row[hi + 1] >= JUNCTION_SOFT_ALPHA:
+        hi += 1
+    return row[lo : hi + 1]
+
+
+def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
+    """The head-body junction must be an opaque bridge, not a translucent one."""
+    alpha = frame.getchannel("A").load()
+    nx, ny = neck
+    if not 0 <= nx < frame.width:
+        return [f"neck anchor x={nx} outside the frame"]
+    failures: list[str] = []
+    for y in range(max(0, ny + JUNCTION_BAND[0]), min(frame.height, ny + JUNCTION_BAND[1] + 1)):
+        run = _junction_run([alpha[x, y] for x in range(frame.width)], nx)
+        effective = sum(run) / 255.0
+        solid = sum(1 for a in run if a >= JUNCTION_SOLID_ALPHA)
+        soft = sum(1 for a in run if a < JUNCTION_SOLID_ALPHA)
+        if effective < JUNCTION_WIDTH_MIN:
+            failures.append(
+                f"neck junction row {y} is a gap (effective width "
+                f"{effective:.1f}px < {JUNCTION_WIDTH_MIN}) — head disconnects "
+                f"from the body at the anchor column"
+            )
+        elif soft / max(solid, 1) > JUNCTION_SOFT_RATIO_MAX:
+            failures.append(
+                f"neck junction row {y} is a semi-transparent bridge "
+                f"(soft/solid {soft}/{solid} > {JUNCTION_SOFT_RATIO_MAX}) — "
+                f"reads as a neck break at play speed"
+            )
+    return failures
+
+
 # Hair-blob scale verification tolerance, on sqrt(pixel count). Generative
 # takes redraw the hair slightly (the wave take grew it ~9% linear —
 # measured), so the tolerance is looser than a resize error would need but
@@ -379,6 +451,10 @@ def lint_avatar(
             ]
 
         recorded_neck = pose.get("anchors", {}).get("neck")
+        if name.startswith("walk") and recorded_neck:
+            failures += [
+                f"{name}: {f}" for f in check_neck_junction(frame, recorded_neck)
+            ]
         try:
             detected_neck = list(structure_neck(frame))
         except SystemExit as exc:
