@@ -31,6 +31,8 @@
       "walk-b": 24,
       "walk-c": 30,
       "walk-d": 36
-    }
+    },
+    "headBobGain": 4.0,
+    "headBobPhase": 1
   }
 }

@@ -67,7 +67,10 @@ python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標�
   残らない。
 - **首ボブ**（差し戻し対応 2026-08-12 — 「顔が固まっている」）: スケールは
   サイクル一律（中央値）でマスター実在の上下ボブを通し、compose が
-  垂直ボブをゲイン 4 に増幅（≈3px p-p @96px）。**水平の頭ずらしは封印**
+  `master_takes.json` の**マスター別ゲイン/位相**で増幅する。通常 boy は
+  gain 4（≈3px p-p @96px）、素の振幅が 2 倍ある heavy carry は gain 2、
+  light carry は gain 4。girl は選定 4 コマの首系列が boy と逆相だったため
+  phase −1 で全体振幅を保ったまま反転する。**水平の頭ずらしは封印**
   （チビ頭がセル bbox 両端を規定 → 中心揃え＋下辺中央アンカーで全体
   平行移動に化け、顔は動かず足が滑る — 実測済み。compose_sheet の
   HEAD_SWAY_GAIN 参照）。
@@ -89,7 +92,9 @@ python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標�
   — 編集レーンの IoU ゲートが構築保持を証明）。旧 carry の staticize
   （上半身の内部色移植）は v2 マスターで腕が自然に動くため**撤去**
   （order の `staticUpperBody` で opt-in のみ — 顔 RGB の移植が二重顔の
-  原因だった）。
+  原因だった）。`handAnchors` は各 carry シートの各コマで実測し、lint は
+  アンカー左右の支持画素を検査する。heavy の把持中心は両手の**間**なので
+  アンカー画素そのものが透明でもよい（外側の腕端は不合格）。
 
 ## 工程
 

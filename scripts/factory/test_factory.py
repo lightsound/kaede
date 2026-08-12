@@ -21,6 +21,7 @@ from factory.anchors import structure_hand_carry, structure_neck
 from factory.blink import eye_openness_score, phase_candidates, select_cells
 from factory.loop_scan import find_loop, verify_loop
 from factory.art_lint import (
+    check_hand_anchor,
     check_head_consistency,
     check_leg_phase,
     check_neck_junction,
@@ -33,6 +34,7 @@ from factory.compose_sheet import (
     chroma_key_greenwear,
     content_bbox,
     cut_head,
+    head_bob_sway_y,
     paste_head,
     staticize_carry_sheet,
 )
@@ -107,6 +109,16 @@ class AnchorTests(unittest.TestCase):
         # Owner-measured mitten top-center is (26, 64); allow a few px.
         self.assertTrue(abs(x - 26) <= 3 and abs(y - 64) <= 3, f"hand={(x, y)}")
 
+    def test_carry_point_accepts_two_hands_and_rejects_outer_edge(self) -> None:
+        frame = Image.new("RGBA", (64, 100), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(frame)
+        # Two palms around an intentionally transparent item center.
+        draw.ellipse((18, 58, 30, 70), fill=(240, 200, 160, 255))
+        draw.ellipse((34, 58, 46, 70), fill=(240, 200, 160, 255))
+        self.assertEqual(check_hand_anchor(frame, [32, 64]), [])
+        failures = check_hand_anchor(frame, [45, 64])
+        self.assertTrue(any("silhouette edge" in failure for failure in failures))
+
 
 class FootPhaseTests(unittest.TestCase):
     def test_foot_signal_sign_follows_leading_foot(self) -> None:
@@ -167,10 +179,13 @@ class ArtLintTests(unittest.TestCase):
             "avatar",
             "avatar-red",
             "avatar-carry",
+            "avatar-carry-light",
             "avatar-red-carry",
+            "avatar-red-carry-light",
             "avatar-girl",
             "avatar-pants",
             "avatar-pants-carry",
+            "avatar-pants-carry-light",
         ):
             order_path = root / name / "order.json"
             order = json.loads(order_path.read_text())
@@ -522,6 +537,22 @@ class GestureCellGateTests(unittest.TestCase):
 
 
 class ComposeTests(unittest.TestCase):
+    def test_signed_head_bob_gain_controls_total_motion(self) -> None:
+        # The body already moves its head by -delta once. The helper returns
+        # only the additional paste offset, so gain 4 must land on ±4× the
+        # raw movement and phase -1 must reverse the total, not halve it.
+        delta = 2.0
+        body_motion = -delta
+        normal = body_motion + head_bob_sway_y(delta, 400, gain=4.0, phase=1)
+        inverted = body_motion + head_bob_sway_y(delta, 400, gain=4.0, phase=-1)
+        self.assertEqual(normal, -8)
+        self.assertEqual(inverted, 8)
+
+    def test_master_specific_gain_matches_raw_amplitudes(self) -> None:
+        # Measured at the compose working scale: boy raw p-p=3px, heavy
+        # carry raw p-p=6px. Gains 4 and 2 yield the same 12px total p-p.
+        self.assertEqual(3 * 4.0, 6 * 2.0)
+
     def test_paste_head_replaces_the_video_head(self) -> None:
         # A body whose own (video-drawn) head is wider than the stand head:
         # paste alone leaves it peeking out (the PR #94 double-head /

@@ -12,17 +12,17 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [46, 51],
-    "walk-b": [46, 58],
-    "walk-c": [47, 53],
-    "walk-d": [47, 58]
+    "walk-a": [39, 50],
+    "walk-b": [39, 56],
+    "walk-c": [40, 53],
+    "walk-d": [40, 57]
   },
   "references": ["../avatar-carry/sheet-original.png"],
   "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the arms held out in front on the walking frames — hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "handLayer": true,
   "originals": {
-    "../avatar-carry/sheet-original.png": "109b51c34afb80b91ec745554dc50078b7fdede597cae35a98e37c991d45e0bf",
-    "sheet-original.png": "cf8e8024095783923185f8e983944a9b3f6f859623297d608df83a1d8f341a33"
+    "../avatar-carry/sheet-original.png": "c4c6c4d6858b3da161c79bab4769d52d7836d0d5d9358fc896eecaaa31bbd65c",
+    "sheet-original.png": "f0b82f6385e1cde61d730aa5bafcfcc17004cb98252a0c965df49d49fb708a23"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry/sheet-original.png",

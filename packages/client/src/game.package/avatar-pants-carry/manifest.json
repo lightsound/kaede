@@ -4,12 +4,12 @@
   "name": "男の子（パンツ・持ち歩き）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#9c5526", "#f8d2a4", "#f6d1a4", "#fdd5a6", "#985529"],
+  "palette": ["#f8d9b1", "#fbd99d", "#fac999", "#fbd3a5", "#9b572a"],
   "source": {
     "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the arms held out in front on the walking frames), just bare skin instead of sleeves. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
     "referenceHashes": [
       "0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e",
-      "109b51c34afb80b91ec745554dc50078b7fdede597cae35a98e37c991d45e0bf"
+      "c4c6c4d6858b3da161c79bab4769d52d7836d0d5d9358fc896eecaaa31bbd65c"
     ]
   },
   "poses": {
@@ -23,34 +23,34 @@
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [52, 92],
+      "size": [52, 94],
       "anchors": {
         "neck": [30, 47],
-        "hand": [46, 51]
+        "hand": [39, 50]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [52, 100],
+      "size": [52, 98],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [46, 58]
+        "neck": [26, 48],
+        "hand": [39, 56]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [53, 92],
+      "size": [53, 94],
       "anchors": {
         "neck": [28, 48],
-        "hand": [47, 53]
+        "hand": [40, 53]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [53, 100],
+      "size": [53, 98],
       "anchors": {
         "neck": [26, 49],
-        "hand": [47, 58]
+        "hand": [40, 57]
       }
     }
   },

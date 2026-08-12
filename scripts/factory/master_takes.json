@@ -27,6 +27,8 @@
     "walk/boy": {
       "motion": "walk",
       "family": "boy",
+      "headBobGain": 4.0,
+      "headBobPhase": 1,
       "masterSha256": "672dc63cf6ffc3fc263f9f1724e089f48bb6d37dc41aee44e9651e80923fc956",
       "sourceSha256": "d83d580bd1932de01438f9f179ebef7d8fd9752754f1fded51b07a429f20efd8",
       "frames": 62,
@@ -45,6 +47,8 @@
     "walk/girl": {
       "motion": "walk",
       "family": "girl",
+      "headBobGain": 4.0,
+      "headBobPhase": -1,
       "masterSha256": "0afe6d1cc2afe39dae23297f005b94668de8b8583cfe2ebb287479be105bd0dd",
       "sourceSha256": "58067618c73a0a3ecd95733d84a2bca34c9177a74ac22b8cf795877f651c35d3",
       "frames": 85,
@@ -81,6 +85,8 @@
     "walk-carry/boy": {
       "motion": "walk-carry",
       "family": "boy",
+      "headBobGain": 2.0,
+      "headBobPhase": 1,
       "masterSha256": "b4102f1f732e319bf1be9416ed4f8451f4bf3bf98d1a1de8338ebe189fb9de66",
       "sourceSha256": "83ab5d1518f9883e0581dc84e6a3be1b5ecc20d919fcce78972f18b74fc568e0",
       "frames": 97,
@@ -99,6 +105,8 @@
     "walk-carry-light/boy": {
       "motion": "walk-carry-light",
       "family": "boy",
+      "headBobGain": 4.0,
+      "headBobPhase": 1,
       "masterSha256": "0df88e422cd3fc1697da893170b5d59067a4586b3e9a96a190c6338dc9887c0b",
       "sourceSha256": "95ef6714db50c0e82e87479096fc00ffd0e74c50f1475503fc0d909116f4f827",
       "frames": 69,

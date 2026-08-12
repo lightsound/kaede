@@ -34,11 +34,12 @@ CHIN_OVERLAP = 14
 # waist) implies a wildly wrong scale — fail the candidate loud and try the
 # next frame instead of compositing a PR #94-class sheet.
 NECK_SCALE_BAND = (0.80, 1.20)
-# Head bob exaggeration gains (see compose_walk_sheet pass 2): the
-# master's per-frame head deviation from the cycle mean is multiplied by
-# these before the head is pasted. Calibrated 2026-08-12 on the boy walk
-# master (raw bob ≈ ±0.6px at 96px cell scale; gain 4 lands the readable
-# ~3px peak-to-peak the owner-era sheets showed as face motion).
+# Default head bob profile (see compose_walk_sheet pass 2): each walk master
+# may override the gain and phase in master_takes.json. A single global gain
+# is wrong because the heavy-carry master has twice the boy master's raw
+# neck amplitude (6px vs 3px at the 400px working scale). The boy default was
+# calibrated 2026-08-12: gain 4 turns its sub-pixel game-scale movement into
+# a readable ~3px peak-to-peak bob.
 # HORIZONTAL sway is structurally disabled (gain 1): the chibi head spans
 # the trimmed cell's full width, so bbox-centering + the client's
 # bottom-center sprite anchor cancel any head x-offset into a body/feet
@@ -47,6 +48,7 @@ NECK_SCALE_BAND = (0.80, 1.20)
 # (it changes the trimmed frame height over the fixed ground line).
 HEAD_SWAY_GAIN = 1.0
 HEAD_BOB_GAIN = 4.0
+HEAD_BOB_PHASE = 1
 HEAD_SWAY_CAP_FRAC = 0.045
 
 
@@ -381,12 +383,42 @@ def cell_on_green(frame: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
     return cell
 
 
+def head_bob_sway_y(
+    delta_neck_from_ground: float,
+    body_height: int,
+    *,
+    gain: float = HEAD_BOB_GAIN,
+    phase: int = HEAD_BOB_PHASE,
+) -> int:
+    """Head-paste Y offset for a master's signed, cycle-relative bob.
+
+    The unshifted paste already follows the body's raw neck deviation once.
+    Therefore the added offset must apply ``signed_gain - 1`` rather than
+    ``signed_gain``. ``phase=-1`` reverses the TOTAL head motion while
+    preserving its requested amplitude; merely negating the old
+    ``gain - 1`` term would leave the body's built-in one copy and shrink a
+    gain-4 inverse to gain 2.
+    """
+    if gain < 0:
+        raise ValueError(f"head bob gain must be non-negative, got {gain}")
+    if phase not in (-1, 1):
+        raise ValueError(f"head bob phase must be -1 or 1, got {phase}")
+    cap = body_height * HEAD_SWAY_CAP_FRAC
+    extra_y = max(
+        -cap,
+        min(cap, (phase * gain - 1) * delta_neck_from_ground),
+    )
+    return round(-extra_y)
+
+
 def compose_walk_sheet(
     stand_path: Path,
     walk_paths: dict[str, Path],
     out_path: Path,
     *,
     cell_size: int = 380,
+    head_bob_gain: float = HEAD_BOB_GAIN,
+    head_bob_phase: int = HEAD_BOB_PHASE,
 ) -> dict[str, tuple[int, int]]:
     """Build sheet-original.png; return per-pose structure neck anchors (pre-scale)."""
     stand = trim_grounded(Image.open(stand_path))
@@ -488,9 +520,14 @@ def compose_walk_sheet(
     for (pose, body, neck), (cx, _), nfg in zip(resized, cents, nfgs):
         cap = body.height * HEAD_SWAY_CAP_FRAC
         extra_x = max(-cap, min(cap, (HEAD_SWAY_GAIN - 1) * (cx - mean_cx)))
-        extra_y = max(-cap, min(cap, (HEAD_BOB_GAIN - 1) * (nfg - mean_nfg)))
+        sway_y = head_bob_sway_y(
+            nfg - mean_nfg,
+            body.height,
+            gain=head_bob_gain,
+            phase=head_bob_phase,
+        )
         composited = paste_head(
-            body, head, stand_neck_y, neck, sway=(round(extra_x), round(-extra_y))
+            body, head, stand_neck_y, neck, sway=(round(extra_x), sway_y)
         )
         # Re-trim after paste (head may extend the bbox).
         composited = trim_grounded(composited)

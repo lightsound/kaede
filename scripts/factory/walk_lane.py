@@ -51,7 +51,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from factory import fal_client  # noqa: E402
-from factory.compose_sheet import chroma_key, compose_walk_sheet, content_bbox  # noqa: E402
+from factory.compose_sheet import (  # noqa: E402
+    HEAD_BOB_GAIN,
+    HEAD_BOB_PHASE,
+    chroma_key,
+    compose_walk_sheet,
+    content_bbox,
+)
 from factory.cycle_scan import POSES, scan_clip  # noqa: E402
 from factory.loop_scan import silhouette_mask, verify_loop  # noqa: E402
 from factory.replace_lane import (  # noqa: E402
@@ -73,6 +79,24 @@ ASSET_ROOT = ROOT / "packages/client/src/game.package"
 # the committed lane's regime (every cell at one working scale).
 WORK_HEIGHT = 400
 DEFAULT_RESOLUTION = "480p"
+
+
+def bob_profile(order: dict, master_meta: dict) -> tuple[float, int]:
+    """Resolve the reproducible per-sheet bob profile.
+
+    The master ledger owns the calibrated default because raw neck amplitude
+    is a property of the motion take. Once produced, walkLane records the
+    effective values so an existing sheet never changes when another master
+    is recalibrated later.
+    """
+    lane = order.get("walkLane") or {}
+    gain = lane.get("headBobGain", master_meta.get("headBobGain", HEAD_BOB_GAIN))
+    phase = lane.get("headBobPhase", master_meta.get("headBobPhase", HEAD_BOB_PHASE))
+    if isinstance(gain, bool) or not isinstance(gain, (int, float)) or gain < 0:
+        raise SystemExit(f"invalid headBobGain {gain!r}; expected a non-negative number")
+    if isinstance(phase, bool) or phase not in (-1, 1):
+        raise SystemExit(f"invalid headBobPhase {phase!r}; expected -1 or 1")
+    return float(gain), int(phase)
 
 
 def stand_cell_of_sheet(order: dict, order_path: Path, dest: Path) -> Path:
@@ -182,6 +206,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
             f"register first (available: {sorted(ledger['masters'])})"
         )
     period = master_meta["loop"]["period"]
+    head_bob_gain, head_bob_phase = bob_profile(order, master_meta)
     master = fetch_r2(master_meta["masterSha256"], work / "master.mp4")
     stand_raw = stand_cell_of_sheet(order, order_path, work / "stand_raw.png")
 
@@ -204,19 +229,32 @@ def cmd_produce(args: argparse.Namespace) -> None:
         period=period,
         skip_head_seconds=0,
         expect_leg_phase=not order.get("handLayer"),
+        head_bob_gain=head_bob_gain,
+        head_bob_phase=head_bob_phase,
     )
     chosen = {pose: int(paths[0].stem.split("_")[1]) for pose, paths in selected.items()}
     print(f"cells: {chosen}")
 
     sheet_path = resolve_asset_path(order_path.parent, order["sheet"], ASSET_ROOT)
-    compose_walk_sheet(stand_raw, selected, sheet_path)
+    compose_walk_sheet(
+        stand_raw,
+        selected,
+        sheet_path,
+        head_bob_gain=head_bob_gain,
+        head_bob_phase=head_bob_phase,
+    )
     print(f"wrote {sheet_path}")
 
     # Provenance into the order (the danceMaster rule: the ledger sha is
     # recorded so a silently different master cannot re-anchor the cells).
     order["walkMaster"] = args.master
     order["walkMasterSha256"] = master_meta["masterSha256"]
-    order["walkLane"] = {"mode": args.mode, "cells": chosen}
+    order["walkLane"] = {
+        "mode": args.mode,
+        "cells": chosen,
+        "headBobGain": head_bob_gain,
+        "headBobPhase": head_bob_phase,
+    }
     order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
         ["pnpm", "exec", "biome", "format", "--write", str(order_path)], check=True
@@ -241,6 +279,8 @@ def cmd_produce(args: argparse.Namespace) -> None:
         "mode": args.mode,
         "period": period,
         "cells": chosen,
+        "headBobGain": head_bob_gain,
+        "headBobPhase": head_bob_phase,
         "sheet": str(sheet_path),
         "minutes": round((time.time() - t0) / 60, 1),
     }

@@ -34,6 +34,8 @@ from factory.art_lint import (  # noqa: E402
     check_palette_drift,
 )
 from factory.compose_sheet import (  # noqa: E402
+    HEAD_BOB_GAIN,
+    HEAD_BOB_PHASE,
     chroma_key,
     compose_walk_sheet,
     content_bbox,
@@ -57,13 +59,21 @@ def _evaluate(
     idx: dict[str, int],
     *,
     expect_leg_phase: bool = True,
+    head_bob_gain: float = HEAD_BOB_GAIN,
+    head_bob_phase: int = HEAD_BOB_PHASE,
 ) -> list[str]:
     """Compose the candidate cycle and run import-approximate checks."""
     candidates = {pose: [frames[i]] for pose, i in idx.items()}
     with tempfile.TemporaryDirectory() as scratch:
         sheet_path = Path(scratch) / "sheet.png"
         try:
-            compose_walk_sheet(stand_raw, candidates, sheet_path)
+            compose_walk_sheet(
+                stand_raw,
+                candidates,
+                sheet_path,
+                head_bob_gain=head_bob_gain,
+                head_bob_phase=head_bob_phase,
+            )
         except SystemExit as exc:
             return [f"compose: {exc}"]
         sheet = Image.open(sheet_path).convert("RGBA")
@@ -133,6 +143,8 @@ def scan_clip(
     period: int | None = None,
     skip_head_seconds: float = SKIP_HEAD_SECONDS,
     expect_leg_phase: bool = True,
+    head_bob_gain: float = HEAD_BOB_GAIN,
+    head_bob_phase: int = HEAD_BOB_PHASE,
 ) -> dict[str, list[Path]]:
     """The first stride cycle (optionally pinned) that passes the checks.
 
@@ -165,7 +177,14 @@ def scan_clip(
         idx = {pose: contact + n * quarter for n, pose in enumerate(POSES)}
         if idx["walk-d"] >= len(frames):
             continue
-        failures = _evaluate(stand_raw, frames, idx, expect_leg_phase=expect_leg_phase)
+        failures = _evaluate(
+            stand_raw,
+            frames,
+            idx,
+            expect_leg_phase=expect_leg_phase,
+            head_bob_gain=head_bob_gain,
+            head_bob_phase=head_bob_phase,
+        )
         attempts = 1
         while failures and attempts < MAX_CYCLE_ATTEMPTS:
             slot = failures[0].split(":")[0]
@@ -176,7 +195,12 @@ def scan_clip(
             for substitute in _substitutes(idx[slot], period, taken, len(frames)):
                 trial = {**idx, slot: substitute}
                 trial_failures = _evaluate(
-                    stand_raw, frames, trial, expect_leg_phase=expect_leg_phase
+                    stand_raw,
+                    frames,
+                    trial,
+                    expect_leg_phase=expect_leg_phase,
+                    head_bob_gain=head_bob_gain,
+                    head_bob_phase=head_bob_phase,
                 )
                 attempts += 1
                 if not any(f.startswith(slot) for f in trial_failures):

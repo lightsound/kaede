@@ -32,10 +32,15 @@ NECK_DIVERGENCE_PX = 10
 # Euclidean RGB distance; white (#ffffff) vs near-white shirt fails below ~40.
 MIN_PALETTE_DISTANCE = 35
 STAND_HEIGHT_RANGE = (88, 104)  # standHeightPx target 96 ± slack
-# Carry mitten rests in front of the waist (not out at the silhouette edge —
-# the arm is bent across the torso). Structural presence = opaque pixel in
-# the waist band; skin-tone is never consulted (beige-clothes hole).
+# Carry point rests in front of the waist/chest, not at the silhouette edge.
+# Heavy carry deliberately anchors BETWEEN the two hands, so the exact pixel
+# may be transparent; require opaque support on both sides instead. This also
+# catches PR #107's x=46/47 anchors on the outer arm edge, which left 71–82%
+# of the plush sprite in empty space. Skin color is never consulted.
 HAND_WAIST_BAND = (0.50, 0.85)
+HAND_SUPPORT_X = 8
+HAND_SUPPORT_Y = 4
+HAND_SIDE_SUPPORT_MIN = 20
 
 # Head-consistency gates (vs the stand frame). The head composite makes every
 # frame's head pixel-identical to the stand's, so any excess above-neck mass
@@ -370,6 +375,45 @@ def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
     return failures
 
 
+def check_hand_anchor(frame: Image.Image, recorded_hand: list[int]) -> list[str]:
+    """The carry point must sit inside supported arm/hand art.
+
+    Heavy carry uses the empty center BETWEEN two hands, while light carry
+    lands on one palm. Requiring support on both sides handles both shapes
+    and rejects an anchor parked on the silhouette's outer edge.
+    """
+    hx, hy = recorded_hand
+    lo = int(frame.height * HAND_WAIST_BAND[0])
+    hi = int(frame.height * HAND_WAIST_BAND[1])
+    if not (0 <= hx < frame.width and 0 <= hy < frame.height):
+        return [f"hand anchor out of frame {recorded_hand}"]
+    if not lo <= hy < hi:
+        return [
+            f"hand y={hy} outside waist band [{lo},{hi}) "
+            "— carry point must sit at the waist/chest"
+        ]
+    alpha = frame.getchannel("A").load()
+    y0 = max(0, hy - HAND_SUPPORT_Y)
+    y1 = min(frame.height, hy + HAND_SUPPORT_Y + 1)
+    left = sum(
+        alpha[x, y] >= OPAQUE
+        for x in range(max(0, hx - HAND_SUPPORT_X), hx)
+        for y in range(y0, y1)
+    )
+    right = sum(
+        alpha[x, y] >= OPAQUE
+        for x in range(hx + 1, min(frame.width, hx + HAND_SUPPORT_X + 1))
+        for y in range(y0, y1)
+    )
+    if min(left, right) < HAND_SIDE_SUPPORT_MIN:
+        return [
+            f"hand anchor {recorded_hand} lacks two-sided support "
+            f"(left/right {left}/{right}, need {HAND_SIDE_SUPPORT_MIN}) "
+            "— item would float at the silhouette edge"
+        ]
+    return []
+
+
 def lint_avatar(
     manifest_path: Path,
     *,
@@ -464,21 +508,10 @@ def lint_avatar(
         if expect_carry_hand or (name == "stand" and manifest.get("handLayer")):
             recorded_hand = pose.get("anchors", {}).get("hand")
             if recorded_hand:
-                hx, hy = recorded_hand
-                lo = int(frame.height * HAND_WAIST_BAND[0])
-                hi = int(frame.height * HAND_WAIST_BAND[1])
-                if not (0 <= hx < frame.width and 0 <= hy < frame.height):
-                    failures.append(f"{name}: hand anchor out of frame {recorded_hand}")
-                elif not (lo <= hy < hi):
-                    failures.append(
-                        f"{name}: hand y={hy} outside waist band [{lo},{hi}) "
-                        f"— carry mitten must sit at the waist (not chest/hips)"
-                    )
-                elif frame.getpixel((hx, hy))[3] < OPAQUE:
-                    failures.append(
-                        f"{name}: hand anchor {recorded_hand} is transparent "
-                        f"(not on the mitten — structural presence check)"
-                    )
+                failures += [
+                    f"{name}: {failure}"
+                    for failure in check_hand_anchor(frame, recorded_hand)
+                ]
 
     if expect_leg_phase:
         failures += check_leg_phase(loaded)
