@@ -59,6 +59,24 @@
       },
       "approval": "crosschar girl walk テイク(factory-yield 2026-08-11)— girl 枠 self-replace の元動画。オーナー実見「品質は今までの中で最も良い」(PR #101 追試②)",
       "registeredAt": "2026-08-11"
+    },
+    "gangnam/girl": {
+      "motion": "gangnam",
+      "family": "girl",
+      "masterSha256": "7008596b8c0c5a8dc13cab78a77be94136b2fd428eff188d3eb3eb91fc985f88",
+      "sourceSha256": "88674e99b0d37d460aac8d0abc4c10c2d81f04fa6c6ac54dcfda84d62a876e5b",
+      "frames": 79,
+      "fps": 24.0,
+      "width": 864,
+      "height": 496,
+      "loop": {
+        "start": 0,
+        "period": 35,
+        "loopMeanIou": 0.969,
+        "closureIou": 0.983
+      },
+      "approval": "girl 系ダンスマスター確立ラウンド(factory-yield 2026-08-12)— boy 3D gangnam 緑参照(0667b6…)×girl 原本 stand セルの seedance 清書(crosschar 方式)。本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-12"
     }
   }
 }
