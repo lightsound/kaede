@@ -220,31 +220,71 @@ def _flood_skin(
     return seen
 
 
+def _rightmost_carry_skin(frame: Image.Image, hand: tuple[int, int]) -> tuple[int, int] | None:
+    """Near-palm skin in the carry band (facing-right). None if the band is empty."""
+    w, h = frame.size
+    hx, hy = hand
+    y_lo = max(int(h * 0.50), hy - 8)
+    y_hi = min(h, hy + 12)
+    x_lo = max(0, hx - 12)
+    x_hi = min(w, hx + 16)
+    skins = [
+        (x, y)
+        for y in range(y_lo, y_hi)
+        for x in range(x_lo, x_hi)
+        if is_skin(frame.getpixel((x, y)))
+    ]
+    if not skins:
+        return None
+    return max(skins, key=lambda p: p[0])
+
+
+def _flood_too_tall(seen: set[tuple[int, int]], height: int) -> bool:
+    if not seen:
+        return False
+    ys = [y for _, y in seen]
+    return max(ys) - min(ys) >= height * 0.16
+
+
 def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Image, list[int]]:
     """The bare hand/arm as its own layer (MapleStory's hand-over-item):
-    the skin pixels 4-connected to the hand anchor, plus their dark outline
+    the skin pixels 4-connected to the overlay seed, plus their dark outline
     ring, alpha-masked and cropped. Rendered ON TOP of a held item so the
     mitten reads as being in front of it (the ①b(a) spike's owner-decided
-    z rule); cut from the stand frame only — the carry sheets hold the arm
-    still, so one overlay serves every pose at its own hand anchor.
+    z rule). Cut from the walk-a carrying pose when the sheet has one
+    (preset-motion carry: stand is a waist-mitten rest, walk is a cradle
+    or chest-fist — a stand-cut overlay on the walk anchor floats off-body).
+
+    `hand` is the ITEM rest point (grip lands here). The overlay seed may
+    be a nearby palm when rest sits in a two-hand cradle gap; the cropped
+    canvas is padded so `hand` stays a valid grip coordinate and the palm
+    still draws at its true location when the overlay is parked on rest.
 
     Shirtless bodies connect the mitten to the whole torso through bare skin;
-    if the unbounded fill grows past a mitten-sized bbox we retry inside a
-    small ellipse so the overlay does not swallow the head.
+    if a flood from rest swallows the torso we retry from the near palm,
+    then inside a small ellipse so the overlay does not swallow the head.
     """
     w, h = frame.size
     hx, hy = hand
-    seen = _flood_skin(frame, hand)
-    xs = [x for x, _ in seen]
-    ys = [y for _, y in seen]
-    too_big = (max(xs) - min(xs) > w * 0.45) or (max(ys) - min(ys) > h * 0.28)
-    if too_big:
+    near = _rightmost_carry_skin(frame, hand)
+    # Light raised-fist rest sits in the left 40% (even when the recorded
+    # point is a sleeve pixel 1–2px off the fist — hoodie edits). The ±6
+    # seed window still finds the fist. A center-band rest is the heavy
+    # cradle (shirt gap or shirtless belly) and must flood the near palm
+    # or the overlay becomes a torso / swinging-arm patch.
+    if hx < w * 0.40:
+        seed = hand
+    else:
+        seed = near or hand
+    seen = _flood_skin(frame, seed)
+    if _flood_too_tall(seen, h):
+        sx, sy = seed
         rx, ry = max(7, w // 7), max(6, h // 14)
 
         def in_mitten(x: int, y: int) -> bool:
-            return ((x - hx) / rx) ** 2 + ((y - hy) / ry) ** 2 <= 1.05
+            return ((x - sx) / rx) ** 2 + ((y - sy) / ry) ** 2 <= 1.05
 
-        seen = _flood_skin(frame, hand, allow=in_mitten)
+        seen = _flood_skin(frame, seed, allow=in_mitten)
     ring = set()
     for x, y in seen:
         for dx in (-1, 0, 1):
@@ -257,8 +297,13 @@ def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Ima
     for x, y in keep:
         layer.putpixel((x, y), frame.getpixel((x, y)))
     bbox = layer.getchannel("A").getbbox()
-    layer = layer.crop(bbox)
-    return layer, [hx - bbox[0], hy - bbox[1]]
+    if bbox is None:
+        raise SystemExit(f"hand layer cut at {hand} produced an empty overlay")
+    x0, y0, x1, y1 = bbox
+    x0, y0 = min(x0, hx), min(y0, hy)
+    x1, y1 = max(x1, hx + 1), max(y1, hy + 1)
+    layer = layer.crop((x0, y0, x1, y1))
+    return layer, [hx - x0, hy - y0]
 
 
 def palette_of(frames: list[Image.Image]) -> list[str]:
@@ -340,9 +385,16 @@ def main() -> None:
         "poses": poses,
     }
     if order.get("handLayer"):
-        stand_frame = frames[order["poses"].index("stand")]
-        stand_hand = poses["stand"]["anchors"]["hand"]
-        layer, anchor = cut_hand_layer(stand_frame, (stand_hand[0], stand_hand[1]))
+        # Cut from walk-a when present: the preset-motion carry sheets rest
+        # the stand mitten at the waist and the walk hands in a different
+        # pose (two-arm cradle / one-hand chest). A stand-cut overlay parked
+        # on the walk anchor extends off-body — the owner-reported floating
+        # item (2026-08-12). Walk-a is the carrying pose the overlay must
+        # match; stand still uses this same cutout at its own hand anchor.
+        cut_pose = "walk-a" if "walk-a" in order["poses"] else "stand"
+        cut_frame = frames[order["poses"].index(cut_pose)]
+        cut_hand = poses[cut_pose]["anchors"]["hand"]
+        layer, anchor = cut_hand_layer(cut_frame, (cut_hand[0], cut_hand[1]))
         layer.save(resolve_asset_path(out_dir, "hand.png", asset_root))
         manifest["handLayer"] = {
             "file": "hand.png",

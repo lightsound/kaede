@@ -265,6 +265,12 @@ belongings と規約が揃わない、で S1 に劣後。
 ラインへ反映済み(component erase・alpha_composite — `compose_sheet.py`)。
 経緯と実測は factory-yield 2026-08-12 の行を参照。
 
+**品質差し戻し②(2026-08-12)**: オーナー実機 3 NG。girl は台帳
+`loop.start` から走査しないと接地/通過の首位相が逆になる。heavy carry
+のボブはマスター別 `headBobGain`（walk-carry/boy=1。一律 4 は過剰）。
+持ち物は walk-a から handLayer を切り、heavy rest は cradle 中央。
+詳細は factory-yield 同日の行と asset-factory.md の walk レーン規約。
+
 ## 8. 増分分割の提案(裁定後の実装ラウンド)
 
 1. **①d-1(段階 1)**: スキーマ S1(2 列とも)+`setSkin`+skin 解決の

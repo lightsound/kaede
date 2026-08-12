@@ -60,17 +60,26 @@ python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標�
   マスターからコマを直切り出し（danceMaster 前例・運転知見 19）。
 - `replace`: 他 identity への転写（fal wan-2.2 animate/replace —
   シルエット系統の合うマスターを選ぶ・運転知見 18）。
-- 選定は cycle_scan（台帳の機械既知周期・頭スキップなし）＋ walk ゲート一式
-  （頭部整合・ドリフト・leg phase＝IoU 一本・**首接合部**）。合成は
+- 選定は cycle_scan（台帳の機械既知周期・**登録ループ開始コマから走査**・
+  頭スキップなし）＋ walk ゲート一式
+  （頭部整合・ドリフト・leg phase＝IoU 一本・**首接合部**・**接地の首ボブが
+  通過より低いこと**）。合成は
   component erase ＋ alpha_composite（girl 首切れ 3 ラウンドの根治規則）で、
   頭はシートの committed stand セルから貼り直す — 動画側の髪は最終シートに
   残らない。
 - **首ボブ**（差し戻し対応 2026-08-12 — 「顔が固まっている」）: スケールは
   サイクル一律（中央値）でマスター実在の上下ボブを通し、compose が
-  垂直ボブをゲイン 4 に増幅（≈3px p-p @96px）。**水平の頭ずらしは封印**
+  垂直ボブをマスター別ゲインで増幅する（台帳 `headBobGain`。walk/boy・
+  walk/girl = 4 で ≈3px p-p @96px。walk-carry/boy は素の振幅がすでにその
+  水準なので 1 — ゲイン 4 の一律適用が heavy carry のボブ過剰だった）。
+  **水平の頭ずらしは封印**
   （チビ頭がセル bbox 両端を規定 → 中心揃え＋下辺中央アンカーで全体
   平行移動に化け、顔は動かず足が滑る — 実測済み。compose_sheet の
-  HEAD_SWAY_GAIN 参照）。
+  HEAD_SWAY_GAIN 参照）。服替え変種は `walk_lane.py match-bob` で素体の
+  新 nfg に頭だけ追従させる（ナノ再編集なし）。ただしゲイン変更でボディ
+  高さ自体が数 px 変わると IoU / 首ドリフトで落ちる（2026-08-12: heavy
+  carry の旧 90px vs donor 95px）→ そのときは素体を editSource にした
+  keep-everything ナノ再編集（$0.10/着）。
 - **マスターの視点は正準右 3/4 で鋳造する**（差し戻し対応 2026-08-12）:
   replace/extract はマスターのシルエットを継承するため、緑参照が profile
   だと最終セルまで真横になる（v1 carry の棄却理由 — 後傾・脚細・シャツ
@@ -80,7 +89,14 @@ python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標�
   `walk-carry/boy`（両腕前・重い物）と `walk-carry-light/boy`（片手胸元・
   軽い物 — Walking_with_Phone_inplace 金型）。item manifest の
   `carryStyle`（light/heavy）でクライアント・試着ステージがシートを
-  選ぶ（light 未生産の服は heavy へフォールバック）。
+  選ぶ（light 未生産の服は heavy へフォールバック）。handLayer の切り出しは
+  **walk-a の持ち手**（stand の腰ミトンではない — プリセットモーション後の
+  walk は stand と手が別ポーズで、stand 切り出しを walk アンカーに置くと
+  画面外へ伸びてアイテムが浮く）。heavy の `handAnchors` は両手の cradle
+  中央（アイテムの rest）。overlay の flood は手前掌から切り、rest が
+  隙間でもグリップ座標になるようキャンバスをパディングする。light の
+  rest が袖画素（フード系）でも x < 0.40w なら rest 近傍の拳から切る
+  — キャリーバンド右端スキンを掴むと振り後ろ手・腰ブロブになる。
 - 服替え変種（red/pants ± carry ± carry-light）は素体の新 walk シートへの
   **シート編集**が実測で優位（$0.10/着・IoU ゲート・変種間で振り付けが
   バイト一致に揃う）。replace の identity 差し替え（$0.155〜/着）は系統の

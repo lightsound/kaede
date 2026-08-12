@@ -12,17 +12,17 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [46, 51],
-    "walk-b": [46, 58],
-    "walk-c": [47, 53],
-    "walk-d": [47, 58]
+    "walk-a": [32, 54],
+    "walk-b": [32, 55],
+    "walk-c": [32, 55],
+    "walk-d": [34, 55]
   },
   "references": ["../avatar/sheet-original.png"],
   "prompt": "Carry-walk pose variant of avatar.boy-basic, v5 — the near-arm mitten spec (owner directions 2026-08-09, final round: ①the carrying arm must be the NEAR arm, its shoulder/upper arm/elbow drawn visibly in front of the torso — earlier takes bent an arm that emerged from behind the torso and read as the far arm ②the hand is a complete round MITTEN with no fingers ③the mitten renders IN FRONT of the held item — the handLayer cut below; earlier: the elbow must be bent standing and walking, items rest on the hand as bare sprites). Stage 0 (bent-mitten STAND): nano-banana-2 single-frame edits of the base stand — three takes to land the pose (take 1 put the mitten at chest height so tall items covered the face; take 2 lowered it to the waist but bent both arms forward; take 3 edited take 2's far arm back down to hang behind the torso). Final wording: 'his NEAR arm — shoulder, upper arm and elbow FULLY VISIBLE drawn in front of his torso — bent at the elbow, forearm forward and slightly downward, the hand a SIMPLE ROUND MITTEN with NO fingers in front of his WAIST; his far arm hangs straight down behind his torso; everything else identical.' Cleaned through the standard post-composition (chroma flatten, key, scale to the base stand height, base stand's head composited at the neck pinch — pose edits drift face/hair, the head composite makes them pixel-identical again). Stage 1: the clean bent-mitten stand on a 720x720 pure #00FF00 canvas (feet y=640). Stage 2: alibaba/wan-2.7-i2v ($0.50, first try obeyed): walk-in-place with BIG strides, 'his near arm stays PERFECTLY STILL exactly as in the image — bent at the elbow with the round mitten hand held in front of his waist... His far arm also stays still, hanging at his side behind his body. Only his legs move.' Committed cells: the bent-mitten stand plus video frames n60 (contact) / n68 (passing) / n75 (opposite contact) / n82 (opposite passing), each center-cropped 760px, downscaled 2x, shadowed-green flattened, base head composited at each frame's own neck anchor. handAnchors = the mitten's top-center per frame (the item rest point; the still arm keeps it within ±1px across the stride — re-measured at the MITTEN BALL's top-center (26,64) white / (23,64) red after an owner review round: the first measurement anchored mid-forearm, so items sat halfway between elbow and mitten). handLayer: true cuts the mitten+visible skin around the stand hand anchor as hand.png, rendered ON TOP of the held item (body → item → hand, the MapleStory hand-over-item layering).",
   "handLayer": true,
   "originals": {
     "../avatar/sheet-original.png": "6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12",
-    "sheet-original.png": "109b51c34afb80b91ec745554dc50078b7fdede597cae35a98e37c991d45e0bf"
+    "sheet-original.png": "dd199c9f533d122f42400faa5b0ef33b1fa066da121d18f1d0b00b9c90b29416"
   },
   "walkMaster": "walk-carry/boy",
   "walkMasterSha256": "b4102f1f732e319bf1be9416ed4f8451f4bf3bf98d1a1de8338ebe189fb9de66",
@@ -30,7 +30,7 @@
     "mode": "extract",
     "cells": {
       "walk-a": 28,
-      "walk-b": 80,
+      "walk-b": 38,
       "walk-c": 48,
       "walk-d": 58
     }

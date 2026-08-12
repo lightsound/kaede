@@ -45,6 +45,11 @@ NECK_SCALE_BAND = (0.80, 1.20)
 # counter-shift — measured 2026-08-12, head-cx byte-identical across cells
 # while feet drifted 13px. Only the VERTICAL bob survives the pipeline
 # (it changes the trimmed frame height over the fixed ground line).
+#
+# VERTICAL gain is per-master (ledger `headBobGain`), not a global knob:
+# applying 4.0 to walk-carry/boy (raw p-p already ≈ walk's amplified 3px)
+# was the owner-reported "head bouncing too hard" on heavy carry
+# (2026-08-12). Lowering the default would freeze the walk/boy face again.
 HEAD_SWAY_GAIN = 1.0
 HEAD_BOB_GAIN = 4.0
 HEAD_SWAY_CAP_FRAC = 0.045
@@ -387,8 +392,14 @@ def compose_walk_sheet(
     out_path: Path,
     *,
     cell_size: int = 380,
+    head_bob_gain: float = HEAD_BOB_GAIN,
 ) -> dict[str, tuple[int, int]]:
-    """Build sheet-original.png; return per-pose structure neck anchors (pre-scale)."""
+    """Build sheet-original.png; return per-pose structure neck anchors (pre-scale).
+
+    `head_bob_gain` is the master's vertical exaggeration (ledger
+    `headBobGain`). The module default is the walk/boy calibration; carry
+    masters whose raw amplitude already matches that target pass 1.0.
+    """
     stand = trim_grounded(Image.open(stand_path))
     stand_neck = structure_neck(stand)
     head, stand_neck_y = cut_head(stand, stand_neck)
@@ -478,8 +489,9 @@ def compose_walk_sheet(
     # off-center on contact frames — THAT read as a living face. Same cure,
     # different lever: amplify the master's OWN per-frame drawn-head motion
     # (head_centroid — the mass the erase clears) around the cycle mean,
-    # deterministically — no re-generation, no gacha. Contacts land around
-    # ±3-4px at cell scale; the neck-junction gate fails loudly if a
+    # deterministically — no re-generation, no gacha. The gain is per-master
+    # (walk/boy = 4 lands ~3px p-p; walk-carry/boy = 1, its raw p-p already
+    # matches that target). The neck-junction gate fails loudly if a
     # shifted head ever breaks the bridge.
     cents = [head_centroid(body, neck[1]) for _, body, neck in resized]
     nfgs = [body.height - neck[1] for _, body, neck in resized]
@@ -488,7 +500,7 @@ def compose_walk_sheet(
     for (pose, body, neck), (cx, _), nfg in zip(resized, cents, nfgs):
         cap = body.height * HEAD_SWAY_CAP_FRAC
         extra_x = max(-cap, min(cap, (HEAD_SWAY_GAIN - 1) * (cx - mean_cx)))
-        extra_y = max(-cap, min(cap, (HEAD_BOB_GAIN - 1) * (nfg - mean_nfg)))
+        extra_y = max(-cap, min(cap, (head_bob_gain - 1) * (nfg - mean_nfg)))
         composited = paste_head(
             body, head, stand_neck_y, neck, sway=(round(extra_x), round(-extra_y))
         )
@@ -505,3 +517,54 @@ def compose_walk_sheet(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     sheet.convert("RGB").save(out_path)
     return necks
+
+
+def _sheet_cells(sheet_path: Path) -> list[Image.Image]:
+    """Five keyed, content-trimmed cells from a green 5-cell sheet."""
+    sheet = Image.open(sheet_path).convert("RGBA")
+    cell_w = sheet.width // 5
+    cells = []
+    for i in range(5):
+        cell = chroma_key(sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height)))
+        cells.append(cell.crop(content_bbox(cell)))
+    return cells
+
+
+def retarget_walk_bob(variant_sheet: Path, donor_sheet: Path, out_path: Path) -> None:
+    """Re-paste the variant's stand head so each walk cell's nfg matches the donor.
+
+    Outfit-edit variants keep their clothes; only the vertical head placement
+    follows a recomposed base (the $0 path when a gain change would otherwise
+    demand a paid nano re-edit). Stand is copied through unchanged.
+    """
+    variant = _sheet_cells(variant_sheet)
+    donor = _sheet_cells(donor_sheet)
+    stand = variant[0]
+    stand_neck = structure_neck(stand)
+    head, stand_neck_y = cut_head(stand, stand_neck)
+    frames = [stand]
+    for body, donor_body in zip(variant[1:], donor[1:]):
+        neck = structure_neck(body)
+        target = donor_body.height - structure_neck(donor_body)[1]
+        current = body.height - neck[1]
+        composited = trim_grounded(
+            paste_head(body, head, stand_neck_y, neck, sway=(0, current - target))
+        )
+        try:
+            new_nfg = composited.height - structure_neck(composited)[1]
+        except SystemExit:
+            frames.append(body)
+            continue
+        # A paste that fills the neck pinch (synthetic chibis, a too-large
+        # sway) lands structure_neck on the waist. Keep the source cell.
+        if abs(new_nfg - target) > abs(current - target):
+            frames.append(body)
+        else:
+            frames.append(composited)
+    cell_w = max(380, max(f.width for f in frames) + 8)
+    cell_h = max(380, max(f.height for f in frames) + 8)
+    sheet = Image.new("RGBA", (cell_w * 5, cell_h), GREEN)
+    for i, frame in enumerate(frames):
+        sheet.paste(cell_on_green(frame, cell_w, cell_h), (i * cell_w, 0))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.convert("RGB").save(out_path)

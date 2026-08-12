@@ -40,7 +40,8 @@
         "closureIou": 0.988
       },
       "approval": "ハイブリッド実動作検証 walk 承認テイク(videoReview「massive upgrade」・factory-yield 2026-08-10)— PR #101 replace 元動画",
-      "registeredAt": "2026-08-11"
+      "registeredAt": "2026-08-11",
+      "headBobGain": 4.0
     },
     "walk/girl": {
       "motion": "walk",
@@ -58,7 +59,8 @@
         "closureIou": 0.995
       },
       "approval": "crosschar girl walk テイク(factory-yield 2026-08-11)— girl 枠 self-replace の元動画。オーナー実見「品質は今までの中で最も良い」(PR #101 追試②)",
-      "registeredAt": "2026-08-11"
+      "registeredAt": "2026-08-11",
+      "headBobGain": 4.0
     },
     "gangnam/girl": {
       "motion": "gangnam",
@@ -94,7 +96,8 @@
         "closureIou": 0.978
       },
       "approval": "carry 歩行マスター v2(2026-08-12・オーナー差し戻し対応)— v1 の真横視点・後傾・巨大髪を、Meshy Carry_Heavy_Object_Walk_inplace GLB(タスク 019fee15…・0cr 再取得)を bpy yaw45=右向き 3/4 で緑レンダー(75〜116 の 42 コマループ・タイル×3)し直して解消。boy 原本 stand セル identity × seedance 480p 4 秒(素手・直立寄り・v1 実証プロンプト+2D 様式強化)。テイク c(a=3D 様式化・b=箱焼き込みで棄却)。本 PR のオーナーマージ = 承認",
-      "registeredAt": "2026-08-12"
+      "registeredAt": "2026-08-12",
+      "headBobGain": 1.0
     },
     "walk-carry-light/boy": {
       "motion": "walk-carry-light",
@@ -112,7 +115,8 @@
         "closureIou": 0.991
       },
       "approval": "軽量 carry 歩行マスター新設(2026-08-12・オーナー指示「持ち物によって carry を変えるべき」)— Meshy Walking_with_Phone_inplace GLB(タスク 019fee45…・0cr 再取得・2026-08-11 コーヒー検証の金型)を bpy yaw45=右向き 3/4 で緑レンダー(6〜35 の 30 コマループ・タイル×3)。boy 原本 stand セル identity × seedance 480p 4 秒(片手を胸元・素手)。テイク c(b=3D 様式化で棄却)。本 PR のオーナーマージ = 承認",
-      "registeredAt": "2026-08-12"
+      "registeredAt": "2026-08-12",
+      "headBobGain": 4.0
     }
   }
 }

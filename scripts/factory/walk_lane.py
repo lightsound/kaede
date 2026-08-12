@@ -51,7 +51,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from factory import fal_client  # noqa: E402
-from factory.compose_sheet import chroma_key, compose_walk_sheet, content_bbox  # noqa: E402
+from factory.compose_sheet import (  # noqa: E402
+    HEAD_BOB_GAIN,
+    chroma_key,
+    compose_walk_sheet,
+    content_bbox,
+    retarget_walk_bob,
+)
 from factory.cycle_scan import POSES, scan_clip  # noqa: E402
 from factory.loop_scan import silhouette_mask, verify_loop  # noqa: E402
 from factory.replace_lane import (  # noqa: E402
@@ -65,7 +71,12 @@ from factory.replace_lane import (  # noqa: E402
 )
 from factory.verdict_material import loop_video, montage_rows, preview_cells  # noqa: E402
 from factory.video import extract_frames  # noqa: E402
-from r2_originals import resolve_asset_path, resolve_original, validate_order_path  # noqa: E402
+from r2_originals import (  # noqa: E402
+    get_object,
+    resolve_asset_path,
+    resolve_original,
+    validate_order_path,
+)
 
 ASSET_ROOT = ROOT / "packages/client/src/game.package"
 # compose_walk_sheet's working height: master/video bodies above it are
@@ -182,6 +193,8 @@ def cmd_produce(args: argparse.Namespace) -> None:
             f"register first (available: {sorted(ledger['masters'])})"
         )
     period = master_meta["loop"]["period"]
+    loop_start = master_meta["loop"]["start"]
+    head_bob_gain = float(master_meta.get("headBobGain", HEAD_BOB_GAIN))
     master = fetch_r2(master_meta["masterSha256"], work / "master.mp4")
     stand_raw = stand_cell_of_sheet(order, order_path, work / "stand_raw.png")
 
@@ -203,13 +216,15 @@ def cmd_produce(args: argparse.Namespace) -> None:
         pinned_contact=args.contact,
         period=period,
         skip_head_seconds=0,
+        loop_start=loop_start,
         expect_leg_phase=not order.get("handLayer"),
+        head_bob_gain=head_bob_gain,
     )
     chosen = {pose: int(paths[0].stem.split("_")[1]) for pose, paths in selected.items()}
     print(f"cells: {chosen}")
 
     sheet_path = resolve_asset_path(order_path.parent, order["sheet"], ASSET_ROOT)
-    compose_walk_sheet(stand_raw, selected, sheet_path)
+    compose_walk_sheet(stand_raw, selected, sheet_path, head_bob_gain=head_bob_gain)
     print(f"wrote {sheet_path}")
 
     # Provenance into the order (the danceMaster rule: the ledger sha is
@@ -253,6 +268,28 @@ def cmd_produce(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_match_bob(args: argparse.Namespace) -> None:
+    """Copy the donor sheet's walk-cell nfg onto an outfit-edit variant."""
+    donor_order_path = validate_order_path(args.donor, ASSET_ROOT)
+    variant_order_path = validate_order_path(args.order, ASSET_ROOT)
+    donor = json.loads(donor_order_path.read_text())
+    variant = json.loads(variant_order_path.read_text())
+    donor_sheet = resolve_asset_path(donor_order_path.parent, donor["sheet"], ASSET_ROOT)
+    if not donor_sheet.is_file():
+        raise SystemExit(f"donor sheet missing on disk: {donor_sheet} — produce it first")
+    rel = variant["sheet"]
+    sha = (variant.get("originals") or {}).get(rel)
+    if not sha:
+        raise SystemExit(f"{variant_order_path} has no originals entry for {rel}")
+    work = args.workdir / variant["id"]
+    work.mkdir(parents=True, exist_ok=True)
+    src = work / "variant-source.png"
+    src.write_bytes(get_object(sha))
+    out = resolve_asset_path(variant_order_path.parent, rel, ASSET_ROOT)
+    retarget_walk_bob(src, donor_sheet, out)
+    print(f"wrote {out} (bob matched to {donor['id']})")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -275,9 +312,18 @@ def main() -> None:
     produce.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-walk-lane"))
     produce.add_argument("--budget", type=float, default=0.5,
                          help="USD stop for replace mode")
+    match = sub.add_parser(
+        "match-bob",
+        help="re-paste a variant sheet's stand head so walk nfg matches a donor",
+    )
+    match.add_argument("order", type=Path, help="the variant sheet's order.json")
+    match.add_argument("--donor", type=Path, required=True, help="the recomposed base order.json")
+    match.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-walk-lane"))
     args = parser.parse_args()
     if args.command == "produce":
         cmd_produce(args)
+    elif args.command == "match-bob":
+        cmd_match_bob(args)
 
 
 if __name__ == "__main__":

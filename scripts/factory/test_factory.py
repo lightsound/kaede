@@ -29,11 +29,14 @@ from factory.art_lint import (
     silhouette_iou,
 )
 from factory.compose_sheet import (
+    HEAD_BOB_GAIN,
     chroma_key,
     chroma_key_greenwear,
+    compose_walk_sheet,
     content_bbox,
     cut_head,
     paste_head,
+    retarget_walk_bob,
     staticize_carry_sheet,
 )
 from factory.foot_phase import foot_signal, select_walk_indices
@@ -547,6 +550,143 @@ class ComposeTests(unittest.TestCase):
             if out.getpixel((x, y))[3] >= 128 and out.getpixel((x, y))[2] > 180
         )
         self.assertEqual(above_neck, 0)
+
+    def test_bob_gain_widens_nfg_spread(self) -> None:
+        # Four walk bodies whose neck-from-ground already differs; gain 4
+        # must stretch that spread vs gain 1 (the walk/boy vs walk-carry
+        # split — a global gain 4 on carry was the owner bounce reject).
+        stand = _chibi(neck_y=50)
+        extras = (0, 6, 2, 6)
+
+        def nfg_spread(gain: float) -> int:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                stand_path = root / "stand.png"
+                stand.save(stand_path)
+                walks: dict[str, Path] = {}
+                for pose, extra in zip(
+                    ("walk-a", "walk-b", "walk-c", "walk-d"), extras
+                ):
+                    body = Image.new("RGBA", (64, 100 + extra), (0, 0, 0, 0))
+                    body.paste(_chibi(neck_y=50), (0, 0))
+                    if extra:
+                        draw = ImageDraw.Draw(body)
+                        draw.rectangle((22, 98, 30, 99 + extra), fill=(240, 200, 160, 255))
+                        draw.rectangle((34, 98, 42, 99 + extra), fill=(240, 200, 160, 255))
+                    path = root / f"{pose}.png"
+                    body.save(path)
+                    walks[pose] = path
+                out = root / "sheet.png"
+                compose_walk_sheet(stand_path, walks, out, head_bob_gain=gain)
+                sheet = Image.open(out).convert("RGBA")
+                cell_w = sheet.width // 5
+                nfgs = []
+                for i in range(1, 5):
+                    cell = chroma_key(
+                        sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height))
+                    )
+                    trimmed = cell.crop(content_bbox(cell))
+                    neck = structure_neck(trimmed)
+                    nfgs.append(trimmed.height - neck[1])
+                return max(nfgs) - min(nfgs)
+
+        self.assertGreater(nfg_spread(HEAD_BOB_GAIN), nfg_spread(1.0))
+
+    def test_retarget_walk_bob_idempotent_on_matching_sheets(self) -> None:
+        extras = (0, 6, 2, 6)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stand = _chibi(neck_y=50)
+            stand_path = root / "stand.png"
+            stand.save(stand_path)
+            walks: dict[str, Path] = {}
+            for pose, extra in zip(
+                ("walk-a", "walk-b", "walk-c", "walk-d"), extras
+            ):
+                body = Image.new("RGBA", (64, 100 + extra), (0, 0, 0, 0))
+                body.paste(_chibi(neck_y=50), (0, 0))
+                if extra:
+                    draw = ImageDraw.Draw(body)
+                    draw.rectangle((22, 98, 30, 99 + extra), fill=(240, 200, 160, 255))
+                    draw.rectangle((34, 98, 42, 99 + extra), fill=(240, 200, 160, 255))
+                path = root / f"{pose}.png"
+                body.save(path)
+                walks[pose] = path
+            donor_sheet = root / "donor.png"
+            compose_walk_sheet(stand_path, walks, donor_sheet, head_bob_gain=1.0)
+            out = root / "matched.png"
+            retarget_walk_bob(donor_sheet, donor_sheet, out)
+
+            def nfgs(path: Path) -> list[int]:
+                sheet = Image.open(path).convert("RGBA")
+                cell_w = sheet.width // 5
+                values = []
+                for i in range(1, 5):
+                    cell = chroma_key(
+                        sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height))
+                    )
+                    trimmed = cell.crop(content_bbox(cell))
+                    neck = structure_neck(trimmed)
+                    values.append(trimmed.height - neck[1])
+                return values
+
+            self.assertEqual(nfgs(out), nfgs(donor_sheet))
+
+
+class HandLayerTests(unittest.TestCase):
+    def test_cut_hand_layer_pads_cradle_rest(self) -> None:
+        # Heavy carry: rest sits in the shirt gap between two palms. The
+        # overlay must flood the NEAR (right) palm and pad so parking the
+        # grip on rest still draws that palm at its true x.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "import_avatar_sheet", SCRIPTS / "import-avatar-sheet.py"
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        frame = Image.new("RGBA", (64, 80), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(frame)
+        draw.ellipse((16, 46, 24, 54), fill=(240, 200, 160, 255))
+        draw.ellipse((40, 46, 48, 54), fill=(240, 200, 160, 255))
+        rest = (32, 50)
+        layer, grip = mod.cut_hand_layer(frame, rest)
+        self.assertGreaterEqual(grip[0], 0)
+        self.assertLess(grip[0], layer.width)
+        # Transparent at the grip (the gap) — the near palm is to its right.
+        self.assertLess(layer.getpixel((grip[0], grip[1]))[3], 128)
+        right = None
+        for x in range(grip[0] + 1, layer.width):
+            if layer.getpixel((x, grip[1]))[3] >= 128:
+                right = x
+                break
+        self.assertIsNotNone(right)
+        self.assertGreater(right - grip[0], 4)
+
+    def test_cut_hand_layer_sleeve_rest_finds_nearby_fist(self) -> None:
+        # Light carry on a long-sleeve outfit: rest is a clothing pixel
+        # 2px left of the fist. Flooding the rightmost skin in a wide
+        # carry band would grab a swinging-arm / waist blob below.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "import_avatar_sheet", SCRIPTS / "import-avatar-sheet.py"
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        frame = Image.new("RGBA", (64, 80), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(frame)
+        draw.ellipse((18, 48, 28, 58), fill=(240, 200, 160, 255))
+        # Decoy inside the carry-band window, further right than the fist.
+        draw.ellipse((24, 62, 32, 78), fill=(240, 200, 160, 255))
+        rest = (16, 53)
+        frame.putpixel(rest, (139, 25, 28, 255))
+        layer, grip = mod.cut_hand_layer(frame, rest)
+        self.assertLess(layer.height, 16)
+        gx, gy = grip
+        self.assertGreater(layer.getpixel((gx + 6, gy))[3], 128)
 
 
 if __name__ == "__main__":

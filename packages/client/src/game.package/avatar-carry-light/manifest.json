@@ -53,9 +53,9 @@
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [16, 12],
+    "size": [12, 7],
     "anchors": {
-      "grip": [14, 4]
+      "grip": [4, 3]
     }
   }
 }
