@@ -168,16 +168,51 @@ def scaled_head_group(
     return resized, (round(neck[0] * scale), round(neck[1] * scale))
 
 
+# A component above the neck row is the OLD HEAD if it reaches up past
+# this fraction of the neck height; body parts that merely poke above the
+# row (a leaning stride's shoulder line rises a few px) stay well below it.
+HEAD_REACH_FRAC = 0.6
+
+
+def erase_old_head(body: Image.Image, neck_y: int) -> Image.Image:
+    """Erase the old head above the neck row, KEEPING body pixels there.
+
+    paste_head erases the full rows above the neck, which is safe at the
+    import line's 400px working height but opened a 1-2px neck gap at cell
+    scale on the girl's walk-c (owner-reported): the forward-leaning
+    stride's shoulder line rises above the neck row, the full-row erase
+    ate it, and the head group's chin overlap (~3px after downscale) could
+    not reach it. Component erase fixes it: only the connected component(s)
+    that reach the head zone (HEAD_REACH_FRAC) are the old head; shoulder
+    bumps stay. Measured caveat, deliberate: hair hanging BELOW the neck
+    row (the girl's bob tips) is not erased — the ①d factory's headless
+    variants need the full head diff, a design-doc point, and the bench
+    takes cover it with larger replacement hair."""
+    import numpy as np
+    from scipy import ndimage
+
+    rgba = np.asarray(body.convert("RGBA")).copy()
+    above = rgba[:neck_y, :, 3] > 0
+    labels, count = ndimage.label(above)
+    if count:
+        erase = np.zeros_like(above)
+        for i, bounds in enumerate(ndimage.find_objects(labels)):
+            if bounds is not None and bounds[0].start < neck_y * HEAD_REACH_FRAC:
+                erase |= labels == i + 1
+        rgba[:neck_y][erase] = 0
+    return Image.fromarray(rgba)
+
+
 def paste_head_group(
     body: Image.Image, group: Image.Image, group_neck: tuple[int, int], body_neck: tuple[int, int]
 ) -> Image.Image:
-    """paste_head's erase-then-paste, aligned on the NECK POINT (not the
-    crop's horizontal center — a long-hair crop is asymmetric)."""
+    """paste_head's erase-then-paste, with two cell-scale differences:
+    aligned on the NECK POINT (not the crop's horizontal center — a
+    long-hair crop is asymmetric) and erasing by old-head component
+    (erase_old_head), not by full rows."""
     paste_x = body_neck[0] - group_neck[0]
     paste_y = body_neck[1] - group_neck[1]
-    out = body.copy()
-    if body_neck[1] > 0:
-        out.paste((0, 0, 0, 0), (0, 0, out.width, body_neck[1]))
+    out = erase_old_head(body, body_neck[1]) if body_neck[1] > 0 else body.copy()
     pad_left = max(0, -paste_x)
     pad_top = max(0, -paste_y)
     pad_right = max(0, paste_x + group.width - out.width)
