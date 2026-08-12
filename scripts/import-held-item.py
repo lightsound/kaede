@@ -132,6 +132,12 @@ def main() -> None:
             "anchors": {"grip": grip},
         },
     }
+    if order.get("carryStyle"):
+        # Which carry sheet the item rides (owner direction 2026-08-12):
+        # "light" = the one-hand carry variant, "heavy" = the two-arm front
+        # carry. Consumed by the game's dress-up preview and the studio's
+        # try-on stage.
+        manifest["carryStyle"] = order["carryStyle"]
     manifest_path = resolve_asset_path(out_dir, "manifest.json", asset_root)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(["pnpm", "exec", "biome", "format", "--write", str(manifest_path)], check=True)

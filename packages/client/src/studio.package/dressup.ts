@@ -14,8 +14,14 @@
 
 import type { AssetCatalog, AssetFrame, AvatarAsset, ItemAsset } from './catalog';
 
-/** The carry variant naming rule: `<outfit id>-carry` (avatar.boy-basic-carry). */
+/**
+ * The carry variant naming rule: `<outfit id>-carry` for the two-arm heavy
+ * carry (avatar.boy-basic-carry), `<outfit id>-carry-light` for the
+ * one-hand light carry (owner direction 2026-08-12 — carry pose must match
+ * the item's weight).
+ */
 const CARRY_SUFFIX = '-carry';
+const CARRY_LIGHT_SUFFIX = '-carry-light';
 
 /**
  * Try-on stage default (owner 2026-08-09): the pants-only boy base outfit.
@@ -26,7 +32,9 @@ export const DEFAULT_OUTFIT_ID = 'avatar.boy-pants';
 
 /** The body sheets offered as outfits: everything that is not itself a carry variant. */
 export function outfitOptions(catalog: AssetCatalog): readonly AvatarAsset[] {
-  const outfits = catalog.avatars.filter((avatar) => !avatar.id.endsWith(CARRY_SUFFIX));
+  const outfits = catalog.avatars.filter(
+    (avatar) => !avatar.id.endsWith(CARRY_SUFFIX) && !avatar.id.endsWith(CARRY_LIGHT_SUFFIX),
+  );
   return [...outfits].sort((a, b) => {
     if (a.id === DEFAULT_OUTFIT_ID) return -1;
     if (b.id === DEFAULT_OUTFIT_ID) return 1;
@@ -34,9 +42,22 @@ export function outfitOptions(catalog: AssetCatalog): readonly AvatarAsset[] {
   });
 }
 
-/** The carry sheet paired with an outfit, when the roster ships one. */
-export function carryVariantOf(catalog: AssetCatalog, outfitId: string): AvatarAsset | undefined {
-  return catalog.avatars.find((avatar) => avatar.id === `${outfitId}${CARRY_SUFFIX}`);
+/**
+ * The carry sheet paired with an outfit for one carry style, when the
+ * roster ships one. A missing light variant falls back to the heavy one:
+ * holding the item beats dropping it, and the fallback is exactly the
+ * pre-2026-08-12 behavior.
+ */
+export function carryVariantOf(
+  catalog: AssetCatalog,
+  outfitId: string,
+  style: 'light' | 'heavy' = 'heavy',
+): AvatarAsset | undefined {
+  const suffix = style === 'light' ? CARRY_LIGHT_SUFFIX : CARRY_SUFFIX;
+  return (
+    catalog.avatars.find((avatar) => avatar.id === `${outfitId}${suffix}`) ??
+    catalog.avatars.find((avatar) => avatar.id === `${outfitId}${CARRY_SUFFIX}`)
+  );
 }
 
 /**
@@ -71,7 +92,7 @@ export function resolveStageLook(
   if (!outfit) return undefined;
   const item = catalog.items.find((candidate) => candidate.id === heldItemId);
   if (!item) return { outfit, body: outfit, item: undefined, note: undefined };
-  const carry = carryVariantOf(catalog, outfit.id);
+  const carry = carryVariantOf(catalog, outfit.id, item.carryStyle);
   if (!carry) {
     return {
       outfit,
