@@ -77,6 +77,24 @@
       },
       "approval": "girl 系ダンスマスター確立ラウンド(factory-yield 2026-08-12)— boy 3D gangnam 緑参照(0667b6…)×girl 原本 stand セルの seedance 清書(crosschar 方式)。16:9 生成(864×496)を内容中心の 496×496 に正方形クロップ(replace レシピの正方形 identity 前提に整合 — 全コマのシルエットはクロップ内・登録ゲート再合格)。本 PR のオーナーマージ = 承認",
       "registeredAt": "2026-08-12"
+    },
+    "walk-carry/boy": {
+      "motion": "walk-carry",
+      "family": "boy",
+      "masterSha256": "53d4da7b2012d6e8dad8d49a4f7999d040034fe2e54dbcffd89d6d72b5e8bc25",
+      "sourceSha256": "381b7afcbb775ac5a695bbe919e15aa19322d4d61c4cd606736bf7b7ab85be74",
+      "frames": 86,
+      "fps": 24.0,
+      "width": 496,
+      "height": 496,
+      "loop": {
+        "start": 4,
+        "period": 41,
+        "loopMeanIou": 0.979,
+        "closureIou": 0.982
+      },
+      "approval": "carry 歩行マスター鋳造ラウンド(2026-08-12・①d 論点 6 の歩行統一 PR)— Meshy Carry_Heavy_Object_Walk_inplace 緑参照(R2 798255…・クリーンループ 42 コマのタイル×3)× boy 原本 stand セルの seedance 清書(crosschar 方式・素手=アイテムなし)。16:9 生成を内容中心 496×496 に正方形クロップ。本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-12"
     }
   }
 }
