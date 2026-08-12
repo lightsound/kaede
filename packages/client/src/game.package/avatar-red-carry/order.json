@@ -12,17 +12,17 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [42, 52],
-    "walk-b": [42, 53],
-    "walk-c": [42, 55],
-    "walk-d": [42, 53]
+    "walk-a": [46, 51],
+    "walk-b": [46, 58],
+    "walk-c": [47, 53],
+    "walk-d": [47, 58]
   },
   "references": ["../avatar-carry/sheet-original.png"],
   "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the arms held out in front on the walking frames — hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "handLayer": true,
   "originals": {
-    "../avatar-carry/sheet-original.png": "766bc09aa34d2a8d8ba840a65c28d28821c97baeb888b5454d3fc0bbdd5b9973",
-    "sheet-original.png": "a382adf88b0ef66d74edb18cbd899cbf9b5870e1120a6f0e8bac1d4cdef86aa6"
+    "../avatar-carry/sheet-original.png": "109b51c34afb80b91ec745554dc50078b7fdede597cae35a98e37c991d45e0bf",
+    "sheet-original.png": "cf8e8024095783923185f8e983944a9b3f6f859623297d608df83a1d8f341a33"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry/sheet-original.png",
@@ -30,6 +30,14 @@
     "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the arms held out in front on the walking frames — hands stay bare skin"
   },
   "lint": {
-    "matchStand": "avatar-red/manifest.json"
+    "matchStand": "avatar-red/manifest.json",
+    "neckFrom": "avatar-carry/manifest.json"
+  },
+  "neckAnchors": {
+    "stand": [26, 49],
+    "walk-a": [29, 47],
+    "walk-b": [26, 49],
+    "walk-c": [27, 48],
+    "walk-d": [26, 49]
   }
 }

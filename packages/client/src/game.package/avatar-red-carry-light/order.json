@@ -1,0 +1,43 @@
+{
+  "id": "avatar.boy-basic-red-carry-light",
+  "type": "avatar-body",
+  "name": "男の子（赤パーカー・軽い持ち物）",
+  "sheet": "sheet-original.png",
+  "outDir": ".",
+  "grid": {
+    "cols": 5,
+    "rows": 1
+  },
+  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "standHeightPx": 96,
+  "handAnchors": {
+    "stand": [26, 64],
+    "walk-a": [17, 59],
+    "walk-b": [19, 60],
+    "walk-c": [21, 59],
+    "walk-d": [20, 59]
+  },
+  "neckAnchors": {
+    "stand": [26, 49],
+    "walk-a": [25, 49],
+    "walk-b": [26, 49],
+    "walk-c": [25, 49],
+    "walk-d": [25, 49]
+  },
+  "references": ["../avatar-carry-light/sheet-original.png"],
+  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry-light/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the near hand raised in front of the chest on the walking frames — hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "handLayer": true,
+  "originals": {
+    "../avatar-carry-light/sheet-original.png": "82f00e525b0fc78179c42ee12d4f86e4b656a81f86df3866df4205177265fc02",
+    "sheet-original.png": "f460086b9e6b15bddd1e8512e79dc118f8bfab13d6d7a138b2d7c258f53ebd9d"
+  },
+  "template": "avatar-outfit-edit",
+  "editSource": "../avatar-carry-light/sheet-original.png",
+  "vars": {
+    "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the near hand raised in front of the chest on the walking frames — hands stay bare skin"
+  },
+  "lint": {
+    "matchStand": "avatar-red/manifest.json",
+    "neckFrom": "avatar-carry-light/manifest.json"
+  }
+}

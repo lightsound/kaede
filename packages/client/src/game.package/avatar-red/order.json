@@ -8,24 +8,72 @@
     "cols": 5,
     "rows": 1
   },
-  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "poses": [
+    "stand",
+    "walk-a",
+    "walk-b",
+    "walk-c",
+    "walk-d"
+  ],
   "standHeightPx": 96,
   "handAnchors": {
-    "stand": [15, 67],
-    "walk-a": [39, 56],
-    "walk-b": [37, 60],
-    "walk-c": [42, 58],
-    "walk-d": [37, 59]
+    "stand": [
+      15,
+      67
+    ],
+    "walk-a": [
+      39,
+      56
+    ],
+    "walk-b": [
+      37,
+      60
+    ],
+    "walk-c": [
+      42,
+      58
+    ],
+    "walk-d": [
+      37,
+      59
+    ]
   },
-  "references": ["../avatar/sheet-original.png"],
+  "references": [
+    "../avatar/sheet-original.png"
+  ],
   "prompt": "Factory template `avatar-outfit-edit` over ../avatar/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "originals": {
-    "../avatar/sheet-original.png": "7300d018e1c7459e491f076b8d629f7672ae2192c165740b5c5f2b9b0247dbe3",
-    "sheet-original.png": "92b9b68593d59df61f4c7b34116c841ade426827d0ab23c7752cf5bfddd2a7db"
+    "../avatar/sheet-original.png": "6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12",
+    "sheet-original.png": "fcc782597a7b9e76ea647f94e62a29d6fd2687d178e69032fd977bc45cd1a351"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar/sheet-original.png",
   "vars": {
     "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin"
+  },
+  "neckAnchors": {
+    "stand": [
+      26,
+      49
+    ],
+    "walk-a": [
+      24,
+      49
+    ],
+    "walk-b": [
+      26,
+      49
+    ],
+    "walk-c": [
+      26,
+      49
+    ],
+    "walk-d": [
+      26,
+      49
+    ]
+  },
+  "lint": {
+    "neckFrom": "avatar/manifest.json"
   }
 }

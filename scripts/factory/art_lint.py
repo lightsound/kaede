@@ -376,6 +376,7 @@ def lint_avatar(
     base_palette: list[str] | None = None,
     expect_carry_hand: bool = False,
     expect_leg_phase: bool = False,
+    neck_reference: dict[str, list[int]] | None = None,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -430,19 +431,35 @@ def lint_avatar(
             failures += [
                 f"{name}: {f}" for f in check_neck_junction(frame, recorded_neck)
             ]
-        try:
-            detected_neck = list(structure_neck(frame))
-        except SystemExit as exc:
-            failures.append(f"{name}: structure neck failed — {exc}")
-            detected_neck = None
-        if recorded_neck and detected_neck:
-            d = math.dist(recorded_neck, detected_neck)
-            if d > NECK_DIVERGENCE_PX:
-                failures.append(
-                    f"{name}: neck divergence {d:.1f}px "
-                    f"(recorded {recorded_neck}, structure {detected_neck}) "
-                    f"> {NECK_DIVERGENCE_PX}"
-                )
+        if neck_reference is not None and name in neck_reference:
+            # Hood-class outfits fill the neck pinch and break the width-
+            # profile detector (measured 2026-08-12: the red hoodie's walk-c
+            # detected 17px low on two independent takes). The recorded
+            # anchor is validated against the PAIR body's manifest instead:
+            # a keep-everything edit preserves poses by construction, and
+            # the sheet-edit IoU gate proves that construction held.
+            if recorded_neck:
+                d = math.dist(recorded_neck, neck_reference[name])
+                if d > NECK_DIVERGENCE_PX:
+                    failures.append(
+                        f"{name}: neck divergence {d:.1f}px from the pair "
+                        f"reference (recorded {recorded_neck}, pair "
+                        f"{neck_reference[name]}) > {NECK_DIVERGENCE_PX}"
+                    )
+        else:
+            try:
+                detected_neck = list(structure_neck(frame))
+            except SystemExit as exc:
+                failures.append(f"{name}: structure neck failed — {exc}")
+                detected_neck = None
+            if recorded_neck and detected_neck:
+                d = math.dist(recorded_neck, detected_neck)
+                if d > NECK_DIVERGENCE_PX:
+                    failures.append(
+                        f"{name}: neck divergence {d:.1f}px "
+                        f"(recorded {recorded_neck}, structure {detected_neck}) "
+                        f"> {NECK_DIVERGENCE_PX}"
+                    )
 
         if expect_carry_hand or (name == "stand" and manifest.get("handLayer")):
             recorded_hand = pose.get("anchors", {}).get("hand")

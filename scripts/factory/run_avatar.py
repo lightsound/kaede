@@ -205,6 +205,17 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
     palette = None
     if contrast:
         palette = json.loads((ASSET_ROOT / contrast).read_text()).get("palette")
+    # lint.neckFrom: validate this sheet's recorded neck anchors against the
+    # named pair manifest instead of structure detection — the hood-class
+    # escape (art_lint's neck_reference doc).
+    neck_from = lint_options.get("neckFrom")
+    neck_reference = None
+    if neck_from:
+        paired_manifest = json.loads((ASSET_ROOT / neck_from).read_text())
+        neck_reference = {
+            name: pose["anchors"]["neck"]
+            for name, pose in paired_manifest["poses"].items()
+        }
     failures = lint_avatar(
         manifest_path_of(order_path, order),
         base_palette=palette,
@@ -212,6 +223,7 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
         # Carry sheets stride gently by spec; every other walk cycle must
         # show opposite-leg contacts and a real second passing.
         expect_leg_phase=not order.get("handLayer"),
+        neck_reference=neck_reference,
     )
     # Variant sheets (carry) must keep their paired outfit's colors: the
     # try-on stage swaps outfit ⇄ carry when an item is picked up, so a
@@ -303,9 +315,14 @@ def run_sheet_edit_lane(order_path: Path, order: dict, work: Path, args) -> None
         stills += 1
         cost += 0.10
         print(f"wrote {sheet_path}")
-        if order.get("handLayer"):
-            # Carry sheets are upper-body-static by spec; make that literal
-            # so the belly shading cannot flicker between cells.
+        if order.get("staticUpperBody"):
+            # The v1 carry spec held arms and torso literally still, so the
+            # belly shading could be unified across cells. The v2 preset
+            # masters (2026-08-12) animate the carrying arms naturally,
+            # which kills that premise — transplanting walk-a's torso onto
+            # the other cells ghosts the moving arms the same way it
+            # double-drew faces. Opt in per order only when the sheet's
+            # motion really is upper-body-static.
             seam = staticize_carry_sheet(sheet_path)
             print(f"carry staticize: upper body unified above row {seam}")
     elif not sheet_path.is_file():
