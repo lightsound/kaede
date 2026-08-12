@@ -23,6 +23,7 @@ from factory.loop_scan import find_loop, verify_loop
 from factory.art_lint import (
     check_head_consistency,
     check_leg_phase,
+    check_neck_junction,
     check_palette_drift,
     lint_avatar,
     silhouette_iou,
@@ -197,6 +198,33 @@ class ArtLintTests(unittest.TestCase):
         self.assertEqual(check_palette_drift(stand, stand), [])
         self.assertNotEqual(check_palette_drift(stand, drifted), [])
 
+    def test_neck_junction_passes_solid_bridge(self) -> None:
+        # The chibi's neck pinch is a fully opaque 9px bridge — healthy.
+        self.assertEqual(check_neck_junction(_chibi(neck_y=50), [32, 50]), [])
+
+    def test_neck_junction_catches_semi_transparent_bridge(self) -> None:
+        # The self-masked-paste decay shape: the junction rows' core drops to
+        # α150 — no solid pixel left in the anchor window, all-soft bridge.
+        frame = _chibi(neck_y=50)
+        for y in range(50, 57):
+            for x in range(22, 44):
+                r, g, b, a = frame.getpixel((x, y))
+                if a:
+                    frame.putpixel((x, y), (r, g, b, 150))
+        failures = check_neck_junction(frame, [32, 50])
+        self.assertTrue(any("semi-transparent bridge" in f for f in failures))
+
+    def test_neck_junction_catches_gap(self) -> None:
+        # The girl walk-c shape: the junction row is fully transparent at
+        # the anchor column — a literal head-body disconnect.
+        frame = _chibi(neck_y=50)
+        for y in range(50, 54):
+            for x in range(frame.width):
+                r, g, b, _a = frame.getpixel((x, y))
+                frame.putpixel((x, y), (r, g, b, 0))
+        failures = check_neck_junction(frame, [32, 50])
+        self.assertTrue(any("gap" in f for f in failures))
+
     def test_silhouette_iou_orders_similarity(self) -> None:
         a = _chibi(neck_y=50)
         shifted = Image.new("RGBA", (64, 100), (0, 0, 0, 0))
@@ -207,36 +235,52 @@ class ArtLintTests(unittest.TestCase):
 
 class LegPhaseTests(unittest.TestCase):
     def _walker(self, lead: int) -> Image.Image:
-        """Chibi with the feet-band mass pushed forward (+1) or back (−1)."""
+        """Chibi whose leg silhouette differs per stride phase.
+
+        The gate is pixel-geometric (pairwise IoU), so the fixtures encode
+        pose distinctness the way real strides do: clearly different leg
+        masses, not a small foot nudge.
+        """
         frame = _chibi(neck_y=50)
         draw = ImageDraw.Draw(frame)
-        if lead > 0:
-            draw.rectangle((44, 88, 60, 98), fill=(240, 200, 160, 255))
-        elif lead < 0:
-            draw.rectangle((4, 88, 20, 98), fill=(240, 200, 160, 255))
+        skin = (240, 200, 160, 255)
+        # Erase the base narrow legs, then draw the phase's own.
+        draw.rectangle((0, 78, 63, 99), fill=(0, 0, 0, 0))
+        if lead == 1:  # contact, near leg forward: wide symmetric spread
+            draw.polygon([(20, 78), (4, 98), (20, 98)], fill=skin)
+            draw.polygon([(44, 78), (60, 98), (44, 98)], fill=skin)
+            draw.rectangle((20, 78, 44, 98), fill=skin)
+        elif lead < 0:  # contact, far leg forward: narrow stance, raised heel
+            draw.rectangle((18, 78, 28, 98), fill=skin)
+            draw.rectangle((36, 78, 46, 88), fill=skin)
+        elif lead == 0:  # passing: legs together, one straight column
+            draw.rectangle((26, 78, 40, 98), fill=skin)
+        else:  # second passing: legs crossing, narrow backward shear
+            draw.polygon([(26, 78), (38, 78), (18, 98), (4, 98)], fill=skin)
         return frame
 
-    def test_opposite_contacts_pass(self) -> None:
+    def test_distinct_cycle_passes(self) -> None:
         frames = {
             "stand": _chibi(neck_y=50),
             "walk-a": self._walker(1),
-            "walk-b": _chibi(neck_y=50),
+            "walk-b": self._walker(2),
             "walk-c": self._walker(-1),
             "walk-d": self._walker(0),
         }
-        failures = check_leg_phase(frames)
-        self.assertFalse(any("opposite legs" in f for f in failures), failures)
+        self.assertEqual(check_leg_phase(frames), [])
 
-    def test_same_side_contacts_fail(self) -> None:
+    def test_one_foot_shuffle_fails_as_near_clones(self) -> None:
+        # Contacts that never trade legs are pixel-near-identical frames —
+        # the owner-rejected shuffle measured IoU 0.92-0.97 on its contact pair.
         frames = {
             "stand": _chibi(neck_y=50),
             "walk-a": self._walker(1),
-            "walk-b": _chibi(neck_y=50),
+            "walk-b": self._walker(2),
             "walk-c": self._walker(1),
             "walk-d": self._walker(0),
         }
         failures = check_leg_phase(frames)
-        self.assertTrue(any("opposite legs" in f for f in failures), failures)
+        self.assertTrue(any("near-clones" in f for f in failures), failures)
 
     def test_clone_pair_fails(self) -> None:
         walker = self._walker(1)
@@ -253,16 +297,29 @@ class LegPhaseTests(unittest.TestCase):
 
 class StaticizeTests(unittest.TestCase):
     def _carry_sheet(self, path: Path) -> None:
-        """5 green cells: identical torso, striding legs, drifted walk bellies."""
+        """5 green cells: striding legs, per-cell drifted walk bellies.
+
+        The walk cells' bellies each drift to their OWN color (the
+        whole-sheet-edit flicker); the transplant must unify them onto
+        walk-a's shading. The stand keeps a distinct color untouched — the
+        preset-motion carry stand poses differently from the walk cells, so
+        it is no longer the donor.
+        """
         cell_w, cell_h = 120, 120
         sheet = Image.new("RGB", (cell_w * 5, cell_h), (0, 255, 0))
+        bellies = [
+            (240, 200, 160, 255),  # stand — its own idle shading
+            (200, 150, 150, 255),  # walk-a — the donor
+            (190, 160, 140, 255),  # walk-b..d — per-cell drift to unify
+            (210, 140, 155, 255),
+            (195, 155, 145, 255),
+        ]
         for i in range(5):
             body = Image.new("RGBA", (64, 100), (0, 0, 0, 0))
             draw = ImageDraw.Draw(body)
             draw.ellipse((8, 4, 56, 54), fill=(240, 200, 160, 255))  # head
             draw.rectangle((28, 50, 36, 56), fill=(240, 200, 160, 255))  # neck
-            belly = (200, 150, 150, 255) if i else (240, 200, 160, 255)
-            draw.rectangle((20, 56, 44, 78), fill=belly)  # torso (drifts on walks)
+            draw.rectangle((20, 56, 44, 78), fill=bellies[i])  # torso
             stride = [0, 6, 0, -6, 0][i]
             draw.rectangle((22 + stride, 78, 30 + stride, 98), fill=(240, 200, 160, 255))
             draw.rectangle((34 - stride, 78, 42 - stride, 98), fill=(240, 200, 160, 255))
@@ -278,15 +335,18 @@ class StaticizeTests(unittest.TestCase):
             seam = staticize_carry_sheet(sheet_path)
             out = Image.open(sheet_path).convert("RGBA")
             cell_w = out.width // 5
-            # Sample a torso pixel per cell: all must now be the stand color.
+            # Sample a torso pixel per cell.
             def torso_sample(i: int) -> tuple[int, int, int]:
                 cell = chroma_key(out.crop((i * cell_w, 0, (i + 1) * cell_w, out.height)))
                 body = cell.crop(content_bbox(cell))
                 return body.getpixel((body.width // 2, int(body.height * 0.68)))[:3]
 
-            stand_color = torso_sample(0)
-            for i in range(1, 5):
-                self.assertEqual(torso_sample(i), stand_color, f"cell {i}")
+            # Walk cells all take walk-a's shading; the stand keeps its own.
+            donor_color = torso_sample(1)
+            for i in range(2, 5):
+                self.assertEqual(torso_sample(i), donor_color, f"cell {i}")
+            self.assertEqual(torso_sample(0), (240, 200, 160))
+            self.assertNotEqual(donor_color, (240, 200, 160))
             # Legs (below the seam) keep their per-cell stride.
             self.assertGreater(seam, 0)
 

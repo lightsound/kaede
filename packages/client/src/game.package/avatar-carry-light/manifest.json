@@ -1,0 +1,61 @@
+{
+  "id": "avatar.boy-basic-carry-light",
+  "type": "avatar-body",
+  "name": "男の子（基本・軽い持ち物）",
+  "author": "kaede",
+  "license": "kaede-internal",
+  "palette": ["#9c5628", "#9c582a", "#fddea3", "#fdd6ab", "#fdd7ab"],
+  "source": {
+    "prompt": "Light-carry walk variant of avatar.boy-basic (owner direction 2026-08-12: carry pose must match the item's weight — a coffee mug on the heavy two-arm carry read as wrong). Walk cells come from the walk-carry-light/boy master (Meshy Walking_with_Phone_inplace preset, re-rendered at the canonical right-facing 3/4 yaw 45 from the retained rigged GLB, seedance-refined onto the boy stand identity with an empty raised palm), extracted by walk_lane — the near hand holds at chest height, the far arm swings naturally. The stand cell is shared with avatar.boy-basic-carry (the bent-mitten idle: an idle carry rest pose fits both weights). handAnchors: stand = the mitten top-center; walk cells = the raised open palm, measured per frame on THIS sheet. handLayer: true cuts the palm around the stand hand anchor, rendered on top of held items.",
+    "referenceHashes": ["6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12"]
+  },
+  "poses": {
+    "stand": {
+      "file": "stand.png",
+      "size": [52, 96],
+      "anchors": {
+        "neck": [26, 49],
+        "hand": [26, 64]
+      }
+    },
+    "walk-a": {
+      "file": "walk-a.png",
+      "size": [52, 95],
+      "anchors": {
+        "neck": [25, 49],
+        "hand": [17, 59]
+      }
+    },
+    "walk-b": {
+      "file": "walk-b.png",
+      "size": [52, 97],
+      "anchors": {
+        "neck": [26, 49],
+        "hand": [19, 60]
+      }
+    },
+    "walk-c": {
+      "file": "walk-c.png",
+      "size": [52, 96],
+      "anchors": {
+        "neck": [25, 49],
+        "hand": [21, 59]
+      }
+    },
+    "walk-d": {
+      "file": "walk-d.png",
+      "size": [52, 96],
+      "anchors": {
+        "neck": [25, 49],
+        "hand": [20, 59]
+      }
+    }
+  },
+  "handLayer": {
+    "file": "hand.png",
+    "size": [16, 12],
+    "anchors": {
+      "grip": [14, 4]
+    }
+  }
+}

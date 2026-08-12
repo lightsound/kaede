@@ -10,13 +10,14 @@
 人のゲートは検品ビューア（`/assets`）での目視 1 回と、シート画像が見える PR
 のオーナー承認だけ。
 
-## レーンは 3 本（歩行系は発注書の `template` で自動選択）
+## レーンは 4 本（歩行系は発注書の `template` で自動選択）
 
 | レーン | 用途 | 生成 | コスト実測 |
 | --- | --- | --- | --- |
-| **動画レーン**（`avatar-stand`） | 新キャラ | nano-banana-2 立ちコマ → wan-2.7-i2v 歩行動画 → 足位置解析 → 頭部合成 | $0.60/本（色ドリフトの取り直しで×1〜3） |
+| **動画レーン**（`avatar-stand`） | 新キャラの stand | nano-banana-2 立ちコマ（**歩行の wan-2.7-i2v プロンプト演技は 2026-08-12 の歩行統一で全廃** — walk セルは walk レーンの担当） | 立ちコマ $0.10 |
 | **シート編集レーン**（`avatar-outfit-edit`） | 服替え・素体変種 | 既存の構成済みシートへの keep-everything 編集（`editSource`）。動画不要・ポーズは構造的に保存 | $0.10/着 |
-| **fal replace レーン**（`scripts/factory/replace_lane.py` — 2026-08-11 工場組み込み・オーナー判定待ち） | ダンス等の動画ネイティブ頭系統をキャラ横展開 | マスターテイク（台帳 `master_takes.json`）× キャラ画像 1 枚 → wan-2.2 animate/replace（AI Gateway BYOK・480p 既定） | $0.155〜0.2425/動作（トリム済みマスター長 62〜97 コマに比例。fal 残高で照合） |
+| **fal replace レーン**（`scripts/factory/replace_lane.py`） | ダンス等の動画ネイティブ頭系統をキャラ横展開 | マスターテイク（台帳 `master_takes.json`）× キャラ画像 1 枚 → wan-2.2 animate/replace（AI Gateway BYOK・480p 既定） | $0.155〜0.2425/動作（トリム済みマスター長 62〜97 コマに比例。fal 残高で照合） |
+| **walk レーン**（`scripts/factory/walk_lane.py` — 2026-08-12 歩行統一・①d 論点 6） | 全シートの walk セル | 登録済み歩行マスター（プリセットモーション由来 — Meshy = 金型・新モーション鋳造時のみ）から `extract`（シートのキャラ = マスターのキャラなら直切り出し・無課金）または `replace`（identity 転写）→ cycle_scan 位相選定 → stand セル頭部の erase-then-paste 合成 | extract $0 / replace $0.155〜0.2125 |
 
 ### fal replace レーン（マスターテイク方式）
 
@@ -42,13 +43,61 @@ cells?}`（identity / standSource は R2 sha256 かローカルパス）。produ
 steps 既定 20（ノブ非公開 — オーナー裁定）・品質を上げたいテイクのみ
 `useTurbo`（約 3 倍遅・追加費用なし）。
 
+### walk レーン（歩行統一 — 2026-08-12・①d 論点 6 の裁定）
+
+**全シートの walk セルは登録済み歩行マスター 1 本から出る**（boy 系 =
+`walk/boy`・girl 系 = `walk/girl`・carry 系 = `walk-carry/boy`。マスター自体は
+Meshy プリセットモーションの 3D 緑参照 × seedance 清書 — 金型は新モーション
+鋳造時に 1 回だけ）。旧方式（wan-2.7-i2v にプロンプトで歩行を演技させる）は
+本番から全廃。
+
+```sh
+python3 scripts/factory/walk_lane.py produce <order.json> --master walk/boy --mode extract
+python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標準取り込み＋全ゲート
+```
+
+- `extract`: シートのキャラ = マスターのキャラなら**モデル呼び出しゼロ**で
+  マスターからコマを直切り出し（danceMaster 前例・運転知見 19）。
+- `replace`: 他 identity への転写（fal wan-2.2 animate/replace —
+  シルエット系統の合うマスターを選ぶ・運転知見 18）。
+- 選定は cycle_scan（台帳の機械既知周期・頭スキップなし）＋ walk ゲート一式
+  （頭部整合・ドリフト・leg phase＝IoU 一本・**首接合部**）。合成は
+  component erase ＋ alpha_composite（girl 首切れ 3 ラウンドの根治規則）で、
+  頭はシートの committed stand セルから貼り直す — 動画側の髪は最終シートに
+  残らない。
+- **首ボブ**（差し戻し対応 2026-08-12 — 「顔が固まっている」）: スケールは
+  サイクル一律（中央値）でマスター実在の上下ボブを通し、compose が
+  垂直ボブをゲイン 4 に増幅（≈3px p-p @96px）。**水平の頭ずらしは封印**
+  （チビ頭がセル bbox 両端を規定 → 中心揃え＋下辺中央アンカーで全体
+  平行移動に化け、顔は動かず足が滑る — 実測済み。compose_sheet の
+  HEAD_SWAY_GAIN 参照）。
+- **マスターの視点は正準右 3/4 で鋳造する**（差し戻し対応 2026-08-12）:
+  replace/extract はマスターのシルエットを継承するため、緑参照が profile
+  だと最終セルまで真横になる（v1 carry の棄却理由 — 後傾・脚細・シャツ
+  欠けの主因）。Meshy GLB は `spike_tripo_render.py` の yaw45 で自前
+  レンダーしてから seedance 清書。
+- **carry は持ち物の重量で 2 系統**（オーナー裁定 2026-08-12）:
+  `walk-carry/boy`（両腕前・重い物）と `walk-carry-light/boy`（片手胸元・
+  軽い物 — Walking_with_Phone_inplace 金型）。item manifest の
+  `carryStyle`（light/heavy）でクライアント・試着ステージがシートを
+  選ぶ（light 未生産の服は heavy へフォールバック）。
+- 服替え変種（red/pants ± carry ± carry-light）は素体の新 walk シートへの
+  **シート編集**が実測で優位（$0.10/着・IoU ゲート・変種間で振り付けが
+  バイト一致に揃う）。replace の identity 差し替え（$0.155〜/着）は系統の
+  合うマスターが無い新シルエット向け。フードなど**首ピンチ検出を壊す服は
+  `lint.neckFrom`** でペア素体 manifest から首を転写検証する（構築不変量
+  — 編集レーンの IoU ゲートが構築保持を証明）。旧 carry の staticize
+  （上半身の内部色移植）は v2 マスターで腕が自然に動くため**撤去**
+  （order の `staticUpperBody` で opt-in のみ — 顔 RGB の移植が二重顔の
+  原因だった）。
+
 ## 工程
 
 | # | 工程 | 実装 |
 | --- | --- | --- |
 | 1 | 発注書 | `game.package/<dir>/order.json`。`template` + `vars` で種別テンプレを展開（直書き `prompt` も可）。展開結果は `prompt` に記録（再現性） |
 | 2a | 立ちコマ生成 | `google/nano-banana-2` ＋ 基準リファレンス（`canonical/`） |
-| 2b | 歩行動画 | `alibaba/wan-2.7-i2v`（誇張スイング。carry は腕固定、淡色キャラは `avatar-walk-i2v-locked` で色固定 — 下の運転知見③） |
+| 2b | walk セル | walk レーン（`walk_lane.py` — 登録済み歩行マスターから extract / replace。旧 wan-2.7-i2v プロンプト演技は 2026-08-12 全廃） |
 | 2c | コマ位相選定 | `scripts/factory/cycle_scan.py` — 足位置重心の自己相関（基本周期選好、`foot_phase.py`）で全ストライドを候補化し、**頭部・ドリフト検査に落ちたコマは位相等価コマ（±k×周期）で置換**して最初のクリーン周期を選ぶ。`--contact` で起点固定（視覚ゲートの裁量） |
 | 2d | 頭部合成 | stand の頭部を各 walk コマの構造 neck へ **erase-then-paste**（動画側頭部を消してから貼る — PR #94 の二重頭の再発防止）。neck の接地相対位置が stand とずれたコマは候補フォールバック → 尽きたら fail loud |
 | 2e | シート組立 | 5 コマ横一列のグリーンバックシート → `sheet-original.png` |
@@ -77,7 +126,8 @@ pnpm --filter @kaede/client assets:pack   # 任意・アトラス派生物の確
   ゲームスケールで裸に見える（PR #94 の棄却実測）
 - 男の子のパンツ一丁ベースコーデを 1 着持ち、検品ビューア試着ステージの
   **デフォルト**にする（`studio.package/dressup.ts` の `DEFAULT_OUTFIT_ID`）
-- 歩行は wan-2.7-i2v 採用ライン（誇張スイング＋立ちコマ頭部の neck 合成）
+- 歩行はプリセットモーション由来のマスターテイク採用ライン（walk レーン＋
+  立ちコマ頭部の neck 合成 — 2026-08-12 歩行統一）
 
 ## アート lint（①b(a)⑵ の穴への構造対応 ＋ PR #94 棄却で較正した 2 検査）
 
@@ -104,6 +154,16 @@ pnpm --filter @kaede/client assets:pack   # 任意・アトラス派生物の確
    ペア素体の stand とドリフト比較。試着ステージは持ち物クリックで
    素体⇄carry を切り替えるため、肌トーンの跳びは可視欠陥（リテイクが
    白肌で返った実測から追加）
+8. **首接合部**（新設 2026-08-12 — ①d 論点 6 の girl 首切れ再現）: walk 各
+   コマの neck アンカー窓 ±5px・アンカー行 −4〜+2 の帯で、行ごとの実効
+   アルファ幅 ≥3.0px（棄却済み girl walk-c は 2.0 = 文字どおりの頭体断絶）
+   ＋最悪行の soft/solid 比 ≤1.5（半透明ブリッジ — 自己マスク paste の
+   α二乗劣化も端から検出）。旧 girl セル=陽性・committed 健常セル=陰性で
+   較正。stand は免除（接合部フリッカーは再生速度の歩行アーティファクト）
+9. **leg phase**（2026-08-12 に IoU 一本へ再較正）: walk-a vs walk-c の
+   シルエット IoU ≤ 0.90（ほぼ同一ポーズ = ストライド消失の検出）。旧
+   足位置符号検査は基準系（stand 相対 vs サイクル相対）でレンダーごとに
+   反転し不安定と実測 — 撤去
 
 ## 運転知見（2026-08-09 通し運転）
 

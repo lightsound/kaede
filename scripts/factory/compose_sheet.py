@@ -23,12 +23,31 @@ OPAQUE = 128
 GREEN = (0, 255, 0, 255)
 # Overlap below the neck so the chin composite doesn't leave a seam.
 CHIN_OVERLAP = 14
-# A walk frame's neck must sit where the stand's does, measured from the
-# ground (feet are planted; only the head bobs). A larger gap means the
-# structural detection latched onto something else (hair pinch, waist) and
-# the head composite would stack a second head — fail loud and retake
-# instead of committing a PR #94-class sheet.
-NECK_FROM_GROUND_TOLERANCE = 0.06
+# Walk bodies are scaled so the NECK-FROM-GROUND matches the stand's (feet
+# planted, head pasted at the stand's own scale): a master take carries its
+# own body proportions — the boy walk master's neck sits 7% higher from the
+# ground than the committed stand's (221 vs 193 at the 400 working height,
+# measured 2026-08-12) and extract/replace both inherit that frame verbatim
+# (運転知見 18), so a fixed-height normalization would grow the character
+# whenever he starts walking. The implied height ratio (scaled body height /
+# stand height) must stay in this band: a misdetected neck (hair pinch,
+# waist) implies a wildly wrong scale — fail the candidate loud and try the
+# next frame instead of compositing a PR #94-class sheet.
+NECK_SCALE_BAND = (0.80, 1.20)
+# Head bob exaggeration gains (see compose_walk_sheet pass 2): the
+# master's per-frame head deviation from the cycle mean is multiplied by
+# these before the head is pasted. Calibrated 2026-08-12 on the boy walk
+# master (raw bob ≈ ±0.6px at 96px cell scale; gain 4 lands the readable
+# ~3px peak-to-peak the owner-era sheets showed as face motion).
+# HORIZONTAL sway is structurally disabled (gain 1): the chibi head spans
+# the trimmed cell's full width, so bbox-centering + the client's
+# bottom-center sprite anchor cancel any head x-offset into a body/feet
+# counter-shift — measured 2026-08-12, head-cx byte-identical across cells
+# while feet drifted 13px. Only the VERTICAL bob survives the pipeline
+# (it changes the trimmed frame height over the fixed ground line).
+HEAD_SWAY_GAIN = 1.0
+HEAD_BOB_GAIN = 4.0
+HEAD_SWAY_CAP_FRAC = 0.045
 
 
 def key_pixel(r: int, g: int, b: int, a: int) -> tuple[int, int, int, int]:
@@ -127,24 +146,88 @@ def cut_head(stand: Image.Image, neck: tuple[int, int]) -> tuple[Image.Image, in
     return head, neck_y
 
 
+# A component above the neck row is the OLD HEAD if it reaches up past
+# this fraction of the neck height; body parts that merely poke above the
+# row (a leaning stride's shoulder line rises a few px) stay well below it.
+HEAD_REACH_FRAC = 0.6
+
+
+def erase_old_head(body: Image.Image, neck_y: int) -> Image.Image:
+    """Erase the old head above the neck row, KEEPING body pixels there.
+
+    A full-row erase above the neck opened a 1-2px neck gap on the girl's
+    walk-c (owner-reported, ①d round 2): the forward-leaning stride's
+    shoulder line rises above the neck row, the erase ate it, and the head
+    crop's chin overlap could not reach it. Component erase fixes it: only
+    the connected component(s) that reach the head zone (HEAD_REACH_FRAC)
+    are the old head; shoulder bumps stay. Measured caveat, deliberate:
+    hair hanging BELOW the neck row (the girl's bob tips) is not erased —
+    the replacement head's own below-neck hair pastes over it."""
+    import numpy as np
+    from scipy import ndimage
+
+    rgba = np.asarray(body.convert("RGBA")).copy()
+    above = rgba[:neck_y, :, 3] > 0
+    labels, count = ndimage.label(above)
+    if count:
+        erase = np.zeros_like(above)
+        for i, bounds in enumerate(ndimage.find_objects(labels)):
+            if bounds is not None and bounds[0].start < neck_y * HEAD_REACH_FRAC:
+                erase |= labels == i + 1
+        rgba[:neck_y][erase] = 0
+    return Image.fromarray(rgba)
+
+
+def head_centroid(body: Image.Image, neck_y: int) -> tuple[float, float]:
+    """Centroid of the pixels erase_old_head would clear — the drawn head.
+
+    The head-sway exaggeration (compose_walk_sheet pass 2) reads its signal
+    here rather than from structure_neck's valley x: the valley center
+    wobbles ±2px with each pose's chin/hair asymmetry, while the drawn head
+    mass moves smoothly with the master's own animation.
+    """
+    erased = erase_old_head(body, neck_y)
+    before = body.getchannel("A")
+    after = erased.getchannel("A")
+    import numpy as np
+
+    gone = (np.asarray(before) >= 128) & (np.asarray(after) < 128)
+    ys, xs = np.nonzero(gone)
+    if len(xs) == 0:
+        return (body.width / 2, neck_y / 2)
+    return (float(xs.mean()), float(ys.mean()))
+
+
 def paste_head(
-    body: Image.Image, head: Image.Image, stand_neck_y: int, body_neck: tuple[int, int]
+    body: Image.Image,
+    head: Image.Image,
+    stand_neck_y: int,
+    body_neck: tuple[int, int],
+    sway: tuple[int, int] = (0, 0),
 ) -> Image.Image:
     """REPLACE the body's head with the stand head at the body's neck anchor.
 
-    Erase-then-paste: everything above the body's neck row is cleared before
-    the stand head lands there. Pasting alone (PR #94) leaves the video-drawn
-    head visible wherever the stand head's alpha does not cover it — the
-    double-head reject on avatar.boy-pants walk-a and the bob-hair remnants
-    on avatar.girl-basic.
+    Erase-then-paste: the old-head component above the body's neck row is
+    cleared before the stand head lands there. Pasting alone (PR #94) leaves
+    the video-drawn head visible wherever the stand head's alpha does not
+    cover it — the double-head reject on avatar.boy-pants walk-a and the
+    bob-hair remnants on avatar.girl-basic.
+
+    Composites with alpha_composite, never self-masked paste:
+    `paste(im, box, im)` squares the alpha of every anti-aliased pixel
+    (α86→29, measured in bench_head_swap), which collapsed the girl's neck
+    junction into the semi-transparent bridge art_lint's junction gate now
+    rejects (①d 論点 6). The erase is by component (erase_old_head), not by
+    full rows: the full-row erase ate the rising shoulder line and opened
+    the walk-c neck gap.
     """
     bx, by = body_neck
-    # Head image's neck is at y=stand_neck_y within the head crop.
-    paste_x = bx - head.width // 2
-    paste_y = by - stand_neck_y
-    out = body.copy()
-    if by > 0:
-        out.paste((0, 0, 0, 0), (0, 0, out.width, by))
+    # Head image's neck is at y=stand_neck_y within the head crop. The sway
+    # offset moves only the PASTE position (the exaggerated head motion);
+    # the erase stays anchored on the body's true neck row.
+    paste_x = bx - head.width // 2 + sway[0]
+    paste_y = by - stand_neck_y + sway[1]
+    out = erase_old_head(body, by) if by > 0 else body.copy()
     # Ensure canvas is large enough for a bobbing head.
     pad_top = max(0, -paste_y)
     pad_left = max(0, -paste_x)
@@ -156,34 +239,41 @@ def paste_head(
             (out.width + pad_left + pad_right, out.height + pad_top + pad_bottom),
             (0, 0, 0, 0),
         )
-        canvas.paste(out, (pad_left, pad_top), out)
+        canvas.alpha_composite(out, (pad_left, pad_top))
         out = canvas
         paste_x += pad_left
         paste_y += pad_top
-    out.paste(head, (paste_x, paste_y), head)
+    out.alpha_composite(head, (paste_x, paste_y))
     return out
 
 
-# Rows whose silhouette diverges this much from the stand belong to the
-# striding legs; above them the carry body is static by spec. Measured on
-# the pants-carry edit: head/torso rows ≤ 0.05 (outline jitter ~1px),
+# Rows whose silhouette diverges this much from the donor cell belong to
+# the striding legs; above them the carry body is static by spec. Measured
+# on the pants-carry edit: head/torso rows ≤ 0.05 (outline jitter ~1px),
 # torso/mitten redraw noise 0.06–0.18, legs ≥ 0.28.
 CARRY_LEG_DIVERGENCE = 0.25
 
 
 def staticize_carry_sheet(sheet_path: Path) -> int:
-    """Unify a carry sheet's static-region shading across cells.
+    """Unify a carry sheet's static-region shading across WALK cells.
 
-    The carry spec holds the near arm, mitten and torso perfectly still —
-    only the legs move — yet a whole-sheet edit redraws each cell's belly
-    shading slightly differently, which flickers at play speed (owner
-    reject 2026-08-09). Fix: an INTERIOR COLOR TRANSPLANT — above the row
-    where the legs start diverging, every walk-cell pixel that is opaque
-    in both the walk cell and the (neck-aligned) stand takes the stand's
-    RGB. Each cell keeps its own alpha and outline, so no silhouette seam
-    is introduced (a whole-region replacement was measured to step the
-    outline by up to 18% of the row width at the junction). Returns the
-    leg-seam row (sheet-cell space) for logging.
+    The carry spec holds the arms and torso still while walking — only the
+    legs move — yet a whole-sheet edit redraws each cell's belly shading
+    slightly differently, which flickers at play speed (owner reject
+    2026-08-09). Fix: an INTERIOR COLOR TRANSPLANT — above the row where
+    the legs start diverging, every walk-cell pixel that is opaque in both
+    the walk cell and the (neck-aligned) donor takes the donor's RGB. Each
+    cell keeps its own alpha and outline, so no silhouette seam is
+    introduced (a whole-region replacement was measured to step the outline
+    by up to 18% of the row width at the junction).
+
+    The donor is WALK-A, not the stand (changed 2026-08-12, the preset-
+    motion carry): the master-lane carry walk carries with both arms out
+    front while the committed stand keeps the near-arm mitten idle, so the
+    stand's upper body no longer matches the walk cells'. The flicker the
+    transplant kills is between consecutive WALK frames at play speed; the
+    stand↔walk transition is a pose change and reads as one. Returns the
+    leg-seam row (donor-cell space) for logging.
     """
     sheet = Image.open(sheet_path).convert("RGBA")
     cell_w = sheet.width // 5
@@ -193,14 +283,15 @@ def staticize_carry_sheet(sheet_path: Path) -> int:
     ]
     trimmed = [c.crop(content_bbox(c)) for c in cells]
     stand = trimmed[0]
-    stand_neck = structure_neck(stand)
+    donor = trimmed[1]
+    donor_neck = structure_neck(donor)
 
-    # Align every walk cell to the stand by its structural neck; the carry
+    # Align the other walk cells to the donor by structural neck; the carry
     # pose keeps the neck static so offsets are a couple of pixels at most.
     aligned: list[tuple[Image.Image, int, int]] = []
-    for body in trimmed[1:]:
+    for body in trimmed[2:]:
         neck = structure_neck(body)
-        aligned.append((body, neck[0] - stand_neck[0], neck[1] - stand_neck[1]))
+        aligned.append((body, neck[0] - donor_neck[0], neck[1] - donor_neck[1]))
 
     def mask_row(img: Image.Image, y: int, dx: int) -> set[int]:
         if not 0 <= y < img.height:
@@ -209,44 +300,61 @@ def staticize_carry_sheet(sheet_path: Path) -> int:
         return {x - dx for x in range(img.width) if alpha[x, y] >= OPAQUE}
 
     def row_diverges(y: int) -> bool:
-        stand_row = mask_row(stand, y, 0)
+        donor_row = mask_row(donor, y, 0)
         for body, dx, dy in aligned:
             body_row = mask_row(body, y + dy, dx)
-            union = stand_row | body_row
+            union = donor_row | body_row
             if (
                 len(union) >= 10
-                and len(stand_row ^ body_row) / len(union) > CARRY_LEG_DIVERGENCE
+                and len(donor_row ^ body_row) / len(union) > CARRY_LEG_DIVERGENCE
             ):
                 return True
         return False
 
-    seam = stand.height
-    for y in range(stand.height - 1):
-        # Two consecutive divergent rows = the legs really start here.
-        if row_diverges(y) and row_diverges(y + 1):
+    # The legs are the BOTTOM contiguous divergent run (small gaps allowed —
+    # mirrored contacts can momentarily overlap). Scanning top-down for the
+    # first divergent pair instead found hair-top noise rows: a nano sheet
+    # edit jitters each cell's head outline by a few px, and on a 10px-wide
+    # hair-tip row that already crosses the divergence line (measured on the
+    # preset-motion pants-carry, 2026-08-12 — seam misdetected at row 1).
+    seam = donor.height
+    gap = 0
+    for y in range(donor.height - 1, -1, -1):
+        if row_diverges(y):
             seam = y
-            break
-    if seam < stand.height * 0.55:
+            gap = 0
+        else:
+            gap += 1
+            if gap > 3:
+                break
+    if seam < donor.height * 0.55:
         raise SystemExit(
-            f"carry staticize: silhouettes diverge from row {seam}/{stand.height} "
+            f"carry staticize: silhouettes diverge from row {seam}/{donor.height} "
             "— this sheet is not upper-body-static; refusing to normalize"
         )
 
-    stand_px = stand.load()
-    out_cells: list[Image.Image] = [stand]
+    donor_px = donor.load()
+    # The transplant starts BELOW the head: copying the donor's face RGB
+    # onto the other cells' own head outlines (which jitter by a pixel or
+    # two in an edited sheet) painted a second set of eyes where the two
+    # alphas disagreed — the double face the owner saw on the edited carry
+    # variants (2026-08-12). The flicker this transplant kills is torso
+    # shading; heads keep their own pixels.
+    transplant_top = donor_neck[1] + 2
+    out_cells: list[Image.Image] = [stand, donor]
     for body, dx, dy in aligned:
         merged = body.copy()
         merged_px = merged.load()
         for y in range(min(merged.height, seam + dy)):
             sy = y - dy
-            if not 0 <= sy < stand.height:
+            if not 0 <= sy < donor.height or sy < transplant_top:
                 continue
             for x in range(merged.width):
                 sx = x - dx
-                if not 0 <= sx < stand.width:
+                if not 0 <= sx < donor.width:
                     continue
                 r, g, b, a = merged_px[x, y]
-                sr, sg, sb, sa = stand_px[sx, sy]
+                sr, sg, sb, sa = donor_px[sx, sy]
                 if a >= OPAQUE and sa >= OPAQUE:
                     merged_px[x, y] = (sr, sg, sb, a)
         out_cells.append(merged)
@@ -261,11 +369,15 @@ def staticize_carry_sheet(sheet_path: Path) -> int:
 
 
 def cell_on_green(frame: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
-    """Center-horizontally, feet on bottom, on a solid green cell."""
+    """Center-horizontally, feet on bottom, on a solid green cell.
+
+    alpha_composite, not self-masked paste — same α-squared rule as
+    paste_head (identical RGB on the opaque green, but the rule is uniform
+    so no future caller inherits the decay by copy-paste)."""
     cell = Image.new("RGBA", (cell_w, cell_h), GREEN)
     x = (cell_w - frame.width) // 2
     y = cell_h - frame.height
-    cell.paste(frame, (x, max(0, y)), frame)
+    cell.alpha_composite(frame.convert("RGBA"), (x, max(0, y)))
     return cell
 
 
@@ -297,6 +409,14 @@ def compose_walk_sheet(
     frames: list[Image.Image] = [stand]
     necks: dict[str, tuple[int, int]] = {"stand": stand_neck}
     stand_neck_from_ground = stand.height - stand_neck[1]
+
+    # Pass 1 — pick each pose's frame and measure its neck, UNSCALED. The
+    # per-frame scale is only used as an acceptance band here; the actual
+    # resize happens below with ONE cycle-wide scale. A first cut normalized
+    # every frame so its neck-from-ground landed EXACTLY on the stand's,
+    # which erased the walk's intrinsic head bob (~±1.5% of body height in
+    # the preset masters) — the owner-reported frozen face (2026-08-12).
+    selected: list[tuple[str, Image.Image, tuple[int, int]]] = []
     for pose in ordered[1:]:
         candidates = walk_paths[pose]
         if isinstance(candidates, Path):
@@ -305,22 +425,21 @@ def compose_walk_sheet(
         rejects: list[str] = []
         for candidate in candidates:
             body = trim_grounded(Image.open(candidate))
-            if body.height > target_h:
-                scale = target_h / body.height
-                body = body.resize(
-                    (max(1, round(body.width * scale)), target_h), Image.LANCZOS
-                )
             try:
                 body_neck = structure_neck(body)
             except SystemExit as exc:
                 rejects.append(f"{candidate.name}: {exc}")
                 body_neck = None
                 continue
-            neck_gap = abs((body.height - body_neck[1]) - stand_neck_from_ground)
-            if neck_gap > stand.height * NECK_FROM_GROUND_TOLERANCE:
+            scale = stand_neck_from_ground / max(1, body.height - body_neck[1])
+            implied = scale * body.height / stand.height
+            if not NECK_SCALE_BAND[0] <= implied <= NECK_SCALE_BAND[1]:
                 # An arm swung across the chin fills the neck valley on some
                 # frames; the adjacent frame usually clears it.
-                rejects.append(f"{candidate.name}: neck {neck_gap}px off ground-relative")
+                rejects.append(
+                    f"{candidate.name}: neck-normalized height ratio "
+                    f"{implied:.2f} outside {NECK_SCALE_BAND}"
+                )
                 body_neck = None
                 continue
             if candidate is not candidates[0]:
@@ -331,7 +450,48 @@ def compose_walk_sheet(
                 f"{pose}: no candidate frame passed neck detection — retake "
                 f"the video ({'; '.join(rejects)})"
             )
-        composited = paste_head(body, head, stand_neck_y, body_neck)
+        selected.append((pose, body, body_neck))
+
+    # Pass 2 — one scale for the whole cycle (median of the per-frame
+    # ratios): the MEAN neck height matches the stand's, and each frame's
+    # deviation from that mean — the bob — survives into the sheet.
+    ratios = sorted(
+        stand_neck_from_ground / max(1, body.height - neck[1])
+        for _, body, neck in selected
+    )
+    cycle_scale = (ratios[1] + ratios[2]) / 2
+    resized: list[tuple[str, Image.Image, tuple[int, int]]] = []
+    for pose, body, _ in selected:
+        body = body.resize(
+            (
+                max(1, round(body.width * cycle_scale)),
+                max(1, round(body.height * cycle_scale)),
+            ),
+            Image.LANCZOS,
+        )
+        resized.append((pose, body, structure_neck(body)))
+
+    # Head sway/bob exaggeration (owner reject 2026-08-12 — "the face is
+    # frozen while walking"). The preset masters are mocap-realistic: their
+    # own head motion measures under ±1px at 96px cell scale, while the
+    # retired wan lane's exaggerated-swing recipe put the head up to 9px
+    # off-center on contact frames — THAT read as a living face. Same cure,
+    # different lever: amplify the master's OWN per-frame drawn-head motion
+    # (head_centroid — the mass the erase clears) around the cycle mean,
+    # deterministically — no re-generation, no gacha. Contacts land around
+    # ±3-4px at cell scale; the neck-junction gate fails loudly if a
+    # shifted head ever breaks the bridge.
+    cents = [head_centroid(body, neck[1]) for _, body, neck in resized]
+    nfgs = [body.height - neck[1] for _, body, neck in resized]
+    mean_cx = sum(c[0] for c in cents) / len(cents)
+    mean_nfg = sum(nfgs) / len(nfgs)
+    for (pose, body, neck), (cx, _), nfg in zip(resized, cents, nfgs):
+        cap = body.height * HEAD_SWAY_CAP_FRAC
+        extra_x = max(-cap, min(cap, (HEAD_SWAY_GAIN - 1) * (cx - mean_cx)))
+        extra_y = max(-cap, min(cap, (HEAD_BOB_GAIN - 1) * (nfg - mean_nfg)))
+        composited = paste_head(
+            body, head, stand_neck_y, neck, sway=(round(extra_x), round(-extra_y))
+        )
         # Re-trim after paste (head may extend the bbox).
         composited = trim_grounded(composited)
         frames.append(composited)

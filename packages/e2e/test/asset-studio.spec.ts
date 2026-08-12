@@ -15,13 +15,15 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await page.goto('/assets');
   await expect(page.getByTestId('asset-studio')).toBeVisible({ timeout: 15_000 });
 
-  // The full roster: 7 avatar-body sheets × 5 poses each, 5 held items
-  // (basic / basic-carry / red / red-carry / pants / pants-carry / girl).
-  await expect(page.getByTestId('avatar-card')).toHaveCount(7);
-  await expect(page.getByTestId('pose-frame')).toHaveCount(35);
+  // The full roster: 10 avatar-body sheets × 5 poses each, 5 held items
+  // (basic / red / pants / girl, plus the heavy carry and light carry
+  // variants of the three boy outfits — carry pose per item weight,
+  // owner direction 2026-08-12).
+  await expect(page.getByTestId('avatar-card')).toHaveCount(10);
+  await expect(page.getByTestId('pose-frame')).toHaveCount(50);
   await expect(page.getByTestId('item-card')).toHaveCount(5);
-  // The carry variants ship a hand overlay (the mitten-over-item layer).
-  await expect(page.getByTestId('hand-layer')).toHaveCount(3);
+  // Every carry variant ships a hand overlay (the hand-over-item layer).
+  await expect(page.getByTestId('hand-layer')).toHaveCount(6);
   // The ①c gesture sheets (boy-basic and girl-basic, 12 cells each:
   // stand + sit + sleep + wave + 8 dance frames) and the busy headgear
   // render in sections of their own, outside the avatar-body pose diff.
@@ -55,20 +57,26 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   // 2026-08-09) with empty hands; clicking an outfit swaps the whole body
   // sheet, and clicking an item swaps to the outfit's carry variant with
   // the item (plus the sheet's hand cutout) composited over it — the
-  // ①b(a)⑵ one-decision rule. Clicking the item again puts it back.
+  // ①b(a)⑵ one-decision rule. The mug is a LIGHT item (its manifest's
+  // carryStyle), so it rides the one-hand carry-light sheets; the plush
+  // bear is heavy and rides the two-arm carry. Clicking an item again
+  // puts it back.
   const figure = page.getByTestId('stage-figure');
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants');
   await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
   await page.getByTestId('item-option-item.coffee-mug').click();
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants-carry-light');
+  await expect(page.getByTestId('stage-overlay')).toHaveCount(2);
+  await page.getByTestId('item-option-item.plush-bear').click();
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants-carry');
   await expect(page.getByTestId('stage-overlay')).toHaveCount(2);
-  await page.getByTestId('item-option-item.coffee-mug').click();
+  await page.getByTestId('item-option-item.plush-bear').click();
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants');
   await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
   await page.getByTestId('outfit-option-avatar.boy-basic-red').click();
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red');
   await page.getByTestId('item-option-item.coffee-mug').click();
-  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red-carry');
+  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red-carry-light');
   await expect(page.getByTestId('stage-overlay')).toHaveCount(2);
   await page.getByTestId('item-option-item.coffee-mug').click();
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red');

@@ -30,6 +30,7 @@ from factory.anchors import structure_neck  # noqa: E402
 from factory.art_lint import (  # noqa: E402
     check_head_consistency,
     check_leg_phase,
+    check_neck_junction,
     check_palette_drift,
 )
 from factory.compose_sheet import (  # noqa: E402
@@ -50,7 +51,13 @@ SUBSTITUTE_STRIDES = (1, -1)
 MAX_CYCLE_ATTEMPTS = 12
 
 
-def _evaluate(stand_raw: Path, frames: list[Path], idx: dict[str, int]) -> list[str]:
+def _evaluate(
+    stand_raw: Path,
+    frames: list[Path],
+    idx: dict[str, int],
+    *,
+    expect_leg_phase: bool = True,
+) -> list[str]:
     """Compose the candidate cycle and run import-approximate checks."""
     candidates = {pose: [frames[i]] for pose, i in idx.items()}
     with tempfile.TemporaryDirectory() as scratch:
@@ -87,10 +94,23 @@ def _evaluate(stand_raw: Path, frames: list[Path], idx: dict[str, int]) -> list[
                 for f in check_head_consistency(stand, stand_neck[1], cell, neck[1])
             ]
             failures += [f"{pose}: {f}" for f in check_palette_drift(stand, cell)]
-        # Leg-phase gate (the owner-caught failure shapes): tag the contact
-        # slots so the substitution loop retries them.
-        for failure in check_leg_phase({"stand": stand, **dict(zip(POSES, cells[1:]))}):
-            failures.append(f"walk-c: {failure}" if "opposite legs" in failure else f"walk-d: {failure}")
+            # Junction gate (①d 論点 6): a semi-transparent neck bridge reads
+            # as a break at play speed — catch it per slot so the substitution
+            # loop can swap the frame instead of failing the whole take.
+            failures += [
+                f"{pose}: {f}" for f in check_neck_junction(cell, list(neck))
+            ]
+        # Leg-phase gate (the owner-caught failure shapes): tag the SECOND
+        # frame of the near-clone pair so the substitution loop retries it.
+        # Carry cycles stride gently with near-clone-adjacent poses by spec,
+        # so the caller excludes them (the run_lint rule).
+        if expect_leg_phase:
+            for failure in check_leg_phase(dict(zip(POSES, cells[1:]))):
+                slot = next(
+                    (p for p in reversed(POSES) if f"{p} " in failure or failure.startswith(p)),
+                    "walk-d",
+                )
+                failures.append(f"{slot}: {failure}")
         return failures
 
 
@@ -110,19 +130,30 @@ def scan_clip(
     frames_dir: Path,
     *,
     pinned_contact: int | None = None,
+    period: int | None = None,
+    skip_head_seconds: float = SKIP_HEAD_SECONDS,
+    expect_leg_phase: bool = True,
 ) -> dict[str, list[Path]]:
-    """The first stride cycle (optionally pinned) that passes the checks."""
+    """The first stride cycle (optionally pinned) that passes the checks.
+
+    `period` short-circuits the detection when the clip's cycle is already
+    machine-known (a registered master take / a replace output inheriting
+    it — master_takes.json), and `skip_head_seconds` drops to 0 for those
+    clips: a trimmed master has no wan-style ease-in to skip, and skipping
+    would eat most of its 2-loop window.
+    """
     frames = sorted(frames_dir.glob("frame_*.png"))
     if len(frames) < 16:
         raise SystemExit(f"need ≥16 frames to scan, got {len(frames)}")
     signals = load_signals(frames)
-    start = min(len(signals) - 16, int(SKIP_HEAD_SECONDS * FPS))
-    period = _find_period(signals[start:], min_period=12, max_period=28)
+    start = min(len(signals) - 16, int(skip_head_seconds * FPS))
+    if period is None:
+        period = _find_period(signals[start:], min_period=12, max_period=28)
     quarter = period // 4
 
     contacts: list[int] = []
     i = start
-    while i + period < len(frames) - period:
+    while i + period <= len(frames):
         contacts.append(max(range(i, i + period), key=lambda k: signals[k]))
         i += period
     if pinned_contact is not None:
@@ -134,7 +165,7 @@ def scan_clip(
         idx = {pose: contact + n * quarter for n, pose in enumerate(POSES)}
         if idx["walk-d"] >= len(frames):
             continue
-        failures = _evaluate(stand_raw, frames, idx)
+        failures = _evaluate(stand_raw, frames, idx, expect_leg_phase=expect_leg_phase)
         attempts = 1
         while failures and attempts < MAX_CYCLE_ATTEMPTS:
             slot = failures[0].split(":")[0]
@@ -144,7 +175,9 @@ def scan_clip(
             replaced = False
             for substitute in _substitutes(idx[slot], period, taken, len(frames)):
                 trial = {**idx, slot: substitute}
-                trial_failures = _evaluate(stand_raw, frames, trial)
+                trial_failures = _evaluate(
+                    stand_raw, frames, trial, expect_leg_phase=expect_leg_phase
+                )
                 attempts += 1
                 if not any(f.startswith(slot) for f in trial_failures):
                     idx, failures, replaced = trial, trial_failures, True

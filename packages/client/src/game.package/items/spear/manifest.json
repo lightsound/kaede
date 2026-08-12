@@ -7,7 +7,7 @@
   "palette": ["#9e9692", "#854726", "#97572f", "#af6d3b", "#cb7d47"],
   "source": {
     "prompt": "Bare-item spec (owner direction 2026-08-09, third respec of the ①b(a) spike): held items are generated WITHOUT any hand and REST ON the body sheet's drawn hand, MapleStory-style — the earlier baked-in gripping hand was rejected as too realistic for the chibi style and not generic (every item would need its own hand, matched per skin tone). The item's `grip` is the point that lands on the body's hand anchor: for resting items the bottom-center (slight overlap so the drawn mitten peeks out under the item = the held reading); for long shafted items the measured shaft point where the hand carries it. Items pair with the carry pose sheets (both arms still — the swing walk leaves every anchor reading as floating, measured). Generated via Cloudflare AI Gateway (kaede-assets) with google/nano-banana-2 (~$0.10), image_input = the base stand frame as style reference. Generation prompt: a LONG fantasy spear — long straight wooden shaft, leaf-shaped steel spearhead at the top, small metal butt cap at the bottom, drawn diagonally bottom-left to top-right (~20 degrees from vertical). Only the spear, no hand, flat pure green background. Grip = the measured shaft point at 70% height (the lower-third carry grip of a polearm); at 2x110px the spear stands taller than the character, the long-item stress case of the genericity check.",
-    "referenceHashes": ["6d2187bb1cf836b3b922ac2378b9138a03239be73da11ef0a774f738e75dd93d"]
+    "referenceHashes": ["4bb31bccd55b8d83e3d5717ad807bdc8831d29e6156f0b1d8152a5c98f87b284"]
   },
   "frame": {
     "file": "spear.png",
@@ -15,5 +15,6 @@
     "anchors": {
       "grip": [18, 77]
     }
-  }
+  },
+  "carryStyle": "heavy"
 }

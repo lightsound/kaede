@@ -47,18 +47,20 @@ HEAD_NECK_ROW_DELTA_MAX = 3
 HEAD_WIDTH_RATIO_MAX = 1.05
 HEAD_PIXEL_RATIO_RANGE = (0.90, 1.05)
 
-# Leg-phase gates for swing (non-carry) walk cycles, calibrated on the
+# Leg-phase gate for swing (non-carry) walk cycles, calibrated on the
 # approved boy sheets vs the owner-rejected girl cycles (2026-08-09 round 3):
-# the two contact frames must read as OPPOSITE legs leading — foot-band
-# signals RELATIVE TO THE STAND of opposite sign and meaningful magnitude —
-# and walk-a/walk-d must not be near-clones (boy IoU 0.78; rejected girl
-# 0.92 — the "no midpoint" read). Stand-relative because the raw signal
-# carries a per-character offset (the girl's foot band measures +2.2 on her
-# symmetric idle stand where the boy's measures +0.4): approved swing
-# sheets measure a' ≈ -2.2..-2.6 / c' ≈ +2.4..+2.7, the rejected girl
-# a' +2.2 / c' 0.0. Carry sheets stride gently and are excluded
-# (approved carry measures same-sign a' +2.0 / c' +1.5).
-CONTACT_SIGNAL_MIN = 1.2
+# no two walk frames may be near-clones. The owner-caught failure shapes —
+# the one-foot shuffle (contacts that never trade legs) and the missing
+# stride midpoint — both manifest as a near-clone pair (rejected girl
+# contact pair IoU 0.92-0.97; approved sheets peak at 0.87, the boy master
+# cycle at 0.85). A foot-band-signal "opposite signs / wide spread" test
+# was tried twice and retired (2026-08-12): opposite contacts of a side-view
+# chibi are near-mirror silhouettes, so the signal's left/right separation is
+# a rendering accident — the committed boy's renders spread 5.2 while the
+# boy MASTER's genuine opposite contacts (verified by eye) spread 0.3, below
+# any line that still catches the rejected shuffle (2.2). Carry sheets
+# stride gently with near-static legs by spec and are excluded from this
+# gate (the run_lint rule).
 WALK_A_D_IOU_MAX = 0.90
 # body every frame; a walk frame must not grow a significant INTERIOR color
 # far from everything in the stand (interior_only — see
@@ -220,30 +222,17 @@ def silhouette_iou(a: Image.Image, b: Image.Image) -> float:
 
 
 def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
-    """Swing-walk cycle sanity: opposite contacts, distinct second passing.
+    """Swing-walk cycle sanity: every walk frame must be a distinct pose.
 
     The owner-facing failure shapes this encodes (both shipped past every
     other gate before being caught by eye): contacts whose legs never trade
     (one-foot shuffle) and a walk-d so close to walk-a that the second half
-    of the stride has no midpoint.
+    of the stride has no midpoint — both read as near-clone frame pairs.
     """
-    from factory.foot_phase import foot_signal
-
-    required = {"stand", "walk-a", "walk-c", "walk-d"}
+    required = {"walk-a", "walk-b", "walk-c", "walk-d"}
     if not required <= frames.keys():
         return []
-    failures = []
-    baseline = foot_signal(frames["stand"])
-    sig_a = foot_signal(frames["walk-a"]) - baseline
-    sig_c = foot_signal(frames["walk-c"]) - baseline
-    if abs(sig_a) < CONTACT_SIGNAL_MIN or abs(sig_c) < CONTACT_SIGNAL_MIN or (
-        (sig_a > 0) == (sig_c > 0)
-    ):
-        failures.append(
-            f"contacts do not read as opposite legs (foot signals "
-            f"walk-a {sig_a:+.1f} / walk-c {sig_c:+.1f}; need opposite signs, "
-            f"|signal| ≥ {CONTACT_SIGNAL_MIN})"
-        )
+    failures: list[str] = []
     # No pair of walk frames may be near-clones. Calibrated: the approved
     # swing sheets peak at IoU(b,d) 0.87; a same-leg contact pair measured
     # 0.97 and a scrambled substitution's (b,c) measured 0.95 — both read
@@ -257,6 +246,64 @@ def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
                     f"{first} and {second} are near-clones (IoU {iou:.2f} > "
                     f"{WALK_A_D_IOU_MAX}) — a stride midpoint is missing"
                 )
+    return failures
+
+
+# Neck-junction gates for walk cells (①d 論点 6 — the girl neck-break
+# reproduction, 2026-08-12). The junction is judged row by row over the band
+# around the recorded neck anchor, WINDOWED to the anchor column ±5px: a
+# first cut measured the whole contiguous alpha run instead and could not be
+# calibrated — the bob's anti-aliased bottom edge merges into the junction
+# row's run, so every girl-with-bob composite (healthy ones included, the
+# master-lane candidates measured 2026-08-12) scored like the rejects. Two
+# windowed signals, calibrated on the committed sheets:
+# - effective alpha width (Σα/255 over the window): the owner-rejected girl
+#   walk-c junction measures 2.0 — a literal head-body gap, THE break the
+#   owner saw flicker at play speed. Healthy committed cells measure ≥ 7.3.
+# - soft/solid ratio (soft = alpha 64..229, solid = alpha ≥ 230) of the worst
+#   band row: every committed healthy cell ≤ 0.83; a translucent-core bridge
+#   has no solid pixels at all, so it measures the raw soft count (≥ 5). The
+#   self-masked-paste alpha-squared decay (bench_head_swap: α186 core → 135)
+#   produces exactly that shape, so this gate also enforces the
+#   alpha_composite rule end to end.
+# Stand cells are exempt: the junction flicker is a play-speed artifact of
+# the walk cycle, and the committed stands are the identity anchors every
+# other lane measures against.
+JUNCTION_BAND = (-4, 2)
+JUNCTION_WINDOW = 5
+JUNCTION_SOFT_ALPHA = 64
+JUNCTION_SOLID_ALPHA = 230
+JUNCTION_SOFT_RATIO_MAX = 1.5
+JUNCTION_WIDTH_MIN = 3.0
+
+
+def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
+    """The head-body junction must be an opaque bridge, not a translucent one."""
+    alpha = frame.getchannel("A").load()
+    nx, ny = neck
+    if not 0 <= nx < frame.width:
+        return [f"neck anchor x={nx} outside the frame"]
+    failures: list[str] = []
+    for y in range(max(0, ny + JUNCTION_BAND[0]), min(frame.height, ny + JUNCTION_BAND[1] + 1)):
+        window = [
+            alpha[x, y]
+            for x in range(max(0, nx - JUNCTION_WINDOW), min(frame.width, nx + JUNCTION_WINDOW + 1))
+        ]
+        effective = sum(window) / 255.0
+        solid = sum(1 for a in window if a >= JUNCTION_SOLID_ALPHA)
+        soft = sum(1 for a in window if JUNCTION_SOFT_ALPHA <= a < JUNCTION_SOLID_ALPHA)
+        if effective < JUNCTION_WIDTH_MIN:
+            failures.append(
+                f"neck junction row {y} is a gap (effective width "
+                f"{effective:.1f}px < {JUNCTION_WIDTH_MIN}) — head disconnects "
+                f"from the body at the anchor column"
+            )
+        elif soft / max(solid, 1) > JUNCTION_SOFT_RATIO_MAX:
+            failures.append(
+                f"neck junction row {y} is a semi-transparent bridge "
+                f"(soft/solid {soft}/{solid} > {JUNCTION_SOFT_RATIO_MAX}) — "
+                f"reads as a neck break at play speed"
+            )
     return failures
 
 
@@ -329,6 +376,7 @@ def lint_avatar(
     base_palette: list[str] | None = None,
     expect_carry_hand: bool = False,
     expect_leg_phase: bool = False,
+    neck_reference: dict[str, list[int]] | None = None,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -379,19 +427,39 @@ def lint_avatar(
             ]
 
         recorded_neck = pose.get("anchors", {}).get("neck")
-        try:
-            detected_neck = list(structure_neck(frame))
-        except SystemExit as exc:
-            failures.append(f"{name}: structure neck failed — {exc}")
-            detected_neck = None
-        if recorded_neck and detected_neck:
-            d = math.dist(recorded_neck, detected_neck)
-            if d > NECK_DIVERGENCE_PX:
-                failures.append(
-                    f"{name}: neck divergence {d:.1f}px "
-                    f"(recorded {recorded_neck}, structure {detected_neck}) "
-                    f"> {NECK_DIVERGENCE_PX}"
-                )
+        if name.startswith("walk") and recorded_neck:
+            failures += [
+                f"{name}: {f}" for f in check_neck_junction(frame, recorded_neck)
+            ]
+        if neck_reference is not None and name in neck_reference:
+            # Hood-class outfits fill the neck pinch and break the width-
+            # profile detector (measured 2026-08-12: the red hoodie's walk-c
+            # detected 17px low on two independent takes). The recorded
+            # anchor is validated against the PAIR body's manifest instead:
+            # a keep-everything edit preserves poses by construction, and
+            # the sheet-edit IoU gate proves that construction held.
+            if recorded_neck:
+                d = math.dist(recorded_neck, neck_reference[name])
+                if d > NECK_DIVERGENCE_PX:
+                    failures.append(
+                        f"{name}: neck divergence {d:.1f}px from the pair "
+                        f"reference (recorded {recorded_neck}, pair "
+                        f"{neck_reference[name]}) > {NECK_DIVERGENCE_PX}"
+                    )
+        else:
+            try:
+                detected_neck = list(structure_neck(frame))
+            except SystemExit as exc:
+                failures.append(f"{name}: structure neck failed — {exc}")
+                detected_neck = None
+            if recorded_neck and detected_neck:
+                d = math.dist(recorded_neck, detected_neck)
+                if d > NECK_DIVERGENCE_PX:
+                    failures.append(
+                        f"{name}: neck divergence {d:.1f}px "
+                        f"(recorded {recorded_neck}, structure {detected_neck}) "
+                        f"> {NECK_DIVERGENCE_PX}"
+                    )
 
         if expect_carry_hand or (name == "stand" and manifest.get("handLayer")):
             recorded_hand = pose.get("anchors", {}).get("hand")

@@ -39,6 +39,12 @@ export interface ItemAsset {
   name: string;
   dir: string;
   frame: AssetFrame;
+  /**
+   * Which carry sheet family the item rides (its manifest's carryStyle —
+   * owner direction 2026-08-12): 'light' = one-hand carry, 'heavy' =
+   * two-arm front carry. Manifests without the field count as heavy.
+   */
+  carryStyle: 'light' | 'heavy';
 }
 
 export interface AssetCatalog {
@@ -160,7 +166,8 @@ function parseItem(site: ManifestSite, collect: Collect, into: ItemAsset[]): voi
   if (!header) return;
   const label = `${site.path} frame`;
   const frame = parseFrame(site.manifest.frame, site.dir, site.imageUrls, collect.problems, label);
-  if (frame) into.push({ ...header, dir: site.dir, frame });
+  const carryStyle = site.manifest.carryStyle === 'light' ? 'light' : 'heavy';
+  if (frame) into.push({ ...header, dir: site.dir, frame, carryStyle });
 }
 
 /**

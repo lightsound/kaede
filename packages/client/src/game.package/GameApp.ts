@@ -517,29 +517,78 @@ async function loadRedSheet(): Promise<AvatarSheetTextures> {
 }
 
 /**
- * The carry-pose sheet variant (avatar.boy-basic-carry / -red-carry): the
- * near arm hangs still through the whole stride, giving a held item a
- * stable hand anchor — the ①b(a) verdict that a statically anchored item
- * cannot ride the swing-walk sheets (see HeldItemDisplay).
+ * How an item is carried (its manifest's carryStyle — owner direction
+ * 2026-08-12): light items ride the one-hand carry sheets, heavy/bulky
+ * ones the two-arm front carry. Which pose sheet a body wears and whether
+ * an item can ride it stay one decision (the ①b(a) verdict); the style
+ * only picks WHICH carry family.
  */
-async function loadCarrySheet(redOutfit: boolean): Promise<AvatarSheetTextures> {
-  return sheetFromModules(
-    await (redOutfit
-      ? Promise.all([
-          import('./avatar-red-carry/stand.png'),
-          import('./avatar-red-carry/walk-a.png'),
-          import('./avatar-red-carry/walk-b.png'),
-          import('./avatar-red-carry/walk-c.png'),
-          import('./avatar-red-carry/walk-d.png'),
-        ])
-      : Promise.all([
-          import('./avatar-carry/stand.png'),
-          import('./avatar-carry/walk-a.png'),
-          import('./avatar-carry/walk-b.png'),
-          import('./avatar-carry/walk-c.png'),
-          import('./avatar-carry/walk-d.png'),
-        ])),
-  );
+type CarryStyle = 'light' | 'heavy';
+
+/**
+ * The carry-pose sheet variants: a stable hand anchor through the whole
+ * stride — the ①b(a) verdict that a statically anchored item cannot ride
+ * the swing-walk sheets (see HeldItemDisplay). Vite needs literal import()
+ * paths, hence the four-thunk table.
+ */
+const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> = {
+  'heavy-base': () =>
+    Promise.all([
+      import('./avatar-carry/stand.png'),
+      import('./avatar-carry/walk-a.png'),
+      import('./avatar-carry/walk-b.png'),
+      import('./avatar-carry/walk-c.png'),
+      import('./avatar-carry/walk-d.png'),
+    ]),
+  'heavy-red': () =>
+    Promise.all([
+      import('./avatar-red-carry/stand.png'),
+      import('./avatar-red-carry/walk-a.png'),
+      import('./avatar-red-carry/walk-b.png'),
+      import('./avatar-red-carry/walk-c.png'),
+      import('./avatar-red-carry/walk-d.png'),
+    ]),
+  'light-base': () =>
+    Promise.all([
+      import('./avatar-carry-light/stand.png'),
+      import('./avatar-carry-light/walk-a.png'),
+      import('./avatar-carry-light/walk-b.png'),
+      import('./avatar-carry-light/walk-c.png'),
+      import('./avatar-carry-light/walk-d.png'),
+    ]),
+  'light-red': () =>
+    Promise.all([
+      import('./avatar-red-carry-light/stand.png'),
+      import('./avatar-red-carry-light/walk-a.png'),
+      import('./avatar-red-carry-light/walk-b.png'),
+      import('./avatar-red-carry-light/walk-c.png'),
+      import('./avatar-red-carry-light/walk-d.png'),
+    ]),
+};
+
+/** The carry sheets' manifest + hand cutout, keyed like CARRY_SHEET_LOADERS. */
+const CARRY_KIT_LOADERS = {
+  'heavy-base': () =>
+    Promise.all([import('./avatar-carry/manifest.json'), import('./avatar-carry/hand.png')]),
+  'heavy-red': () =>
+    Promise.all([
+      import('./avatar-red-carry/manifest.json'),
+      import('./avatar-red-carry/hand.png'),
+    ]),
+  'light-base': () =>
+    Promise.all([
+      import('./avatar-carry-light/manifest.json'),
+      import('./avatar-carry-light/hand.png'),
+    ]),
+  'light-red': () =>
+    Promise.all([
+      import('./avatar-red-carry-light/manifest.json'),
+      import('./avatar-red-carry-light/hand.png'),
+    ]),
+};
+
+async function loadCarrySheet(style: CarryStyle, redOutfit: boolean): Promise<AvatarSheetTextures> {
+  return sheetFromModules(await CARRY_SHEET_LOADERS[`${style}-${redOutfit ? 'red' : 'base'}`]());
 }
 
 /**
@@ -581,12 +630,12 @@ const HELD_ITEM_LOADERS = {
  */
 async function loadHeldItem(
   loader: (typeof HELD_ITEM_LOADERS)[keyof typeof HELD_ITEM_LOADERS],
+  style: CarryStyle,
   redOutfit: boolean,
 ): Promise<HeldItemDisplay> {
-  const [[itemManifest, itemUrl], bodyManifest, handUrl] = await Promise.all([
+  const [[itemManifest, itemUrl], [bodyManifest, handUrl]] = await Promise.all([
     loader(),
-    redOutfit ? import('./avatar-red-carry/manifest.json') : import('./avatar-carry/manifest.json'),
-    redOutfit ? import('./avatar-red-carry/hand.png') : import('./avatar-carry/hand.png'),
+    CARRY_KIT_LOADERS[`${style}-${redOutfit ? 'red' : 'base'}`](),
   ]);
   const [texture, handTexture] = await Promise.all([
     Assets.load(itemUrl.default),
@@ -616,14 +665,30 @@ async function loadHeldItem(
  * can ride it are one decision (the ①b(a) verdict), not two independent
  * toggles.
  */
+/**
+ * The carrying look for one held item: the item's own manifest names its
+ * carry style (light = one-hand, heavy = two-arm front), and the body
+ * swaps to that carry family. Split from loadDressUpPreview to keep both
+ * under the CRAP complexity budget (the createGameApp precedent).
+ */
+async function loadHeldPreview(
+  loader: (typeof HELD_ITEM_LOADERS)[keyof typeof HELD_ITEM_LOADERS],
+  redOutfit: boolean,
+): Promise<DressUpPreview> {
+  const [itemManifest] = await loader();
+  const style: CarryStyle = itemManifest.default.carryStyle === 'light' ? 'light' : 'heavy';
+  return {
+    sheet: await loadCarrySheet(style, redOutfit),
+    held: await loadHeldItem(loader, style, redOutfit),
+  };
+}
+
 async function loadDressUpPreview(): Promise<DressUpPreview> {
   const params = new URLSearchParams(window.location.search);
   const redOutfit = params.get('outfit') === 'red';
   const held = params.get('held');
   const loader = held ? HELD_ITEM_LOADERS[held as keyof typeof HELD_ITEM_LOADERS] : undefined;
-  if (loader) {
-    return { sheet: await loadCarrySheet(redOutfit), held: await loadHeldItem(loader, redOutfit) };
-  }
+  if (loader) return loadHeldPreview(loader, redOutfit);
   if (redOutfit) return { sheet: await loadRedSheet() };
   return {};
 }

@@ -77,6 +77,42 @@
       },
       "approval": "girl 系ダンスマスター確立ラウンド(factory-yield 2026-08-12)— boy 3D gangnam 緑参照(0667b6…)×girl 原本 stand セルの seedance 清書(crosschar 方式)。16:9 生成(864×496)を内容中心の 496×496 に正方形クロップ(replace レシピの正方形 identity 前提に整合 — 全コマのシルエットはクロップ内・登録ゲート再合格)。本 PR のオーナーマージ = 承認",
       "registeredAt": "2026-08-12"
+    },
+    "walk-carry/boy": {
+      "motion": "walk-carry",
+      "family": "boy",
+      "masterSha256": "b4102f1f732e319bf1be9416ed4f8451f4bf3bf98d1a1de8338ebe189fb9de66",
+      "sourceSha256": "83ab5d1518f9883e0581dc84e6a3be1b5ecc20d919fcce78972f18b74fc568e0",
+      "frames": 97,
+      "fps": 24.0,
+      "width": 496,
+      "height": 496,
+      "loop": {
+        "start": 0,
+        "period": 42,
+        "loopMeanIou": 0.97,
+        "closureIou": 0.978
+      },
+      "approval": "carry 歩行マスター v2(2026-08-12・オーナー差し戻し対応)— v1 の真横視点・後傾・巨大髪を、Meshy Carry_Heavy_Object_Walk_inplace GLB(タスク 019fee15…・0cr 再取得)を bpy yaw45=右向き 3/4 で緑レンダー(75〜116 の 42 コマループ・タイル×3)し直して解消。boy 原本 stand セル identity × seedance 480p 4 秒(素手・直立寄り・v1 実証プロンプト+2D 様式強化)。テイク c(a=3D 様式化・b=箱焼き込みで棄却)。本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-12"
+    },
+    "walk-carry-light/boy": {
+      "motion": "walk-carry-light",
+      "family": "boy",
+      "masterSha256": "0df88e422cd3fc1697da893170b5d59067a4586b3e9a96a190c6338dc9887c0b",
+      "sourceSha256": "95ef6714db50c0e82e87479096fc00ffd0e74c50f1475503fc0d909116f4f827",
+      "frames": 69,
+      "fps": 24.0,
+      "width": 496,
+      "height": 496,
+      "loop": {
+        "start": 0,
+        "period": 30,
+        "loopMeanIou": 0.988,
+        "closureIou": 0.991
+      },
+      "approval": "軽量 carry 歩行マスター新設(2026-08-12・オーナー指示「持ち物によって carry を変えるべき」)— Meshy Walking_with_Phone_inplace GLB(タスク 019fee45…・0cr 再取得・2026-08-11 コーヒー検証の金型)を bpy yaw45=右向き 3/4 で緑レンダー(6〜35 の 30 コマループ・タイル×3)。boy 原本 stand セル identity × seedance 480p 4 秒(片手を胸元・素手)。テイク c(b=3D 様式化で棄却)。本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-12"
     }
   }
 }

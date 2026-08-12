@@ -33,11 +33,16 @@ const avatar = (id: string, over: Partial<AvatarAsset> = {}): AvatarAsset => ({
   ...over,
 });
 
-const item = (id: string, grip: readonly [number, number] = [5, 12]): ItemAsset => ({
+const item = (
+  id: string,
+  grip: readonly [number, number] = [5, 12],
+  carryStyle: 'light' | 'heavy' = 'heavy',
+): ItemAsset => ({
   id,
   name: `アイテム ${id}`,
   dir: `./items/${id}`,
   frame: frame({ file: `${id}.png`, url: `/items/${id}.png`, size: [10, 16], anchors: { grip } }),
+  carryStyle,
 });
 
 const catalogOf = (avatars: AvatarAsset[], items: ItemAsset[] = []): AssetCatalog => ({
@@ -63,6 +68,25 @@ describe('outfitOptions / carryVariantOf', () => {
     ]);
     expect(carryVariantOf(catalog, 'avatar.boy-basic')?.id).toBe('avatar.boy-basic-carry');
     expect(carryVariantOf(catalog, 'avatar.boy-basic-red')).toBeUndefined();
+  });
+
+  it('hides the light-carry variants from the outfit list and resolves them by style', () => {
+    const basic = avatar('avatar.boy-basic');
+    const carry = avatar('avatar.boy-basic-carry');
+    const light = avatar('avatar.boy-basic-carry-light');
+    const catalog = catalogOf([basic, carry, light]);
+    expect(outfitOptions(catalog).map((o) => o.id)).toEqual(['avatar.boy-basic']);
+    expect(carryVariantOf(catalog, 'avatar.boy-basic', 'light')?.id).toBe(
+      'avatar.boy-basic-carry-light',
+    );
+    expect(carryVariantOf(catalog, 'avatar.boy-basic', 'heavy')?.id).toBe('avatar.boy-basic-carry');
+  });
+
+  it('falls back to the heavy carry when an outfit has no light variant', () => {
+    const basic = avatar('avatar.boy-basic');
+    const carry = avatar('avatar.boy-basic-carry');
+    const catalog = catalogOf([basic, carry]);
+    expect(carryVariantOf(catalog, 'avatar.boy-basic', 'light')?.id).toBe('avatar.boy-basic-carry');
   });
 });
 
@@ -94,6 +118,18 @@ describe('resolveStageLook', () => {
     );
     expect(look?.outfit.id).toBe('avatar.boy-basic');
     expect(look?.body.id).toBe('avatar.boy-basic-carry');
+    expect(look?.item?.id).toBe('item.mug');
+  });
+
+  it('a light item swaps to the one-hand light carry variant', () => {
+    const light = avatar('avatar.boy-basic-carry-light');
+    const lightMug = item('item.mug', [5, 12], 'light');
+    const look = resolveStageLook(
+      catalogOf([basic, carry, light], [lightMug]),
+      'avatar.boy-basic',
+      'item.mug',
+    );
+    expect(look?.body.id).toBe('avatar.boy-basic-carry-light');
     expect(look?.item?.id).toBe('item.mug');
   });
 
