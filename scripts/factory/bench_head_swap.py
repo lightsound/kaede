@@ -206,10 +206,16 @@ def erase_old_head(body: Image.Image, neck_y: int) -> Image.Image:
 def paste_head_group(
     body: Image.Image, group: Image.Image, group_neck: tuple[int, int], body_neck: tuple[int, int]
 ) -> Image.Image:
-    """paste_head's erase-then-paste, with two cell-scale differences:
+    """paste_head's erase-then-paste, with three cell-scale differences:
     aligned on the NECK POINT (not the crop's horizontal center — a
-    long-hair crop is asymmetric) and erasing by old-head component
-    (erase_old_head), not by full rows."""
+    long-hair crop is asymmetric), erasing by old-head component
+    (erase_old_head), and compositing with alpha_composite, never
+    self-masked paste. `paste(im, box, im)` squares the alpha of every
+    anti-aliased pixel (α86→29, measured), which thinned the whole body
+    outline and read as a neck break at play speed on ALL takes
+    (owner-reported, round 2); paste_head gets away with it because the
+    import line flattens onto green right after, but here the cells
+    render as-is. The ①d-2 factory lane must keep this rule."""
     paste_x = body_neck[0] - group_neck[0]
     paste_y = body_neck[1] - group_neck[1]
     out = erase_old_head(body, body_neck[1]) if body_neck[1] > 0 else body.copy()
@@ -223,11 +229,11 @@ def paste_head_group(
             (out.width + pad_left + pad_right, out.height + pad_top + pad_bottom),
             (0, 0, 0, 0),
         )
-        canvas.paste(out, (pad_left, pad_top), out)
+        canvas.alpha_composite(out, (pad_left, pad_top))
         out = canvas
         paste_x += pad_left
         paste_y += pad_top
-    out.paste(group, (paste_x, paste_y), group)
+    out.alpha_composite(group, (paste_x, paste_y))
     return out
 
 
