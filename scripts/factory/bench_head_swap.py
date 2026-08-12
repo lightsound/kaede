@@ -64,7 +64,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from factory.compose_sheet import CHIN_OVERLAP, chroma_key  # noqa: E402
+from factory.compose_sheet import CHIN_OVERLAP, _dilate, chroma_key  # noqa: E402
 from factory.extract_headgear import (  # noqa: E402
     CANVAS_CHAR_H,
     CANVAS_GROUND_Y,
@@ -113,7 +113,10 @@ def prepare(skin: str, out: Path) -> None:
 
 
 def head_group_of_edit(
-    edit_path: Path, base_stand: Image.Image, base_neck: tuple[int, int]
+    edit_path: Path,
+    base_stand: Image.Image,
+    base_neck: tuple[int, int],
+    diff_only: bool = False,
 ) -> tuple[Image.Image, tuple[int, int]]:
     """(head-group crop, its neck point) extracted from the edit, at the
     720-canvas scale.
@@ -122,7 +125,14 @@ def head_group_of_edit(
     CANVAS (the keep-everything invariant: the edited body is
     pixel-identical, so the base's measured neck transfers). Above the
     neck line (+CHIN_OVERLAP, scaled) everything opaque is head group;
-    below it, only pixels differing from the base canvas (long hair)."""
+    below it, only pixels differing from the base canvas (long hair).
+
+    `diff_only` keeps CHANGED pixels alone even above the neck (the
+    extract_headgear diff, aimed at the face): a face/expression edit
+    then composites over the committed head without touching it — a full
+    head replacement re-imports nano's redraw of the "unchanged" hair,
+    whose silhouette wobbles a few px and thins the neck junction
+    (measured on the closed-eyes take, owner round 3)."""
     base_canvas, (off_x, off_y) = canvas_of_stand(base_stand)
     canvas_scale = CANVAS_CHAR_H / base_stand.height
     neck_canvas = (
@@ -141,7 +151,13 @@ def head_group_of_edit(
     b = np.asarray(edit.convert("RGB")).astype(int)
     differs = np.sqrt(((a - b) ** 2).sum(axis=2)) > DIFF_MIN
     rows = np.arange(CANVAS)[:, None]
-    mask = opaque & ((rows < cut_y) | differs)
+    if diff_only:
+        # Dilated so the overlay carries a skin margin around the changed
+        # features: with the residual ~1px of head registration error the
+        # margin covers the old feature's rim (walk-c measured).
+        mask = opaque & _dilate(differs, 2) & (rows < cut_y)
+    else:
+        mask = opaque & ((rows < cut_y) | differs)
 
     out = np.zeros((CANVAS, CANVAS, 4), np.uint8)
     out[mask] = keyed[mask]
@@ -157,9 +173,10 @@ def scaled_head_group(
     edit_path: Path,
     base_stand: Image.Image,
     base_neck: tuple[int, int],
+    diff_only: bool = False,
 ) -> tuple[Image.Image, tuple[int, int]]:
     """The head group scaled from canvas to committed-cell pixels."""
-    crop, neck = head_group_of_edit(edit_path, base_stand, base_neck)
+    crop, neck = head_group_of_edit(edit_path, base_stand, base_neck, diff_only)
     scale = base_stand.height / CANVAS_CHAR_H
     resized = crop.resize(
         (max(1, round(crop.width * scale)), max(1, round(crop.height * scale))),
@@ -204,21 +221,26 @@ def erase_old_head(body: Image.Image, neck_y: int) -> Image.Image:
 
 
 def paste_head_group(
-    body: Image.Image, group: Image.Image, group_neck: tuple[int, int], body_neck: tuple[int, int]
+    body: Image.Image,
+    group: Image.Image,
+    group_neck: tuple[int, int],
+    body_neck: tuple[int, int],
+    erase: bool = True,
 ) -> Image.Image:
     """paste_head's erase-then-paste, with three cell-scale differences:
     aligned on the NECK POINT (not the crop's horizontal center — a
     long-hair crop is asymmetric), erasing by old-head component
-    (erase_old_head), and compositing with alpha_composite, never
-    self-masked paste. `paste(im, box, im)` squares the alpha of every
-    anti-aliased pixel (α86→29, measured), which thinned the whole body
-    outline and read as a neck break at play speed on ALL takes
-    (owner-reported, round 2); paste_head gets away with it because the
-    import line flattens onto green right after, but here the cells
-    render as-is. The ①d-2 factory lane must keep this rule."""
+    (erase_old_head; skipped for diff overlays), and compositing with
+    alpha_composite, never self-masked paste. `paste(im, box, im)`
+    squares the alpha of every anti-aliased pixel (α86→29, measured),
+    which thinned the whole body outline and read as a neck break at
+    play speed on ALL takes (owner-reported, round 2); paste_head gets
+    away with it because the import line flattens onto green right
+    after, but here the cells render as-is. The ①d-2 factory lane must
+    keep this rule."""
     paste_x = body_neck[0] - group_neck[0]
     paste_y = body_neck[1] - group_neck[1]
-    out = erase_old_head(body, body_neck[1]) if body_neck[1] > 0 else body.copy()
+    out = erase_old_head(body, body_neck[1]) if erase and body_neck[1] > 0 else body.copy()
     pad_left = max(0, -paste_x)
     pad_top = max(0, -paste_y)
     pad_right = max(0, paste_x + group.width - out.width)
@@ -289,13 +311,56 @@ def walk_clip(frames: list[Image.Image], out_dir: Path, name: str) -> None:
     print(f"wrote {out_dir / f'{name}.mp4'}")
 
 
-def composite(edit: Path, skins: list[str], poses: list[str], out_dir: Path) -> None:
+def head_shift(stand: Image.Image, body: Image.Image, neck_y: int) -> tuple[int, int]:
+    """(dx, dy) of the pose cell's head relative to the stand's, by
+    template match over ±4px. The committed walk heads are the stand head
+    pasted at import time, but the manifest neck anchors carry ±1-2px of
+    per-pose measurement noise — enough that a face diff aligned on the
+    NECK lets the old eye rims peek out from behind the new eyes
+    (measured, owner round 3). A face overlay must register against the
+    head it decorates, so it aligns on the head pixels themselves."""
+    import numpy as np
+
+    s = np.asarray(stand.convert("RGBA")).astype(int)
+    b = np.asarray(body.convert("RGBA")).astype(int)
+    rows = max(1, neck_y - 6)
+    best: tuple[int, tuple[int, int]] | None = None
+    for dy in range(-4, 5):
+        for dx in range(-4, 5):
+            score = 0
+            count = 0
+            for y in range(0, rows):
+                by = y + dy
+                if not 0 <= by < b.shape[0]:
+                    continue
+                sx0, bx0 = (0, dx) if dx >= 0 else (-dx, 0)
+                w = min(s.shape[1] - sx0, b.shape[1] - bx0)
+                if w <= 0:
+                    continue
+                srow = s[y, sx0 : sx0 + w]
+                brow = b[by, bx0 : bx0 + w]
+                both = (srow[:, 3] >= 128) & (brow[:, 3] >= 128)
+                if both.any():
+                    score += int(np.abs(srow[both, :3] - brow[both, :3]).sum())
+                    count += int(both.sum())
+            if count:
+                mean = score / count
+                if best is None or mean < best[0]:
+                    best = (mean, (dx, dy))
+    if best is None:
+        raise SystemExit("head template match found no overlapping opaque pixels")
+    return best[1]
+
+
+def composite(
+    edit: Path, skins: list[str], poses: list[str], out_dir: Path, diff_only: bool = False
+) -> None:
     cells = committed_cells(skins)
     manifest, base_dir = load_manifest(skins[0])
     stand_meta = manifest["poses"]["stand"]
     base_stand = Image.open(base_dir / stand_meta["file"]).convert("RGBA")
     base_neck = tuple(stand_meta["anchors"]["neck"])
-    group, group_neck = scaled_head_group(edit, base_stand, base_neck)
+    group, group_neck = scaled_head_group(edit, base_stand, base_neck, diff_only)
     out_dir.mkdir(parents=True, exist_ok=True)
     base_row: list[Image.Image] = []
     swap_row: list[Image.Image] = []
@@ -303,7 +368,17 @@ def composite(edit: Path, skins: list[str], poses: list[str], out_dir: Path) -> 
         if pose not in cells:
             raise SystemExit(f"pose {pose!r} not in manifests of {skins}")
         body, neck = cells[pose]
-        swapped = paste_head_group(body, group, group_neck, neck)
+        if diff_only:
+            # A diff overlay changes nothing outside the edited pixels, so
+            # the committed head — junction included — stays untouched
+            # (erase off), and it registers against the HEAD, not the neck
+            # anchor (head_shift): the anchor's per-pose noise would let
+            # the old features peek out around the new ones.
+            dx, dy = head_shift(base_stand, body, base_neck[1])
+            anchor = (base_neck[0] + dx, base_neck[1] + dy)
+            swapped = paste_head_group(body, group, group_neck, anchor, erase=False)
+        else:
+            swapped = paste_head_group(body, group, group_neck, neck)
         swapped.save(out_dir / f"{pose}.png")
         base_row.append(body)
         swap_row.append(swapped)
@@ -336,6 +411,12 @@ def main() -> None:
         default="stand,walk-a,walk-b,walk-c,walk-d",
         help="comma-separated poses to composite",
     )
+    comp.add_argument(
+        "--mode",
+        choices=["replace", "diff"],
+        default="replace",
+        help="replace = full head swap (hair); diff = changed-pixels overlay (face)",
+    )
     comp.add_argument("--out", type=Path, required=True, help="output directory")
     args = parser.parse_args()
 
@@ -343,7 +424,7 @@ def main() -> None:
         prepare(args.skin, args.out)
         return
     skins = args.skin or ["avatar", "avatar-gestures"]
-    composite(args.edit, skins, args.poses.split(","), args.out)
+    composite(args.edit, skins, args.poses.split(","), args.out, diff_only=args.mode == "diff")
 
 
 if __name__ == "__main__":
