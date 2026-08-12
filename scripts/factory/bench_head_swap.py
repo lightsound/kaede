@@ -45,9 +45,11 @@ Usage:
         --image /tmp/bench-1d/stand-canvas.png --prompt "..." \
         --out /tmp/bench-1d/hair-take
     python3 scripts/factory/bench_head_swap.py composite \
-        --edit /tmp/bench-1d/hair-take_0.png --skin avatar \
+        --edit /tmp/bench-1d/hair-take_0.png \
         --poses stand,walk-a,walk-b,walk-c,walk-d,sit,wave,dance-a \
         --out /tmp/bench-1d/hair
+    (composite --skin is appendable; omitting it reads avatar +
+    avatar-gestures, and gesture poses need the gesture manifest listed)
 """
 
 from __future__ import annotations
