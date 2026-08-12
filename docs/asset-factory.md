@@ -65,10 +65,31 @@ python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標�
   component erase ＋ alpha_composite（girl 首切れ 3 ラウンドの根治規則）で、
   頭はシートの committed stand セルから貼り直す — 動画側の髪は最終シートに
   残らない。
-- 服替え変種（red/pants ± carry）は素体の新 walk シートへの**シート編集**が
-  実測で優位（$0.10/着・IoU ゲート・変種間で振り付けがバイト一致に揃う）。
-  replace の identity 差し替え（$0.155〜/着）は系統の合うマスターが無い
-  新シルエット向け。
+- **首ボブ**（差し戻し対応 2026-08-12 — 「顔が固まっている」）: スケールは
+  サイクル一律（中央値）でマスター実在の上下ボブを通し、compose が
+  垂直ボブをゲイン 4 に増幅（≈3px p-p @96px）。**水平の頭ずらしは封印**
+  （チビ頭がセル bbox 両端を規定 → 中心揃え＋下辺中央アンカーで全体
+  平行移動に化け、顔は動かず足が滑る — 実測済み。compose_sheet の
+  HEAD_SWAY_GAIN 参照）。
+- **マスターの視点は正準右 3/4 で鋳造する**（差し戻し対応 2026-08-12）:
+  replace/extract はマスターのシルエットを継承するため、緑参照が profile
+  だと最終セルまで真横になる（v1 carry の棄却理由 — 後傾・脚細・シャツ
+  欠けの主因）。Meshy GLB は `spike_tripo_render.py` の yaw45 で自前
+  レンダーしてから seedance 清書。
+- **carry は持ち物の重量で 2 系統**（オーナー裁定 2026-08-12）:
+  `walk-carry/boy`（両腕前・重い物）と `walk-carry-light/boy`（片手胸元・
+  軽い物 — Walking_with_Phone_inplace 金型）。item manifest の
+  `carryStyle`（light/heavy）でクライアント・試着ステージがシートを
+  選ぶ（light 未生産の服は heavy へフォールバック）。
+- 服替え変種（red/pants ± carry ± carry-light）は素体の新 walk シートへの
+  **シート編集**が実測で優位（$0.10/着・IoU ゲート・変種間で振り付けが
+  バイト一致に揃う）。replace の identity 差し替え（$0.155〜/着）は系統の
+  合うマスターが無い新シルエット向け。フードなど**首ピンチ検出を壊す服は
+  `lint.neckFrom`** でペア素体 manifest から首を転写検証する（構築不変量
+  — 編集レーンの IoU ゲートが構築保持を証明）。旧 carry の staticize
+  （上半身の内部色移植）は v2 マスターで腕が自然に動くため**撤去**
+  （order の `staticUpperBody` で opt-in のみ — 顔 RGB の移植が二重顔の
+  原因だった）。
 
 ## 工程
 
