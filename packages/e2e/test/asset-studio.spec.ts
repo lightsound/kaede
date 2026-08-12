@@ -22,11 +22,11 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await expect(page.getByTestId('item-card')).toHaveCount(5);
   // The carry variants ship a hand overlay (the mitten-over-item layer).
   await expect(page.getByTestId('hand-layer')).toHaveCount(3);
-  // The ①c gesture sheet (boy-basic: stand + sit + sleep + wave + 8 dance
-  // frames) and the busy headgear render in sections of their own, outside
-  // the avatar-body pose diff.
-  await expect(page.getByTestId('gesture-card')).toHaveCount(1);
-  await expect(page.getByTestId('gesture-frame')).toHaveCount(12);
+  // The ①c gesture sheets (boy-basic and girl-basic, 12 cells each:
+  // stand + sit + sleep + wave + 8 dance frames) and the busy headgear
+  // render in sections of their own, outside the avatar-body pose diff.
+  await expect(page.getByTestId('gesture-card')).toHaveCount(2);
+  await expect(page.getByTestId('gesture-frame')).toHaveCount(24);
   await expect(page.getByTestId('headgear-card')).toHaveCount(1);
 
   // The shipped manifests share one pose vocabulary, so the diff is clean —

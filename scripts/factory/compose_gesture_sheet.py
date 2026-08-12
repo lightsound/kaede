@@ -32,6 +32,25 @@ Inputs are named by the order's `gestureSources` map (file → sha256 in
 the R2 originals store), so a fresh clone reproduces the committed sheet
 without the local takes.
 
+Per-order source shapes (the girl sheet, 2026-08-12, extends the boy
+defaults without touching them):
+
+- sit: `sit-original.png` in gestureSources = a nano still (the
+  cross-legged floor sit passed one-shot on the girl — the 2026-08-10
+  candidate-D precedent); otherwise the boy's `sit-clip-original.mp4`
+  frame SIT_FRAME.
+- dance: an order `danceMaster` key ("motion/family") cuts the cells
+  straight from the registered master take (master_takes.json — no
+  replace call, no charge): the ledger's loop (start, period) anchors
+  the phase-even slots, blink.py picks the openest-eyed
+  phase-equivalent frame per slot (the master is a seedance
+  generation, so blink frames exist that a wan clip's cells would
+  not), and scales are normalized by the median hair-blob ratio
+  against the stand — the master's canvas scale is not the bench
+  canvas's, so a constant ratio cannot be assumed (the replace lane's
+  normalization, re-verified per cell by the same gate). Otherwise
+  the boy's `dance-clip-original.mp4` + DANCE_FRAMES.
+
 Usage:
     python3 scripts/factory/compose_gesture_sheet.py \
         packages/client/src/game.package/avatar-gestures/order.json
@@ -51,16 +70,23 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from factory.anchors import hair_reference  # noqa: E402
+from factory.anchors import hair_reference, hair_stats  # noqa: E402
 from factory.art_lint import check_gesture_cell  # noqa: E402
+from factory.blink import eye_openness_score, select_cells  # noqa: E402
 from factory.compose_sheet import (  # noqa: E402
     cell_on_green,
     chroma_key,
+    chroma_key_greenwear,
     content_bbox,
 )
+from factory.loop_scan import silhouette_mask, verify_loop  # noqa: E402
+from factory.video import extract_frames  # noqa: E402
 from r2_originals import resolve_asset_path, resolve_original, validate_order_path  # noqa: E402
+
+LEDGER_PATH = Path(__file__).resolve().parent / "master_takes.json"
 
 ASSET_ROOT = ROOT / "packages/client/src/game.package"
 
@@ -116,6 +142,73 @@ def keyed_cell(img: Image.Image, scale: float) -> Image.Image:
     return keyed.crop(content_bbox(keyed))
 
 
+def master_dance_cells(order: dict, clip: Path, reference) -> dict[str, Image.Image]:
+    """Dance cells cut straight from a registered master take (no charge).
+
+    The ledger entry is the contract: its sha256 must match the order's
+    recorded source (a silently different clip would re-anchor every cell),
+    its loop quality is re-proved on the extracted frames, and its (start,
+    period) anchors the same phase-even slots a replace output would get —
+    so the family's pose grid stays canonical across characters.
+    """
+    ledger = json.loads(LEDGER_PATH.read_text())
+    meta = ledger["masters"].get(order["danceMaster"])
+    if meta is None:
+        raise SystemExit(
+            f"danceMaster {order['danceMaster']!r} is not in the ledger "
+            f"(available: {sorted(ledger['masters'])})"
+        )
+    recorded = order["gestureSources"].get("dance-master-original.mp4")
+    if recorded != meta["masterSha256"]:
+        raise SystemExit(
+            f"gestureSources records dance-master-original.mp4 {recorded} but the "
+            f"ledger's {order['danceMaster']} master is {meta['masterSha256']} — "
+            "the order and the ledger disagree on which take the cells come from"
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        frame_paths = extract_frames(clip, Path(tmp) / "frames")
+        if len(frame_paths) != meta["frames"]:
+            raise SystemExit(
+                f"master extracted {len(frame_paths)} frames, ledger records "
+                f"{meta['frames']} — wrong or re-encoded clip"
+            )
+        # The green-wear-safe key is the master-take contract (replace lane;
+        # the blink calibration was measured on frames keyed this way).
+        frames = [chroma_key_greenwear(Image.open(p)) for p in frame_paths]
+
+    period = meta["loop"]["period"]
+    start, loop_mean, closure = verify_loop(
+        [silhouette_mask(img) for img in frames], period
+    )
+    print(
+        f"master loop: start={start} period={period} "
+        f"loop-mean={loop_mean:.3f} closure={closure:.3f} "
+        f"(ledger {meta['loop']['loopMeanIou']:.3f}/{meta['loop']['closureIou']:.3f})"
+    )
+
+    scores = [eye_openness_score(img) for img in frames]
+    chosen, suspects = select_cells(scores, meta["loop"]["start"], period, 8)
+    print(f"dance cells (0-based master frames): {chosen}")
+    if suspects:
+        print(f"blink suspects (visual gate must confirm): {suspects}")
+
+    # The master's canvas scale is unknown to the bench geometry, so the
+    # cells are normalized to the stand by the MEDIAN hair-blob ratio
+    # (rotation-invariant; the replace lane's rule) — each cell is then
+    # re-verified individually by check_gesture_cell.
+    raw = [frames[i].crop(content_bbox(frames[i])) for i in chosen]
+    ratios = [hair_stats(c, reference.mean)[2] / reference.scale for c in raw]
+    normalize = 1.0 / float(np.median(ratios))
+    return {
+        f"dance-{pose}": cell.resize(
+            (max(1, round(cell.width * normalize)), max(1, round(cell.height * normalize))),
+            Image.LANCZOS,
+        )
+        for pose, cell in zip("abcdefgh", raw)
+    }
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
@@ -146,22 +239,32 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
         cells: dict[str, Image.Image] = {"stand": stand}
-        cells["sit"] = keyed_cell(
-            extract_clip_frame(source("sit-clip-original.mp4"), SIT_FRAME, tmpdir / "sit.png"),
-            CANVAS / WAN_SIZE,
-        )
+        if "sit-original.png" in sources:
+            cells["sit"] = keyed_cell(
+                Image.open(source("sit-original.png")).convert("RGBA"), CANVAS / NANO_SIZE
+            )
+        else:
+            cells["sit"] = keyed_cell(
+                extract_clip_frame(source("sit-clip-original.mp4"), SIT_FRAME, tmpdir / "sit.png"),
+                CANVAS / WAN_SIZE,
+            )
         cells["sleep"] = keyed_cell(
             Image.open(source("sleep-original.png")).convert("RGBA"), CANVAS / NANO_SIZE
         )
         cells["wave"] = keyed_cell(
             Image.open(source("wave-original.png")).convert("RGBA"), CANVAS / NANO_SIZE
         )
-        dance_clip = source("dance-clip-original.mp4")
-        for pose, frame in zip("abcdefgh", DANCE_FRAMES):
-            cells[f"dance-{pose}"] = keyed_cell(
-                extract_clip_frame(dance_clip, frame, tmpdir / f"dance-{pose}.png"),
-                CANVAS / WAN_SIZE,
+        if order.get("danceMaster"):
+            cells.update(
+                master_dance_cells(order, source("dance-master-original.mp4"), reference)
             )
+        else:
+            dance_clip = source("dance-clip-original.mp4")
+            for pose, frame in zip("abcdefgh", DANCE_FRAMES):
+                cells[f"dance-{pose}"] = keyed_cell(
+                    extract_clip_frame(dance_clip, frame, tmpdir / f"dance-{pose}.png"),
+                    CANVAS / WAN_SIZE,
+                )
 
     if list(cells) != list(order["poses"]):
         raise SystemExit(f"pose mismatch: composed {list(cells)} vs order {order['poses']}")

@@ -1,0 +1,110 @@
+{
+  "id": "avatar.girl-basic-gestures",
+  "type": "avatar-gesture",
+  "name": "女の子（基本）ジェスチャー",
+  "author": "kaede",
+  "license": "kaede-internal",
+  "palette": ["#fdd0bb", "#fcddc0", "#36373c", "#32313b", "#16121a"],
+  "source": {
+    "prompt": "Phase 5 ①c gesture sheet for the girl (composed by scripts/factory/compose_gesture_sheet.py, 2026-08-12 — the boy sheet's 12-cell layout, avatar.boy-basic-gestures precedent). Sources: sit/sleep/wave = nano-banana-2 reference+instruction pose edits of the committed avatar-girl stand cell on the 720px green canvas (character ~470px tall), generated via Cloudflare AI Gateway (kaede-assets, ~$0.10/still): sit = cross-legged floor sit directly ON the ground line, legs folded in front, hands on knees, back upright (the 2026-08-10 candidate-D cross-legged one-shot precedent held — no wan-i2v fallback needed); sleep = lies asleep on her side, head right, eyes closed, one arm folded, knees slightly bent (take 2 of 3 adopted: take 1 drew a literal ground line under her, take 3 oversized the character past the hair-scale gate at ratio 1.158); wave = near arm raised high, elbow bent, open palm waving, far arm relaxed (one-shot; same raised-far-arm read as the committed boy wave). dance-a..h = 0-based frames 0/74/9/48/18/22/26/31 of the REGISTERED gangnam/girl master take (master_takes.json master 9649b9d2…, 496×496 79 frames — owner-approved by the PR #104 merge; cut directly from the master, no replace call, no charge): 8 phase-even slots over the 35-frame loop from the registered start 0, each slot's frame picked blink-aware from its phase-equivalent candidates (blink.py — zero residual suspects; loop re-verified on the extracted frames at loop-mean 0.970 / closure 0.982 = the ledger values), 100ms per sampled cell = DANCE_FRAME_MS. Scale normalization back to the 720 canvas: nano stills x720/1024, master cells by the median hair-blob ratio against the stand (the master's own canvas scale is not the bench canvas's — the replace lane's rule), every cell re-verified by hair-blob area against the stand (fail loud). Neck anchors are hair-blob estimates persisted as neckAnchors overrides — the structural neck detector breaks on arms-over-head dance frames and the lying sleeper (boy-precedent measurements); the sleep anchor is approximate by design (nothing renders from it: the busy headgear overlay hides on sleep). NO head composite anywhere: dance frames keep the master's video-native heads (erase-then-paste erases arms crossing above the neck line — boy-precedent measurement), the nano stills keep their own redrawn heads, all gated by the calibrated per-cell palette-drift check. The sheet is committed factory-ready but UNCONSUMED, like the avatar-girl walk cells: wiring the girl skin into AvatarView is 増分①d (setSkin).",
+    "referenceHashes": ["0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e"]
+  },
+  "poses": {
+    "stand": {
+      "file": "stand.png",
+      "size": [54, 96],
+      "anchors": {
+        "neck": [27, 50],
+        "hand": [27, 63]
+      }
+    },
+    "sit": {
+      "file": "sit.png",
+      "size": [53, 87],
+      "anchors": {
+        "neck": [27, 49],
+        "hand": [26, 57]
+      }
+    },
+    "sleep": {
+      "file": "sleep.png",
+      "size": [133, 66],
+      "anchors": {
+        "neck": [98, 49],
+        "hand": [66, 43]
+      }
+    },
+    "wave": {
+      "file": "wave.png",
+      "size": [58, 96],
+      "anchors": {
+        "neck": [27, 49],
+        "hand": [29, 63]
+      }
+    },
+    "dance-a": {
+      "file": "dance-a.png",
+      "size": [56, 97],
+      "anchors": {
+        "neck": [29, 49],
+        "hand": [28, 64]
+      }
+    },
+    "dance-b": {
+      "file": "dance-b.png",
+      "size": [56, 99],
+      "anchors": {
+        "neck": [31, 49],
+        "hand": [28, 65]
+      }
+    },
+    "dance-c": {
+      "file": "dance-c.png",
+      "size": [56, 97],
+      "anchors": {
+        "neck": [31, 49],
+        "hand": [28, 64]
+      }
+    },
+    "dance-d": {
+      "file": "dance-d.png",
+      "size": [56, 99],
+      "anchors": {
+        "neck": [29, 49],
+        "hand": [28, 65]
+      }
+    },
+    "dance-e": {
+      "file": "dance-e.png",
+      "size": [56, 99],
+      "anchors": {
+        "neck": [26, 49],
+        "hand": [28, 65]
+      }
+    },
+    "dance-f": {
+      "file": "dance-f.png",
+      "size": [56, 97],
+      "anchors": {
+        "neck": [26, 49],
+        "hand": [28, 64]
+      }
+    },
+    "dance-g": {
+      "file": "dance-g.png",
+      "size": [56, 97],
+      "anchors": {
+        "neck": [26, 49],
+        "hand": [28, 64]
+      }
+    },
+    "dance-h": {
+      "file": "dance-h.png",
+      "size": [56, 98],
+      "anchors": {
+        "neck": [26, 49],
+        "hand": [28, 64]
+      }
+    }
+  }
+}

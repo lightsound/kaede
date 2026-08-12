@@ -473,6 +473,17 @@ v1 は「頭・胴・腕・脚を別画像で持ち、PixiJS Container の階層
   特徴継承」でもある**の追実測。girl 自身のダンスセル 8 コマはマスター
   直切り出し（無課金・compose ゲート全通過・/tmp 取り込み検証済み —
   シート本採用はオーナー判定後）。実測・R2 ハッシュは factory-yield.md
+  **✅ girl ジェスチャーシート本採用（2026-08-12 — ①c 後続・オーナー
+  判定待ち）**: boy 前例と同型の 12 セルシート
+  `avatar.girl-basic-gestures` を構成・コミット。ダンス 8 コマは承認済み
+  gangnam/girl マスターからの直切り出し（`compose_gesture_sheet.py` に
+  `danceMaster` モードを追加 — 台帳 sha 照合・blink 選定・髪ブロブ中央値
+  正規化。前ラウンドの /tmp 再導出と完全一致 = 決定論を確認）、
+  sit/sleep/wave は nano 静止ポーズ編集（sit はあぐら床座り一発の前例が
+  本番でも成立・ドリフト lint がキャミ再シェーディングを 1 回検出）。
+  ヘッドホン headgear の girl 対応と AvatarView の girl スキン配線
+  （setSkin）は増分①d の領分 — シートは avatar-girl walk セルと同じ
+  工場出荷済み・未消費。実測・コストは factory-yield.md
 - 配信の R2 移行・マーケットプレイス・スタイル学習は asset-pipeline.md の
   DP-1/DP-2/DP-3。
 
