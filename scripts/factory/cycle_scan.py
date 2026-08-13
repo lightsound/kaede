@@ -119,14 +119,22 @@ def _evaluate(
         return failures
 
 
-def _substitutes(index: int, period: int, taken: set[int], limit: int) -> list[int]:
-    """Phase-equivalent alternatives for one slot, spacing-safe."""
+def _substitutes(
+    index: int, period: int, taken: set[int], lo: int, limit: int
+) -> list[int]:
+    """Phase-equivalent alternatives for one slot, spacing-safe.
+
+    `lo` is the master's loop start: a `-period` hop (or `-1` jitter) from
+    a slot near the loop head would otherwise land in the pre-loop ease-in
+    — the exact untrustworthy gait region the loop-windowed anchor exists
+    to avoid (the girl inverted-bob差し戻し).
+    """
     options = [index + k * period for k in SUBSTITUTE_STRIDES]
     options += [index + 1, index - 1]
     return [
         i
         for i in options
-        if 0 <= i < limit and all(abs(i - t) >= 2 for t in taken)
+        if lo <= i < limit and all(abs(i - t) >= 2 for t in taken)
     ]
 
 
@@ -224,7 +232,9 @@ def scan_clip(
                 break
             taken = {v for k, v in idx.items() if k != slot}
             replaced = False
-            for substitute in _substitutes(idx[slot], period, taken, len(frames)):
+            for substitute in _substitutes(
+                idx[slot], period, taken, loop_start, len(frames)
+            ):
                 trial = {**idx, slot: substitute}
                 trial_failures = _evaluate(
                     stand_raw, frames, trial, expect_leg_phase=expect_leg_phase
