@@ -12,10 +12,10 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [36, 60],
-    "walk-b": [37, 61],
-    "walk-c": [39, 60],
-    "walk-d": [38, 61]
+    "walk-a": [40, 59],
+    "walk-b": [40, 59],
+    "walk-c": [42, 59],
+    "walk-d": [42, 60]
   },
   "neckAnchors": {
     "stand": [26, 49],
@@ -29,7 +29,7 @@
   "handLayer": true,
   "originals": {
     "../avatar-carry-light/sheet-original.png": "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86",
-    "sheet-original.png": "e76886edaff2f84a4e9c33016936188ce5a695fbf44481cc8332b6da255b47ac"
+    "sheet-original.png": "f5d84b724f177d9efae0987cdd0bc1a9658b199fbcf6a928f25df2f814f4b857"
   },
   "editSource": "../avatar-red-carry/sheet-original.png",
   "lint": {

@@ -15,22 +15,22 @@
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry/sheet-original.png",
   "vars": {
-    "outfit": "turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes; keep every pose exactly as drawn — BOTH HANDS held together palm-up in front of his belly on the walking frames, exactly where they are in the source image; do not move or repose any limb"
+    "outfit": "turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes; keep every pose exactly as drawn — on the walking frames BOTH his hands are held TOGETHER, touching each other, palms up, directly in front of his belly (do NOT separate them, do NOT put a hand on his chest, do NOT hold a hand out to the side); do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure"
   },
   "originals": {
     "../avatar-carry/sheet-original.png": "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86",
-    "sheet-original.png": "4ac6a02687161a690e33bc11c453a23faa2fff594d858e417d257154f79418bd"
+    "sheet-original.png": "27f3444ff5272c1c3d5daeacc56336d9f3743a7e366e0168b72e0005d3171650"
   },
-  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes; keep every pose exactly as drawn — BOTH HANDS held together palm-up in front of his belly on the walking frames, exactly where they are in the source image; do not move or repose any limb. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes; keep every pose exactly as drawn — on the walking frames BOTH his hands are held TOGETHER, touching each other, palms up, directly in front of his belly (do NOT separate them, do NOT put a hand on his chest, do NOT hold a hand out to the side); do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "lint": {
     "matchStand": "avatar-pants/manifest.json"
   },
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [37, 61],
-    "walk-b": [38, 62],
-    "walk-c": [40, 61],
-    "walk-d": [39, 62]
+    "walk-a": [39, 59],
+    "walk-b": [40, 60],
+    "walk-c": [40, 58],
+    "walk-d": [40, 61]
   },
   "handLayerFrom": "walk-a",
   "neckAnchors": {

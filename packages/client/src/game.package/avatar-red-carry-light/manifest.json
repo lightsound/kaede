@@ -4,7 +4,7 @@
   "name": "男の子（赤パーカー・軽い持ち物）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#95552b", "#965529", "#93542a", "#673b1d", "#62371c"],
+  "palette": ["#965529", "#fbd1a1", "#925329", "#96562a", "#673b1d"],
   "source": {
     "prompt": "Byte-copy of ../avatar-red-carry/sheet-original.png (2026-08-13, 差し戻し③): the light and heavy carry families both extract from the walk-carry/boy v4 master (Texting_Walk_inplace — both hands palm-up at the belly), so the light variant shares the heavy variant's sheet verbatim and differs only in manifest anchors (item rest point centered for small items) and carryStyle wiring. This removes the nano re-edit gacha for light variants entirely: the 2026-08-13 rolls re-laid the 5-cell row out as a 6-figure square grid twice in a row. The one-hand light pose returns when a stable one-hand master is cast (owner-visible interim decision, PR #110).",
     "referenceHashes": ["ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86"]
@@ -20,42 +20,42 @@
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [52, 95],
+      "size": [52, 94],
       "anchors": {
         "neck": [24, 50],
-        "hand": [36, 60]
+        "hand": [40, 59]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [52, 98],
+      "size": [52, 97],
       "anchors": {
         "neck": [25, 49],
-        "hand": [37, 61]
+        "hand": [40, 59]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [52, 94],
+      "size": [52, 95],
       "anchors": {
         "neck": [25, 49],
-        "hand": [39, 60]
+        "hand": [42, 59]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [52, 98],
+      "size": [52, 97],
       "anchors": {
         "neck": [25, 49],
-        "hand": [38, 61]
+        "hand": [42, 60]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [7, 5],
+    "size": [7, 6],
     "anchors": {
-      "grip": [-2, 2]
+      "grip": [3, 2]
     }
   }
 }

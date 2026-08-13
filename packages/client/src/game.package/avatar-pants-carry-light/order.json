@@ -12,17 +12,17 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [36, 60],
-    "walk-b": [37, 61],
-    "walk-c": [39, 60],
-    "walk-d": [38, 61]
+    "walk-a": [39, 59],
+    "walk-b": [40, 60],
+    "walk-c": [40, 58],
+    "walk-d": [40, 61]
   },
   "references": ["../avatar-carry-light/sheet-original.png"],
   "prompt": "Byte-copy of ../avatar-pants-carry/sheet-original.png (2026-08-13, 差し戻し③): the light and heavy carry families both extract from the walk-carry/boy v4 master (Texting_Walk_inplace — both hands palm-up at the belly), so the light variant shares the heavy variant's sheet verbatim and differs only in manifest anchors (item rest point centered for small items) and carryStyle wiring. This removes the nano re-edit gacha for light variants entirely: the 2026-08-13 rolls re-laid the 5-cell row out as a 6-figure square grid twice in a row. The one-hand light pose returns when a stable one-hand master is cast (owner-visible interim decision, PR #110).",
   "handLayer": true,
   "originals": {
     "../avatar-carry-light/sheet-original.png": "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86",
-    "sheet-original.png": "4ac6a02687161a690e33bc11c453a23faa2fff594d858e417d257154f79418bd"
+    "sheet-original.png": "27f3444ff5272c1c3d5daeacc56336d9f3743a7e366e0168b72e0005d3171650"
   },
   "editSource": "../avatar-pants-carry/sheet-original.png",
   "lint": {
