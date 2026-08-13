@@ -4,10 +4,10 @@
   "name": "男の子（赤パーカー）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#9a572a", "#9d5a2b", "#65391e", "#69391d", "#6a3a1c"],
+  "palette": ["#99572b", "#9a572a", "#754120", "#975b2d", "#734122"],
   "source": {
-    "prompt": "Factory template `avatar-outfit-edit` over ../avatar/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
-    "referenceHashes": ["6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12"]
+    "prompt": "Factory template `avatar-outfit-edit` over ../avatar/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+    "referenceHashes": ["d7dffe23127c386b17c8cfc49b2e1a9425402ef51e474bed6b7d3d696eb3c221"]
   },
   "poses": {
     "stand": {
@@ -20,15 +20,15 @@
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [52, 95],
+      "size": [53, 95],
       "anchors": {
         "neck": [24, 49],
-        "hand": [39, 56]
+        "hand": [39, 57]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [52, 99],
+      "size": [52, 97],
       "anchors": {
         "neck": [26, 49],
         "hand": [37, 60]
@@ -36,15 +36,15 @@
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [52, 96],
+      "size": [53, 95],
       "anchors": {
-        "neck": [26, 49],
+        "neck": [25, 50],
         "hand": [42, 58]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [52, 96],
+      "size": [52, 97],
       "anchors": {
         "neck": [26, 49],
         "hand": [37, 59]

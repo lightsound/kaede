@@ -12,16 +12,16 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [15, 67],
-    "walk-a": [39, 56],
+    "walk-a": [39, 57],
     "walk-b": [37, 60],
     "walk-c": [42, 58],
     "walk-d": [37, 59]
   },
   "references": ["../avatar/sheet-original.png"],
-  "prompt": "Factory template `avatar-outfit-edit` over ../avatar/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "prompt": "Factory template `avatar-outfit-edit` over ../avatar/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "originals": {
-    "../avatar/sheet-original.png": "6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12",
-    "sheet-original.png": "fcc782597a7b9e76ea647f94e62a29d6fd2687d178e69032fd977bc45cd1a351"
+    "../avatar/sheet-original.png": "d7dffe23127c386b17c8cfc49b2e1a9425402ef51e474bed6b7d3d696eb3c221",
+    "sheet-original.png": "fec0cccabdc7349d3926c61e4c9431c11755ced3156d5456d479ce6bee1b730e"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar/sheet-original.png",
@@ -32,7 +32,7 @@
     "stand": [26, 49],
     "walk-a": [24, 49],
     "walk-b": [26, 49],
-    "walk-c": [26, 49],
+    "walk-c": [25, 50],
     "walk-d": [26, 49]
   },
   "lint": {
