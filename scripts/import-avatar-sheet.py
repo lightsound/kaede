@@ -340,9 +340,16 @@ def main() -> None:
         "poses": poses,
     }
     if order.get("handLayer"):
-        stand_frame = frames[order["poses"].index("stand")]
-        stand_hand = poses["stand"]["anchors"]["hand"]
-        layer, anchor = cut_hand_layer(stand_frame, (stand_hand[0], stand_hand[1]))
+        # The overlay must look like the hand actually drawn on the frames
+        # it rides: the light-carry walk holds a fist at the chest while
+        # its (shared) stand keeps the idle waist mitten, and pasting the
+        # mitten cutout over the fist read as a second floating hand
+        # (差し戻し② 2026-08-13). `handLayerFrom` names the pose to cut
+        # from; the default stays the stand (the heavy-carry precedent).
+        layer_pose = order.get("handLayerFrom", "stand")
+        layer_frame = frames[order["poses"].index(layer_pose)]
+        layer_hand = poses[layer_pose]["anchors"]["hand"]
+        layer, anchor = cut_hand_layer(layer_frame, (layer_hand[0], layer_hand[1]))
         layer.save(resolve_asset_path(out_dir, "hand.png", asset_root))
         manifest["handLayer"] = {
             "file": "hand.png",

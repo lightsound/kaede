@@ -34,19 +34,29 @@ CHIN_OVERLAP = 14
 # waist) implies a wildly wrong scale — fail the candidate loud and try the
 # next frame instead of compositing a PR #94-class sheet.
 NECK_SCALE_BAND = (0.80, 1.20)
-# Head bob exaggeration gains (see compose_walk_sheet pass 2): the
-# master's per-frame head deviation from the cycle mean is multiplied by
-# these before the head is pasted. Calibrated 2026-08-12 on the boy walk
-# master (raw bob ≈ ±0.6px at 96px cell scale; gain 4 lands the readable
-# ~3px peak-to-peak the owner-era sheets showed as face motion).
-# HORIZONTAL sway is structurally disabled (gain 1): the chibi head spans
-# the trimmed cell's full width, so bbox-centering + the client's
+# PRESCRIBED head bob (replaces the gain-amplification of 2026-08-12,
+# retired 2026-08-13 after the girl/carry差し戻し): the composed neck
+# height is SET per pose, not derived by multiplying the master's measured
+# per-frame deviation. The measured deviations are 0-3px at the working
+# scale on chibi masters — mostly detection noise — and a gain turns that
+# noise into a confident wrong-phase bob (the girl walked with her head
+# HIGH on contact frames, opposite to the boy; the carry master's real
+# 4%-of-height bob became a 7px seasick bounce at the same gain). The
+# prescription encodes the physics directly: on CONTACT frames (legs
+# spread, body lowest) the head sits BOB_AMPLITUDE below the stand's neck
+# height, on PASSING frames (legs together, body tallest) the same amount
+# above — the two-bump-per-cycle pattern of the owner-approved wan-era boy
+# sheet (nfg 45/47/44/47, p-p 3px at the 96px sheet scale). Every sheet
+# and every master get the identical, deterministic bob.
+#
+# HORIZONTAL sway stays structurally disabled: the chibi head spans the
+# trimmed cell's full width, so bbox-centering + the client's
 # bottom-center sprite anchor cancel any head x-offset into a body/feet
 # counter-shift — measured 2026-08-12, head-cx byte-identical across cells
 # while feet drifted 13px. Only the VERTICAL bob survives the pipeline
 # (it changes the trimmed frame height over the fixed ground line).
-HEAD_SWAY_GAIN = 1.0
-HEAD_BOB_GAIN = 4.0
+BOB_AMPLITUDE_FRAC = 0.015  # of the stand height: ±6px at 400 ≈ ±1.4px at 96
+CONTACT_POSES = frozenset({"walk-a", "walk-c"})
 HEAD_SWAY_CAP_FRAC = 0.045
 
 
@@ -176,26 +186,6 @@ def erase_old_head(body: Image.Image, neck_y: int) -> Image.Image:
                 erase |= labels == i + 1
         rgba[:neck_y][erase] = 0
     return Image.fromarray(rgba)
-
-
-def head_centroid(body: Image.Image, neck_y: int) -> tuple[float, float]:
-    """Centroid of the pixels erase_old_head would clear — the drawn head.
-
-    The head-sway exaggeration (compose_walk_sheet pass 2) reads its signal
-    here rather than from structure_neck's valley x: the valley center
-    wobbles ±2px with each pose's chin/hair asymmetry, while the drawn head
-    mass moves smoothly with the master's own animation.
-    """
-    erased = erase_old_head(body, neck_y)
-    before = body.getchannel("A")
-    after = erased.getchannel("A")
-    import numpy as np
-
-    gone = (np.asarray(before) >= 128) & (np.asarray(after) < 128)
-    ys, xs = np.nonzero(gone)
-    if len(xs) == 0:
-        return (body.width / 2, neck_y / 2)
-    return (float(xs.mean()), float(ys.mean()))
 
 
 def paste_head(
@@ -471,26 +461,23 @@ def compose_walk_sheet(
         )
         resized.append((pose, body, structure_neck(body)))
 
-    # Head sway/bob exaggeration (owner reject 2026-08-12 — "the face is
-    # frozen while walking"). The preset masters are mocap-realistic: their
-    # own head motion measures under ±1px at 96px cell scale, while the
-    # retired wan lane's exaggerated-swing recipe put the head up to 9px
-    # off-center on contact frames — THAT read as a living face. Same cure,
-    # different lever: amplify the master's OWN per-frame drawn-head motion
-    # (head_centroid — the mass the erase clears) around the cycle mean,
-    # deterministically — no re-generation, no gacha. Contacts land around
-    # ±3-4px at cell scale; the neck-junction gate fails loudly if a
-    # shifted head ever breaks the bridge.
-    cents = [head_centroid(body, neck[1]) for _, body, neck in resized]
-    nfgs = [body.height - neck[1] for _, body, neck in resized]
-    mean_cx = sum(c[0] for c in cents) / len(cents)
-    mean_nfg = sum(nfgs) / len(nfgs)
-    for (pose, body, neck), (cx, _), nfg in zip(resized, cents, nfgs):
+    # Prescribed head bob (owner rejects 2026-08-12/13 — "the face is
+    # frozen", then "the girl bobs opposite", then "the carry bobs too
+    # much": all three were the SAME lever mis-set). The head is pasted so
+    # the composed neck-from-ground lands exactly at the stand's ± the
+    # prescribed amplitude — LOW on contact poses, HIGH on passing poses —
+    # instead of amplifying the master's measured (noise-dominated) bob.
+    # See BOB_AMPLITUDE_FRAC. The neck-junction gate still fails loudly if
+    # a shifted head ever breaks the bridge, and art_lint's bob-phase gate
+    # re-verifies the pattern on the imported frames.
+    bob = stand.height * BOB_AMPLITUDE_FRAC
+    for pose, body, neck in resized:
+        nfg = body.height - neck[1]
+        target_nfg = stand_neck_from_ground + (-bob if pose in CONTACT_POSES else bob)
         cap = body.height * HEAD_SWAY_CAP_FRAC
-        extra_x = max(-cap, min(cap, (HEAD_SWAY_GAIN - 1) * (cx - mean_cx)))
-        extra_y = max(-cap, min(cap, (HEAD_BOB_GAIN - 1) * (nfg - mean_nfg)))
+        extra_y = max(-cap, min(cap, target_nfg - nfg))
         composited = paste_head(
-            body, head, stand_neck_y, neck, sway=(round(extra_x), round(-extra_y))
+            body, head, stand_neck_y, neck, sway=(0, round(-extra_y))
         )
         # Re-trim after paste (head may extend the bbox).
         composited = trim_grounded(composited)

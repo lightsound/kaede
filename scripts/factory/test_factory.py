@@ -36,7 +36,12 @@ from factory.compose_sheet import (
     paste_head,
     staticize_carry_sheet,
 )
-from factory.foot_phase import foot_signal, select_walk_indices
+from factory.foot_phase import (
+    foot_signal,
+    leg_spread,
+    select_walk_indices,
+    stride_quad,
+)
 
 
 def _chibi(neck_y: int = 50, hand: tuple[int, int] | None = None) -> Image.Image:
@@ -519,6 +524,148 @@ class GestureCellGateTests(unittest.TestCase):
         shrunk = reference.stand.resize((32, 50))
         failures, _ = check_gesture_cell(reference, 1.0, "dance-a", shrunk)
         self.assertTrue(any("scale normalization broke" in f for f in failures))
+
+
+class StrideQuadTests(unittest.TestCase):
+    def test_anchors_on_spread_max_inside_loop_window(self) -> None:
+        # Pre-loop ease-in garbage (frames 0-9 widest) must be ignored: the
+        # girl master's committed cells were cut from exactly that region.
+        spreads = [90.0] * 10 + [
+            30 + 20 * math.sin(2 * math.pi * i / 12) for i in range(40)
+        ]
+        quad = stride_quad(spreads, 10, 50, 12)
+        anchor = quad["walk-a"]
+        self.assertGreaterEqual(anchor, 10)
+        self.assertEqual(spreads[anchor], max(spreads[10:22]))
+        self.assertEqual(
+            [quad[p] - anchor for p in ("walk-a", "walk-b", "walk-c", "walk-d")],
+            [0, 3, 6, 9],
+        )
+
+    def test_rounded_quarters_do_not_drift(self) -> None:
+        # period 42: floor quarters land walk-d at +30 (1.5 frames early —
+        # the committed carry v2 drift); rounding lands it at +32.
+        spreads = [10.0] * 100
+        spreads[0] = 50.0
+        quad = stride_quad(spreads, 0, 100, 42)
+        self.assertEqual(quad["walk-d"] - quad["walk-a"], 32)
+
+    def test_late_anchor_still_fits_two_instance_window(self) -> None:
+        spreads = [10.0] * 24
+        spreads[11] = 50.0  # anchor at the first period's very end
+        quad = stride_quad(spreads, 0, 24, 12)
+        self.assertEqual(quad["walk-a"], 11)
+        self.assertEqual(quad["walk-d"], 11 + 9)
+
+    def test_window_without_two_instances_fails_loud(self) -> None:
+        with self.assertRaises(SystemExit):
+            stride_quad([10.0] * 30, 0, 20, 12)
+
+
+class BobPhaseTests(unittest.TestCase):
+    def _lint(self, nfg: dict[str, int]) -> list[str]:
+        from factory.art_lint import check_bob_phase
+
+        return check_bob_phase(nfg)
+
+    def test_prescribed_pattern_passes(self) -> None:
+        # The wan-era owner-approved boy shape: contacts low, passings high.
+        self.assertEqual(
+            self._lint({"walk-a": 45, "walk-b": 47, "walk-c": 44, "walk-d": 47}), []
+        )
+
+    def test_inverted_girl_shape_fails(self) -> None:
+        # The committed girl (NG1): head HIGH on a contact slot.
+        failures = self._lint({"walk-a": 47, "walk-b": 44, "walk-c": 45, "walk-d": 48})
+        self.assertTrue(any("bob phase broken" in f for f in failures), failures)
+
+    def test_seasick_carry_amplitude_fails(self) -> None:
+        # The committed heavy carry (NG2): correct phase, 7px amplitude.
+        failures = self._lint({"walk-a": 45, "walk-b": 51, "walk-c": 44, "walk-d": 51})
+        self.assertTrue(any("amplitude" in f for f in failures), failures)
+
+    def test_frozen_face_fails(self) -> None:
+        failures = self._lint({"walk-a": 47, "walk-b": 47, "walk-c": 47, "walk-d": 47})
+        self.assertTrue(failures)
+
+    def test_rejected_fix_attempts_fail(self) -> None:
+        # PR #108 (a==b: no rise into the first passing) and PR #109 (the
+        # second half inverted) both shipped past every then-existing gate.
+        pr108 = self._lint({"walk-a": 46, "walk-b": 46, "walk-c": 44, "walk-d": 49})
+        pr109 = self._lint({"walk-a": 44, "walk-b": 48, "walk-c": 47, "walk-d": 44})
+        self.assertTrue(pr108)
+        self.assertTrue(pr109)
+
+    def test_missing_walk_poses_are_ignored(self) -> None:
+        self.assertEqual(self._lint({"stand": 47}), [])
+
+
+class HandOnSkinTests(unittest.TestCase):
+    def test_anchor_on_mitten_passes(self) -> None:
+        from factory.art_lint import check_hand_on_skin
+
+        frame = _chibi(hand=(32, 64))
+        self.assertEqual(check_hand_on_skin(frame, [32, 64]), [])
+
+    def test_anchor_on_clothing_fails(self) -> None:
+        from factory.art_lint import check_hand_on_skin
+
+        frame = _chibi()
+        ImageDraw.Draw(frame).rectangle((20, 56, 44, 78), fill=(40, 60, 120, 255))
+        failures = check_hand_on_skin(frame, [32, 64])
+        self.assertTrue(any("no skin" in f for f in failures), failures)
+
+
+class LegSpreadTests(unittest.TestCase):
+    def test_contact_reads_wider_than_passing(self) -> None:
+        contact = _chibi()
+        draw = ImageDraw.Draw(contact)
+        draw.rectangle((0, 78, 63, 99), fill=(0, 0, 0, 0))
+        draw.rectangle((6, 78, 16, 98), fill=(240, 200, 160, 255))
+        draw.rectangle((48, 78, 58, 98), fill=(240, 200, 160, 255))
+        passing = _chibi()
+        self.assertGreater(leg_spread(contact), leg_spread(passing) + 15)
+
+
+class PrescribedBobTests(unittest.TestCase):
+    def test_composed_cells_hold_the_two_bump_pattern(self) -> None:
+        # Four identical bodies in, prescribed bob out: the head must land
+        # LOW on walk-a/c and HIGH on walk-b/d regardless of what the
+        # master's own (noise-dominated) bob does — the amplification this
+        # replaces turned that noise into the girl's inverted bob.
+        from factory.compose_sheet import compose_walk_sheet
+
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            stand_path = base / "stand.png"
+            _on_green(_chibi(neck_y=50)).save(stand_path)
+            walk_paths = {}
+            for pose in ("walk-a", "walk-b", "walk-c", "walk-d"):
+                path = base / f"{pose}.png"
+                _on_green(_chibi(neck_y=50)).save(path)
+                walk_paths[pose] = [path]
+            out = base / "sheet.png"
+            compose_walk_sheet(stand_path, walk_paths, out)
+
+            sheet = Image.open(out).convert("RGBA")
+            cell_w = sheet.width // 5
+            nfg = {}
+            for i, pose in enumerate(("stand", "walk-a", "walk-b", "walk-c", "walk-d")):
+                cell = chroma_key(sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height)))
+                cell = cell.crop(content_bbox(cell))
+                nfg[pose] = cell.height - structure_neck(cell)[1]
+            contact_max = max(nfg["walk-a"], nfg["walk-c"])
+            passing_min = min(nfg["walk-b"], nfg["walk-d"])
+            self.assertGreater(passing_min, contact_max, nfg)
+            values = [nfg[p] for p in ("walk-a", "walk-b", "walk-c", "walk-d")]
+            self.assertLessEqual(max(values) - min(values), 6, nfg)
+
+
+def _on_green(frame: Image.Image) -> Image.Image:
+    """A synthetic body on the green canvas compose expects to key."""
+    canvas = Image.new("RGBA", (frame.width + 16, frame.height + 8), (0, 255, 0, 255))
+    canvas.alpha_composite(frame, (8, canvas.height - frame.height))
+    return canvas
 
 
 class ComposeTests(unittest.TestCase):
