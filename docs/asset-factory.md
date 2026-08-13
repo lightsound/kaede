@@ -85,15 +85,24 @@ python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標�
   欠けの主因）。Meshy GLB は `spike_tripo_render.py` の yaw45 で自前
   レンダーしてから seedance 清書。
 - **carry は持ち物の重量で 2 系統**（オーナー裁定 2026-08-12）:
-  `walk-carry/boy`（両腕前・重い物）と `walk-carry-light/boy`（片手胸元・
-  軽い物 — Walking_with_Phone_inplace 金型）。item manifest の
+  `walk-carry/boy`（両手を腹前で揃える — **Texting_Walk_inplace 金型**。
+  差し戻し③ 2026-08-13: Carry_Heavy_Object 系は空手にすると腕が
+  「夢遊病」に見えると棄却。両手前保持の直立自然歩行はカタログ 680 本
+  中 Texting_Walk がほぼ唯一）と `walk-carry-light/boy`（片手掌を体の
+  前に静止保持 — Walking_with_Phone_inplace 金型の右腕を fcurve 展開:
+  前腕 X−80°+上腕 X+30°/Y+25°。素の phone ポーズは拳が胸に密着し、
+  合成アイテムが胴へ沈んで読めない）。item manifest の
   `carryStyle`（light/heavy）でクライアント・試着ステージがシートを
   選ぶ（light 未生産の服は heavy へフォールバック）。carry の
   handAnchors は**シートごと・フレーム別に描かれた手の上を実測**
-  （heavy = 掌トップ・light = 拳。皮膚近接 lint が検証）、hand.png は
-  order の `handLayerFrom`（既定 stand）で **walk-a の手から切り出す** —
-  stand の腰ミトンを胸元拳の上に貼ると第二の手が浮いて見える
-  （差し戻し② 2026-08-13）。
+  （heavy = 揃えた両手のトップ・light = 差し出した掌のトップ。皮膚
+  近接 lint が検証。計測バンドが顎の肌・スイング側の手を掴む誤検出に
+  注意 — 実測 2026-08-13）、hand.png は order の `handLayerFrom`
+  （既定 stand）で **walk-a の手から切り出す** — stand の腰ミトンを
+  別ポーズの手の上に貼ると第二の手が浮いて見える（差し戻し②
+  2026-08-13）。**保持腕は seedance が自然歩行へ引き戻す**: 参照で
+  静止していても「stays PERFECTLY STILL」を明示しないと軽いスイングに
+  化ける（v1 wan 時代の実証文言の再確認 2026-08-13）。
 - 服替え変種（red/pants ± carry ± carry-light）は素体の新 walk シートへの
   **シート編集**が実測で優位（$0.10/着・IoU ゲート・変種間で振り付けが
   バイト一致に揃う）。replace の identity 差し替え（$0.155〜/着）は系統の
