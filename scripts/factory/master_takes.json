@@ -99,19 +99,19 @@
     "walk-carry-light/boy": {
       "motion": "walk-carry-light",
       "family": "boy",
-      "masterSha256": "b195a4da445b9d2aad80a5c3e41ed02d0bd1b12f5c418bdb87092f6f8092da4c",
-      "sourceSha256": "c29b92409876641e49711b745563c8bfdbd6e94b61801b9d5ea7d095cf8bff9a",
-      "frames": 82,
+      "masterSha256": "0ff0cb8e7d8e4e7129c95ac1d405fa08942b7b19761824741fb573729fa4ee46",
+      "sourceSha256": "a9be142f07322cae840dcbdac0314a2ee106d75bde6c410590faa85fcd5fe439",
+      "frames": 71,
       "fps": 24.0,
       "width": 864,
       "height": 496,
       "loop": {
-        "start": 0,
-        "period": 27,
-        "loopMeanIou": 0.989,
-        "closureIou": 0.995
+        "start": 9,
+        "period": 24,
+        "loopMeanIou": 0.99,
+        "closureIou": 0.994
       },
-      "approval": "軽量 carry 歩行マスター v3c(2026-08-13 最終)— v3b はズボン影の紺が系統的に濃く(#000348 系・ドリフト 50-52 > 45)全ループ・インスタンスで較正済みドリフト lint に落ちたため、「same flat navy shading・no darker or bluer shadow tones」を明示して再鋳造(不合格コマは免除でなく差し替えの規約)。ポーズは v3b と同一(腰前静止掌・PERFECTLY STILL 文言・phone GLB 右腕展開参照)。テイク c(0.989/0.995)。本 PR のオーナーマージ = 承認",
+      "approval": "軽量 carry 歩行マスター v5 = walk-carry/boy v4 と同一テイク(Texting_Walk 由来・両手を腹前)を light 系統にも採用(2026-08-13・差し戻し③)— 片手静止掌の再鋳造は seedance の腕正規化ガチャで 3 テイク(D 案=胸で拳化/W2 案=様式ドリフト×2/D2 案=掌ふらつき)とも決定打に欠け、両手保持は「奥の腕で持って見える」「スイング腕との3本手」が構造的に発生しない。マグ等の軽量物は両手で丁寧に持つ読み。重量 2 系統の分化は良い片手マスター確立時に戻す暫定裁定(オーナー確認事項として PR に明記)。本 PR のオーナーマージ = 承認",
       "registeredAt": "2026-08-13"
     }
   }

@@ -4,10 +4,10 @@
   "name": "男の子（赤パーカー・軽い持ち物）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#fbd1a2", "#98572a", "#683c1e", "#663a1d", "#9b562a"],
+  "palette": ["#95552b", "#965529", "#93542a", "#673b1d", "#62371c"],
   "source": {
-    "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry-light/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — the near arm held out in front of him with its open hand FLAT and PALM-UP, exactly as drawn in the source image; hands stay bare skin, do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
-    "referenceHashes": ["38c6969c0609535d02cdd76b868f9ef3b0cf4056b577ce5541ff3724cbfe8e5c"]
+    "prompt": "Byte-copy of ../avatar-red-carry/sheet-original.png (2026-08-13, 差し戻し③): the light and heavy carry families both extract from the walk-carry/boy v4 master (Texting_Walk_inplace — both hands palm-up at the belly), so the light variant shares the heavy variant's sheet verbatim and differs only in manifest anchors (item rest point centered for small items) and carryStyle wiring. This removes the nano re-edit gacha for light variants entirely: the 2026-08-13 rolls re-laid the 5-cell row out as a 6-figure square grid twice in a row. The one-hand light pose returns when a stable one-hand master is cast (owner-visible interim decision, PR #110).",
+    "referenceHashes": ["ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86"]
   },
   "poses": {
     "stand": {
@@ -22,40 +22,40 @@
       "file": "walk-a.png",
       "size": [52, 95],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [39, 55]
+        "neck": [24, 50],
+        "hand": [36, 60]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [52, 97],
+      "size": [52, 98],
       "anchors": {
         "neck": [25, 49],
-        "hand": [39, 54]
+        "hand": [37, 61]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [52, 95],
+      "size": [52, 94],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [39, 55]
+        "neck": [25, 49],
+        "hand": [39, 60]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [52, 97],
+      "size": [52, 98],
       "anchors": {
         "neck": [25, 49],
-        "hand": [39, 55]
+        "hand": [38, 61]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [6, 4],
+    "size": [7, 5],
     "anchors": {
-      "grip": [3, 2]
+      "grip": [-2, 2]
     }
   }
 }

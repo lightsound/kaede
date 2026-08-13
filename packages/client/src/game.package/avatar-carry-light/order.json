@@ -12,28 +12,29 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [39, 55],
-    "walk-b": [39, 54],
-    "walk-c": [39, 55],
-    "walk-d": [39, 55]
+    "walk-a": [36, 60],
+    "walk-b": [37, 61],
+    "walk-c": [39, 60],
+    "walk-d": [38, 61]
   },
   "references": ["../avatar/sheet-original.png"],
   "prompt": "Light-carry walk variant of avatar.boy-basic (owner direction 2026-08-12: carry pose must match the item's weight — a coffee mug on the heavy two-arm carry read as wrong). Walk cells come from the walk-carry-light/boy master (Meshy Walking_with_Phone_inplace preset, re-rendered at the canonical right-facing 3/4 yaw 45 from the retained rigged GLB, seedance-refined onto the boy stand identity with an empty raised palm), extracted by walk_lane — the near hand holds at chest height, the far arm swings naturally. The stand cell is shared with avatar.boy-basic-carry (the bent-mitten idle: an idle carry rest pose fits both weights). handAnchors: stand = the mitten top-center; walk cells = the raised open palm, measured per frame on THIS sheet. handLayer: true cuts the palm around the stand hand anchor, rendered on top of held items.",
   "handLayer": true,
   "originals": {
     "../avatar/sheet-original.png": "d7dffe23127c386b17c8cfc49b2e1a9425402ef51e474bed6b7d3d696eb3c221",
-    "sheet-original.png": "38c6969c0609535d02cdd76b868f9ef3b0cf4056b577ce5541ff3724cbfe8e5c"
+    "sheet-original.png": "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86"
   },
   "walkMaster": "walk-carry-light/boy",
-  "walkMasterSha256": "b195a4da445b9d2aad80a5c3e41ed02d0bd1b12f5c418bdb87092f6f8092da4c",
+  "walkMasterSha256": "0ff0cb8e7d8e4e7129c95ac1d405fa08942b7b19761824741fb573729fa4ee46",
   "walkLane": {
     "mode": "extract",
     "cells": {
-      "walk-a": 13,
-      "walk-b": 20,
-      "walk-c": 27,
-      "walk-d": 33
+      "walk-a": 33,
+      "walk-b": 39,
+      "walk-c": 45,
+      "walk-d": 51
     }
   },
-  "handLayerFrom": "walk-a"
+  "handLayerFrom": "walk-a",
+  "handLayerSide": "near"
 }

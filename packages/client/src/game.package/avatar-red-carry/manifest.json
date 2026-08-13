@@ -23,7 +23,7 @@
       "size": [52, 95],
       "anchors": {
         "neck": [24, 50],
-        "hand": [34, 59]
+        "hand": [37, 61]
       }
     },
     "walk-b": {
@@ -31,7 +31,7 @@
       "size": [52, 98],
       "anchors": {
         "neck": [25, 49],
-        "hand": [35, 60]
+        "hand": [38, 62]
       }
     },
     "walk-c": {
@@ -39,7 +39,7 @@
       "size": [52, 94],
       "anchors": {
         "neck": [25, 49],
-        "hand": [37, 59]
+        "hand": [40, 61]
       }
     },
     "walk-d": {
@@ -47,15 +47,15 @@
       "size": [52, 98],
       "anchors": {
         "neck": [25, 49],
-        "hand": [36, 60]
+        "hand": [39, 62]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [20, 7],
+    "size": [7, 6],
     "anchors": {
-      "grip": [9, 2]
+      "grip": [-1, 4]
     }
   }
 }

@@ -220,13 +220,23 @@ def _flood_skin(
     return seen
 
 
-def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Image, list[int]]:
+def cut_hand_layer(
+    frame: Image.Image, hand: tuple[int, int], *, near_side_only: bool = False
+) -> tuple[Image.Image, list[int]]:
     """The bare hand/arm as its own layer (MapleStory's hand-over-item):
     the skin pixels 4-connected to the hand anchor, plus their dark outline
     ring, alpha-masked and cropped. Rendered ON TOP of a held item so the
     mitten reads as being in front of it (the ①b(a) spike's owner-decided
     z rule); cut from the stand frame only — the carry sheets hold the arm
     still, so one overlay serves every pose at its own hand anchor.
+
+    `near_side_only` keeps just the NEAR-side half of the flood (pixels at
+    or right of the anchor column on the right-facing sheets): the v4
+    two-hand carry joins both hands into one skin blob, and drawing the
+    whole blob over the item cut the plush in half with a skin band
+    (owner reject 2026-08-13 — the ordering must read near arm → item →
+    far arm, so only the near hand may render in front; the far hand
+    stays in the body cell behind the item).
 
     Shirtless bodies connect the mitten to the whole torso through bare skin;
     if the unbounded fill grows past a mitten-sized bbox we retry inside a
@@ -235,6 +245,8 @@ def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Ima
     w, h = frame.size
     hx, hy = hand
     seen = _flood_skin(frame, hand)
+    if near_side_only:
+        seen = {(x, y) for x, y in seen if x >= hx - 2}
     xs = [x for x, _ in seen]
     ys = [y for _, y in seen]
     too_big = (max(xs) - min(xs) > w * 0.45) or (max(ys) - min(ys) > h * 0.28)
@@ -349,7 +361,11 @@ def main() -> None:
         layer_pose = order.get("handLayerFrom", "stand")
         layer_frame = frames[order["poses"].index(layer_pose)]
         layer_hand = poses[layer_pose]["anchors"]["hand"]
-        layer, anchor = cut_hand_layer(layer_frame, (layer_hand[0], layer_hand[1]))
+        layer, anchor = cut_hand_layer(
+            layer_frame,
+            (layer_hand[0], layer_hand[1]),
+            near_side_only=order.get("handLayerSide") == "near",
+        )
         layer.save(resolve_asset_path(out_dir, "hand.png", asset_root))
         manifest["handLayer"] = {
             "file": "hand.png",

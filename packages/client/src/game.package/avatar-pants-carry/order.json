@@ -27,10 +27,10 @@
   },
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [34, 59],
-    "walk-b": [35, 60],
-    "walk-c": [37, 59],
-    "walk-d": [36, 60]
+    "walk-a": [37, 61],
+    "walk-b": [38, 62],
+    "walk-c": [40, 61],
+    "walk-d": [39, 62]
   },
   "handLayerFrom": "walk-a",
   "neckAnchors": {
@@ -39,5 +39,6 @@
     "walk-b": [25, 49],
     "walk-c": [25, 49],
     "walk-d": [25, 49]
-  }
+  },
+  "handLayerSide": "near"
 }
