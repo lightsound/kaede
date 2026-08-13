@@ -12,29 +12,29 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [22, 58],
-    "walk-b": [20, 60],
-    "walk-c": [18, 59],
-    "walk-d": [20, 60]
+    "walk-a": [39, 55],
+    "walk-b": [39, 54],
+    "walk-c": [39, 55],
+    "walk-d": [39, 55]
   },
   "neckAnchors": {
     "stand": [26, 49],
-    "walk-a": [25, 49],
+    "walk-a": [26, 49],
     "walk-b": [25, 49],
-    "walk-c": [25, 49],
+    "walk-c": [26, 49],
     "walk-d": [25, 49]
   },
   "references": ["../avatar-carry-light/sheet-original.png"],
-  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry-light/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the near hand raised in front of the chest on the walking frames — hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry-light/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — the near arm held out in front of him with its open hand FLAT and PALM-UP, exactly as drawn in the source image; hands stay bare skin, do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "handLayer": true,
   "originals": {
-    "../avatar-carry-light/sheet-original.png": "2ed5c121fc86c602abfc37826e0ffde6cb3acf1351e012cf32070a65ccc0303f",
-    "sheet-original.png": "349f4930d8146c4d19af9e3f5084ce8dac3c8657561b3676678e461b090f3534"
+    "../avatar-carry-light/sheet-original.png": "38c6969c0609535d02cdd76b868f9ef3b0cf4056b577ce5541ff3724cbfe8e5c",
+    "sheet-original.png": "50ea3685d94cb5bb2d20bd5ff33fe7304552a0f596944d5339612a293523b2c4"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry-light/sheet-original.png",
   "vars": {
-    "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the near hand raised in front of the chest on the walking frames — hands stay bare skin"
+    "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — the near arm held out in front of him with its open hand FLAT and PALM-UP, exactly as drawn in the source image; hands stay bare skin, do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure"
   },
   "lint": {
     "matchStand": "avatar-red/manifest.json",

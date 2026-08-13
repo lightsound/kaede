@@ -4,12 +4,12 @@
   "name": "男の子（パンツ・持ち歩き）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#fbd6a8", "#fad4a6", "#f8d3a6", "#9a5425", "#fdd7a7"],
+  "palette": ["#592512", "#fbd5a6", "#985529", "#fdd4a5", "#9d5627"],
   "source": {
-    "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the arms held out in front on the walking frames), just bare skin instead of sleeves. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+    "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes; keep every pose exactly as drawn — BOTH HANDS held together palm-up in front of his belly on the walking frames, exactly where they are in the source image; do not move or repose any limb. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
     "referenceHashes": [
       "0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e",
-      "73c956a0212e0c9eed48f33ebcee4ff4a97862951fbd4d1ad4c8524ccd23eadd"
+      "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86"
     ]
   },
   "poses": {
@@ -25,40 +25,40 @@
       "file": "walk-a.png",
       "size": [52, 95],
       "anchors": {
-        "neck": [25, 50],
-        "hand": [44, 59]
+        "neck": [24, 50],
+        "hand": [34, 59]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
       "size": [52, 97],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [45, 59]
+        "neck": [25, 49],
+        "hand": [35, 60]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [52, 94],
+      "size": [52, 95],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [44, 62]
+        "neck": [25, 49],
+        "hand": [37, 59]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
       "size": [52, 97],
       "anchors": {
-        "neck": [26, 49],
-        "hand": [44, 60]
+        "neck": [25, 49],
+        "hand": [36, 60]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [10, 6],
+    "size": [15, 13],
     "anchors": {
-      "grip": [6, 3]
+      "grip": [7, 6]
     }
   }
 }

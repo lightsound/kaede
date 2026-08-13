@@ -12,22 +12,22 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [46, 58],
-    "walk-b": [47, 58],
-    "walk-c": [45, 61],
-    "walk-d": [50, 59]
+    "walk-a": [34, 59],
+    "walk-b": [35, 60],
+    "walk-c": [37, 59],
+    "walk-d": [36, 60]
   },
   "references": ["../avatar-carry/sheet-original.png"],
-  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the arms held out in front on the walking frames — hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — BOTH HANDS held together palm-up in front of his belly on the walking frames, exactly where they are drawn in the source image; hands stay bare skin, do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "handLayer": true,
   "originals": {
-    "../avatar-carry/sheet-original.png": "73c956a0212e0c9eed48f33ebcee4ff4a97862951fbd4d1ad4c8524ccd23eadd",
-    "sheet-original.png": "64048355563e4d3272053beecc010d19922ed30c979c2129170cff05b65fc01d"
+    "../avatar-carry/sheet-original.png": "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86",
+    "sheet-original.png": "e76886edaff2f84a4e9c33016936188ce5a695fbf44481cc8332b6da255b47ac"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry/sheet-original.png",
   "vars": {
-    "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the arms held out in front on the walking frames — hands stay bare skin"
+    "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — BOTH HANDS held together palm-up in front of his belly on the walking frames, exactly where they are drawn in the source image; hands stay bare skin, do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure"
   },
   "lint": {
     "matchStand": "avatar-red/manifest.json",
@@ -35,9 +35,9 @@
   },
   "neckAnchors": {
     "stand": [26, 49],
-    "walk-a": [25, 50],
-    "walk-b": [26, 49],
-    "walk-c": [25, 50],
+    "walk-a": [24, 50],
+    "walk-b": [25, 49],
+    "walk-c": [25, 49],
     "walk-d": [25, 49]
   },
   "handLayerFrom": "walk-a"

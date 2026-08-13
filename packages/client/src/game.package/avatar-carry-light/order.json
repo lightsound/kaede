@@ -12,27 +12,27 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [22, 58],
-    "walk-b": [20, 60],
-    "walk-c": [18, 59],
-    "walk-d": [20, 60]
+    "walk-a": [39, 55],
+    "walk-b": [39, 54],
+    "walk-c": [39, 55],
+    "walk-d": [39, 55]
   },
   "references": ["../avatar/sheet-original.png"],
   "prompt": "Light-carry walk variant of avatar.boy-basic (owner direction 2026-08-12: carry pose must match the item's weight — a coffee mug on the heavy two-arm carry read as wrong). Walk cells come from the walk-carry-light/boy master (Meshy Walking_with_Phone_inplace preset, re-rendered at the canonical right-facing 3/4 yaw 45 from the retained rigged GLB, seedance-refined onto the boy stand identity with an empty raised palm), extracted by walk_lane — the near hand holds at chest height, the far arm swings naturally. The stand cell is shared with avatar.boy-basic-carry (the bent-mitten idle: an idle carry rest pose fits both weights). handAnchors: stand = the mitten top-center; walk cells = the raised open palm, measured per frame on THIS sheet. handLayer: true cuts the palm around the stand hand anchor, rendered on top of held items.",
   "handLayer": true,
   "originals": {
     "../avatar/sheet-original.png": "d7dffe23127c386b17c8cfc49b2e1a9425402ef51e474bed6b7d3d696eb3c221",
-    "sheet-original.png": "2ed5c121fc86c602abfc37826e0ffde6cb3acf1351e012cf32070a65ccc0303f"
+    "sheet-original.png": "38c6969c0609535d02cdd76b868f9ef3b0cf4056b577ce5541ff3724cbfe8e5c"
   },
   "walkMaster": "walk-carry-light/boy",
-  "walkMasterSha256": "0df88e422cd3fc1697da893170b5d59067a4586b3e9a96a190c6338dc9887c0b",
+  "walkMasterSha256": "b195a4da445b9d2aad80a5c3e41ed02d0bd1b12f5c418bdb87092f6f8092da4c",
   "walkLane": {
     "mode": "extract",
     "cells": {
-      "walk-a": 6,
-      "walk-b": 14,
-      "walk-c": 21,
-      "walk-d": 28
+      "walk-a": 13,
+      "walk-b": 20,
+      "walk-c": 27,
+      "walk-d": 33
     }
   },
   "handLayerFrom": "walk-a"

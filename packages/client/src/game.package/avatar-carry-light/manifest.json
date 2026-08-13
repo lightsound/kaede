@@ -4,7 +4,7 @@
   "name": "男の子（基本・軽い持ち物）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#9e582a", "#9c5628", "#fddea3", "#fdd6ab", "#fdddac"],
+  "palette": ["#5f3319", "#995527", "#fddea3", "#9e5829", "#fdd7aa"],
   "source": {
     "prompt": "Light-carry walk variant of avatar.boy-basic (owner direction 2026-08-12: carry pose must match the item's weight — a coffee mug on the heavy two-arm carry read as wrong). Walk cells come from the walk-carry-light/boy master (Meshy Walking_with_Phone_inplace preset, re-rendered at the canonical right-facing 3/4 yaw 45 from the retained rigged GLB, seedance-refined onto the boy stand identity with an empty raised palm), extracted by walk_lane — the near hand holds at chest height, the far arm swings naturally. The stand cell is shared with avatar.boy-basic-carry (the bent-mitten idle: an idle carry rest pose fits both weights). handAnchors: stand = the mitten top-center; walk cells = the raised open palm, measured per frame on THIS sheet. handLayer: true cuts the palm around the stand hand anchor, rendered on top of held items.",
     "referenceHashes": ["d7dffe23127c386b17c8cfc49b2e1a9425402ef51e474bed6b7d3d696eb3c221"]
@@ -22,8 +22,8 @@
       "file": "walk-a.png",
       "size": [52, 95],
       "anchors": {
-        "neck": [25, 49],
-        "hand": [22, 58]
+        "neck": [26, 49],
+        "hand": [39, 55]
       }
     },
     "walk-b": {
@@ -31,15 +31,15 @@
       "size": [52, 97],
       "anchors": {
         "neck": [25, 49],
-        "hand": [20, 60]
+        "hand": [39, 54]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
       "size": [52, 95],
       "anchors": {
-        "neck": [25, 49],
-        "hand": [18, 59]
+        "neck": [26, 49],
+        "hand": [39, 55]
       }
     },
     "walk-d": {
@@ -47,15 +47,15 @@
       "size": [52, 97],
       "anchors": {
         "neck": [25, 49],
-        "hand": [20, 60]
+        "hand": [39, 55]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [13, 8],
+    "size": [9, 6],
     "anchors": {
-      "grip": [6, 2]
+      "grip": [5, 3]
     }
   }
 }

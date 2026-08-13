@@ -81,38 +81,38 @@
     "walk-carry/boy": {
       "motion": "walk-carry",
       "family": "boy",
-      "masterSha256": "b6da419fa5cc21e25ffb4d74032e2121bde97a80b20cf077aec0879d4bc41e27",
-      "sourceSha256": "9f11838b74f3a6d677c3b7f30d4a458c4c97e44196e61192f311aafdfca5d7f3",
-      "frames": 75,
+      "masterSha256": "0ff0cb8e7d8e4e7129c95ac1d405fa08942b7b19761824741fb573729fa4ee46",
+      "sourceSha256": "a9be142f07322cae840dcbdac0314a2ee106d75bde6c410590faa85fcd5fe439",
+      "frames": 71,
+      "fps": 24.0,
+      "width": 864,
+      "height": 496,
+      "loop": {
+        "start": 9,
+        "period": 24,
+        "loopMeanIou": 0.99,
+        "closureIou": 0.994
+      },
+      "approval": "carry 歩行マスター v4(2026-08-13・オーナー差し戻し「人間っぽくない姿勢・別の両手持ちプリセットを」対応)— カタログ 680 本から両手前保持系を全列挙し Texting_Walk_inplace を採用(両手を腹前で揃えた直立歩行・ボーン実測で完全 2 歩・周期 24 = walk 系標準・手 z0.41 = 腹前)。boy meshy-6 リグ(019febfd…)へリターゲット 3cr(タスク 019ff9b2…)→ bpy yaw45 で 24 コマ緑レンダー(ボーン編集なし・参照ループ 0.999/1.000)→ boy 原本 stand セル identity × seedance 480p 4 秒(素手・視線正面指定)。テイク a 一発(0.990/0.993)。v3(Carry_Heavy_Object の腕下げ版)は「夢遊病様の腕」でオーナー棄却。本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-13"
+    },
+    "walk-carry-light/boy": {
+      "motion": "walk-carry-light",
+      "family": "boy",
+      "masterSha256": "b195a4da445b9d2aad80a5c3e41ed02d0bd1b12f5c418bdb87092f6f8092da4c",
+      "sourceSha256": "c29b92409876641e49711b745563c8bfdbd6e94b61801b9d5ea7d095cf8bff9a",
+      "frames": 82,
       "fps": 24.0,
       "width": 864,
       "height": 496,
       "loop": {
         "start": 0,
         "period": 27,
-        "loopMeanIou": 0.976,
-        "closureIou": 0.986
+        "loopMeanIou": 0.989,
+        "closureIou": 0.995
       },
-      "approval": "carry 歩行マスター v3(2026-08-13・差し戻し②根本対応)— v2 の 42 コマ窓は Carry_Heavy_Object_Walk_inplace の片脚 1 歩分(ボーン実測: L-R 足位相が全周期で同符号)で、シートが片足スキップ化していた。GLB(R2 64e94c…)をボーン署名で全周期解析し真の 2 歩サイクル f54-f109(T=56)を特定、bpy yaw45 で step2(28 コマ・周期 1.17s = walk 系標準)緑レンダー+肩 X+30°/肘 X-20° の fcurve 合成で腕を胸前→腰前の抱え位置に降ろして再鋳造(参照ループ 0.997/1.000)。boy 原本 stand セル identity × seedance-2.0-fast 480p 4 秒(v2 実証プロンプトの腕記述のみ waist cradle に変更・素手)。テイク a 一発。本 PR のオーナーマージ = 承認",
+      "approval": "軽量 carry 歩行マスター v3c(2026-08-13 最終)— v3b はズボン影の紺が系統的に濃く(#000348 系・ドリフト 50-52 > 45)全ループ・インスタンスで較正済みドリフト lint に落ちたため、「same flat navy shading・no darker or bluer shadow tones」を明示して再鋳造(不合格コマは免除でなく差し替えの規約)。ポーズは v3b と同一(腰前静止掌・PERFECTLY STILL 文言・phone GLB 右腕展開参照)。テイク c(0.989/0.995)。本 PR のオーナーマージ = 承認",
       "registeredAt": "2026-08-13"
-    },
-    "walk-carry-light/boy": {
-      "motion": "walk-carry-light",
-      "family": "boy",
-      "masterSha256": "0df88e422cd3fc1697da893170b5d59067a4586b3e9a96a190c6338dc9887c0b",
-      "sourceSha256": "95ef6714db50c0e82e87479096fc00ffd0e74c50f1475503fc0d909116f4f827",
-      "frames": 69,
-      "fps": 24.0,
-      "width": 496,
-      "height": 496,
-      "loop": {
-        "start": 0,
-        "period": 30,
-        "loopMeanIou": 0.988,
-        "closureIou": 0.991
-      },
-      "approval": "軽量 carry 歩行マスター新設(2026-08-12・オーナー指示「持ち物によって carry を変えるべき」)— Meshy Walking_with_Phone_inplace GLB(タスク 019fee45…・0cr 再取得・2026-08-11 コーヒー検証の金型)を bpy yaw45=右向き 3/4 で緑レンダー(6〜35 の 30 コマループ・タイル×3)。boy 原本 stand セル identity × seedance 480p 4 秒(片手を胸元・素手)。テイク c(b=3D 様式化で棄却)。本 PR のオーナーマージ = 承認",
-      "registeredAt": "2026-08-12"
     }
   }
 }
