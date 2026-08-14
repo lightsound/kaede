@@ -72,7 +72,10 @@ def _evaluate(
         for i in range(5):
             cell = chroma_key(sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height)))
             cells.append(cell.crop(content_bbox(cell)))
-        scale = 96 / cells[0].height
+        # 192px = the 4x shipping scale (factory-v2 step-1 ruling); the art
+        # lint's px gates are calibrated at this scale, so mirroring them on
+        # 96px cells would judge with doubled tolerances.
+        scale = 192 / cells[0].height
         cells = [
             c.resize(
                 (max(1, round(c.width * scale)), max(1, round(c.height * scale))),

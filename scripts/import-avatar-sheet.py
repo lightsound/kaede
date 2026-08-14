@@ -86,6 +86,13 @@ OPAQUE = 128
 # trimming or a single pixel skews the frame's bounding box.
 SPECK_FRACTION = 0.005
 
+# Seed neighborhood (±px around the hand anchor) for the hand-layer skin
+# flood. 4x-resolution pixels — doubled from the 2x-era ±6 with the 192px
+# shipping scale: at 4x the outline strokes splitting the mitten's skin
+# doubled too, so a ±6 window seeds only the sliver at the anchor and the
+# long-sleeve (red hoodie) cuts came out half their logical size.
+HAND_SEED_RADIUS = 12
+
 PALETTE_COLORS = 5
 
 
@@ -199,8 +206,8 @@ def _flood_skin(
     hx, hy = hand
     seeds = [
         (x, y)
-        for y in range(max(0, hy - 6), min(h, hy + 7))
-        for x in range(max(0, hx - 6), min(w, hx + 7))
+        for y in range(max(0, hy - HAND_SEED_RADIUS), min(h, hy + HAND_SEED_RADIUS + 1))
+        for x in range(max(0, hx - HAND_SEED_RADIUS), min(w, hx + HAND_SEED_RADIUS + 1))
         if (allow is None or allow(x, y)) and is_skin(frame.getpixel((x, y)))
     ]
     if not seeds:
