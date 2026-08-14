@@ -38,7 +38,12 @@ from factory.compose_sheet import (  # noqa: E402
     compose_walk_sheet,
     content_bbox,
 )
-from factory.foot_phase import _find_period, load_signals  # noqa: E402
+from factory.foot_phase import (  # noqa: E402
+    _find_period,
+    load_signals,
+    load_spreads,
+    stride_quad,
+)
 
 POSES = ("walk-a", "walk-b", "walk-c", "walk-d")
 SKIP_HEAD_SECONDS = 1.5
@@ -117,15 +122,75 @@ def _evaluate(
         return failures
 
 
-def _substitutes(index: int, period: int, taken: set[int], limit: int) -> list[int]:
-    """Phase-equivalent alternatives for one slot, spacing-safe."""
+def _substitutes(
+    index: int, period: int, taken: set[int], lo: int, limit: int
+) -> list[int]:
+    """Phase-equivalent alternatives for one slot, spacing-safe.
+
+    `lo` is the master's loop start: a `-period` hop (or `-1` jitter) from
+    a slot near the loop head would otherwise land in the pre-loop ease-in
+    — the exact untrustworthy gait region the loop-windowed anchor exists
+    to avoid (the girl inverted-bob差し戻し).
+    """
     options = [index + k * period for k in SUBSTITUTE_STRIDES]
     options += [index + 1, index - 1]
     return [
         i
         for i in options
-        if 0 <= i < limit and all(abs(i - t) >= 2 for t in taken)
+        if lo <= i < limit and all(abs(i - t) >= 2 for t in taken)
     ]
+
+
+def _candidate_quads(
+    frames: list[Path],
+    *,
+    pinned_contact: int | None,
+    period: int | None,
+    loop_start: int,
+    skip_head_seconds: float,
+) -> tuple[list[dict[str, int]], int]:
+    """(candidate walk-a..d index quads, period) for scan_clip.
+
+    Master-lane clips (period machine-known from the ledger) anchor on the
+    leg-spread maximum INSIDE the loop window (stride_quad): the girl
+    sheet's inverted bob traced back to this function scanning from frame
+    0 while her master's loop starts at 31 — the pre-loop ease-in gait
+    passed every pixel gate but held no contact/passing structure. Later
+    candidates step whole periods so every quad stays phase-aligned.
+
+    Unknown-period clips (the retired wan lane, still used by run_avatar's
+    legacy path) keep the foot-signal contact scan.
+    """
+    if period is not None:
+        spreads = load_spreads(frames)
+        base = (
+            {pose: pinned_contact + round(n * period / 4) for n, pose in enumerate(POSES)}
+            if pinned_contact is not None
+            else stride_quad(spreads, loop_start, len(frames), period)
+        )
+        quads = []
+        offset = 0
+        while base["walk-d"] + offset < len(frames):
+            quads.append({pose: i + offset for pose, i in base.items()})
+            offset += period
+        return quads, period
+
+    signals = load_signals(frames)
+    start = min(len(signals) - 16, int(skip_head_seconds * FPS))
+    period = _find_period(signals[start:], min_period=12, max_period=28)
+    quarter = period // 4
+    contacts: list[int] = []
+    i = start
+    while i + period <= len(frames):
+        contacts.append(max(range(i, i + period), key=lambda k: signals[k]))
+        i += period
+    if pinned_contact is not None:
+        contacts = [pinned_contact]
+    quads = [
+        {pose: contact + n * quarter for n, pose in enumerate(POSES)}
+        for contact in contacts
+    ]
+    return [q for q in quads if q["walk-d"] < len(frames)], period
 
 
 def scan_clip(
@@ -134,6 +199,7 @@ def scan_clip(
     *,
     pinned_contact: int | None = None,
     period: int | None = None,
+    loop_start: int = 0,
     skip_head_seconds: float = SKIP_HEAD_SECONDS,
     expect_leg_phase: bool = True,
 ) -> dict[str, list[Path]]:
@@ -141,33 +207,26 @@ def scan_clip(
 
     `period` short-circuits the detection when the clip's cycle is already
     machine-known (a registered master take / a replace output inheriting
-    it — master_takes.json), and `skip_head_seconds` drops to 0 for those
-    clips: a trimmed master has no wan-style ease-in to skip, and skipping
-    would eat most of its 2-loop window.
+    it — master_takes.json) and switches the anchor to the loop-windowed
+    stride quad (see _candidate_quads); `loop_start` is that master's
+    verified loop start. `skip_head_seconds` drops to 0 for those clips: a
+    trimmed master has no wan-style ease-in to skip, and skipping would
+    eat most of its 2-loop window.
     """
     frames = sorted(frames_dir.glob("frame_*.png"))
     if len(frames) < 16:
         raise SystemExit(f"need ≥16 frames to scan, got {len(frames)}")
-    signals = load_signals(frames)
-    start = min(len(signals) - 16, int(skip_head_seconds * FPS))
-    if period is None:
-        period = _find_period(signals[start:], min_period=12, max_period=28)
-    quarter = period // 4
-
-    contacts: list[int] = []
-    i = start
-    while i + period <= len(frames):
-        contacts.append(max(range(i, i + period), key=lambda k: signals[k]))
-        i += period
-    if pinned_contact is not None:
-        contacts = [pinned_contact]
-    print(f"cycle scan: period={period} contacts={contacts}")
+    quads, period = _candidate_quads(
+        frames,
+        pinned_contact=pinned_contact,
+        period=period,
+        loop_start=loop_start,
+        skip_head_seconds=skip_head_seconds,
+    )
+    print(f"cycle scan: period={period} quads={[q['walk-a'] for q in quads]}")
 
     rejects: list[str] = []
-    for contact in contacts:
-        idx = {pose: contact + n * quarter for n, pose in enumerate(POSES)}
-        if idx["walk-d"] >= len(frames):
-            continue
+    for idx in quads:
         failures = _evaluate(stand_raw, frames, idx, expect_leg_phase=expect_leg_phase)
         attempts = 1
         while failures and attempts < MAX_CYCLE_ATTEMPTS:
@@ -176,7 +235,9 @@ def scan_clip(
                 break
             taken = {v for k, v in idx.items() if k != slot}
             replaced = False
-            for substitute in _substitutes(idx[slot], period, taken, len(frames)):
+            for substitute in _substitutes(
+                idx[slot], period, taken, loop_start, len(frames)
+            ):
                 trial = {**idx, slot: substitute}
                 trial_failures = _evaluate(
                     stand_raw, frames, trial, expect_leg_phase=expect_leg_phase
@@ -192,7 +253,7 @@ def scan_clip(
         if not failures:
             print(f"cycle scan: clean cycle {idx}")
             return {pose: [frames[i]] for pose, i in idx.items()}
-        rejects.append(f"contact {contact}: {failures[0]}")
+        rejects.append(f"contact {idx['walk-a']}: {failures[0]}")
 
     raise SystemExit(
         "no clean cycle in this clip — retake the video ("

@@ -230,7 +230,13 @@ def _flood_skin(
     return seen
 
 
-def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Image, list[int]]:
+def cut_hand_layer(
+    frame: Image.Image,
+    hand: tuple[int, int],
+    *,
+    near_side_only: bool = False,
+    seed: tuple[int, int] | None = None,
+) -> tuple[Image.Image, list[int]]:
     """The bare hand/arm as its own layer (MapleStory's hand-over-item):
     the skin pixels 4-connected to the hand anchor, plus their dark outline
     ring, alpha-masked and cropped. Rendered ON TOP of a held item so the
@@ -238,23 +244,62 @@ def cut_hand_layer(frame: Image.Image, hand: tuple[int, int]) -> tuple[Image.Ima
     z rule); cut from the stand frame only — the carry sheets hold the arm
     still, so one overlay serves every pose at its own hand anchor.
 
+    `near_side_only` keeps just the NEAR hand of the flood: the v4
+    two-hand carry joins both hands into one skin blob, and drawing the
+    whole blob over the item cut the plush in half with a skin band
+    (owner reject 2026-08-13 — the ordering must read near arm → item →
+    far arm, so only the near hand may render in front; the far hand
+    stays in the body cell behind the item). On the canonical
+    right-facing 3/4 sheets the NEAR arm is the one crossing IN FRONT of
+    the torso, so its hand is the INNER (image-left) part of the blob —
+    at or LEFT of the anchor column; the far arm reaches around the body
+    and its hand is the outer image-right part (a first cut kept the
+    right side and put the FAR hand in front of the plush — the second
+    owner reject of 2026-08-13).
+
+    `seed` floods from a different point than the item anchor (the grip
+    still maps the overlay onto the anchor): long-sleeve outfits separate
+    the two hands' skin blobs, so flooding from the item anchor (on the
+    FAR hand the item covers) can never reach the near hand at all — the
+    red hoodie's near-hand cut came back empty (2026-08-13).
+
     Shirtless bodies connect the mitten to the whole torso through bare skin;
     if the unbounded fill grows past a mitten-sized bbox we retry inside a
     small ellipse so the overlay does not swallow the head.
     """
     w, h = frame.size
     hx, hy = hand
-    seen = _flood_skin(frame, hand)
+    sx, sy = seed or hand
+
+    def flood(allow: Callable[[int, int], bool] | None = None) -> set[tuple[int, int]]:
+        found = _flood_skin(frame, (sx, sy), allow=allow)
+        if near_side_only:
+            # −6px at the 4x=192px scale (−3 at the 2x-era calibration): the
+            # near hand sits at or LEFT of the anchor column by anatomy.
+            found = {(x, y) for x, y in found if x <= hx - 6}
+        if not found:
+            raise SystemExit(
+                f"hand layer cut is empty at anchor ({hx},{hy}) — set handLayerSeed "
+                f"on the near hand (long sleeves separate the two hands' skin)"
+            )
+        return found
+
+    seen = flood()
     xs = [x for x, _ in seen]
     ys = [y for _, y in seen]
     too_big = (max(xs) - min(xs) > w * 0.45) or (max(ys) - min(ys) > h * 0.28)
     if too_big:
         rx, ry = max(7, w // 7), max(6, h // 14)
 
+        # The retry must keep the same flood origin, near-side filter and
+        # empty guard as the first pass: re-flooding from the item anchor
+        # pulled BOTH hands back into the overlay on shirtless two-hand
+        # carries (the far hand rendered in front of the item again), and
+        # an anchor-centered ellipse can exclude a `seed` blob entirely.
         def in_mitten(x: int, y: int) -> bool:
-            return ((x - hx) / rx) ** 2 + ((y - hy) / ry) ** 2 <= 1.05
+            return ((x - sx) / rx) ** 2 + ((y - sy) / ry) ** 2 <= 1.05
 
-        seen = _flood_skin(frame, hand, allow=in_mitten)
+        seen = flood(in_mitten)
     ring = set()
     for x, y in seen:
         for dx in (-1, 0, 1):
@@ -350,9 +395,22 @@ def main() -> None:
         "poses": poses,
     }
     if order.get("handLayer"):
-        stand_frame = frames[order["poses"].index("stand")]
-        stand_hand = poses["stand"]["anchors"]["hand"]
-        layer, anchor = cut_hand_layer(stand_frame, (stand_hand[0], stand_hand[1]))
+        # The overlay must look like the hand actually drawn on the frames
+        # it rides: the light-carry walk holds a fist at the chest while
+        # its (shared) stand keeps the idle waist mitten, and pasting the
+        # mitten cutout over the fist read as a second floating hand
+        # (差し戻し② 2026-08-13). `handLayerFrom` names the pose to cut
+        # from; the default stays the stand (the heavy-carry precedent).
+        layer_pose = order.get("handLayerFrom", "stand")
+        layer_frame = frames[order["poses"].index(layer_pose)]
+        layer_hand = poses[layer_pose]["anchors"]["hand"]
+        layer_seed = order.get("handLayerSeed")
+        layer, anchor = cut_hand_layer(
+            layer_frame,
+            (layer_hand[0], layer_hand[1]),
+            near_side_only=order.get("handLayerSide") == "near",
+            seed=tuple(layer_seed) if layer_seed else None,
+        )
         layer.save(resolve_asset_path(out_dir, "hand.png", asset_root))
         manifest["handLayer"] = {
             "file": "hand.png",
