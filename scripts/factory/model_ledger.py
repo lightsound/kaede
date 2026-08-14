@@ -314,7 +314,7 @@ def cmd_register_motion(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------- retarget
 
 
-def meshy(method: str, path: str, **kwargs) -> dict:
+def meshy(method: str, path: str, *, missing_ok: bool = False, **kwargs) -> dict | None:
     import os
 
     key = os.environ.get("MESHY_API_KEY")
@@ -324,6 +324,8 @@ def meshy(method: str, path: str, **kwargs) -> dict:
         method, f"{MESHY_BASE}{path}",
         headers={"Authorization": f"Bearer {key}"}, timeout=120, **kwargs,
     )
+    if missing_ok and response.status_code == 404:
+        return None
     if response.status_code not in (200, 201, 202):
         raise SystemExit(
             f"Meshy {method} {path} failed: HTTP {response.status_code} "
@@ -338,19 +340,31 @@ class MeshyJobs:
 
     def __init__(self, work: Path, budget: float) -> None:
         work.mkdir(parents=True, exist_ok=True)
-        self.state_path = work / "state.json"
+        # Distinct filename: fal_client.FalJobs shares the workdir and owns
+        # state.json there — sharing one file would let either ledger clobber
+        # the other (and a Fal-written file has no "spent" key).
+        self.state_path = work / "meshy_state.json"
         self.budget = budget
         self.state: dict = (
             json.loads(self.state_path.read_text())
             if self.state_path.exists()
-            else {"spent": 0.0}
+            else {}
         )
+        self.state.setdefault("spent", 0.0)
 
     def save(self) -> None:
         self.state_path.write_text(json.dumps(self.state, indent=1))
 
     def submit(self, key: str, kind: str, payload: dict) -> str:
         tasks = self.state.setdefault("tasks", {})
+        cached = tasks.get(key)
+        if cached is not None and meshy("GET", f"/{kind}/{cached}", missing_ok=True) is None:
+            # Meshy purges its tasks after ~3 days, so a cached id is only a
+            # shortcut — once it 404s, drop it and re-submit from the durable
+            # inputs instead of failing in poll.
+            print(f"  {key}: cached task {cached} purged by Meshy — re-submitting")
+            del tasks[key]
+            self.save()
         if key not in tasks:
             if self.state["spent"] >= self.budget:
                 raise SystemExit(
