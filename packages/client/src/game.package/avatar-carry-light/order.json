@@ -12,17 +12,17 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [36, 60],
+    "walk-a": [37, 60],
     "walk-b": [37, 61],
-    "walk-c": [39, 60],
-    "walk-d": [38, 61]
+    "walk-c": [37, 60],
+    "walk-d": [37, 61]
   },
   "references": ["../avatar/sheet-original.png"],
-  "prompt": "Light-carry walk variant of avatar.boy-basic (owner direction 2026-08-12: carry pose must match the item's weight — a coffee mug on the heavy two-arm carry read as wrong). Walk cells come from the walk-carry-light/boy master (Meshy Walking_with_Phone_inplace preset, re-rendered at the canonical right-facing 3/4 yaw 45 from the retained rigged GLB, seedance-refined onto the boy stand identity with an empty raised palm), extracted by walk_lane — the near hand holds at chest height, the far arm swings naturally. The stand cell is shared with avatar.boy-basic-carry (the bent-mitten idle: an idle carry rest pose fits both weights). handAnchors: stand = the mitten top-center; walk cells = the raised open palm, measured per frame on THIS sheet. handLayer: true cuts the palm around the stand hand anchor, rendered on top of held items.",
+  "prompt": "Derived one-hand light-carry sheet (2026-08-13 差し戻し④): the walk cells are ../avatar-carry/sheet-original.png with the OUTER (far) hand erased per cell by scripts/factory/derive_light_carry.py — deterministic pixel op, no generation. The v4 two-hand belly carry keeps the NEAR hand crossing in front of the torso; erasing the far hand (which sticks out past the torso silhouette) leaves the owner-approved v1 reading of a one-hand carry with the far arm hanging invisibly behind the torso. Cast attempts at a still one-hand walk were rejected three times (seedance re-poses the held arm; nano re-poses inconsistently per cell), so the light family derives from the heavy family until a stable one-hand master exists. Item anchors = the near hand, measured per frame on this sheet.",
   "handLayer": true,
   "originals": {
     "../avatar/sheet-original.png": "d7dffe23127c386b17c8cfc49b2e1a9425402ef51e474bed6b7d3d696eb3c221",
-    "sheet-original.png": "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86"
+    "sheet-original.png": "035b317d957ba1f19847b522152fa4a6e6fcefc92a408f72e83241212a1a3695"
   },
   "walkMaster": "walk-carry-light/boy",
   "walkMasterSha256": "0ff0cb8e7d8e4e7129c95ac1d405fa08942b7b19761824741fb573729fa4ee46",
@@ -36,5 +36,8 @@
     }
   },
   "handLayerFrom": "walk-a",
-  "handLayerSide": "near"
+  "editSource": "../avatar-carry/sheet-original.png",
+  "lint": {
+    "neckFrom": "avatar-carry/manifest.json"
+  }
 }

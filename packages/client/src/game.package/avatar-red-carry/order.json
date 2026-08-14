@@ -12,17 +12,17 @@
   "standHeightPx": 96,
   "handAnchors": {
     "stand": [26, 64],
-    "walk-a": [40, 59],
-    "walk-b": [40, 59],
-    "walk-c": [42, 59],
-    "walk-d": [42, 60]
+    "walk-a": [40, 58],
+    "walk-b": [41, 59],
+    "walk-c": [41, 58],
+    "walk-d": [41, 59]
   },
   "references": ["../avatar-carry/sheet-original.png"],
   "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-13): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — on the walking frames BOTH his hands are held TOGETHER, touching each other, palms up, directly in front of his belly (do NOT separate them, do NOT put a hand on his chest, do NOT hold a hand out to the side); hands stay bare skin; do not move or repose any limb; the output must contain EXACTLY 5 figures in one row at the same positions and sizes as the input — never add, remove, duplicate or crop a figure. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
   "handLayer": true,
   "originals": {
     "../avatar-carry/sheet-original.png": "ee849bac0ed117a335d1c2d22837e1e3e472afa8bba5dc3be4d1613aef3e1b86",
-    "sheet-original.png": "f5d84b724f177d9efae0987cdd0bc1a9658b199fbcf6a928f25df2f814f4b857"
+    "sheet-original.png": "e2604c4054eadb560414d678847b3e72d86661113b3f017576c99a76a9fdc2cc"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry/sheet-original.png",
@@ -41,5 +41,17 @@
     "walk-d": [25, 49]
   },
   "handLayerFrom": "walk-a",
-  "handLayerSide": "near"
+  "handLayerSide": "near",
+  "walkMaster": "walk-carry/boy",
+  "walkMasterSha256": "0ff0cb8e7d8e4e7129c95ac1d405fa08942b7b19761824741fb573729fa4ee46",
+  "walkLane": {
+    "mode": "replace",
+    "cells": {
+      "walk-a": 10,
+      "walk-b": 16,
+      "walk-c": 22,
+      "walk-d": 28
+    }
+  },
+  "handLayerSeed": [33, 61]
 }
