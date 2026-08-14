@@ -484,6 +484,14 @@ v1 は「頭・胴・腕・脚を別画像で持ち、PixiJS Container の階層
   ヘッドホン headgear の girl 対応と AvatarView の girl スキン配線
   （setSkin）は増分①d の領分 — シートは avatar-girl walk セルと同じ
   工場出荷済み・未消費。実測・コストは factory-yield.md
+  **→ 構想の集約: ファクトリー v2（2026-08-14 オーナー承認）**: 本 DP の
+  実測スレッド（ハイブリッド → fal replace → マスター台帳）と carry 差し
+  戻しラウンド（PR #110 — 後付けレイヤー復元の構造的限界を実測）の帰結を
+  「**3D 正本 × 動画清書 × レイヤー出荷**」の三層アーキテクチャとして
+  [docs/factory-v2-plan.md](./factory-v2-plan.md) に集約。実施順・合否
+  ゲート・徹底調査の発見（Wan-Animate-2 / PixelLab / See-through 等）も
+  同文書。各スパイクの合格をもって本書 §2 と asset-pipeline.md の該当節を
+  改訂する
 - 配信の R2 移行・マーケットプレイス・スタイル学習は asset-pipeline.md の
   DP-1/DP-2/DP-3。
 
