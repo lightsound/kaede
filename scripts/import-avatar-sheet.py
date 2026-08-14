@@ -269,26 +269,37 @@ def cut_hand_layer(
     """
     w, h = frame.size
     hx, hy = hand
-    seen = _flood_skin(frame, seed or hand)
-    if near_side_only:
-        # −6px at the 4x=192px scale (−3 at the 2x-era calibration): the
-        # near hand sits at or LEFT of the anchor column by anatomy.
-        seen = {(x, y) for x, y in seen if x <= hx - 6}
-    if not seen:
-        raise SystemExit(
-            f"hand layer cut is empty at anchor ({hx},{hy}) — set handLayerSeed "
-            f"on the near hand (long sleeves separate the two hands' skin)"
-        )
+    sx, sy = seed or hand
+
+    def flood(allow: Callable[[int, int], bool] | None = None) -> set[tuple[int, int]]:
+        found = _flood_skin(frame, (sx, sy), allow=allow)
+        if near_side_only:
+            # −6px at the 4x=192px scale (−3 at the 2x-era calibration): the
+            # near hand sits at or LEFT of the anchor column by anatomy.
+            found = {(x, y) for x, y in found if x <= hx - 6}
+        if not found:
+            raise SystemExit(
+                f"hand layer cut is empty at anchor ({hx},{hy}) — set handLayerSeed "
+                f"on the near hand (long sleeves separate the two hands' skin)"
+            )
+        return found
+
+    seen = flood()
     xs = [x for x, _ in seen]
     ys = [y for _, y in seen]
     too_big = (max(xs) - min(xs) > w * 0.45) or (max(ys) - min(ys) > h * 0.28)
     if too_big:
         rx, ry = max(7, w // 7), max(6, h // 14)
 
+        # The retry must keep the same flood origin, near-side filter and
+        # empty guard as the first pass: re-flooding from the item anchor
+        # pulled BOTH hands back into the overlay on shirtless two-hand
+        # carries (the far hand rendered in front of the item again), and
+        # an anchor-centered ellipse can exclude a `seed` blob entirely.
         def in_mitten(x: int, y: int) -> bool:
-            return ((x - hx) / rx) ** 2 + ((y - hy) / ry) ** 2 <= 1.05
+            return ((x - sx) / rx) ** 2 + ((y - sy) / ry) ** 2 <= 1.05
 
-        seen = _flood_skin(frame, hand, allow=in_mitten)
+        seen = flood(in_mitten)
     ring = set()
     for x, y in seen:
         for dx in (-1, 0, 1):
