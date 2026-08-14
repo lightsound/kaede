@@ -87,11 +87,14 @@ OPAQUE = 128
 SPECK_FRACTION = 0.005
 
 # Seed neighborhood (±px around the hand anchor) for the hand-layer skin
-# flood. 4x-resolution pixels — doubled from the 2x-era ±6 with the 192px
-# shipping scale: at 4x the outline strokes splitting the mitten's skin
-# doubled too, so a ±6 window seeds only the sliver at the anchor and the
-# long-sleeve (red hoodie) cuts came out half their logical size.
-HAND_SEED_RADIUS = 12
+# flood. Deliberately NOT doubled with the 4x shipping scale: this window
+# only locates skin near the anchor — the flood then grows to the full
+# connected component, so the cut's size scales with the artwork, not with
+# this value. Widening it to ±12 was measured (2026-08-14) to seed PAST the
+# fist into khaki trousers (which pass is_skin), reattaching the 2x-era
+# pants-streak contamination to the red-hoodie and pants-body mittens; ±6
+# already captures the whole 192px fist blob.
+HAND_SEED_RADIUS = 6
 
 PALETTE_COLORS = 5
 
