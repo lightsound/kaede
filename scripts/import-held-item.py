@@ -4,7 +4,7 @@ one-shot -> trimmed transparent frame + manifest.
 
 The held-item lane of the factory line (docs/asset-pipeline.md §4): reads an
 order file (発注書), chroma-keys the generated image, trims it to content,
-scales it to the ordered height (2x display resolution, the shared rule),
+scales it to the ordered height (4x display resolution, the shared rule),
 and writes the frame plus the manifest of docs/asset-pipeline.md §2. The
 chroma-key/despeckle constants mirror import-avatar-sheet.py; 増分①b merges
 the two scripts into one type-dispatched line (this spike deliberately does

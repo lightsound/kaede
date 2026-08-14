@@ -7,14 +7,14 @@ green-screen sheet, cuts it on the frame grid (NOT the quadrant layout of the
 rejected parts rig — one cell per pose), trims each frame to content so the
 feet sit exactly on the frame's bottom edge (the ground baseline the renderer
 anchors at the physics-AABB bottom), scales every frame by ONE factor derived
-from the stand pose (so relative pose sizes survive) to 2x display
+from the stand pose (so relative pose sizes survive) to 4x display
 resolution, and writes the frames plus the manifest of docs/asset-pipeline.md
 §2 (id/type/author/license/palette/source/poses with per-pose neck/hand
 anchors — recorded from day one because retrofitting them means regenerating
 the sheet; refining the VALUES later is just editing coordinates).
 
 Anchor coordinates are pixels in the emitted frame image (origin top-left,
-2x resolution). `neck` is detected as the narrowest opaque row of the frame's
+4x resolution). `neck` is detected as the narrowest opaque row of the frame's
 chin-to-hip band (the chibi neck pinch); `hand` defaults to a proportional
 estimate, overridden per pose by the order's `handAnchors` (measured values —
 skin-tone blob detection plus visual confirmation; the override lives in the
@@ -289,7 +289,7 @@ def main() -> None:
     frames = [cut_cell(sheet, grid["cols"], grid["rows"], i) for i in range(len(order["poses"]))]
 
     # One scale for every frame, derived from the stand pose's target height
-    # (2x display resolution): relative pose heights must survive, so walking
+    # (4x display resolution): relative pose heights must survive, so walking
     # frames are NOT independently stretched to a common size.
     scale = order["standHeightPx"] / frames[order["poses"].index("stand")].height
     frames = [

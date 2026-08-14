@@ -22,7 +22,7 @@ export interface AvatarSheetTextures {
 /**
  * A held item composited onto the avatar's hand anchor (avatar-rig.md §2 —
  * the held-item layer). All coordinates are pixels in the source frames
- * (2x display resolution, origin top-left, straight from the manifests):
+ * (4x display resolution, origin top-left, straight from the manifests):
  * `grip` is the point in the item frame that lands on the hand anchor, and
  * `hands` are the per-pose hand anchors. The keys mirror AvatarSheetTextures
  * so held items and pose frames can never disagree about which poses exist.
@@ -75,7 +75,7 @@ export interface GestureSheetTextures {
  * The busy-status headgear (取り込み中=ヘッドホン — VISION 体験の核 2),
  * composited onto the current pose's NECK anchor the way held items ride
  * the hand anchor: `grip` is the point in the headgear frame that lands on
- * the anchor, `necks` the per-pose neck anchors (frame pixels, 2x, from
+ * the anchor, `necks` the per-pose neck anchors (frame pixels, 4x, from
  * the manifests). Poses without a neck entry — and the sleep pose, whose
  * head lies sideways — simply hide the gear.
  */
@@ -121,9 +121,10 @@ export interface AvatarView {
   pose(): string;
 }
 
-// Frame assets ship at 2x the logical display resolution (the Phase 4
-// avatar precedent, docs/asset-pipeline.md §2).
-const ASSET_SCALE = 0.5;
+// Frame assets ship at 4x the logical display resolution (the factory-v2
+// step-1 ruling raising the Phase 4 2x precedent, docs/asset-pipeline.md §2:
+// the extra pixels feed Retina/zoom rendering and inspection precision).
+const ASSET_SCALE = 0.25;
 
 /**
  * A carried layer as a sprite whose origin is its grip point: positioning
@@ -145,7 +146,7 @@ function createGripSprite(texture: Texture, grip: readonly number[]): Sprite {
 
 /**
  * Parks the held item's grip on the pose's hand anchor. The anchor is in
- * frame pixels (2x, origin top-left); the avatar sprite renders that frame
+ * frame pixels (4x, origin top-left); the avatar sprite renders that frame
  * bottom-centered at the AABB's bottom edge at ASSET_SCALE, so the same
  * transform maps the anchor into body-local coordinates.
  */

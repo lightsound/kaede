@@ -4,7 +4,7 @@
     "オーナー承認済み(approval に承認の出所を記録)",
     "ループ閉包の機械確認済み(シルエット IoU ≥ 0.93 — loop_scan.py)"
   ],
-  "canonicalForm": "masterSha256 はトリム済み(1 ループ+位相等価差し替えマージン・最大 97 コマ ≈ 480p $0.24/replace)の R2 原本。sourceSha256 は承認テイクの元動画(トレーサビリティ用)。",
+  "canonicalForm": "masterSha256 はトリム済み(1 ループ+位相等価差し替えマージン・最大 97 コマ ≈ 720p $0.49/replace — ファクトリー v2 手順 1 で既定解像度を 480p から引き上げ)の R2 原本。sourceSha256 は承認テイクの元動画(トレーサビリティ用)。",
   "masters": {
     "gangnam/boy": {
       "motion": "gangnam",

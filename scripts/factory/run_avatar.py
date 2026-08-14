@@ -104,6 +104,9 @@ def expand_prompt(order: dict) -> str:
 
 
 def generate_image(prompt: str, images: list[Path], out_prefix: Path, field: str) -> Path:
+    # Stills render at 2K (factory-v2 step-1 ruling: 静止画 1080p 以上 —
+    # per-image billing means the resolution is free, and the extra detail
+    # feeds the 4x/192px shipping scale and inspection precision).
     cmd = [
         sys.executable,
         str(GENERATE),
@@ -113,6 +116,8 @@ def generate_image(prompt: str, images: list[Path], out_prefix: Path, field: str
         prompt,
         "--field",
         field,
+        "--param",
+        "resolution=2K",
         "--out",
         str(out_prefix),
     ]

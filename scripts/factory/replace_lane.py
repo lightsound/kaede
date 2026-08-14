@@ -14,11 +14,13 @@ The ledger's registration requirements (enforced by `register`):
 2. owner approval (--approval provenance note, required)
 3. machine-verified loop closure (loop_scan gates)
 The canonical master is the ffmpeg-TRIMMED version (one loop + substitution
-margin, ≤ 97 frames ≈ $0.24/replace at 480p): billing is output frames =
-input frames ($0.04 per 16 frames at 480p), so a 5-second source is never
+margin, ≤ 97 frames ≈ $0.49/replace at 720p): billing is output frames =
+input frames ($0.08 per 16 frames at 720p), so a 5-second source is never
 submitted as-is.
 
-Recipe (owner-settled, PR #101): wan replace 480p, identity = A-pose padded
+Recipe (owner-settled, PR #101; resolution raised to 720p by the factory-v2
+step-1 ruling — 4x/192px shipping needs the extra source detail): wan
+replace 720p, identity = A-pose padded
 square with its background color, default 20 inference steps (the steps
 knob is NOT exposed — owner rejected it), use_turbo only on takes that
 need the quality boost (~3x slower, no extra cost). Blink frames are
@@ -43,7 +45,7 @@ Usage:
 
 Order (発注書) fields: id, motion, family, identity (R2 sha256 or path),
 standSource (same — the sheet's reference cell), optional resolution
-(default 480p), useTurbo, cells (default 8), posePrefix (default "dance").
+(default 720p), useTurbo, cells (default 8), posePrefix (default "dance").
 """
 
 from __future__ import annotations
@@ -98,7 +100,7 @@ ORDER_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]*\Z")
 REGISTER_WORKDIR_PREFIX = "register-"
 
 # One loop + substitution margin: 97 frames = 6.0625 billed video-seconds
-# ($0.2425 at 480p). The window must hold ≥ 2 loop instances so every cell
+# ($0.485 at 720p). The window must hold ≥ 2 loop instances so every cell
 # slot has a phase-equivalent substitute (blink.py), which caps the periods
 # a master may have — slow cycles need a deliberate TRIM_MAX_FRAMES raise.
 TRIM_MAX_FRAMES = 97
@@ -114,15 +116,16 @@ TRIM_MIN_MARGIN = 4
 OUTPUT_LOOP_MEAN_MIN = 0.89
 OUTPUT_CLOSURE_MIN = 0.92
 
-# Sheet composition (the gesture lane's working scale).
+# Sheet composition (the gesture lane's working scale). STAND_HEIGHT_PX is
+# the shipping scale: 4x = 192px per the factory-v2 step-1 ruling.
 STAND_WORK_HEIGHT = 400
-STAND_HEIGHT_PX = 96
+STAND_HEIGHT_PX = 192
 # Border pixels of a green-screen clip that must be green-dominant.
 GREEN_BORDER_MIN = 0.95
 BACKGROUND_KEY_DISTANCE = 40
 
 DEFAULT_CELLS = 8
-DEFAULT_RESOLUTION = "480p"
+DEFAULT_RESOLUTION = "720p"
 
 
 def fetch_r2(sha256: str, dest: Path) -> Path:
