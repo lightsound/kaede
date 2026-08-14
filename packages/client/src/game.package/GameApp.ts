@@ -59,7 +59,7 @@ import {
   visibleBubbleText,
   visibleReactionEmoji,
 } from './bubble';
-import { cameraOffset } from './camera';
+import { cameraOffset, parseZoomOverride } from './camera';
 import { createHuddleLayer, type HuddleRender } from './huddleLayer';
 import { createInput } from './input';
 import headphonesUrl from './items/headphones/headphones.png';
@@ -431,6 +431,16 @@ function renderResolution(): number {
 }
 
 /**
+ * Dev-only camera magnification (/?zoom=2 — 検品・デモ録画用): vertical-fit
+ * rendering leaves no other way to enlarge the avatar on screen. Always 1 in
+ * production builds (the DEV gate drops the parser).
+ */
+function devZoomFactor(): number {
+  if (!import.meta.env.DEV) return 1;
+  return parseZoomOverride(window.location.search) ?? 1;
+}
+
+/**
  * What the dev-only dress-up preview swaps in (ROADMAP ①b 着手順⑵ — the
  * layer-composition verification spike): an outfit-swapped pose sheet
  * and/or a held item pinned to the hand anchors. 増分①e replaces this with
@@ -707,6 +717,7 @@ async function resolveAvatarLook(
 }
 
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
+  const devZoom = devZoomFactor();
   const app = new Application();
   // Window-fit canvas: sized to the window in CSS pixels, rendered at the
   // device pixel ratio (autoDensity keeps the CSS size in sync). Resizes are
@@ -860,15 +871,17 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     // Vertical-fit zoom: the full world height always fills the window, and
     // the visible logical width follows from the window's aspect ratio. The
     // camera math stays in logical world pixels; only the world container's
-    // scale and offset are expressed in screen pixels.
-    const scale = Math.max(app.screen.height, 1) / VIEW_H;
+    // scale and offset are expressed in screen pixels. devZoom (dev-only
+    // /?zoom= override) multiplies the fit for inspection and demo capture.
+    const scale = (Math.max(app.screen.height, 1) / VIEW_H) * devZoom;
     const viewW = app.screen.width / scale;
+    const viewH = app.screen.height / scale;
     world.scale.set(scale);
     const cam = cameraOffset(
       sx,
       sy,
       viewW,
-      VIEW_H,
+      viewH,
       currentMap.collision.width,
       currentMap.collision.height,
     );
