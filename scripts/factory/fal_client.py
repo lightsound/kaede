@@ -80,7 +80,11 @@ def sniff_content_type(data: bytes) -> str:
         return "image/jpeg"
     if data[4:8] == b"ftyp":
         return "video/mp4"
-    raise SystemExit("unrecognized file type — expected png/jpeg/mp4")
+    if data[:4] == b"glTF":
+        # Rigged/remesh model GLBs: the CDN hosts them as Meshy `model_url`
+        # inputs (the 3D-master ledger's re-rig path — model_ledger.py).
+        return "model/gltf-binary"
+    raise SystemExit("unrecognized file type — expected png/jpeg/mp4/glb")
 
 
 def estimate_cost(model: str, resolution: str, frames: int, duration: float) -> float:
