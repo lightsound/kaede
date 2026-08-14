@@ -42,6 +42,7 @@ from factory.foot_phase import (
     select_walk_indices,
     stride_quad,
 )
+from factory.derive_light_carry import erase_outer_hand
 
 
 def _chibi(neck_y: int = 50, hand: tuple[int, int] | None = None) -> Image.Image:
@@ -637,6 +638,47 @@ class LegSpreadTests(unittest.TestCase):
         draw.rectangle((48, 78, 58, 98), fill=(240, 200, 160, 255))
         passing = _chibi()
         self.assertGreater(leg_spread(contact), leg_spread(passing) + 15)
+
+
+class DeriveLightCarryTests(unittest.TestCase):
+    SKIN = (230, 190, 150, 255)
+    OUTLINE = (30, 20, 20, 255)
+
+    def _two_hand_cell(self) -> Image.Image:
+        """Synthetic two-hand carry cell: near hand (left), skin bridge,
+        outer hand (right, outlined), and a leg column below the hand band
+        — the shirtless worst case the row band exists for."""
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((8, 26, 18, 34), fill=self.SKIN)  # near hand
+        draw.rectangle((18, 29, 42, 31), fill=self.SKIN)  # bridge
+        draw.rectangle((42, 24, 52, 36), fill=self.SKIN)  # outer hand
+        draw.rectangle((53, 24, 54, 36), fill=self.OUTLINE)  # its outline ring
+        draw.rectangle((44, 36, 46, 55), fill=self.SKIN)  # leg column below band
+        return img
+
+    def test_erases_outer_hand_and_ring_only_within_band(self) -> None:
+        cell = self._two_hand_cell()
+        erased = erase_outer_hand(cell, (47, 30), 30)
+        self.assertGreater(erased, 0)
+        px = cell.load()
+        self.assertEqual(px[47, 30][3], 0, "outer hand must be cleared")
+        self.assertEqual(px[53, 30][3], 0, "outer outline ring must be cleared")
+        self.assertEqual(px[10, 30], self.SKIN, "near hand (left of cut) survives")
+        self.assertEqual(px[24, 30], self.SKIN, "bridge left of cut survives")
+        self.assertEqual(px[45, 50], self.SKIN, "leg skin outside ±7 row band survives")
+
+    def test_reoutlines_the_exposed_cut_edge(self) -> None:
+        cell = self._two_hand_cell()
+        erase_outer_hand(cell, (47, 30), 30)
+        edge = cell.load()[29, 30]
+        self.assertEqual(edge[3], 255, "cut edge stays opaque")
+        self.assertLess(edge[0], 150, "cut edge darkened toward the outline tone")
+
+    def test_no_skin_at_seed_fails_loud(self) -> None:
+        blank = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        with self.assertRaises(SystemExit):
+            erase_outer_hand(blank, (30, 30), 20)
 
 
 class PrescribedBobTests(unittest.TestCase):
