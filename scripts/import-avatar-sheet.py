@@ -7,14 +7,14 @@ green-screen sheet, cuts it on the frame grid (NOT the quadrant layout of the
 rejected parts rig — one cell per pose), trims each frame to content so the
 feet sit exactly on the frame's bottom edge (the ground baseline the renderer
 anchors at the physics-AABB bottom), scales every frame by ONE factor derived
-from the stand pose (so relative pose sizes survive) to 2x display
+from the stand pose (so relative pose sizes survive) to 4x display
 resolution, and writes the frames plus the manifest of docs/asset-pipeline.md
 §2 (id/type/author/license/palette/source/poses with per-pose neck/hand
 anchors — recorded from day one because retrofitting them means regenerating
 the sheet; refining the VALUES later is just editing coordinates).
 
 Anchor coordinates are pixels in the emitted frame image (origin top-left,
-2x resolution). `neck` is detected as the narrowest opaque row of the frame's
+4x resolution). `neck` is detected as the narrowest opaque row of the frame's
 chin-to-hip band (the chibi neck pinch); `hand` defaults to a proportional
 estimate, overridden per pose by the order's `handAnchors` (measured values —
 skin-tone blob detection plus visual confirmation; the override lives in the
@@ -85,6 +85,16 @@ OPAQUE = 128
 # are keying residue (stray sheet speckles), not character: drop them before
 # trimming or a single pixel skews the frame's bounding box.
 SPECK_FRACTION = 0.005
+
+# Seed neighborhood (±px around the hand anchor) for the hand-layer skin
+# flood. Deliberately NOT doubled with the 4x shipping scale: this window
+# only locates skin near the anchor — the flood then grows to the full
+# connected component, so the cut's size scales with the artwork, not with
+# this value. Widening it to ±12 was measured (2026-08-14) to seed PAST the
+# fist into khaki trousers (which pass is_skin), reattaching the 2x-era
+# pants-streak contamination to the red-hoodie and pants-body mittens; ±6
+# already captures the whole 192px fist blob.
+HAND_SEED_RADIUS = 6
 
 PALETTE_COLORS = 5
 
@@ -199,8 +209,8 @@ def _flood_skin(
     hx, hy = hand
     seeds = [
         (x, y)
-        for y in range(max(0, hy - 6), min(h, hy + 7))
-        for x in range(max(0, hx - 6), min(w, hx + 7))
+        for y in range(max(0, hy - HAND_SEED_RADIUS), min(h, hy + HAND_SEED_RADIUS + 1))
+        for x in range(max(0, hx - HAND_SEED_RADIUS), min(w, hx + HAND_SEED_RADIUS + 1))
         if (allow is None or allow(x, y)) and is_skin(frame.getpixel((x, y)))
     ]
     if not seeds:
@@ -289,7 +299,7 @@ def main() -> None:
     frames = [cut_cell(sheet, grid["cols"], grid["rows"], i) for i in range(len(order["poses"]))]
 
     # One scale for every frame, derived from the stand pose's target height
-    # (2x display resolution): relative pose heights must survive, so walking
+    # (4x display resolution): relative pose heights must survive, so walking
     # frames are NOT independently stretched to a common size.
     scale = order["standHeightPx"] / frames[order["poses"].index("stand")].height
     frames = [

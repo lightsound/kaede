@@ -27,3 +27,17 @@ function offsetAxis(focus: number, view: number, world: number): number {
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
+
+/**
+ * 開発ビルド限定のカメラ倍率上書き(例: /?zoom=2)。検品・デモ録画で
+ * アバターを画面上大きく映すためのもので、縦フィット描画(ワールド全高 =
+ * ウィンドウ高)では他に拡大手段がない。呼び出し元(GameApp)が
+ * import.meta.env.DEV で外すので本番バンドルには乗らない。1〜8 の有限数
+ * だけを受け付ける(0 以下・巨大値は描画を壊すため)。
+ */
+export function parseZoomOverride(search: string): number | undefined {
+  const raw = new URLSearchParams(search).get('zoom');
+  if (raw === null || raw.trim() === '') return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 8 ? parsed : undefined;
+}

@@ -15,7 +15,7 @@ export interface AssetFrame {
   file: string;
   /** The bundled PNG's served URL, or undefined when the file is absent (also reported as a problem). */
   url: string | undefined;
-  /** [width, height] in source pixels (2x display resolution), when the manifest carries it. */
+  /** [width, height] in source pixels (4x display resolution), when the manifest carries it. */
   size: readonly [number, number] | undefined;
   /** Anchor points by name (neck / hand / grip …), in source pixels from the frame's top-left. */
   anchors: Readonly<Record<string, readonly [number, number]>>;

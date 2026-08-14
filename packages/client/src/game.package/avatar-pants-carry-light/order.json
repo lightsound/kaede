@@ -9,13 +9,13 @@
     "rows": 1
   },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
-  "standHeightPx": 96,
+  "standHeightPx": 192,
   "handAnchors": {
-    "stand": [26, 64],
-    "walk-a": [17, 59],
-    "walk-b": [19, 60],
-    "walk-c": [21, 59],
-    "walk-d": [20, 59]
+    "stand": [52, 128],
+    "walk-a": [34, 118],
+    "walk-b": [38, 120],
+    "walk-c": [42, 118],
+    "walk-d": [40, 118]
   },
   "references": ["../avatar-carry-light/sheet-original.png"],
   "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry-light/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the near hand raised in front of the chest on the walking frames), just bare skin instead of sleeves. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
@@ -34,10 +34,10 @@
     "neckFrom": "avatar-carry-light/manifest.json"
   },
   "neckAnchors": {
-    "stand": [26, 49],
-    "walk-a": [25, 49],
-    "walk-b": [26, 49],
-    "walk-c": [25, 49],
-    "walk-d": [25, 49]
+    "stand": [52, 98],
+    "walk-a": [50, 98],
+    "walk-b": [52, 98],
+    "walk-c": [50, 98],
+    "walk-d": [50, 98]
   }
 }

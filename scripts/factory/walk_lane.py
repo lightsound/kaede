@@ -72,7 +72,7 @@ ASSET_ROOT = ROOT / "packages/client/src/game.package"
 # normalized down to it, so the stand is pre-scaled to the same height —
 # the committed lane's regime (every cell at one working scale).
 WORK_HEIGHT = 400
-DEFAULT_RESOLUTION = "480p"
+DEFAULT_RESOLUTION = "720p"
 
 
 def stand_cell_of_sheet(order: dict, order_path: Path, dest: Path) -> Path:
@@ -149,15 +149,16 @@ def replace_frames(
     return work / "frames"
 
 
-def sheet_cells_96(sheet_path: Path) -> list[Image.Image]:
-    """The composed sheet's five cells keyed, trimmed and import-scaled."""
+def sheet_cells_shipping(sheet_path: Path) -> list[Image.Image]:
+    """The composed sheet's five cells keyed, trimmed and import-scaled
+    (192px = the 4x shipping scale of the factory-v2 step-1 ruling)."""
     sheet = Image.open(sheet_path).convert("RGBA")
     cell_w = sheet.width // 5
     cells = []
     for i in range(5):
         cell = chroma_key(sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height)))
         cells.append(cell.crop(content_bbox(cell)))
-    scale = 96 / cells[0].height
+    scale = 192 / cells[0].height
     return [
         c.resize(
             (max(1, round(c.width * scale)), max(1, round(c.height * scale))),
@@ -223,7 +224,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
     )
 
     # Verdict material: master cells vs composed cells + the 96px loop.
-    cells = sheet_cells_96(sheet_path)
+    cells = sheet_cells_shipping(sheet_path)
     master_cells = []
     for pose in POSES:
         keyed = chroma_key(Image.open(selected[pose][0]))

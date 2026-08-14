@@ -104,8 +104,9 @@ class AnchorTests(unittest.TestCase):
         if not stand.is_file():
             self.skipTest("avatar-carry stand not in workspace")
         x, y = structure_hand_carry(Image.open(stand))
-        # Owner-measured mitten top-center is (26, 64); allow a few px.
-        self.assertTrue(abs(x - 26) <= 3 and abs(y - 64) <= 3, f"hand={(x, y)}")
+        # Owner-measured mitten top-center was (26, 64) on the 2x=96px sheet;
+        # the 4x=192px re-import doubles it to (52, 128). Tolerance doubles too.
+        self.assertTrue(abs(x - 52) <= 6 and abs(y - 128) <= 6, f"hand={(x, y)}")
 
 
 class FootPhaseTests(unittest.TestCase):

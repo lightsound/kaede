@@ -8,7 +8,7 @@ held-item order for import-held-item.py: the emitted `item-original.png`
 is the bare headgear on green, `grip` is the point that lands on a pose's
 NECK anchor (headgear rides the neck the way held items ride the hand —
 the handLayer precedent, aimed one anchor higher), and `heightPx` matches
-the avatar frames' 2x scale.
+the avatar frames' 4x scale.
 
 Why diff, not generation: a bare "headphones only" generation has no
 registration against the head (the spec hole the held-item spike hit,

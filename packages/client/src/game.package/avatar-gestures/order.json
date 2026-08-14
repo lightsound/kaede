@@ -22,7 +22,7 @@
     "dance-g",
     "dance-h"
   ],
-  "standHeightPx": 96,
+  "standHeightPx": 192,
   "standSource": "../avatar/stand.png",
   "references": ["../avatar/reference.png"],
   "gestureSources": {
@@ -33,20 +33,20 @@
   },
   "prompt": "Phase 5 ①c gesture sheet, composed by scripts/factory/compose_gesture_sheet.py from the bench-approved takes (2026-08-10, PR #96; owner picks: floor sit = the video-lane settled sit, sleep/wave = the reference+instruction nano takes, dance = the wan loop). Sources, all generated via Cloudflare AI Gateway (kaede-assets) from the committed stand frame on a 720px green canvas (character ~470px tall): sit = frame 120 of the wan-2.7-i2v sit-down clip (prompt: sits down on the ground and then stays perfectly still, bottom on the ground line, knees bent, hands on knees; motionless from ~frame 80); sleep = nano-banana-2 pose edit (lies asleep on his side ON the ground line, head right, eyes closed, one arm folded, knees slightly bent); wave = nano-banana-2 pose edit (near arm raised high, elbow bent, open palm waving, far arm relaxed); dance-a..h = frames 34/37/40/43/46/49/52/55 of the wan-2.7-i2v dance clip (prompt: cheerful perfectly-looping dance cycle, bounces to a steady beat stepping side to side, arms swinging overhead and down, hips swaying; adopted 24-frame cycle from frame 34, loop-closure IoU 0.932, 100ms per sampled frame = DANCE_FRAME_MS). Scale normalization back to the 720 canvas: nano stills x720/1024, wan frames x720/1440, verified per cell by hair-blob width against the stand (fail loud). Neck anchors are hair-blob estimates persisted as neckAnchors overrides — the structural neck detector breaks on arms-over-head dance frames and the lying sleeper (both measured in the ①c bench); the sleep anchor is approximate by design (nothing renders from it: the busy headgear overlay hides on sleep). NO head composite on the dance frames — erase-then-paste erases arms crossing above the neck line (measured); the video-native heads passed the calibrated per-frame palette-drift gate and videoReview (minor wobble, judged acceptable at game scale).",
   "originals": {
-    "sheet-original.png": "08610b80959b17d32234f73921738455955984b0d83108fe11fa4f049ee1a580"
+    "sheet-original.png": "92b2b2c0aaf6646a4c05c9a12063c6cf0166f164b9e8b8a451b8fbd50ab7c72b"
   },
   "neckAnchors": {
-    "stand": [26, 51],
-    "sit": [26, 51],
-    "sleep": [75, 50],
-    "wave": [26, 50],
-    "dance-a": [25, 50],
-    "dance-b": [26, 50],
-    "dance-c": [25, 50],
-    "dance-d": [26, 50],
-    "dance-e": [25, 50],
-    "dance-f": [25, 50],
-    "dance-g": [25, 50],
-    "dance-h": [25, 50]
+    "stand": [52, 99],
+    "sit": [53, 101],
+    "sleep": [149, 99],
+    "wave": [53, 99],
+    "dance-a": [50, 99],
+    "dance-b": [51, 99],
+    "dance-c": [51, 99],
+    "dance-d": [51, 99],
+    "dance-e": [50, 100],
+    "dance-f": [50, 99],
+    "dance-g": [51, 99],
+    "dance-h": [50, 99]
   }
 }

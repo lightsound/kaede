@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraOffset } from '../src/game.package/camera';
+import { cameraOffset, parseZoomOverride } from '../src/game.package/camera';
 
 // A 1000x600 world seen through an 800x400 viewport: 200px of horizontal and
 // 200px of vertical scroll before the camera hits an edge.
@@ -30,5 +30,25 @@ describe('cameraOffset', () => {
 
   it('treats a world exactly the viewport size as centered at zero', () => {
     expect(cameraOffset(50, 50, VIEW_W, VIEW_H, VIEW_W, VIEW_H)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('parseZoomOverride', () => {
+  it('parses an in-range zoom', () => {
+    expect(parseZoomOverride('?zoom=2')).toBe(2);
+    expect(parseZoomOverride('?other=1&zoom=1.5')).toBe(1.5);
+  });
+
+  it('returns undefined when absent or empty', () => {
+    expect(parseZoomOverride('')).toBeUndefined();
+    expect(parseZoomOverride('?other=1')).toBeUndefined();
+    expect(parseZoomOverride('?zoom=')).toBeUndefined();
+  });
+
+  it('rejects out-of-range and non-numeric values', () => {
+    expect(parseZoomOverride('?zoom=0.5')).toBeUndefined();
+    expect(parseZoomOverride('?zoom=9')).toBeUndefined();
+    expect(parseZoomOverride('?zoom=abc')).toBeUndefined();
+    expect(parseZoomOverride('?zoom=Infinity')).toBeUndefined();
   });
 });

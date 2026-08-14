@@ -168,7 +168,7 @@ describe('frameFor / maxFrameSize', () => {
 
   it('reserves the largest frame footprint so pose swaps cannot resize the box', () => {
     expect(maxFrameSize(sheet)).toEqual([57, 96]);
-    expect(maxFrameSize(avatar('avatar.c', { poses: [] }))).toEqual([64, 96]);
+    expect(maxFrameSize(avatar('avatar.c', { poses: [] }))).toEqual([128, 192]);
   });
 });
 

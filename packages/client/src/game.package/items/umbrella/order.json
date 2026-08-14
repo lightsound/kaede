@@ -4,7 +4,7 @@
   "name": "傘（閉じ）",
   "sheet": "item-original.png",
   "outDir": ".",
-  "heightPx": 56,
+  "heightPx": 112,
   "grip": [0.5, 0.5],
   "references": ["../../avatar/stand.png"],
   "prompt": "Bare-item spec (owner direction 2026-08-09, third respec of the ①b(a) spike): held items are generated WITHOUT any hand and REST ON the body sheet's drawn hand, MapleStory-style — the earlier baked-in gripping hand was rejected as too realistic for the chibi style and not generic (every item would need its own hand, matched per skin tone). The item's `grip` is the point that lands on the body's hand anchor: for resting items the bottom-center (slight overlap so the drawn mitten peeks out under the item = the held reading); for long shafted items the measured shaft point where the hand carries it. Items pair with the carry pose sheets (both arms still — the swing walk leaves every anchor reading as floating, measured). Generated via Cloudflare AI Gateway (kaede-assets) with google/nano-banana-2 (~$0.10), image_input = the base stand frame as style reference. Generation prompt: a CLOSED folded umbrella, muted teal fabric with a small strap, a brown J-shaped hook handle at the top and a short metal tip at the bottom, almost vertical (tilted ~10 degrees), tip down. Only the umbrella, no hand, flat pure green background. Grip = the measured shaft center at mid-height (a long item rides the hand at its shaft, not at its bottom).",

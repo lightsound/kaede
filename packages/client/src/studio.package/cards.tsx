@@ -44,8 +44,8 @@ const missingBadgeStyle: CSSProperties = {
 };
 
 const missingBoxStyle: CSSProperties = {
-  width: 52,
-  height: 96,
+  width: 104,
+  height: 192,
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -94,7 +94,7 @@ function AnchorMarkers(props: { anchors: AssetFrame['anchors']; scale: number })
 
 /**
  * One manifest-referenced frame at `scale` × source pixels (the sources
- * ship at 2x display resolution, so scale 1 already doubles the in-game
+ * ship at 4x display resolution, so scale 1 already quadruples the in-game
  * size — the point of an inspection view). Anchor markers overlay at the
  * manifest coordinates when enabled; a frame whose PNG is absent renders
  * as a labeled hole instead of a broken image.
@@ -154,11 +154,11 @@ function WalkPreview(props: { avatar: AvatarAsset; pose: string; showAnchors: bo
     <span
       data-testid="walk-preview"
       data-pose={resolved.pose}
-      style={groundBoxStyle(maxFrameSize(avatar), 2)}
+      style={groundBoxStyle(maxFrameSize(avatar), 1)}
     >
       <FrameImage
         frame={resolved.frame}
-        scale={2}
+        scale={1}
         showAnchors={showAnchors}
         alt={`${avatar.id} 歩行再生`}
       />
@@ -222,7 +222,7 @@ export function AvatarCard(props: {
           <figure style={figureStyle} data-testid="hand-layer">
             <FrameImage
               frame={avatar.handLayer}
-              scale={2}
+              scale={1}
               showAnchors={showAnchors}
               alt={`${avatar.id} handLayer`}
             />
@@ -259,10 +259,10 @@ export function CompareStrip(props: {
   );
 }
 
-/** How many source pixels per screen pixel an item frame gets: aim near 96px tall, clamped. */
+/** CSS px per source px for an item frame: aim near 96px tall on screen, clamped. */
 function itemScale(size: readonly [number, number] | undefined): number {
-  if (!size) return 2;
-  return Math.max(1, Math.min(6, Math.round(96 / size[1])));
+  if (!size) return 1;
+  return Math.max(0.5, Math.min(6, 96 / size[1]));
 }
 
 /** One held-item: the bare sprite with its grip point (the rest point on the carry mitten). */

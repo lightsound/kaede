@@ -27,11 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from factory.anchors import HairReference, structure_neck  # noqa: E402
 
 OPAQUE = 128
-# 2x-resolution pixels. A 4px miss at source = 2 logical px on screen.
-NECK_DIVERGENCE_PX = 10
+# 4x-resolution pixels (factory v2 手順 1 — shipping moved 2x/96px → 4x/192px;
+# every px-length constant here doubled with it, same logical tolerance).
+# A 8px miss at source = 2 logical px on screen.
+NECK_DIVERGENCE_PX = 20
 # Euclidean RGB distance; white (#ffffff) vs near-white shirt fails below ~40.
 MIN_PALETTE_DISTANCE = 35
-STAND_HEIGHT_RANGE = (88, 104)  # standHeightPx target 96 ± slack
+STAND_HEIGHT_RANGE = (176, 208)  # standHeightPx target 192 ± slack
 # Carry mitten rests in front of the waist (not out at the silhouette edge —
 # the arm is bent across the torso). Structural presence = opaque pixel in
 # the waist band; skin-tone is never consulted (beige-clothes hole).
@@ -42,8 +44,9 @@ HAND_WAIST_BAND = (0.50, 0.85)
 # is a compositing/detection failure. Calibrated 2026-08-09 on the four
 # committed sheets (pass: neck row Δ ≤ 1, head-pixel ratio 0.99–1.01) against
 # the PR #94 rejects (fail: double head Δ+19 / ratio 1.61; bob-hair remnants
-# behind the pasted head ratio 1.07–1.08).
-HEAD_NECK_ROW_DELTA_MAX = 3
+# behind the pasted head ratio 1.07–1.08). Row delta doubled with the 4x
+# shipping scale (ratios are scale-free).
+HEAD_NECK_ROW_DELTA_MAX = 6
 HEAD_WIDTH_RATIO_MAX = 1.05
 HEAD_PIXEL_RATIO_RANGE = (0.90, 1.05)
 
@@ -269,12 +272,15 @@ def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
 # Stand cells are exempt: the junction flicker is a play-speed artifact of
 # the walk cycle, and the committed stands are the identity anchors every
 # other lane measures against.
-JUNCTION_BAND = (-4, 2)
-JUNCTION_WINDOW = 5
+# Px lengths (band, window, effective width) doubled with the 4x shipping
+# scale; the soft/solid ratio is scale-free (soft and solid pixels widen
+# together under LANCZOS from the same source).
+JUNCTION_BAND = (-8, 4)
+JUNCTION_WINDOW = 10
 JUNCTION_SOFT_ALPHA = 64
 JUNCTION_SOLID_ALPHA = 230
 JUNCTION_SOFT_RATIO_MAX = 1.5
-JUNCTION_WIDTH_MIN = 3.0
+JUNCTION_WIDTH_MIN = 6.0
 
 
 def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
@@ -311,7 +317,12 @@ def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
 # takes redraw the hair slightly (the wave take grew it ~9% linear —
 # measured), so the tolerance is looser than a resize error would need but
 # far tighter than the 1.42x/2x canvas-scale mistakes it exists to catch.
-HAIR_SCALE_TOLERANCE = 0.15
+# Recalibrated 0.15 → 0.18 at the 4x re-import (factory v2 手順 1): the
+# sharper 192px stand shrinks the reference blob ~3.5% (girl 170.4 → 164.5
+# — fewer edge pixels blend into the hair color), so every ratio shifted
+# up ~4% and the owner-approved girl sleep (old yardstick 1.118) measured
+# 1.159 on identical source pixels.
+HAIR_SCALE_TOLERANCE = 0.18
 
 
 def check_gesture_cell(
@@ -392,7 +403,7 @@ def lint_avatar(
     if not STAND_HEIGHT_RANGE[0] <= stand_h <= STAND_HEIGHT_RANGE[1]:
         failures.append(
             f"stand height {stand_h}px outside {STAND_HEIGHT_RANGE} "
-            f"(target standHeightPx≈96)"
+            f"(target standHeightPx≈192)"
         )
 
     stand_path = base / stand["file"]

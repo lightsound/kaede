@@ -5,7 +5,9 @@ import { groundBoxStyle } from './cards';
 import type { AssetCatalog, AvatarAsset, ItemAsset } from './catalog';
 import { frameFor, maxFrameSize, outfitOptions, type StageLook, stageOverlays } from './dressup';
 
-const STAGE_SCALE = 3;
+// Halved from 3 when sources moved 2x → 4x (factory-v2 step 1): the stage
+// figure keeps its on-screen size while the source pixels doubled.
+const STAGE_SCALE = 1.5;
 
 const stageSectionStyle: CSSProperties = {
   background: UI_PANEL_BG,

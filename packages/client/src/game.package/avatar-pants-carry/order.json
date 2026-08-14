@@ -9,7 +9,7 @@
     "rows": 1
   },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
-  "standHeightPx": 96,
+  "standHeightPx": 192,
   "handLayer": true,
   "references": ["../canonical/style-reference.png", "../avatar-carry/sheet-original.png"],
   "template": "avatar-outfit-edit",
@@ -26,10 +26,10 @@
     "matchStand": "avatar-pants/manifest.json"
   },
   "handAnchors": {
-    "stand": [26, 64],
-    "walk-a": [46, 51],
-    "walk-b": [46, 58],
-    "walk-c": [47, 53],
-    "walk-d": [47, 58]
+    "stand": [52, 128],
+    "walk-a": [92, 102],
+    "walk-b": [92, 116],
+    "walk-c": [94, 106],
+    "walk-d": [94, 116]
   }
 }

@@ -4,16 +4,16 @@
   "name": "コーヒーカップ",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#f8f0e4", "#fef9f0", "#e3dbd1", "#dcbda2", "#fbf4eb"],
+  "palette": ["#f8f0e5", "#f1caac", "#fefefa", "#c5b2a0", "#f7eee2"],
   "source": {
     "prompt": "Bare-item spec (owner direction 2026-08-09, third respec of the ①b(a) spike): held items are generated WITHOUT any hand and REST ON the body sheet's drawn hand, MapleStory-style — the earlier baked-in gripping hand was rejected as too realistic for the chibi style and not generic (every item would need its own hand, matched per skin tone). The item's `grip` is the point that lands on the body's hand anchor: for resting items the bottom-center (slight overlap so the drawn mitten peeks out under the item = the held reading); for long shafted items the measured shaft point where the hand carries it. Items pair with the carry pose sheets (both arms still — the swing walk leaves every anchor reading as floating, measured). Generated via Cloudflare AI Gateway (kaede-assets) with google/nano-banana-2 (~$0.10), image_input = the base stand frame as style reference. Generation prompt: a simple white ceramic mug of coffee. A plain cylinder with NO handle visible (handle faces away, hidden; an earlier take's handle ring let body parts behind show through the hole). Upright, brown coffee seen from a slight top-down angle, tiny steam wisp. Only the mug, no hand, flat pure green background. grip lowered from [0.5, 0.95] to [0.5, 0.75] after owner review: flat-bottomed resting items (mug, notebook) read as floating when their bottom merely touches the mitten top — sinking the bottom ~4px into the mitten (the hand layer redraws the mitten in front) reads as held in the hand. Round-bottomed or shafted items (plush, umbrella, spear) keep their grips.",
-    "referenceHashes": ["4bb31bccd55b8d83e3d5717ad807bdc8831d29e6156f0b1d8152a5c98f87b284"]
+    "referenceHashes": ["ad352dfef69a165c98323eeb77e2480da7bb6bf6c2c3b3cec4c5439b190ca8d5"]
   },
   "frame": {
     "file": "coffee-mug.png",
-    "size": [10, 16],
+    "size": [20, 32],
     "anchors": {
-      "grip": [5, 12]
+      "grip": [10, 24]
     }
   },
   "carryStyle": "light"

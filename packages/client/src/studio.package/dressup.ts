@@ -134,7 +134,7 @@ export function maxFrameSize(avatar: AvatarAsset): readonly [number, number] {
     w = Math.max(w, frame.size[0]);
     h = Math.max(h, frame.size[1]);
   }
-  return [w > 0 ? w : 64, h > 0 ? h : 96];
+  return [w > 0 ? w : 128, h > 0 ? h : 192];
 }
 
 /** One composited layer over the body frame, in source pixels from the frame's top-left. */

@@ -11,7 +11,7 @@ Why a lane of its own (the ①c bench findings, 2026-08-10):
 
 - Sources arrive at three scales: nano-banana-2 stills upscale the 720px
   input canvas to 1024 (x1.4222), wan clips render it at 1440 (x2), and
-  the stand cell is rebuilt from the committed 2x frame. Cells are
+  the stand cell is rebuilt from the committed 4x frame. Cells are
   normalized back to the 720 canvas scale and VERIFIED by hair-blob width
   against the stand (fail loud) — the constant-ratio assumption is
   checked, not trusted.
@@ -91,7 +91,7 @@ LEDGER_PATH = Path(__file__).resolve().parent / "master_takes.json"
 ASSET_ROOT = ROOT / "packages/client/src/game.package"
 
 # The bench canvas geometry every take derives from (prepare_stand_canvas):
-# the committed 2x stand frame upscaled to CANVAS_CHAR_H on a 720px green
+# the committed 4x stand frame upscaled to CANVAS_CHAR_H on a 720px green
 # square. nano-banana-2 returns 1024px, wan renders 1440px.
 CANVAS = 720
 CANVAS_CHAR_H = 470
@@ -220,7 +220,7 @@ def main() -> None:
     def source(rel: str) -> Path:
         return resolve_original(base, rel, sources, ASSET_ROOT)
 
-    # Stand cell: the committed 2x stand frame upscaled exactly as
+    # Stand cell: the committed 4x stand frame upscaled exactly as
     # prepare_stand_canvas did for every bench generation, so the duplicate
     # stand cell carries the scale every other cell was generated at.
     stand_src = Image.open(

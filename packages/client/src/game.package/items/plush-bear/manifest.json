@@ -4,16 +4,16 @@
   "name": "くまのぬいぐるみ",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#c06d38", "#ab5e33", "#d38d53", "#753422", "#83452b"],
+  "palette": ["#c16d39", "#aa5a31", "#96462a", "#814128", "#db8f53"],
   "source": {
     "prompt": "Bare-item spec (owner direction 2026-08-09, third respec of the ①b(a) spike): held items are generated WITHOUT any hand and REST ON the body sheet's drawn hand, MapleStory-style — the earlier baked-in gripping hand was rejected as too realistic for the chibi style and not generic (every item would need its own hand, matched per skin tone). The item's `grip` is the point that lands on the body's hand anchor: for resting items the bottom-center (slight overlap so the drawn mitten peeks out under the item = the held reading); for long shafted items the measured shaft point where the hand carries it. Items pair with the carry pose sheets (both arms still — the swing walk leaves every anchor reading as floating, measured). Generated via Cloudflare AI Gateway (kaede-assets) with google/nano-banana-2 (~$0.10), image_input = the base stand frame as style reference. Generation prompt: a cute brown teddy bear plush toy in a sitting pose, round belly, stubby arms and legs. Only the bear, no hand, flat pure green background.",
-    "referenceHashes": ["4bb31bccd55b8d83e3d5717ad807bdc8831d29e6156f0b1d8152a5c98f87b284"]
+    "referenceHashes": ["ad352dfef69a165c98323eeb77e2480da7bb6bf6c2c3b3cec4c5439b190ca8d5"]
   },
   "frame": {
     "file": "plush-bear.png",
-    "size": [15, 19],
+    "size": [29, 38],
     "anchors": {
-      "grip": [8, 18]
+      "grip": [14, 36]
     }
   },
   "carryStyle": "heavy"
