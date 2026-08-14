@@ -128,6 +128,38 @@ python3 scripts/factory/run_avatar.py <order.json> --from-stage import   # 標�
   （order の `staticUpperBody` で opt-in のみ — 顔 RGB の移植が二重顔の
   原因だった）。
 
+### 3D 正本台帳（`scripts/factory/model_ledger.py` — ファクトリー v2 手順 2）
+
+第 1 層（3D 正本 — factory-v2-plan §2）の台帳 `master_models.json`。
+キャラごとのリグ済み GLB（同一性・ポーズの権威）と、カタログプリセットを
+そのリグへリターゲットしたモーション GLB を、master_takes と同じ
+「登録条件の機械強制」で管理する:
+
+```sh
+python3 scripts/factory/model_ledger.py register-model --family <f> \
+    --rigged <sha256> --remesh <sha256> --provenance ... --approval ...
+python3 scripts/factory/model_ledger.py register-motion --family <f> \
+    --motion <m> --glb <sha256|path> --preset ... --approval ...
+python3 scripts/factory/model_ledger.py retarget --family <f> \
+    --preset <カタログ名> --budget 20   # 再リグ 5cr＋リターゲット 3cr
+```
+
+- 登録条件: R2 保管（sha256 照合）・承認出所・**骨署名ゲート**
+  （`bone_signature.py` — 相対閉包 ≤ 0.35・2 周入りクリップはループ整合
+  ≤ 1.0・歩行系は L−R 足先行の交代 2 回/両振幅/半周期反相の 2 歩確認 =
+  運転知見 22 の機械化）・緑参照のシルエットゲート（loop_scan の
+  マスター水準）。較正の実測値は bone_signature.py の docstring と
+  factory-yield 2026-08-14 の行。
+- 緑参照（第 2 層の清書入力）は bpy yaw45（spike_tripo_render の出力契約）
+  ＋**サイクル正確なサブフレーム標本化**（`bpy_render_loop.py`）で
+  タイル×3 — Meshy クリップは自前レートで作られており、24fps の整数
+  コマ標本化は最大 ~0.8 コマのシームを参照に焼き込む（運転知見 18 の
+  シーム毒の源）。
+- モーション追加はまず登録済み GLB の再利用（walk/run はリグ付属 0cr）、
+  次に retarget（運転知見 23 の恒久経路）。姿勢の質はゲート外 —
+  オーナー目視の領分（girl Texting の前傾 +20.7° 実測 — 台帳 note 参照）。
+
+
 ## 工程
 
 | # | 工程 | 実装 |
@@ -365,3 +397,32 @@ pnpm --filter @kaede/client assets:pack   # 任意・アトラス派生物の確
     タイル×3）。ついでに fcurve へのクォータニオン合成で腕ポーズも直せる
     （v3 は肩 X+30°/肘 X−20° で掌を胸前→腰前へ — Meshy プリセットの
     箱前提の腕は空手だと「夢遊病」に見える）
+23. **Meshy のタスクは ~3 日で削除される — R2 保管 GLB＋`model_url` 再リグが
+    リターゲットの恒久経路**（3D 正本台帳の設営 2026-08-14）: 2026-08-10/11 の
+    全タスク（boy リグ 019febfd…・girl 一式 019fee46…系）が単体 GET でも 404 と
+    実測。「キャラごとにリターゲット 3cr」の前提だった rig タスク ID は恒久
+    資産ではないため、台帳へ恒久情報として記録しない。恒久なのは R2 の
+    remesh GLB で、rigging API の `model_url` 入力（fal CDN ホスト経由）に
+    渡す再リグ 5cr で新しい rig タスクを立ててから 3cr/本でリターゲットする
+    （`model_ledger.py retarget` — 一発成功・再リグ産 walking も骨署名閉包
+    0.000 でリグ再現性を確認）。**リターゲット姿勢はキャラごとのガチャ**
+    （運転知見 18 のループ品質ガチャの姿勢版）: girl の Texting_Walk は前傾
+    +20.7°（hips→head。boy +1.8°・girl 自身の walking +12.2°）— 姿勢の質は
+    骨署名ゲートの外でオーナー目視の領分、補正は fcurve 合成（運転知見 22）
+    か boy 参照の crosschar が代替
+24. **30fps 素材の 24fps 整数コマ標本化はサブコマのシームを作る**（3D 正本
+    台帳の設営 2026-08-14）: Meshy クリップは自前レート（rig 付属 walking の
+    真のサイクルは 24fps 換算 24.8 コマ）のため、整数コマだけで測る・
+    レンダーすると最大 ~0.8 コマ分の偽シームが閉包にもタイル参照にも乗る
+    （girl gangnam 級のシーム毒 = 運転知見 18 の一因になり得る）。骨署名の
+    解析・緑参照レンダーとも **1/4 コマのサブフレーム標本化**で行う
+    （`bpy_dump_bones.py`／`bpy_render_loop.py` — `frame_set(f, subframe=…)`
+    が姿勢を補間評価しレンダーにも反映されることを画素で実測確認）
+25. **Blender ヘッドレスの落とし穴 3 件**（同上）: ① スクリプト例外でも
+    exit 0 で終わる — `--python-exit-code 1` を必ず付ける（付けないと
+    「レンダー 0 コマ」のような下流症状で発覚する）② Cycles addon は `--`
+    以降の引数を自前 argparse する — `--cycle` は `--cycles-print-stats/
+    --cycles-device` と曖昧衝突して **addon 登録ごと失敗し CYCLES エンジンが
+    消えたように見える**（引数名を `--span` に改名して回避）③ ディストロの
+    blender パッケージは Cycles が壊れていることがある — 公式 tarball
+    ビルドを使う（`BLENDER_BIN` で指定可能）
