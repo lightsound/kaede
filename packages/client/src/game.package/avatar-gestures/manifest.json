@@ -4,7 +4,7 @@
   "name": "男の子（基本）ジェスチャー",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#965225", "#9b5027", "#f9d6a8", "#fcd6a4", "#fcd7b1"],
+  "palette": ["#9e5229", "#fde3a9", "#fcd5a4", "#fbd6b1", "#fddba7"],
   "source": {
     "prompt": "Phase 5 ①c gesture sheet, composed by scripts/factory/compose_gesture_sheet.py from the bench-approved takes (2026-08-10, PR #96; owner picks: floor sit = the video-lane settled sit, sleep/wave = the reference+instruction nano takes, dance = the wan loop). Sources, all generated via Cloudflare AI Gateway (kaede-assets) from the committed stand frame on a 720px green canvas (character ~470px tall): sit = frame 120 of the wan-2.7-i2v sit-down clip (prompt: sits down on the ground and then stays perfectly still, bottom on the ground line, knees bent, hands on knees; motionless from ~frame 80); sleep = nano-banana-2 pose edit (lies asleep on his side ON the ground line, head right, eyes closed, one arm folded, knees slightly bent); wave = nano-banana-2 pose edit (near arm raised high, elbow bent, open palm waving, far arm relaxed); dance-a..h = frames 34/37/40/43/46/49/52/55 of the wan-2.7-i2v dance clip (prompt: cheerful perfectly-looping dance cycle, bounces to a steady beat stepping side to side, arms swinging overhead and down, hips swaying; adopted 24-frame cycle from frame 34, loop-closure IoU 0.932, 100ms per sampled frame = DANCE_FRAME_MS). Scale normalization back to the 720 canvas: nano stills x720/1024, wan frames x720/1440, verified per cell by hair-blob width against the stand (fail loud). Neck anchors are hair-blob estimates persisted as neckAnchors overrides — the structural neck detector breaks on arms-over-head dance frames and the lying sleeper (both measured in the ①c bench); the sleep anchor is approximate by design (nothing renders from it: the busy headgear overlay hides on sleep). NO head composite on the dance frames — erase-then-paste erases arms crossing above the neck line (measured); the video-native heads passed the calibrated per-frame palette-drift gate and videoReview (minor wobble, judged acceptable at game scale).",
     "referenceHashes": ["0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e"]
@@ -12,98 +12,98 @@
   "poses": {
     "stand": {
       "file": "stand.png",
-      "size": [53, 96],
+      "size": [105, 192],
       "anchors": {
-        "neck": [26, 51],
-        "hand": [26, 63]
+        "neck": [52, 99],
+        "hand": [52, 126]
       }
     },
     "sit": {
       "file": "sit.png",
-      "size": [56, 80],
+      "size": [110, 159],
       "anchors": {
-        "neck": [26, 51],
-        "hand": [28, 52]
+        "neck": [53, 101],
+        "hand": [55, 104]
       }
     },
     "sleep": {
       "file": "sleep.png",
-      "size": [97, 48],
+      "size": [192, 95],
       "anchors": {
-        "neck": [75, 50],
-        "hand": [48, 31]
+        "neck": [149, 99],
+        "hand": [96, 62]
       }
     },
     "wave": {
       "file": "wave.png",
-      "size": [57, 96],
+      "size": [114, 190],
       "anchors": {
-        "neck": [26, 50],
-        "hand": [28, 63]
+        "neck": [53, 99],
+        "hand": [57, 125]
       }
     },
     "dance-a": {
       "file": "dance-a.png",
-      "size": [53, 98],
+      "size": [105, 194],
       "anchors": {
-        "neck": [25, 50],
-        "hand": [26, 64]
+        "neck": [50, 99],
+        "hand": [52, 128]
       }
     },
     "dance-b": {
       "file": "dance-b.png",
-      "size": [52, 95],
+      "size": [103, 188],
       "anchors": {
-        "neck": [26, 50],
-        "hand": [26, 62]
+        "neck": [51, 99],
+        "hand": [51, 124]
       }
     },
     "dance-c": {
       "file": "dance-c.png",
-      "size": [56, 99],
+      "size": [111, 196],
       "anchors": {
-        "neck": [25, 50],
-        "hand": [28, 65]
+        "neck": [51, 99],
+        "hand": [55, 129]
       }
     },
     "dance-d": {
       "file": "dance-d.png",
-      "size": [54, 97],
+      "size": [107, 193],
       "anchors": {
-        "neck": [26, 50],
-        "hand": [27, 64]
+        "neck": [51, 99],
+        "hand": [53, 127]
       }
     },
     "dance-e": {
       "file": "dance-e.png",
-      "size": [53, 95],
+      "size": [105, 188],
       "anchors": {
-        "neck": [25, 50],
-        "hand": [26, 62]
+        "neck": [50, 100],
+        "hand": [52, 124]
       }
     },
     "dance-f": {
       "file": "dance-f.png",
-      "size": [55, 99],
+      "size": [110, 196],
       "anchors": {
-        "neck": [25, 50],
-        "hand": [27, 65]
+        "neck": [50, 99],
+        "hand": [55, 129]
       }
     },
     "dance-g": {
       "file": "dance-g.png",
-      "size": [52, 95],
+      "size": [103, 189],
       "anchors": {
-        "neck": [25, 50],
-        "hand": [26, 62]
+        "neck": [51, 99],
+        "hand": [51, 124]
       }
     },
     "dance-h": {
       "file": "dance-h.png",
-      "size": [55, 98],
+      "size": [108, 195],
       "anchors": {
-        "neck": [25, 50],
-        "hand": [27, 64]
+        "neck": [50, 99],
+        "hand": [54, 128]
       }
     }
   }

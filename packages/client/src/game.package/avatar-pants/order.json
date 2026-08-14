@@ -9,13 +9,13 @@
     "rows": 1
   },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
-  "standHeightPx": 96,
+  "standHeightPx": 192,
   "handAnchors": {
-    "stand": [15, 67],
-    "walk-a": [39, 57],
-    "walk-b": [37, 60],
-    "walk-c": [42, 58],
-    "walk-d": [37, 59]
+    "stand": [30, 134],
+    "walk-a": [78, 114],
+    "walk-b": [74, 120],
+    "walk-c": [84, 116],
+    "walk-d": [74, 118]
   },
   "references": ["../canonical/style-reference.png", "../avatar/sheet-original.png"],
   "template": "avatar-outfit-edit",

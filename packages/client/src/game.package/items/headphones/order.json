@@ -4,7 +4,7 @@
   "name": "ヘッドホン",
   "sheet": "item-original.png",
   "outDir": ".",
-  "standHeightPx": 96,
+  "standHeightPx": 192,
   "standSource": "../../avatar/stand.png",
   "gestureSources": {
     "worn-original.png": "1ceedbb0f5926863f7b4ce8ad75e4561840103cd6cac469865ef27e8b7950134"
@@ -15,5 +15,5 @@
     "item-original.png": "dc5a8e8c40b7e6a14591ea0766b9ea0adfe3b2f222913e487cf3801f832e5b4b"
   },
   "grip": [0.4881, 1.0807],
-  "heightPx": 46
+  "heightPx": 92
 }

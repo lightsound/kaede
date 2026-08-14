@@ -9,7 +9,7 @@
     "rows": 1
   },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
-  "standHeightPx": 96,
+  "standHeightPx": 192,
   "references": ["../canonical/style-reference.png", "../canonical/stand-reference.png"],
   "template": "avatar-stand",
   "walkTemplate": "avatar-walk-i2v-arms-soft",
