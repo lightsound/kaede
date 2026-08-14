@@ -107,9 +107,10 @@ def stand_cell_of_sheet(order: dict, order_path: Path, dest: Path) -> Path:
 
 def replace_frames(
     order: dict, master: Path, master_meta: dict, stand_raw: Path, work: Path, budget: float
-) -> Path:
+) -> tuple[Path, int]:
     """fal wan-replace transfer of the master onto the sheet's stand identity;
-    returns the gated frames directory (the replace_lane produce recipe)."""
+    returns (gated frames directory, verified loop start) — the
+    replace_lane produce recipe."""
     resolution = order.get("walkResolution", DEFAULT_RESOLUTION)
     est = fal_client.estimate_cost(
         fal_client.WAN_ANIMATE_REPLACE,
@@ -146,7 +147,7 @@ def replace_frames(
             f"{closure:.3f} (floors {OUTPUT_LOOP_MEAN_MIN} / {OUTPUT_CLOSURE_MIN})"
             " — retake (new key) or re-check the master"
         )
-    return work / "frames"
+    return work / "frames", start
 
 
 def sheet_cells_shipping(sheet_path: Path) -> list[Image.Image]:
@@ -190,8 +191,13 @@ def cmd_produce(args: argparse.Namespace) -> None:
         frames_dir = work / "frames"
         frame_paths = extract_frames(master, frames_dir)
         assert_green_background(frame_paths)
+        # The ledger's verified loop start bounds the scan: the girl master
+        # eases in for 31 frames before its loop, and cells cut from that
+        # region passed every pixel gate while holding no contact/passing
+        # structure (the inverted-bob差し戻し, 2026-08-13).
+        loop_start = master_meta["loop"]["start"]
     else:
-        frames_dir = replace_frames(
+        frames_dir, loop_start = replace_frames(
             order, master, master_meta, stand_raw, work, args.budget
         )
 
@@ -203,6 +209,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
         frames_dir,
         pinned_contact=args.contact,
         period=period,
+        loop_start=loop_start,
         skip_head_seconds=0,
         expect_leg_phase=not order.get("handLayer"),
     )

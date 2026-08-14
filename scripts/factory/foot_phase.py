@@ -97,6 +97,64 @@ def _find_period(signals: list[float], min_period: int, max_period: int) -> int:
     return max(scores, key=lambda lag: scores[lag])
 
 
+def leg_spread(frame: Image.Image) -> float:
+    """Horizontal extent of the silhouette's foot band (bottom 15%).
+
+    The one leg-phase observable that is reliable at the canonical
+    right-facing 3/4 view: the NEAR-leg contact always reads widest.
+    The signed foot signal's sign is a rendering accident (measured twice,
+    2026-08-12 — the retired opposite-signs lint), and the FAR-leg contact
+    projects nearly as narrow as a passing (depth-forward cancels lateral
+    offset at yaw 45), so neither can classify every frame; the spread
+    maximum alone is trustworthy, and stride_quad anchors on exactly that.
+    """
+    px = frame.convert("RGBA").load()
+    w, h = frame.size
+    content = [
+        (x, y) for y in range(h) for x in range(w) if _is_content(*px[x, y])
+    ]
+    if not content:
+        return 0.0
+    y0 = min(y for _, y in content)
+    y1 = max(y for _, y in content)
+    band = y1 - int((y1 - y0) * 0.15)
+    xs = [x for x, y in content if y >= band]
+    return float(max(xs) - min(xs)) if xs else 0.0
+
+
+def load_spreads(frame_paths: list[Path]) -> list[float]:
+    return [leg_spread(Image.open(p)) for p in frame_paths]
+
+
+def stride_quad(spreads: list[float], lo: int, hi: int, period: int) -> dict[str, int]:
+    """walk-a..d indices for one stride cycle anchored inside `[lo, hi)`.
+
+    walk-a anchors on the leg-spread maximum of the window's first period
+    — the near-leg contact, the one pose the 3/4 view identifies reliably
+    (see leg_spread) — and walk-b/c/d follow at properly ROUNDED quarter
+    phases (the mocap masters' two steps are symmetric in time even when
+    their projections are not). This replaces the foot-signal argmax
+    anchor: on the girl master the scan roamed the pre-loop ease-in and
+    the signal max landed mid-swing, so the committed cells never held the
+    contact/passing pattern the bob prescription assumes. Floor-division
+    quarters also drifted walk-d by 1.5 frames on the period-42 carry.
+
+    `lo` must be the master's verified loop start: outside the loop window
+    the gait is easing in and no anchor is trustworthy. Two loop instances
+    must follow it (the ledger trim guarantee), so the quad always fits.
+    """
+    if hi - lo < 2 * period:
+        raise SystemExit(
+            f"stride quad needs two loop instances ({2 * period} frames) "
+            f"in the window [{lo}, {hi}) — the ledger trim guarantee"
+        )
+    a = max(range(lo, lo + period), key=lambda i: spreads[i])
+    return {
+        pose: a + round(n * period / 4)
+        for n, pose in enumerate(("walk-a", "walk-b", "walk-c", "walk-d"))
+    }
+
+
 def select_walk_indices(
     frame_paths: list[Path],
     *,

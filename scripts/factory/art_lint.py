@@ -313,6 +313,84 @@ def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
     return failures
 
 
+# Bob-phase gate (差し戻し② 2026-08-13 — the girl walked with her head
+# bobbing OPPOSITE to the boy's, and the carry bounced 7px): the composed
+# walk cells' neck-from-ground (frame height − neck row; the frame bottom
+# is the ground) must hold the prescribed two-bump pattern — LOW on both
+# contact slots (walk-a/c), HIGH on both passings (walk-b/d) — with the
+# owner-approved amplitude (the wan-era boy sheet's p-p 3px at the 2x=96px
+# sheet scale; the ranges below are px at the 4x=192px shipping scale, so
+# the historic measurements read doubled). This is the gate that makes
+# NG1/NG2 shapes unshippable: both rejected fix attempts (PR #108:
+# 46/46/44/49 @96px, PR #109: 44/48/47/44) fail it, as do the three
+# rejected committed families (girl 47/44/45/48, carry 45/51/44/51,
+# light 46/48/47/47). Sheets composed before the prescription (the
+# one-bump boy base, 46/49/47/47) fail on re-import by design: the fix is
+# re-running the walk lane, not exempting the sheet.
+BOB_PP_RANGE = (4, 10)
+BOB_CONTRAST_MIN = 2.0
+BOB_CONTACTS = ("walk-a", "walk-c")
+BOB_PASSINGS = ("walk-b", "walk-d")
+
+
+def check_bob_phase(nfg: dict[str, int]) -> list[str]:
+    """The head bob must follow the legs — see BOB_PP_RANGE above."""
+    required = BOB_CONTACTS + BOB_PASSINGS
+    if any(pose not in nfg for pose in required):
+        return []
+    contacts = max(nfg[p] for p in BOB_CONTACTS)
+    passings = min(nfg[p] for p in BOB_PASSINGS)
+    values = [nfg[p] for p in required]
+    failures: list[str] = []
+    if contacts > passings - BOB_CONTRAST_MIN:
+        failures.append(
+            f"bob phase broken: contact neck heights "
+            f"{[nfg[p] for p in BOB_CONTACTS]} must sit ≥{BOB_CONTRAST_MIN}px "
+            f"below passing heights {[nfg[p] for p in BOB_PASSINGS]} — "
+            f"re-run the walk lane (prescribed bob), do not hand-edit anchors"
+        )
+    pp = max(values) - min(values)
+    if not BOB_PP_RANGE[0] <= pp <= BOB_PP_RANGE[1]:
+        failures.append(
+            f"bob amplitude {pp}px peak-to-peak outside {BOB_PP_RANGE} — "
+            f"a frozen face (<{BOB_PP_RANGE[0]}) or a seasick bounce "
+            f"(>{BOB_PP_RANGE[1]})"
+        )
+    return failures
+
+
+# The held-item anchor must land ON drawn hand pixels: the carry v2 sheet
+# recorded anchors at the very tip of the outstretched arms, so items
+# stood on fingertips beside the face and read as floating (NG3
+# 2026-08-13). Skin is only consulted within this radius of an anchor the
+# structural checks already accepted — this is not the retired skin-blob
+# hand DETECTION (the beige-clothes hole), it validates a recorded
+# measurement the way lint.neckFrom validates necks. ±3px at the 2x-era
+# calibration, doubled for the 4x=192px shipping scale (a tolerance, not
+# a search window — 運転知見 21 の区別).
+HAND_SKIN_RADIUS = 6
+
+
+def _is_skinish(px: tuple[int, int, int, int]) -> bool:
+    r, g, b, a = px
+    return a >= OPAQUE and r > 200 and 110 < g < 235 and 90 < b < 215 and r > g > b
+
+
+def check_hand_on_skin(frame: Image.Image, hand: list[int]) -> list[str]:
+    hx, hy = hand
+    for dy in range(-HAND_SKIN_RADIUS, HAND_SKIN_RADIUS + 1):
+        for dx in range(-HAND_SKIN_RADIUS, HAND_SKIN_RADIUS + 1):
+            x, y = hx + dx, hy + dy
+            if 0 <= x < frame.width and 0 <= y < frame.height and _is_skinish(
+                frame.getpixel((x, y))
+            ):
+                return []
+    return [
+        f"hand anchor {hand} has no skin within {HAND_SKIN_RADIUS}px — "
+        f"the item would ride clothing or empty air, not the drawn hand"
+    ]
+
+
 # Hair-blob scale verification tolerance, on sqrt(pixel count). Generative
 # takes redraw the hair slightly (the wave take grew it ~9% linear —
 # measured), so the tolerance is looser than a resize error would need but
@@ -490,9 +568,20 @@ def lint_avatar(
                         f"{name}: hand anchor {recorded_hand} is transparent "
                         f"(not on the mitten — structural presence check)"
                     )
+                else:
+                    failures += [
+                        f"{name}: {f}" for f in check_hand_on_skin(frame, recorded_hand)
+                    ]
 
     if expect_leg_phase:
         failures += check_leg_phase(loaded)
+
+    nfg = {
+        name: pose["size"][1] - pose["anchors"]["neck"][1]
+        for name, pose in poses.items()
+        if pose.get("size") and pose.get("anchors", {}).get("neck")
+    }
+    failures += check_bob_phase(nfg)
 
     if base_palette:
         sheet_palette = [_parse_hex(c) for c in manifest.get("palette", [])]
