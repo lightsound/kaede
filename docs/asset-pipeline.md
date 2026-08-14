@@ -65,7 +65,13 @@
 }
 ```
 
-- **解像度は表示の 2 倍**（Phase 4 の前例を全種別に適用）。
+- **解像度は表示の 4 倍**（ファクトリー v2 手順 1、2026-08-14 — Phase 4 の
+  2 倍前例から引き上げ。アバターは standHeightPx 192（論理 48px 表示、
+  クライアント側 `ASSET_SCALE` 0.25）、アイテムの `heightPx` も同スケール。
+  恩恵は Retina・将来ズーム・検品/機械ゲート精度で、4x 超は画面に現れない
+  — 根拠は [factory-v2-plan.md](./factory-v2-plan.md) §4。生成側の規格も
+  同時に確定: 動画 720p（fal wan replace の上限）、静止画（nano-banana-2）
+  は resolution 2K で 1080p 以上）。
 - 種別ごとのキャンバス・頭身規約は数値で定義し、アート lint（§3-3）が検査
   する。
 - `id`・`author`・`license`・`source` を**最初から**持つのは §0-2/3 の
