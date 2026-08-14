@@ -118,7 +118,7 @@ R3（headless 体セル＋頭グループ — [docs/avatar-head-group.md](./avat
 
 ## 6. 実施順（各ステップ = 1 スパイク・合否ゲート付き）
 
-1. ✅ **土台: 生成 720p・出荷 4x（192px）・静止画 1080p 化**（合格・マージ
+1. ✅ **土台: 生成 720p・出荷 4x（192px）・静止画 2K（1080p 以上）化**（合格・マージ
    済み 2026-08-14 PR #112 — 全 18 資産を無課金で再取り込み・byte 再現性
    確認・videoReview 全項目 PASS・asset-pipeline.md 規格改訂済み。実測は
    factory-yield.md の行参照）— 取り込み
