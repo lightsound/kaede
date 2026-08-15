@@ -46,12 +46,11 @@ from factory.spike_tripo_render import (  # noqa: E402
 )
 
 
-def loop_parser() -> "argparse.ArgumentParser":
-    """The loop-window CLI shared with bpy_render_arm_ids.py: identical
-    arguments guarantee an ID render can only be invoked with the same
-    sampling contract as the green reference it must align with."""
+def main() -> None:
     import argparse
+    import math
 
+    argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("glb")
     parser.add_argument("outdir")
@@ -60,33 +59,32 @@ def loop_parser() -> "argparse.ArgumentParser":
     parser.add_argument("--frames", type=int, required=True)
     parser.add_argument("--yaw", type=float, default=45)
     parser.add_argument("--resolution", type=int, default=720)
-    return parser
+    args = parser.parse_args(argv)
 
-
-def load_single_action(glb: str) -> None:
-    load(glb)
+    load(args.glb)
     actions = list(bpy.data.actions)
     if len(actions) != 1:
         raise SystemExit(
-            f"expected exactly one action in {glb}, found "
+            f"expected exactly one action in {args.glb}, found "
             f"{[a.name for a in actions]}"
         )
     armature = next(o for o in bpy.data.objects if o.type == "ARMATURE")
     armature.animation_data_create().action = actions[0]
 
+    flatten_materials()
+    setup_render(args.resolution)
+    scene = bpy.context.scene
 
-def set_time(time: float) -> None:
-    bpy.context.scene.frame_set(int(time), subframe=time - int(time))
+    def set_time(time: float) -> None:
+        scene.frame_set(int(time), subframe=time - int(time))
 
+    times = [args.start_time + i * args.span / args.frames for i in range(args.frames)]
 
-def fit_camera_over_times(times: list[float], yaw_degrees: float) -> None:
-    """Fit one camera over every sampled pose so no frame is cropped and the
-    framing is loop-stable (the spike renderer's fitting rule)."""
-    import math
-
+    # Fit one camera over every sampled pose so no frame is cropped and the
+    # framing is loop-stable (the spike renderer's fitting rule).
     set_time(times[0])
-    setup_camera(yaw_degrees)
-    camera = bpy.context.scene.camera
+    setup_camera(args.yaw)
+    camera = scene.camera
     lo_all = Vector((1e9, 1e9, 1e9))
     hi_all = Vector((-1e9, -1e9, -1e9))
     for time in times:
@@ -96,24 +94,11 @@ def fit_camera_over_times(times: list[float], yaw_degrees: float) -> None:
         hi_all = Vector(map(max, hi_all, hi))
     center = (lo_all + hi_all) / 2
     size = max(hi_all.x - lo_all.x, hi_all.y - lo_all.y, hi_all.z - lo_all.z)
-    yaw = math.radians(yaw_degrees)
+    yaw = math.radians(args.yaw)
     camera.data.ortho_scale = size * 1.15
     camera.location = center + Vector(
         (math.sin(yaw) * size * 4, -math.cos(yaw) * size * 4, 0)
     )
-
-
-def main() -> None:
-    argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-    args = loop_parser().parse_args(argv)
-
-    load_single_action(args.glb)
-    flatten_materials()
-    setup_render(args.resolution)
-    scene = bpy.context.scene
-
-    times = [args.start_time + i * args.span / args.frames for i in range(args.frames)]
-    fit_camera_over_times(times, args.yaw)
 
     for index, time in enumerate(times):
         set_time(time)

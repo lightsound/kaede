@@ -22,12 +22,8 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await expect(page.getByTestId('avatar-card')).toHaveCount(10);
   await expect(page.getByTestId('pose-frame')).toHaveCount(50);
   await expect(page.getByTestId('item-card')).toHaveCount(5);
-  // Legacy carry variants ship a hand overlay (the hand-over-item layer);
-  // the recast boy heavy carry ships 3rd-layer arm cutouts instead
-  // (factory v2 手順 3): far+near per pose over its 5 pose figures and the
-  // walk preview — 12 composited arm layers, no hand-layer figure.
-  await expect(page.getByTestId('hand-layer')).toHaveCount(5);
-  await expect(page.getByTestId('arm-layer')).toHaveCount(12);
+  // Every carry variant ships a hand overlay (the hand-over-item layer).
+  await expect(page.getByTestId('hand-layer')).toHaveCount(6);
   // The ①c gesture sheets (boy-basic and girl-basic, 12 cells each:
   // stand + sit + sleep + wave + 8 dance frames) and the busy headgear
   // render in sections of their own, outside the avatar-body pose diff.
@@ -76,15 +72,6 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await expect(page.getByTestId('stage-overlay')).toHaveCount(2);
   await page.getByTestId('item-option-item.plush-bear').click();
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-pants');
-  await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
-  // The 3rd-layer heavy carry (avatar.boy-basic-carry — the arm-mask
-  // recast): holding the heavy plush on the basic outfit composes THREE
-  // overlays, far arm → item → near arm (no hand cutout, no heuristics).
-  await page.getByTestId('outfit-option-avatar.boy-basic').click();
-  await page.getByTestId('item-option-item.plush-bear').click();
-  await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-carry');
-  await expect(page.getByTestId('stage-overlay')).toHaveCount(3);
-  await page.getByTestId('item-option-item.plush-bear').click();
   await expect(page.getByTestId('stage-overlay')).toHaveCount(0);
   await page.getByTestId('outfit-option-avatar.boy-basic-red').click();
   await expect(figure).toHaveAttribute('data-body', 'avatar.boy-basic-red');

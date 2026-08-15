@@ -576,43 +576,24 @@ const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> 
     ]),
 };
 
-/** One carry-family key: the sheet family × the outfit variant. */
-type CarryKey = 'heavy-base' | 'heavy-red' | 'light-base' | 'light-red';
-
-/** The carry sheets' manifests, keyed like CARRY_SHEET_LOADERS. */
-const CARRY_MANIFEST_LOADERS: Record<CarryKey, () => Promise<{ default: CarryBodyManifest }>> = {
-  'heavy-base': () => import('./avatar-carry/manifest.json'),
-  'heavy-red': () => import('./avatar-red-carry/manifest.json'),
-  'light-base': () => import('./avatar-carry-light/manifest.json'),
-  'light-red': () => import('./avatar-red-carry-light/manifest.json'),
-};
-
-/** The legacy sheets' hand cutout PNGs (manifest handLayer) — absent for 3rd-layer sheets. */
-const CARRY_HAND_LOADERS: Partial<Record<CarryKey, () => Promise<{ default: string }>>> = {
-  'heavy-red': () => import('./avatar-red-carry/hand.png'),
-  'light-base': () => import('./avatar-carry-light/hand.png'),
-  'light-red': () => import('./avatar-red-carry-light/hand.png'),
-};
-
-/**
- * The 3rd-layer sheets' arm cutout PNGs (factory v2 手順 3), pose order ×
- * (far, near) — matching SHEET_POSES and the import line's fixed file
- * names. Only the recast boy heavy carry ships arm layers so far; the
- * legacy sheets keep their hand cutout until their own recast.
- */
-const CARRY_ARM_LOADERS: Partial<Record<CarryKey, () => Promise<{ default: string }[]>>> = {
+/** The carry sheets' manifest + hand cutout, keyed like CARRY_SHEET_LOADERS. */
+const CARRY_KIT_LOADERS = {
   'heavy-base': () =>
+    Promise.all([import('./avatar-carry/manifest.json'), import('./avatar-carry/hand.png')]),
+  'heavy-red': () =>
     Promise.all([
-      import('./avatar-carry/stand-arm-far.png'),
-      import('./avatar-carry/stand-arm-near.png'),
-      import('./avatar-carry/walk-a-arm-far.png'),
-      import('./avatar-carry/walk-a-arm-near.png'),
-      import('./avatar-carry/walk-b-arm-far.png'),
-      import('./avatar-carry/walk-b-arm-near.png'),
-      import('./avatar-carry/walk-c-arm-far.png'),
-      import('./avatar-carry/walk-c-arm-near.png'),
-      import('./avatar-carry/walk-d-arm-far.png'),
-      import('./avatar-carry/walk-d-arm-near.png'),
+      import('./avatar-red-carry/manifest.json'),
+      import('./avatar-red-carry/hand.png'),
+    ]),
+  'light-base': () =>
+    Promise.all([
+      import('./avatar-carry-light/manifest.json'),
+      import('./avatar-carry-light/hand.png'),
+    ]),
+  'light-red': () =>
+    Promise.all([
+      import('./avatar-red-carry-light/manifest.json'),
+      import('./avatar-red-carry-light/hand.png'),
     ]),
 };
 
@@ -651,87 +632,27 @@ const HELD_ITEM_LOADERS = {
     Promise.all([import('./items/spear/manifest.json'), import('./items/spear/spear.png')]),
 };
 
-/** The five sheet poses in the fixed loader order (AvatarSheetTextures keys). */
-const SHEET_POSES = ['stand', 'walk-a', 'walk-b', 'walk-c', 'walk-d'] as const;
-
-/**
- * The carry-manifest shape the held-item loader reads — the structural
- * boundary over the four imported JSONs, which differ in which layering
- * they ship (legacy handLayer vs 3rd-layer per-pose armLayers).
- */
-interface CarryBodyManifest {
-  poses: Record<
-    (typeof SHEET_POSES)[number],
-    {
-      anchors: { hand: number[] };
-      armLayers?: { far: { offset: number[] }; near: { offset: number[] } };
-    }
-  >;
-  handLayer?: { anchors: { grip: number[] } };
-}
-
-/**
- * Loads the 3rd-layer arm cutouts of one carry sheet (factory v2 手順 3):
- * ten textures in SHEET_POSES × (far, near) order, offsets from the
- * manifest — the far arm renders under the item, the near arm over it.
- */
-async function loadArmLayers(
-  loader: () => Promise<{ default: string }[]>,
-  poses: CarryBodyManifest['poses'],
-): Promise<NonNullable<HeldItemDisplay['arms']>> {
-  const textures = await Promise.all((await loader()).map((mod) => Assets.load(mod.default)));
-  const entry = (pose: (typeof SHEET_POSES)[number], index: number) => {
-    const meta = poses[pose].armLayers;
-    if (!meta) throw new Error(`carry manifest pose ${pose} lacks armLayers`);
-    return {
-      far: { texture: textures[index * 2], offset: meta.far.offset },
-      near: { texture: textures[index * 2 + 1], offset: meta.near.offset },
-    };
-  };
-  return {
-    stand: entry('stand', 0),
-    'walk-a': entry('walk-a', 1),
-    'walk-b': entry('walk-b', 2),
-    'walk-c': entry('walk-c', 3),
-    'walk-d': entry('walk-d', 4),
-  };
-}
-
-/** The legacy carry layering: the single hand cutout drawn over the item. */
-async function loadLegacyHand(
-  key: CarryKey,
-  body: CarryBodyManifest,
-): Promise<NonNullable<HeldItemDisplay['hand']>> {
-  const handLoader = CARRY_HAND_LOADERS[key];
-  if (!handLoader || !body.handLayer) {
-    throw new Error(`carry sheet ${key} ships neither armLayers nor a handLayer`);
-  }
-  const texture = await Assets.load((await handLoader()).default);
-  return { texture, grip: body.handLayer.anchors.grip };
-}
-
 /**
  * One held item, manifest-driven: the item's grip point comes from its own
  * manifest, and the per-pose hand anchors from the manifest of the carry
  * sheet being worn — the anchors are frame coordinates, so they must match
- * the frames actually rendered. The overlap layering follows what the sheet
- * ships: 3rd-layer sheets load their per-pose arm cutouts (body → far arm
- * → item → near arm), legacy sheets their single hand cutout (item → hand).
+ * the frames actually rendered.
  */
 async function loadHeldItem(
   loader: (typeof HELD_ITEM_LOADERS)[keyof typeof HELD_ITEM_LOADERS],
   style: CarryStyle,
   redOutfit: boolean,
 ): Promise<HeldItemDisplay> {
-  const key: CarryKey = `${style}-${redOutfit ? 'red' : 'base'}`;
-  const [[itemManifest, itemUrl], bodyModule] = await Promise.all([
+  const [[itemManifest, itemUrl], [bodyManifest, handUrl]] = await Promise.all([
     loader(),
-    CARRY_MANIFEST_LOADERS[key](),
+    CARRY_KIT_LOADERS[`${style}-${redOutfit ? 'red' : 'base'}`](),
   ]);
-  const body = bodyModule.default;
-  const texture = await Assets.load(itemUrl.default);
-  const poses = body.poses;
-  const base = {
+  const [texture, handTexture] = await Promise.all([
+    Assets.load(itemUrl.default),
+    Assets.load(handUrl.default),
+  ]);
+  const poses = bodyManifest.default.poses;
+  return {
     texture,
     grip: itemManifest.default.frame.anchors.grip,
     hands: {
@@ -741,10 +662,8 @@ async function loadHeldItem(
       'walk-c': poses['walk-c'].anchors.hand,
       'walk-d': poses['walk-d'].anchors.hand,
     },
+    hand: { texture: handTexture, grip: bodyManifest.default.handLayer.anchors.grip },
   };
-  const armLoader = CARRY_ARM_LOADERS[key];
-  if (armLoader) return { ...base, arms: await loadArmLayers(armLoader, poses) };
-  return { ...base, hand: await loadLegacyHand(key, body) };
 }
 
 /**

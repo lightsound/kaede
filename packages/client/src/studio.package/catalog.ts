@@ -19,21 +19,6 @@ export interface AssetFrame {
   size: readonly [number, number] | undefined;
   /** Anchor points by name (neck / hand / grip …), in source pixels from the frame's top-left. */
   anchors: Readonly<Record<string, readonly [number, number]>>;
-  /** Arm layers only: the layer's top-left in its pose frame, source pixels (manifest armLayers offset). */
-  offset?: readonly [number, number];
-}
-
-/**
- * One pose of an avatar-body sheet. 3rd-layer carry sheets (factory v2
- * 手順 3) ship each pose SPLIT: the pose frame is the armless body, and
- * `armLayers` carries the far/near arm cutouts whose offsets pin them back
- * onto the frame — runtime composes body → far → item → near (the 3D
- * arm-mask replacement for the legacy whole-sheet + handLayer pair).
- */
-export interface AvatarPoseEntry {
-  readonly pose: string;
-  readonly frame: AssetFrame;
-  readonly armLayers?: { readonly far: AssetFrame; readonly near: AssetFrame };
 }
 
 /** One avatar-body manifest, poses in manifest order. */
@@ -41,8 +26,8 @@ export interface AvatarAsset {
   id: string;
   name: string;
   dir: string;
-  poses: ReadonlyArray<AvatarPoseEntry>;
-  /** The legacy carry sheets' hand overlay (manifest handLayer), when present. */
+  poses: ReadonlyArray<{ readonly pose: string; readonly frame: AssetFrame }>;
+  /** The carry sheets' hand overlay (manifest handLayer), when present. */
   handLayer: AssetFrame | undefined;
   /** Poses other avatars declare but this one lacks (the ①b(b) set difference). */
   missingPoses: readonly string[];
@@ -130,38 +115,7 @@ function parseFrame(
   }
   const url = imageUrls[`${dir}/${value.file}`];
   if (url === undefined) problems.push(`${label}: 参照先 PNG（${value.file}）が同梱されていません`);
-  const frame: AssetFrame = {
-    file: value.file,
-    url,
-    size: asPair(value.size),
-    anchors: parseAnchors(value.anchors),
-  };
-  const offset = asPair(value.offset);
-  if (offset) frame.offset = offset;
-  return frame;
-}
-
-/**
- * Reads one pose's armLayers block ({far, near} of {file, size, offset}) —
- * the 3rd-layer split. Both layers must parse (an arm cannot be half
- * missing: the pose frame is armless, so a lost layer is a lost arm) or the
- * block is dropped and reported.
- */
-function parseArmLayers(
-  value: unknown,
-  dir: string,
-  imageUrls: Readonly<Record<string, string>>,
-  problems: string[],
-  label: string,
-): { far: AssetFrame; near: AssetFrame } | undefined {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) {
-    problems.push(`${label}: armLayers 定義が不正です`);
-    return undefined;
-  }
-  const far = parseFrame(value.far, dir, imageUrls, problems, `${label}.far`);
-  const near = parseFrame(value.near, dir, imageUrls, problems, `${label}.near`);
-  return far && near ? { far, near } : undefined;
+  return { file: value.file, url, size: asPair(value.size), anchors: parseAnchors(value.anchors) };
 }
 
 /** Reads the identity fields every manifest type shares, or reports why not. */
@@ -193,21 +147,12 @@ function parseAvatar(site: ManifestSite, collect: Collect, into: AvatarAsset[]):
   const { manifest, path, dir, imageUrls } = site;
   const header = parseHeader(manifest, path, collect);
   if (!header) return;
-  const poses: AvatarPoseEntry[] = [];
+  const poses: Array<{ pose: string; frame: AssetFrame }> = [];
   const rawPoses = isRecord(manifest.poses) ? manifest.poses : {};
   if (Object.keys(rawPoses).length === 0) collect.problems.push(`${path}: poses が空です`);
   for (const [pose, value] of Object.entries(rawPoses)) {
-    const label = `${path} poses.${pose}`;
-    const frame = parseFrame(value, dir, imageUrls, collect.problems, label);
-    if (!frame) continue;
-    const armLayers = parseArmLayers(
-      isRecord(value) ? value.armLayers : undefined,
-      dir,
-      imageUrls,
-      collect.problems,
-      `${label} armLayers`,
-    );
-    poses.push(armLayers ? { pose, frame, armLayers } : { pose, frame });
+    const frame = parseFrame(value, dir, imageUrls, collect.problems, `${path} poses.${pose}`);
+    if (frame) poses.push({ pose, frame });
   }
   const handLayer =
     manifest.handLayer === undefined

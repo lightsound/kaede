@@ -1,7 +1,7 @@
 // fallow-ignore-file coverage-gaps -- DOM cards for the dev-only asset studio; the catalog they render (parsing, pose diff, integrity checks) lives in catalog.ts, which is unit-tested
 import type { CSSProperties, ReactNode } from 'react';
 import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
-import type { AssetFrame, AvatarAsset, AvatarPoseEntry, ItemAsset } from './catalog';
+import type { AssetFrame, AvatarAsset, ItemAsset } from './catalog';
 import { frameFor, maxFrameSize } from './dressup';
 
 /**
@@ -92,52 +92,24 @@ function AnchorMarkers(props: { anchors: AssetFrame['anchors']; scale: number })
   );
 }
 
-/** One arm-layer cutout pinned back onto its pose frame at the manifest offset. */
-function ArmLayerImage(props: { layer: AssetFrame; scale: number; alt: string }) {
-  const { layer, scale, alt } = props;
-  if (layer.url === undefined || !layer.offset) return null;
-  return (
-    <img
-      data-testid="arm-layer"
-      src={layer.url}
-      alt={alt}
-      style={{
-        ...frameImageStyle(layer.size, scale),
-        position: 'absolute',
-        left: layer.offset[0] * scale,
-        top: layer.offset[1] * scale,
-      }}
-    />
-  );
-}
-
 /**
  * One manifest-referenced frame at `scale` × source pixels (the sources
  * ship at 4x display resolution, so scale 1 already quadruples the in-game
- * size — the point of an inspection view). 3rd-layer poses composite their
- * far/near arm cutouts back on (the shipped body is armless — the split is
- * an exact partition, so this reconstructs the drawn frame). Anchor markers
- * overlay at the manifest coordinates when enabled; a frame whose PNG is
- * absent renders as a labeled hole instead of a broken image.
+ * size — the point of an inspection view). Anchor markers overlay at the
+ * manifest coordinates when enabled; a frame whose PNG is absent renders
+ * as a labeled hole instead of a broken image.
  */
 function FrameImage(props: {
   frame: AssetFrame;
   scale: number;
   showAnchors: boolean;
   alt: string;
-  armLayers?: AvatarPoseEntry['armLayers'];
 }) {
-  const { frame, scale, showAnchors, alt, armLayers } = props;
+  const { frame, scale, showAnchors, alt } = props;
   if (frame.url === undefined) return <span style={missingBoxStyle}>PNG なし</span>;
   return (
     <span style={{ position: 'relative', display: 'inline-block', lineHeight: 0 }}>
       <img src={frame.url} alt={alt} style={frameImageStyle(frame.size, scale)} />
-      {armLayers && (
-        <>
-          <ArmLayerImage layer={armLayers.far} scale={scale} alt={`${alt} 奥腕`} />
-          <ArmLayerImage layer={armLayers.near} scale={scale} alt={`${alt} 手前腕`} />
-        </>
-      )}
       {showAnchors && <AnchorMarkers anchors={frame.anchors} scale={scale} />}
     </span>
   );
@@ -189,7 +161,6 @@ function WalkPreview(props: { avatar: AvatarAsset; pose: string; showAnchors: bo
         scale={1}
         showAnchors={showAnchors}
         alt={`${avatar.id} 歩行再生`}
-        armLayers={resolved.armLayers}
       />
     </span>
   );
@@ -230,7 +201,7 @@ export function AvatarCard(props: {
           <WalkPreview avatar={avatar} pose={pose} showAnchors={showAnchors} />
           <figcaption style={captionStyle}>歩行再生</figcaption>
         </figure>
-        {avatar.poses.map(({ pose: name, frame, armLayers }) => (
+        {avatar.poses.map(({ pose: name, frame }) => (
           <figure key={name} style={figureStyle} data-testid="pose-frame">
             <span style={groundBoxStyle(maxFrameSize(avatar), 1)}>
               <FrameImage
@@ -238,12 +209,10 @@ export function AvatarCard(props: {
                 scale={1}
                 showAnchors={showAnchors}
                 alt={`${avatar.id} ${name}`}
-                armLayers={armLayers}
               />
             </span>
             <figcaption style={captionStyle}>
               {name}
-              {armLayers && '（腕層合成）'}
               <br />
               {anchorCaption(frame)}
             </figcaption>

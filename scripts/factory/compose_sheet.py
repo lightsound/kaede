@@ -141,20 +141,11 @@ def content_bbox(img: Image.Image) -> tuple[int, int, int, int]:
     return bbox
 
 
-def keyed_content(img: Image.Image) -> tuple[Image.Image, tuple[int, int, int, int]]:
-    """Chroma-keyed image cropped to content, plus the crop box itself.
-
-    The box is what lets a companion image (the 3rd layer's arm mask) ride
-    the exact same trim as its frame — see compose_walk_sheet's layer_sink.
-    """
-    keyed = chroma_key(img)
-    box = content_bbox(keyed)
-    return keyed.crop(box), box
-
-
 def trim_grounded(img: Image.Image) -> Image.Image:
     """Crop to content; feet sit on the image's bottom edge."""
-    return keyed_content(img)[0]
+    keyed = chroma_key(img)
+    x0, y0, x1, y1 = content_bbox(keyed)
+    return keyed.crop((x0, y0, x1, y1))
 
 
 def cut_head(stand: Image.Image, neck: tuple[int, int]) -> tuple[Image.Image, int]:
@@ -203,12 +194,8 @@ def paste_head(
     stand_neck_y: int,
     body_neck: tuple[int, int],
     sway: tuple[int, int] = (0, 0),
-) -> tuple[Image.Image, tuple[int, int]]:
+) -> Image.Image:
     """REPLACE the body's head with the stand head at the body's neck anchor.
-
-    Returns (composited, (pad_left, pad_top)): the top/left canvas growth a
-    bobbing head forced, which shifts every body pixel — the arm-mask
-    companion transform (layer_sink) must replay exactly this shift.
 
     Erase-then-paste: the old-head component above the body's neck row is
     cleared before the stand head lands there. Pasting alone (PR #94) leaves
@@ -247,7 +234,7 @@ def paste_head(
         paste_x += pad_left
         paste_y += pad_top
     out.alpha_composite(head, (paste_x, paste_y))
-    return out, (pad_left, pad_top)
+    return out
 
 
 # Rows whose silhouette diverges this much from the donor cell belong to
@@ -390,24 +377,8 @@ def compose_walk_sheet(
     out_path: Path,
     *,
     cell_size: int = 380,
-    stand_body: Path | None = None,
-    companion_of=None,
-    layer_sink: dict | None = None,
 ) -> dict[str, tuple[int, int]]:
-    """Build sheet-original.png; return per-pose structure neck anchors (pre-scale).
-
-    Arm-layer lane options (factory v2 手順 3 — the 3rd layer):
-    - `stand_body`: a master frame whose BODY becomes the stand cell (the
-      committed stand still drives scale and donates the head; bob 0). Its
-      own drawn body then never ships — every cell of the sheet is a master
-      frame with a 3D arm mask.
-    - `companion_of(path)`: the frame's arm-mask companion at the frame's own
-      pixel size. It rides the exact crop/scale/pad chain of its frame
-      (NEAREST so the flat ID colors stay classifiable).
-    - `layer_sink`: filled with {"cells": {pose: mask cell}, "maps": {pose:
-      point transform for arm_layers.apply_map}, "paths": {pose: chosen
-      frame path}, "cell": (w, h)} for the caller to pack and record.
-    """
+    """Build sheet-original.png; return per-pose structure neck anchors (pre-scale)."""
     stand = trim_grounded(Image.open(stand_path))
     stand_neck = structure_neck(stand)
     head, stand_neck_y = cut_head(stand, stand_neck)
@@ -425,7 +396,8 @@ def compose_walk_sheet(
         head, stand_neck_y = cut_head(stand, stand_neck)
 
     ordered = ["stand", "walk-a", "walk-b", "walk-c", "walk-d"]
-    necks: dict[str, tuple[int, int]] = {}
+    frames: list[Image.Image] = [stand]
+    necks: dict[str, tuple[int, int]] = {"stand": stand_neck}
     stand_neck_from_ground = stand.height - stand_neck[1]
 
     # Pass 1 — pick each pose's frame and measure its neck, UNSCALED. The
@@ -434,15 +406,15 @@ def compose_walk_sheet(
     # every frame so its neck-from-ground landed EXACTLY on the stand's,
     # which erased the walk's intrinsic head bob (~±1.5% of body height in
     # the preset masters) — the owner-reported frozen face (2026-08-12).
-    selected: list[tuple[str, Path, Image.Image, tuple, tuple[int, int]]] = []
+    selected: list[tuple[str, Image.Image, tuple[int, int]]] = []
     for pose in ordered[1:]:
         candidates = walk_paths[pose]
         if isinstance(candidates, Path):
             candidates = [candidates]
-        body = body_neck = chosen = box = None
+        body = body_neck = None
         rejects: list[str] = []
         for candidate in candidates:
-            body, box = keyed_content(Image.open(candidate))
+            body = trim_grounded(Image.open(candidate))
             try:
                 body_neck = structure_neck(body)
             except SystemExit as exc:
@@ -462,31 +434,24 @@ def compose_walk_sheet(
                 continue
             if candidate is not candidates[0]:
                 print(f"{pose}: fell back to {candidate.name}")
-            chosen = candidate
             break
         if body is None or body_neck is None:
             raise SystemExit(
                 f"{pose}: no candidate frame passed neck detection — retake "
                 f"the video ({'; '.join(rejects)})"
             )
-        selected.append((pose, chosen, body, box, body_neck))
+        selected.append((pose, body, body_neck))
 
     # Pass 2 — one scale for the whole cycle (median of the per-frame
     # ratios): the MEAN neck height matches the stand's, and each frame's
-    # deviation from that mean — the bob — survives into the sheet. The
-    # stand-from-master cell (arm-layer lane) reuses the same cycle scale:
-    # it is the same master body, just parked at bob 0.
+    # deviation from that mean — the bob — survives into the sheet.
     ratios = sorted(
         stand_neck_from_ground / max(1, body.height - neck[1])
-        for _, _, body, _, neck in selected
+        for _, body, neck in selected
     )
     cycle_scale = (ratios[1] + ratios[2]) / 2
-    work = list(selected)
-    if stand_body is not None:
-        sb, sb_box = keyed_content(Image.open(stand_body))
-        work.insert(0, ("stand", stand_body, sb, sb_box, structure_neck(sb)))
-    resized: list[tuple[str, Path, Image.Image, tuple, tuple[int, int]]] = []
-    for pose, path, body, box, _ in work:
+    resized: list[tuple[str, Image.Image, tuple[int, int]]] = []
+    for pose, body, _ in selected:
         body = body.resize(
             (
                 max(1, round(body.width * cycle_scale)),
@@ -494,7 +459,7 @@ def compose_walk_sheet(
             ),
             Image.LANCZOS,
         )
-        resized.append((pose, path, body, box, structure_neck(body)))
+        resized.append((pose, body, structure_neck(body)))
 
     # Prescribed head bob (owner rejects 2026-08-12/13 — "the face is
     # frozen", then "the girl bobs opposite", then "the carry bobs too
@@ -506,40 +471,18 @@ def compose_walk_sheet(
     # a shifted head ever breaks the bridge, and art_lint's bob-phase gate
     # re-verifies the pattern on the imported frames.
     bob = stand.height * BOB_AMPLITUDE_FRAC
-    composed: dict[str, Image.Image] = {}
-    transforms: dict[str, dict] = {}
-    for pose, path, body, box, neck in resized:
+    for pose, body, neck in resized:
         nfg = body.height - neck[1]
-        if pose == "stand":
-            target_nfg = stand_neck_from_ground  # the idle cell carries no bob
-        else:
-            target_nfg = stand_neck_from_ground + (
-                -bob if pose in CONTACT_POSES else bob
-            )
+        target_nfg = stand_neck_from_ground + (-bob if pose in CONTACT_POSES else bob)
         cap = body.height * HEAD_SWAY_CAP_FRAC
         extra_y = max(-cap, min(cap, target_nfg - nfg))
-        composited, pad = paste_head(
+        composited = paste_head(
             body, head, stand_neck_y, neck, sway=(0, round(-extra_y))
         )
         # Re-trim after paste (head may extend the bbox).
-        keyed = chroma_key(composited)
-        box2 = content_bbox(keyed)
-        frame = keyed.crop(box2)
-        composed[pose] = frame
-        necks[pose] = structure_neck(frame)
-        transforms[pose] = {
-            "path": path,
-            "crop1": box,
-            "size": (body.width, body.height),
-            "canvas": composited.size,
-            "pad": pad,
-            "crop2": box2,
-        }
-
-    if stand_body is None:
-        composed["stand"] = stand
-        necks["stand"] = stand_neck
-    frames = [composed[pose] for pose in ordered]
+        composited = trim_grounded(composited)
+        frames.append(composited)
+        necks[pose] = structure_neck(composited)
 
     cell_w = max(cell_size, max(f.width for f in frames) + 8)
     cell_h = max(cell_size, max(f.height for f in frames) + 8)
@@ -548,36 +491,4 @@ def compose_walk_sheet(
         sheet.paste(cell_on_green(frame, cell_w, cell_h), (i * cell_w, 0))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     sheet.convert("RGB").save(out_path)
-
-    # Companion pass: replay each frame's recorded geometry on its arm-mask
-    # companion, and fold the whole chain into one affine map per pose (the
-    # bone-projection → cell-coordinate transform of arm_layers.apply_map).
-    if companion_of is not None and layer_sink is not None:
-        cells: dict[str, Image.Image] = {}
-        maps: dict[str, dict] = {}
-        paths: dict[str, str] = {}
-        for pose in ordered if stand_body is not None else ordered[1:]:
-            t = transforms[pose]
-            frame = composed[pose]
-            place = ((cell_w - frame.width) // 2, cell_h - frame.height)
-            mask = companion_of(t["path"]).crop(t["crop1"])
-            mask = mask.resize(t["size"], Image.NEAREST)
-            canvas = Image.new("RGBA", t["canvas"], (0, 0, 0, 0))
-            canvas.paste(mask, t["pad"])
-            cell = Image.new("RGBA", (cell_w, cell_h), (0, 0, 0, 0))
-            cell.paste(canvas.crop(t["crop2"]), place)
-            cells[pose] = cell
-            paths[pose] = str(t["path"])
-            maps[pose] = {
-                "crop1": list(t["crop1"]),
-                "scale": [
-                    t["size"][0] / (t["crop1"][2] - t["crop1"][0]),
-                    t["size"][1] / (t["crop1"][3] - t["crop1"][1]),
-                ],
-                "shift": [
-                    t["pad"][0] - t["crop2"][0] + place[0],
-                    t["pad"][1] - t["crop2"][1] + place[1],
-                ],
-            }
-        layer_sink.update(cells=cells, maps=maps, paths=paths, cell=(cell_w, cell_h))
     return necks

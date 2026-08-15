@@ -221,18 +221,13 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
             name: pose["anchors"]["neck"]
             for name, pose in paired_manifest["poses"].items()
         }
-    # Carry-ness: the skin-heuristic era's handLayer flag OR the 3rd-layer
-    # armLayers block (factory v2 手順 3) — both mean a held-item sheet whose
-    # strides are gentle by spec (no leg-phase opposition gate) and whose
-    # hand anchors must be validated.
-    is_carry = bool(order.get("handLayer") or order.get("armLayers"))
     failures = lint_avatar(
         manifest_path_of(order_path, order),
         base_palette=palette,
-        expect_carry_hand=is_carry,
+        expect_carry_hand=bool(order.get("handLayer")),
         # Carry sheets stride gently by spec; every other walk cycle must
         # show opposite-leg contacts and a real second passing.
-        expect_leg_phase=not is_carry,
+        expect_leg_phase=not order.get("handLayer"),
         neck_reference=neck_reference,
     )
     # Variant sheets (carry) must keep their paired outfit's colors: the

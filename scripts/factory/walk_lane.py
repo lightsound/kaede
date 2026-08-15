@@ -51,12 +51,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from factory import fal_client  # noqa: E402
-from factory.arm_layers import (  # noqa: E402
-    apply_map,
-    arm_companion,
-    near_side,
-    sample_index,
-)
 from factory.compose_sheet import chroma_key, compose_walk_sheet, content_bbox  # noqa: E402
 from factory.cycle_scan import POSES, scan_clip  # noqa: E402
 from factory.loop_scan import silhouette_mask, verify_loop  # noqa: E402
@@ -175,84 +169,6 @@ def sheet_cells_shipping(sheet_path: Path) -> list[Image.Image]:
     ]
 
 
-def arm_mask_sources(arm_ids: Path, master_meta: dict, frame_size: tuple[int, int]):
-    """(companion_of, sample_of) for the 3rd-layer lane (--arm-ids).
-
-    `sample_of(path)` returns the bones.json sample of one master frame
-    (ffmpeg's 1-based frame_%04d naming → 0-based index → sourceStart-offset
-    loop phase); `companion_of(path)` its ARM-ID render as a frame-sized
-    RGBA companion. Bone projections are scaled from the ID render's
-    resolution to the master's below via `scale`.
-    """
-    bones = json.loads((arm_ids / "bones.json").read_text())
-    samples = bones["samples"]
-    source_start = master_meta.get("sourceStart")
-    if source_start is None:
-        raise SystemExit(
-            "master row records no sourceStart — the frame ↔ ID-render "
-            "mapping is unknown; re-register the master via `recast`"
-        )
-    scale = frame_size[0] / bones["resolution"]
-
-    def sample_of(path: Path) -> dict:
-        index = sample_index(int(path.stem.split("_")[1]) - 1, source_start, len(samples))
-        return samples[index]
-
-    def companion_of(path: Path) -> Image.Image:
-        index = sample_index(int(path.stem.split("_")[1]) - 1, source_start, len(samples))
-        return arm_companion(Image.open(arm_ids / f"ids_{index:02d}.png"), frame_size)
-
-    return companion_of, sample_of, scale
-
-
-def write_arm_layers(
-    sink: dict, sample_of, bone_scale: float, order_dir: Path
-) -> tuple[Path, Path]:
-    """Pack the composed mask cells + bone-derived anchors next to the sheet.
-
-    arm-masks.png mirrors sheet-original.png cell for cell (transparent
-    background — the mask is alpha, not chroma). arm-layers.json records,
-    per pose in SHEET-CELL coordinates: which chain is the near arm (camera
-    depth), both wrist/elbow projections, and the hand anchor — the midpoint
-    of the two wrists, where a two-hand-carried item rests. These replace
-    the measured handAnchors / handLayerSide era wholesale.
-    """
-    cell_w, cell_h = sink["cell"]
-    poses = list(sink["cells"])
-    mask_sheet = Image.new("RGBA", (cell_w * len(poses), cell_h), (0, 0, 0, 0))
-    meta: dict = {"cell": [cell_w, cell_h], "poses": {}}
-    for i, pose in enumerate(poses):
-        mask_sheet.paste(sink["cells"][pose], (i * cell_w, 0))
-        sample = sample_of(Path(sink["paths"][pose]))
-        transform = sink["maps"][pose]
-
-        def project(bone: str, sample=sample, transform=transform) -> list[int]:
-            x, y, _depth = sample[bone]
-            return apply_map(transform, (x * bone_scale, y * bone_scale))
-
-        wrists = {"left": project("LeftHand"), "right": project("RightHand")}
-        meta["poses"][pose] = {
-            "near": near_side(sample),
-            "hand": [
-                round((wrists["left"][0] + wrists["right"][0]) / 2),
-                round((wrists["left"][1] + wrists["right"][1]) / 2),
-            ],
-            "wrists": wrists,
-            "elbows": {"left": project("LeftForeArm"), "right": project("RightForeArm")},
-        }
-    # `-original` naming: the mask sheet is an R2-stored generation input
-    # like sheet-original.png (gitignored; upload-asset-originals.py records
-    # its sha256 into the order), not a committed asset.
-    mask_path = order_dir / "arm-masks-original.png"
-    mask_sheet.save(mask_path)
-    meta_path = order_dir / "arm-layers.json"
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
-    subprocess.run(
-        ["pnpm", "exec", "biome", "format", "--write", str(meta_path)], check=True
-    )
-    return mask_path, meta_path
-
-
 def cmd_produce(args: argparse.Namespace) -> None:
     t0 = time.time()
     order_path = validate_order_path(args.order, ASSET_ROOT)
@@ -288,7 +204,6 @@ def cmd_produce(args: argparse.Namespace) -> None:
     # Carry sheets stride gently with same-sign contacts by spec (the
     # run_lint rule) — the leg-phase opposition gate only applies to swing
     # walks. Every other gate (junction included) applies to both.
-    is_carry = bool(order.get("handLayer") or order.get("armLayers") or args.arm_ids)
     selected = scan_clip(
         stand_raw,
         frames_dir,
@@ -296,46 +211,13 @@ def cmd_produce(args: argparse.Namespace) -> None:
         period=period,
         loop_start=loop_start,
         skip_head_seconds=0,
-        expect_leg_phase=not is_carry,
+        expect_leg_phase=not order.get("handLayer"),
     )
     chosen = {pose: int(paths[0].stem.split("_")[1]) for pose, paths in selected.items()}
     print(f"cells: {chosen}")
 
     sheet_path = resolve_asset_path(order_path.parent, order["sheet"], ASSET_ROOT)
-    if args.arm_ids:
-        # The 3rd-layer lane: every cell must carry a 3D arm mask, so the
-        # stand cell too comes from the master — the chosen PASSING frame
-        # (legs together = the natural idle of a walk-in-place motion). The
-        # committed stand still drives scale and donates the head.
-        with Image.open(selected["walk-b"][0]) as first:
-            frame_size = first.size
-        companion_of, sample_of, bone_scale = arm_mask_sources(
-            args.arm_ids, master_meta, frame_size
-        )
-        sink: dict = {}
-        compose_walk_sheet(
-            stand_raw,
-            selected,
-            sheet_path,
-            stand_body=selected["walk-b"][0],
-            companion_of=companion_of,
-            layer_sink=sink,
-        )
-        mask_path, meta_path = write_arm_layers(
-            sink, sample_of, bone_scale, order_path.parent
-        )
-        order["armLayers"] = {
-            "maskSheet": "arm-masks-original.png",
-            "meta": "arm-layers.json",
-        }
-        # The 3rd layer replaces the skin-heuristic era wholesale: measured
-        # hand anchors and the flood-cut knobs must not survive in the order
-        # or a re-import would resurrect them over the bone-derived values.
-        for legacy in ("handAnchors", "handLayer", "handLayerFrom", "handLayerSide", "handLayerSeed"):
-            order.pop(legacy, None)
-        print(f"wrote {mask_path} + {meta_path}")
-    else:
-        compose_walk_sheet(stand_raw, selected, sheet_path)
+    compose_walk_sheet(stand_raw, selected, sheet_path)
     print(f"wrote {sheet_path}")
 
     # Provenance into the order (the danceMaster rule: the ledger sha is
@@ -397,14 +279,6 @@ def main() -> None:
         type=int,
         default=None,
         help="pin the cycle scan to one contact frame index (visual-gate override)",
-    )
-    produce.add_argument(
-        "--arm-ids",
-        type=Path,
-        default=None,
-        help="bpy_render_arm_ids.py output dir (ids_XX.png + bones.json) — "
-        "the 3rd-layer lane: composes arm-masks.png/arm-layers.json alongside "
-        "the sheet and drops the skin-heuristic order fields",
     )
     produce.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-walk-lane"))
     produce.add_argument("--budget", type=float, default=0.5,

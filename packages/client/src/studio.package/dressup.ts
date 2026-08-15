@@ -12,7 +12,7 @@
  * hand layer — the ①b(a)⑵ spec, same as the in-game avatarView.
  */
 
-import type { AssetCatalog, AssetFrame, AvatarAsset, AvatarPoseEntry, ItemAsset } from './catalog';
+import type { AssetCatalog, AssetFrame, AvatarAsset, ItemAsset } from './catalog';
 
 /**
  * The carry variant naming rule: `<outfit id>-carry` for the two-arm heavy
@@ -109,7 +109,10 @@ export function resolveStageLook(
  * pose falls back to stand (the gap is already flagged by the missing-pose
  * badge, so the preview degrades quietly).
  */
-export function frameFor(avatar: AvatarAsset, pose: string): AvatarPoseEntry | undefined {
+export function frameFor(
+  avatar: AvatarAsset,
+  pose: string,
+): { readonly pose: string; readonly frame: AssetFrame } | undefined {
   return (
     avatar.poses.find((p) => p.pose === pose) ??
     avatar.poses.find((p) => p.pose === 'stand') ??
@@ -156,29 +159,20 @@ function overlayOf(frame: AssetFrame, hand: readonly [number, number]): OverlayL
   return { url: frame.url, left: offset[0], top: offset[1], width: frame.size[0] };
 }
 
-/** An arm-layer cutout at its manifest offset (frame pixels — no anchor math). */
-function armOverlayOf(layer: AssetFrame): OverlayLayer | undefined {
-  if (layer.url === undefined || !layer.size || !layer.offset) return undefined;
-  return { url: layer.url, left: layer.offset[0], top: layer.offset[1], width: layer.size[0] };
-}
-
 /**
- * The held-item layers over one body frame, bottom-up. 3rd-layer sheets
- * (the pose carries armLayers — factory v2 手順 3) compose the armless body
- * → far arm → item → near arm, so the item structurally sits between the
- * arms with no heuristic. Legacy sheets keep body → item → hand cutout
- * (the MapleStory hand-over-item order). Empty when nothing is held or the
- * frame carries no hand anchor.
+ * The held-item layers over one body frame, bottom-up: the bare item
+ * resting on the hand anchor, then the sheet's own hand cutout on top —
+ * body → item → hand, the MapleStory hand-over-item order avatarView
+ * renders in-game. Empty when nothing is held or the frame carries no
+ * hand anchor.
  */
-export function stageOverlays(look: StageLook, entry: AvatarPoseEntry): readonly OverlayLayer[] {
-  const hand = entry.frame.anchors.hand;
+export function stageOverlays(look: StageLook, frame: AssetFrame): readonly OverlayLayer[] {
+  const hand = frame.anchors.hand;
   if (!look.item || !hand) return [];
+  const layers: OverlayLayer[] = [];
   const item = overlayOf(look.item.frame, hand);
-  if (entry.armLayers) {
-    const far = armOverlayOf(entry.armLayers.far);
-    const near = armOverlayOf(entry.armLayers.near);
-    return [far, item, near].filter((layer) => layer !== undefined);
-  }
+  if (item) layers.push(item);
   const handLayer = look.body.handLayer && overlayOf(look.body.handLayer, hand);
-  return [item, handLayer].filter((layer) => layer !== undefined);
+  if (handLayer) layers.push(handLayer);
+  return layers;
 }

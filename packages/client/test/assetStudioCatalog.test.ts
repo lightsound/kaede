@@ -208,48 +208,6 @@ describe('buildCatalog', () => {
     });
   });
 
-  it('parses 3rd-layer armLayers with offsets, and drops a half-missing pair loudly', () => {
-    const armLayers = {
-      far: { file: 'stand-arm-far.png', size: [7, 8], offset: [6, 50] },
-      near: { file: 'stand-arm-near.png', size: [9, 8], offset: [30, 48] },
-    };
-    const catalog = buildCatalog(
-      {
-        './carry/manifest.json': avatarManifest('avatar.carry', {
-          stand: { ...pose('stand.png'), armLayers },
-        }),
-      },
-      {
-        './carry/stand.png': 'u',
-        './carry/stand-arm-far.png': '/assets/far.png',
-        './carry/stand-arm-near.png': '/assets/near.png',
-      },
-    );
-    expect(catalog.problems).toEqual([]);
-    const entry = catalog.avatars[0]?.poses[0];
-    expect(entry?.armLayers?.far).toEqual({
-      file: 'stand-arm-far.png',
-      url: '/assets/far.png',
-      size: [7, 8],
-      anchors: {},
-      offset: [6, 50],
-    });
-    expect(entry?.armLayers?.near.offset).toEqual([30, 48]);
-
-    // A pose frame is ARMLESS, so one lost layer means a lost arm: the
-    // whole block drops and the missing PNG is reported.
-    const broken = buildCatalog(
-      {
-        './carry/manifest.json': avatarManifest('avatar.carry', {
-          stand: { ...pose('stand.png'), armLayers: { far: armLayers.far } },
-        }),
-      },
-      { './carry/stand.png': 'u', './carry/stand-arm-far.png': '/assets/far.png' },
-    );
-    expect(broken.avatars[0]?.poses[0]?.armLayers).toBeUndefined();
-    expect(broken.problems.join(' ')).toContain('armLayers.near');
-  });
-
   it('drops malformed anchor and size pairs instead of failing', () => {
     const catalog = buildCatalog(
       {

@@ -612,25 +612,6 @@ class BobPhaseTests(unittest.TestCase):
     def test_missing_walk_poses_are_ignored(self) -> None:
         self.assertEqual(self._lint({"stand": 94}), [])
 
-    def test_crown_signal_rescues_buried_chin(self) -> None:
-        # The 3rd-layer carry master: the LOW paste buries the chin, so the
-        # neck pinch under-reads (3px pp) while the frame height — the bob the
-        # player sees — holds the full prescribed pattern.
-        from factory.art_lint import check_bob_phase
-
-        buried_neck = {"walk-a": 92, "walk-b": 94, "walk-c": 91, "walk-d": 94}
-        crown = {"walk-a": 180, "walk-b": 186, "walk-c": 180, "walk-d": 186}
-        self.assertTrue(check_bob_phase(buried_neck))
-        self.assertEqual(check_bob_phase(buried_neck, crown), [])
-
-    def test_crown_signal_cannot_rescue_a_real_defect(self) -> None:
-        # Both signals frozen: the sheet genuinely has no bob — still fails.
-        from factory.art_lint import check_bob_phase
-
-        frozen = {"walk-a": 94, "walk-b": 94, "walk-c": 94, "walk-d": 94}
-        crown = {"walk-a": 184, "walk-b": 184, "walk-c": 184, "walk-d": 184}
-        self.assertTrue(check_bob_phase(frozen, crown))
-
 
 class HandOnSkinTests(unittest.TestCase):
     def test_anchor_on_mitten_passes(self) -> None:
@@ -750,7 +731,7 @@ class ComposeTests(unittest.TestCase):
         head, stand_neck_y = cut_head(stand, (32, 50))
         body = _chibi(neck_y=50)
         ImageDraw.Draw(body).ellipse((0, 0, 63, 52), fill=(10, 30, 220, 255))
-        out, _pad = paste_head(body, head, stand_neck_y, (32, 50))
+        out = paste_head(body, head, stand_neck_y, (32, 50))
         remnants = sum(
             1
             for y in range(out.height)
@@ -849,98 +830,6 @@ class BoneSignatureTests(unittest.TestCase):
         self.assertTrue(
             any("one-sided" in f for f in bone_signature.check_gait(metrics))
         )
-
-
-class ArmLayerTests(unittest.TestCase):
-    """factory v2 手順 3 — the 3rd layer's mask → layer machinery."""
-
-    def _frame_and_mask(self) -> tuple[Image.Image, Image.Image]:
-        """A body slab with a red (left) and blue (right) arm strip mask."""
-        frame = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
-        ImageDraw.Draw(frame).rectangle((4, 4, 35, 35), fill=(200, 170, 140, 255))
-        mask = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
-        d = ImageDraw.Draw(mask)
-        d.rectangle((4, 4, 35, 35), fill=(255, 255, 255, 255))  # body white
-        d.rectangle((6, 10, 12, 30), fill=(255, 0, 0, 255))  # left chain
-        d.rectangle((26, 10, 32, 30), fill=(0, 0, 255, 255))  # right chain
-        return frame, mask
-
-    def test_sample_index_wraps_the_loop_window(self) -> None:
-        from factory.arm_layers import sample_index
-
-        # sourceStart 2, 24-sample loop: master frame 0 → phase 2, 22 → 0.
-        self.assertEqual(sample_index(0, 2, 24), 2)
-        self.assertEqual(sample_index(22, 2, 24), 0)
-        self.assertEqual(sample_index(46, 2, 24), 0)
-
-    def test_near_side_reads_camera_depth(self) -> None:
-        from factory.arm_layers import near_side
-
-        sample = {"LeftHand": [10, 20, 0.91], "RightHand": [30, 20, 0.95]}
-        self.assertEqual(near_side(sample), "left")
-        sample = {"LeftHand": [10, 20, 0.95], "RightHand": [30, 20, 0.91]}
-        self.assertEqual(near_side(sample), "right")
-
-    def test_arm_companion_survives_nearest_upscale(self) -> None:
-        from factory.arm_layers import arm_companion, arm_masks_of
-
-        _, mask = self._frame_and_mask()
-        companion = arm_companion(mask, (160, 160))
-        left, right = arm_masks_of(companion)
-        self.assertTrue(left.any())
-        self.assertTrue(right.any())
-        # Body white must be transparent, not a third class.
-        a = np.asarray(companion)
-        body_visible = (a[..., 3] > 128) & ~(left | right)
-        self.assertFalse(body_visible.any())
-
-    def test_apply_map_folds_crop_scale_shift(self) -> None:
-        from factory.arm_layers import apply_map
-
-        transform = {"crop1": [10, 20, 90, 120], "scale": [0.5, 0.5], "shift": [3, 7]}
-        self.assertEqual(apply_map(transform, (30, 40)), [13, 17])
-
-    def test_split_is_an_exact_partition(self) -> None:
-        from factory.arm_layers import split_arm_layers
-
-        frame, mask = self._frame_and_mask()
-        body, (far_img, far_off), (near_img, near_off) = split_arm_layers(
-            frame, mask, near="left", dilate_px=1
-        )
-        recomposed = body.copy()
-        recomposed.alpha_composite(far_img, tuple(far_off))
-        recomposed.alpha_composite(near_img, tuple(near_off))
-        self.assertEqual(recomposed.tobytes(), frame.convert("RGBA").tobytes())
-
-    def test_near_wins_the_dilated_overlap(self) -> None:
-        from factory.arm_layers import split_arm_layers
-
-        frame = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
-        ImageDraw.Draw(frame).rectangle((4, 4, 35, 35), fill=(200, 170, 140, 255))
-        mask = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
-        d = ImageDraw.Draw(mask)
-        d.rectangle((4, 4, 35, 35), fill=(255, 255, 255, 255))
-        # Adjacent strips: heavy dilation makes them overlap.
-        d.rectangle((14, 10, 19, 30), fill=(255, 0, 0, 255))
-        d.rectangle((20, 10, 25, 30), fill=(0, 0, 255, 255))
-        _, (far_img, far_off), (near_img, near_off) = split_arm_layers(
-            frame, mask, near="left", dilate_px=3
-        )
-        far = np.zeros((40, 40), dtype=bool)
-        near = np.zeros((40, 40), dtype=bool)
-        fa = np.asarray(far_img)[..., 3] > 0
-        na = np.asarray(near_img)[..., 3] > 0
-        far[far_off[1] : far_off[1] + fa.shape[0], far_off[0] : far_off[0] + fa.shape[1]] = fa
-        near[near_off[1] : near_off[1] + na.shape[0], near_off[0] : near_off[0] + na.shape[1]] = na
-        self.assertFalse((far & near).any())
-
-    def test_missing_arm_fails_loud(self) -> None:
-        from factory.arm_layers import split_arm_layers
-
-        frame, _ = self._frame_and_mask()
-        blank = Image.new("RGBA", (40, 40), (255, 255, 255, 255))
-        with self.assertRaises(SystemExit):
-            split_arm_layers(frame, blank, near="left")
 
 
 if __name__ == "__main__":
