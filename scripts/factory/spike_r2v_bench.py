@@ -322,6 +322,29 @@ def lane_request(
             },
             1.09 * 2.25,
         )
+    if lane == "seedance25-r2v-720p-upid":
+        # Both-worlds lever ① (運転知見 33): the stand identity upscaled 4x
+        # by SeedVR2 image (pose unchanged — right-3/4 is preserved by
+        # construction; only the detail gain is under test).
+        upid = work / "identity_upscaled_square.png"
+        if not upid.exists():
+            raise SystemExit(
+                "identity_upscaled_square.png missing — run the SeedVR2 "
+                "image upscale step first"
+            )
+        return (
+            "bytedance/seedance-2.5/reference-to-video",
+            {
+                "prompt": r2v_prompt(motion, "@Image1", "@Video1"),
+                "image_urls": [jobs.upload(upid)],
+                "video_urls": [ref],
+                "resolution": "720p",
+                "aspect_ratio": "1:1",
+                "duration": "4",
+                "generate_audio": False,
+            },
+            1.09 * 2.25,
+        )
     if lane == "seedance25-r2v-720p":
         # Resolution probe on the winner candidate: token billing is
         # pixel-proportional, so 720p ≈ 2.25x the measured 480p actual.
