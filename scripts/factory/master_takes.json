@@ -81,20 +81,27 @@
     "walk-carry/boy": {
       "motion": "walk-carry",
       "family": "boy",
-      "masterSha256": "b4102f1f732e319bf1be9416ed4f8451f4bf3bf98d1a1de8338ebe189fb9de66",
-      "sourceSha256": "83ab5d1518f9883e0581dc84e6a3be1b5ecc20d919fcce78972f18b74fc568e0",
-      "frames": 97,
+      "masterSha256": "fb6d4ef63a349d871f62933447bda9ffd6376d7d6791fc2aab044daac030800d",
+      "sourceSha256": "2c391c04156e830b5bd34dde47ccd2d78ac8ecf725d0fc3e9020f0a73c156a10",
+      "sourceStart": 2,
+      "frames": 70,
       "fps": 24.0,
-      "width": 496,
-      "height": 496,
+      "width": 960,
+      "height": 960,
       "loop": {
-        "start": 0,
-        "period": 42,
-        "loopMeanIou": 0.97,
+        "start": 21,
+        "period": 24,
+        "loopMeanIou": 0.968,
         "closureIou": 0.978
       },
-      "approval": "carry 歩行マスター v2(2026-08-12・オーナー差し戻し対応)— v1 の真横視点・後傾・巨大髪を、Meshy Carry_Heavy_Object_Walk_inplace GLB(タスク 019fee15…・0cr 再取得)を bpy yaw45=右向き 3/4 で緑レンダー(75〜116 の 42 コマループ・タイル×3)し直して解消。boy 原本 stand セル identity × seedance 480p 4 秒(素手・直立寄り・v1 実証プロンプト+2D 様式強化)。テイク c(a=3D 様式化・b=箱焼き込みで棄却)。本 PR のオーナーマージ = 承認",
-      "registeredAt": "2026-08-12"
+      "recast": {
+        "referenceSha256": "f090cc5c69d69fcb4333c2cc03a5f0efb77ddcada3c5e060696a96000cc4ce18",
+        "identityOrder": "packages/client/src/game.package/avatar/order.json",
+        "resolution": "720p",
+        "estimatedCost": 0.36
+      },
+      "approval": "ファクトリー v2 手順 3(計画 §6-3)— 台帳 boy carry 緑参照 f090cc… × boy 原本 stand セル identity の 720p 清書再鋳造(v5)。棄却済み v2(Carry_Heavy_Object 半サイクル窓)を置換。登録は本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-15"
     },
     "walk-carry-light/boy": {
       "motion": "walk-carry-light",

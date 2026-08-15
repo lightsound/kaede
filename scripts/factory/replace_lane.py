@@ -29,6 +29,12 @@ generated on the new character's side, so cells are picked blink-aware
 
 Subcommands:
     register  trim + machine-gate + upload an approved take as a master
+    recast    factory-v2 master casting (計画 §6-3): the 3D ledger's green
+              reference × a committed sheet's stand-cell identity → wan
+              replace 720p → the same register gates. Records the
+              reference sha and the trim offset (sourceStart) into the
+              ledger row so the 3D arm-ID renders stay frame-mappable to
+              every master frame (the 3rd layer's mask correspondence).
     produce   run one order (発注書 JSON) end to end: ledger lookup →
               replace → chroma key → loop verify → blink-aware cells →
               transparent sheet + neck anchors + verdict material
@@ -39,6 +45,10 @@ Usage:
     python3 scripts/factory/replace_lane.py register \
         --motion gangnam --family boy --source <sha256|path> \
         --approval "PR #101 承認済み本番テイク" [--workdir DIR]
+    python3 scripts/factory/replace_lane.py recast \
+        --motion walk-carry --family boy --reference <sha256> \
+        --identity-order packages/client/src/game.package/avatar/order.json \
+        --approval "..." [--budget 0.6] [--workdir DIR]
     python3 scripts/factory/replace_lane.py produce <order.json> \
         [--workdir DIR] [--budget 1.0]
     python3 scripts/factory/replace_lane.py costs [--limit 20]
@@ -87,9 +97,16 @@ from factory.verdict_material import (  # noqa: E402
     scaled,
 )
 from factory.video import extract_frames, probe, trim  # noqa: E402
-from r2_originals import get_object, put_object, sha256_of  # noqa: E402
+from r2_originals import (  # noqa: E402
+    get_object,
+    put_object,
+    resolve_original,
+    sha256_of,
+    validate_order_path,
+)
 
 LEDGER_PATH = Path(__file__).resolve().parent / "master_takes.json"
+ASSET_ROOT = ROOT / "packages/client/src/game.package"
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 # Order ids are lowercase dotted slugs (run_avatar's rule): the id names the
 # order's workdir under --workdir, so a crafted id must not traverse out of
@@ -187,13 +204,26 @@ def load_ledger() -> dict:
     return json.loads(LEDGER_PATH.read_text())
 
 
-def cmd_register(args: argparse.Namespace) -> None:
-    work = args.workdir / f"register-{args.motion}-{args.family}"
-    work.mkdir(parents=True, exist_ok=True)
-    if not args.approval.strip():
+def register_take(
+    source: Path,
+    motion: str,
+    family: str,
+    approval: str,
+    work: Path,
+    *,
+    extra: dict | None = None,
+) -> dict:
+    """Trim + machine-gate + upload one approved take as the ledger master.
+
+    The row records `sourceStart` — the trimmed master's frame-0 offset in
+    the SOURCE clip — because a recast source is frame-synced 1:1 to a 3D
+    green reference (replace inherits timing), so master frame i maps to
+    reference frame (sourceStart + i): the correspondence the 3rd layer's
+    arm-ID renders are cut against (factory-v2 §2.1).
+    """
+    if not approval.strip():
         raise SystemExit("--approval must record where the owner approved this take")
     ledger = load_ledger()
-    source = resolve_input(args.source, work, "source")
     source_sha = sha256_of(source)
 
     frames = extract_frames(source, work / "frames_source")
@@ -228,7 +258,7 @@ def cmd_register(args: argparse.Namespace) -> None:
     print(f"trim: start={start} length={length} loop-mean={score:.3f}")
 
     fps = probe(source).fps
-    master = work / f"master_{args.motion}_{args.family}.mp4"
+    master = work / f"master_{motion}_{family}.mp4"
     trim(source, start, start + length - 1, fps, master)
 
     trimmed = extract_frames(master, work / "frames_master")
@@ -247,11 +277,12 @@ def cmd_register(args: argparse.Namespace) -> None:
     master_sha = put_object(master.read_bytes())
     print(f"uploaded master to R2: {master_sha}")
 
-    ledger["masters"][f"{args.motion}/{args.family}"] = {
-        "motion": args.motion,
-        "family": args.family,
+    row = {
+        "motion": motion,
+        "family": family,
         "masterSha256": master_sha,
         "sourceSha256": source_sha,
+        "sourceStart": start,
         "frames": length,
         "fps": fps,
         "width": width,
@@ -262,16 +293,114 @@ def cmd_register(args: argparse.Namespace) -> None:
             "loopMeanIou": round(tscore, 3),
             "closureIou": round(tclosure, 3),
         },
-        "approval": args.approval,
+        **(extra or {}),
+        "approval": approval,
         "registeredAt": time.strftime("%Y-%m-%d"),
     }
+    ledger["masters"][f"{motion}/{family}"] = row
     LEDGER_PATH.write_text(json.dumps(ledger, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
         ["pnpm", "exec", "biome", "format", "--write", str(LEDGER_PATH)], check=True
     )
-    print(f"registered {args.motion}/{args.family}: {length} frames, "
+    print(f"registered {motion}/{family}: {length} frames, "
           f"loop start={tstart} period={period} loop-mean={tscore:.3f} "
           f"closure={tclosure:.3f}")
+    return row
+
+
+def cmd_register(args: argparse.Namespace) -> None:
+    work = args.workdir / f"register-{args.motion}-{args.family}"
+    work.mkdir(parents=True, exist_ok=True)
+    source = resolve_input(args.source, work, "source")
+    register_take(source, args.motion, args.family, args.approval, work)
+
+
+# ------------------------------------------------------------------ recast
+
+
+def stand_identity_square(order_path: Path, dest: Path) -> Path:
+    """A committed sheet's stand cell squared ON ITS OWN GREEN — the recast
+    identity (crosschar precedent: the gangnam/girl master was cast from
+    the girl's committed stand cell). The green background is kept: the
+    replace recipe pads the identity square with the image's background
+    color, and the sheet's green IS that background."""
+    order = json.loads(order_path.read_text())
+    sheet = Image.open(
+        resolve_original(
+            order_path.parent, order["sheet"], order.get("originals", {}), ASSET_ROOT
+        )
+    ).convert("RGB")
+    grid = order["grid"]
+    index = order["poses"].index("stand")
+    w, h = sheet.size
+    col, row = index % grid["cols"], index // grid["cols"]
+    cell = sheet.crop(
+        (
+            col * w // grid["cols"],
+            row * h // grid["rows"],
+            (col + 1) * w // grid["cols"],
+            (row + 1) * h // grid["rows"],
+        )
+    )
+    side = max(cell.size)
+    canvas = Image.new("RGB", (side, side), (0, 255, 0))
+    canvas.paste(cell, ((side - cell.width) // 2, (side - cell.height) // 2))
+    canvas.save(dest)
+    return dest
+
+
+def cmd_recast(args: argparse.Namespace) -> None:
+    """Green reference × stand identity → replace → register (v2 §6-3)."""
+    work = args.workdir / f"recast-{args.motion}-{args.family}"
+    work.mkdir(parents=True, exist_ok=True)
+    if not SHA256_PATTERN.fullmatch(args.reference):
+        raise SystemExit("--reference must be the ledger reference's R2 sha256")
+    reference = fetch_r2(args.reference, work / "reference.mp4")
+    order_path = validate_order_path(args.identity_order, ASSET_ROOT)
+    print(f"identity: stand cell of {order_path}")
+    identity = stand_identity_square(order_path, work / "identity_square.png")
+
+    info = probe(reference)
+    ref_frames = extract_frames(reference, work / "frames_reference")
+    est = fal_client.estimate_cost(
+        fal_client.WAN_ANIMATE_REPLACE,
+        args.resolution,
+        len(ref_frames),
+        len(ref_frames) / info.fps,
+    )
+    jobs = fal_client.FalJobs(work, args.budget)
+    payload = {
+        "video_url": jobs.upload(reference),
+        "image_url": jobs.upload(identity),
+        "resolution": args.resolution,
+    }
+    key = f"recast-{args.motion}-{args.family}"
+    print(f"recast {key} — {len(ref_frames)} reference frames, est ${est:.3f}")
+    result = jobs.run(key, fal_client.WAN_ANIMATE_REPLACE, payload, est)
+    replace_mp4 = jobs.download(key, result["video"]["url"], dest=work / "replace-output.mp4")
+
+    out_frames = extract_frames(replace_mp4, work / "frames_replace")
+    if len(out_frames) != len(ref_frames):
+        raise SystemExit(
+            f"replace output has {len(out_frames)} frames vs reference "
+            f"{len(ref_frames)} — timing inheritance broke; the arm-mask "
+            "frame mapping is void; retake under a new key"
+        )
+    register_take(
+        replace_mp4,
+        args.motion,
+        args.family,
+        args.approval,
+        work,
+        extra={
+            "recast": {
+                "referenceSha256": args.reference,
+                "identityOrder": str(order_path.relative_to(ROOT)),
+                "resolution": args.resolution,
+                "estimatedCost": est,
+            }
+        },
+    )
 
 
 # ----------------------------------------------------------------- produce
@@ -541,6 +670,21 @@ def main() -> None:
                           help="where the owner approved this take (provenance)")
     register.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-fal-lane"))
 
+    recast = sub.add_parser(
+        "recast", help="3D green reference × stand identity → replace → register"
+    )
+    recast.add_argument("--motion", required=True)
+    recast.add_argument("--family", required=True)
+    recast.add_argument("--reference", required=True,
+                        help="R2 sha256 of the model ledger's green reference video")
+    recast.add_argument("--identity-order", type=Path, required=True,
+                        help="order.json whose committed stand cell is the identity")
+    recast.add_argument("--approval", required=True,
+                        help="where the owner approved this recast (provenance)")
+    recast.add_argument("--resolution", default=DEFAULT_RESOLUTION)
+    recast.add_argument("--budget", type=float, default=0.6)
+    recast.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-fal-lane"))
+
     produce = sub.add_parser("produce", help="run one order (発注書) end to end")
     produce.add_argument("order", type=Path)
     produce.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-fal-lane"))
@@ -553,6 +697,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "register":
         cmd_register(args)
+    elif args.command == "recast":
+        cmd_recast(args)
     elif args.command == "produce":
         cmd_produce(args)
     elif args.command == "costs":
