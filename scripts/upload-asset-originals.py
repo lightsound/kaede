@@ -56,7 +56,13 @@ def is_original(rel: str) -> bool:
 
 
 def original_inputs(order: dict) -> list[str]:
-    return [order["sheet"], *order.get("references", [])]
+    inputs = [order["sheet"], *order.get("references", [])]
+    # 3rd-layer sheets (factory v2 手順 3) carry an arm-mask companion sheet,
+    # stored and recorded exactly like the pose sheet it is registered to.
+    mask_sheet = (order.get("armLayers") or {}).get("maskSheet")
+    if mask_sheet:
+        inputs.append(mask_sheet)
+    return inputs
 
 
 def all_orders(asset_root: Path = ASSET_ROOT) -> list[Path]:

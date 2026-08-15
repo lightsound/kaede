@@ -64,6 +64,7 @@ from pathlib import Path
 
 from PIL import Image
 from factory.anchors import structure_hand_carry, structure_neck
+from factory.arm_layers import split_arm_layers
 from r2_originals import (
     reference_sha256,
     resolve_asset_path,
@@ -97,6 +98,11 @@ SPECK_FRACTION = 0.005
 HAND_SEED_RADIUS = 6
 
 PALETTE_COLORS = 5
+
+# Arm-mask dilation at the shipping scale (factory v2 手順 3 §2.1): absorbs
+# the clean-up model's overdraw past the 3D mask edge (measured ≲2px at the
+# master's 960px scale — sub-pixel here, so 2px is already generous margin).
+ARM_DILATE_PX = 2
 
 
 def key_pixel(r: int, g: int, b: int, a: int) -> tuple[int, int, int, int]:
@@ -152,18 +158,29 @@ def despeckle(cell: Image.Image) -> Image.Image:
     return cell
 
 
-def cut_cell(sheet: Image.Image, cols: int, rows: int, index: int) -> Image.Image:
-    """One grid cell trimmed to its content: content bottom == frame bottom."""
+def grid_cell(sheet: Image.Image, cols: int, rows: int, index: int) -> Image.Image:
+    """One raw grid cell of the sheet (untrimmed)."""
     w, h = sheet.size
     col, row = index % cols, index // cols
-    cell = sheet.crop((col * w // cols, row * h // rows, (col + 1) * w // cols, (row + 1) * h // rows))
+    return sheet.crop(
+        (col * w // cols, row * h // rows, (col + 1) * w // cols, (row + 1) * h // rows)
+    )
+
+
+def cut_cell(
+    sheet: Image.Image, cols: int, rows: int, index: int
+) -> tuple[Image.Image, tuple[int, int, int, int]]:
+    """One grid cell trimmed to its content (content bottom == frame bottom),
+    plus the trim box in cell coordinates — the arm-mask sheet's matching
+    cell must be cropped by exactly this box to stay pixel-registered."""
+    cell = grid_cell(sheet, cols, rows, index)
     if cell.getchannel("A").getbbox() is None:
         raise SystemExit(f"empty sheet cell {index}")
     cell = despeckle(cell)
     bbox = cell.getchannel("A").point(lambda a: 255 if a >= OPAQUE else 0).getbbox()
     if bbox is None:
         raise SystemExit(f"empty sheet cell {index}")
-    return cell.crop(bbox)
+    return cell.crop(bbox), bbox
 
 
 def opaque_row_span(frame: Image.Image, y: int) -> tuple[int, int] | None:
@@ -316,6 +333,59 @@ def cut_hand_layer(
     return layer, [hx - bbox[0], hy - bbox[1]]
 
 
+def import_arm_layers(
+    frame: Image.Image,
+    name: str,
+    index: int,
+    bbox: tuple[int, int, int, int],
+    scale: float,
+    order: dict,
+    arm_meta: dict,
+    mask_sheet: Image.Image,
+    out_dir: Path,
+    asset_root: Path,
+) -> tuple[list[int], dict]:
+    """Split one 3rd-layer pose into armless body + far/near arm layers.
+
+    The mask sheet is cell-registered to the pose sheet, so the frame's own
+    trim box + import scale (NEAREST — flat ID colors) put the mask in frame
+    pixels; split_arm_layers then partitions the frame exactly. The hand
+    anchor is the walk lane's bone-derived point (arm-layers.json, sheet-cell
+    coordinates) pushed through the same trim + scale — no measurement, no
+    skin detection. Saves {name}.png (armless body, full frame canvas so the
+    ground line and centering stay those of the drawn frame) plus the two
+    arm layers; returns (hand anchor, manifest armLayers block).
+    """
+    grid = order["grid"]
+    cell = grid_cell(mask_sheet, grid["cols"], grid["rows"], index)
+    mask = cell.crop(bbox).resize(frame.size, Image.NEAREST)
+    meta = arm_meta["poses"][name]
+    body, (far_img, far_off), (near_img, near_off) = split_arm_layers(
+        frame, mask, meta["near"], dilate_px=ARM_DILATE_PX
+    )
+    body.save(resolve_asset_path(out_dir, f"{name}.png", asset_root))
+    far_img.save(resolve_asset_path(out_dir, f"{name}-arm-far.png", asset_root))
+    near_img.save(resolve_asset_path(out_dir, f"{name}-arm-near.png", asset_root))
+    hand = [
+        round((meta["hand"][0] - bbox[0]) * scale),
+        round((meta["hand"][1] - bbox[1]) * scale),
+    ]
+    block = {
+        "far": {
+            "file": f"{name}-arm-far.png",
+            "size": [far_img.width, far_img.height],
+            "offset": far_off,
+        },
+        "near": {
+            "file": f"{name}-arm-near.png",
+            "size": [near_img.width, near_img.height],
+            "offset": near_off,
+        },
+    }
+    print(f"{name}: arm layers far {far_img.size} near {near_img.size} hand={hand}")
+    return hand, block
+
+
 def palette_of(frames: list[Image.Image]) -> list[str]:
     """The dominant opaque colors across all frames (art-lint input, §3-3)."""
     counts: Counter[tuple[int, int, int]] = Counter()
@@ -341,7 +411,8 @@ def main() -> None:
     originals = order.get("originals", {})
     sheet = chroma_key(Image.open(resolve_original(base, order["sheet"], originals, asset_root)))
     grid = order["grid"]
-    frames = [cut_cell(sheet, grid["cols"], grid["rows"], i) for i in range(len(order["poses"]))]
+    cuts = [cut_cell(sheet, grid["cols"], grid["rows"], i) for i in range(len(order["poses"]))]
+    frames = [frame for frame, _ in cuts]
 
     # One scale for every frame, derived from the stand pose's target height
     # (4x display resolution): relative pose heights must survive, so walking
@@ -352,12 +423,25 @@ def main() -> None:
         for f in frames
     ]
 
+    # 3rd-layer sheets (factory v2 手順 3): the walk lane composed an
+    # arm-mask companion sheet (cell-registered to the pose sheet) plus
+    # bone-derived anchors — the frame ships SPLIT into armless body + far
+    # arm + near arm, and the hand anchor comes from the 3D wrists, not a
+    # measurement. Mutually exclusive with the skin-heuristic handLayer era.
+    arm_cfg = order.get("armLayers")
+    arm_meta = None
+    mask_sheet = None
+    if arm_cfg:
+        arm_meta = json.loads((base / arm_cfg["meta"]).read_text())
+        mask_sheet = Image.open(
+            resolve_original(base, arm_cfg["maskSheet"], originals, asset_root)
+        ).convert("RGBA")
+
     hand_overrides = order.get("handAnchors", {})
     neck_overrides = order.get("neckAnchors", {})
     carry_sheet = bool(order.get("handLayer"))
     poses = {}
-    for name, frame in zip(order["poses"], frames):
-        frame.save(resolve_asset_path(out_dir, f"{name}.png", asset_root))
+    for index, (name, frame) in enumerate(zip(order["poses"], frames)):
         # Overrides must SHORT-CIRCUIT the detectors, not just win over
         # them: dict.get(k, default) evaluates the default eagerly, and the
         # structural detectors RAISE on poses they cannot read (a lying
@@ -366,7 +450,7 @@ def main() -> None:
         # present (harmless before ①c only because the hoodie-class
         # failures returned wrong values instead of raising).
         hand = hand_overrides.get(name)
-        if hand is None:
+        if hand is None and arm_meta is None:
             hand = list(hand_anchor(frame, carry=carry_sheet))
         neck = neck_overrides.get(name)
         if neck is None:
@@ -376,6 +460,13 @@ def main() -> None:
             "size": [frame.width, frame.height],
             "anchors": {"neck": neck, "hand": hand},
         }
+        if arm_meta is not None and mask_sheet is not None:
+            poses[name]["anchors"]["hand"], poses[name]["armLayers"] = import_arm_layers(
+                frame, name, index, cuts[index][1], scale,
+                order, arm_meta, mask_sheet, out_dir, asset_root,
+            )
+        else:
+            frame.save(resolve_asset_path(out_dir, f"{name}.png", asset_root))
         print(f"{name}.png {frame.width}x{frame.height}")
 
     manifest = {

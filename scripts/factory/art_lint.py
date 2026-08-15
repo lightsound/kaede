@@ -333,30 +333,50 @@ BOB_CONTACTS = ("walk-a", "walk-c")
 BOB_PASSINGS = ("walk-b", "walk-d")
 
 
-def check_bob_phase(nfg: dict[str, int]) -> list[str]:
-    """The head bob must follow the legs — see BOB_PP_RANGE above."""
+def check_bob_phase(
+    nfg: dict[str, int], crown: dict[str, int] | None = None
+) -> list[str]:
+    """The head bob must follow the legs — see BOB_PP_RANGE above.
+
+    Two signals of the same physical head movement: `nfg` (neck-from-ground,
+    the historical signal) and optionally `crown` (frame height = head top
+    from ground — the bob the player actually sees, since frames render
+    feet-on-ground). The neck signal under-reads when the prescribed LOW
+    paste buries the chin in the shoulder line and shifts the detected pinch
+    (the 3rd-layer carry master, 2026-08-15: crown moved the full prescribed
+    12px at the 400 working scale while the pinch moved 8 — 3px vs 6px at
+    shipping scale). A sheet passes when EITHER signal holds the pattern;
+    a frozen face or seasick bounce fails both.
+    """
     required = BOB_CONTACTS + BOB_PASSINGS
+
+    def signal_failures(values: dict[str, int]) -> list[str]:
+        contacts = max(values[p] for p in BOB_CONTACTS)
+        passings = min(values[p] for p in BOB_PASSINGS)
+        failures: list[str] = []
+        if contacts > passings - BOB_CONTRAST_MIN:
+            failures.append(
+                f"bob phase broken: contact neck heights "
+                f"{[values[p] for p in BOB_CONTACTS]} must sit ≥{BOB_CONTRAST_MIN}px "
+                f"below passing heights {[values[p] for p in BOB_PASSINGS]} — "
+                f"re-run the walk lane (prescribed bob), do not hand-edit anchors"
+            )
+        all_values = [values[p] for p in required]
+        pp = max(all_values) - min(all_values)
+        if not BOB_PP_RANGE[0] <= pp <= BOB_PP_RANGE[1]:
+            failures.append(
+                f"bob amplitude {pp}px peak-to-peak outside {BOB_PP_RANGE} — "
+                f"a frozen face (<{BOB_PP_RANGE[0]}) or a seasick bounce "
+                f"(>{BOB_PP_RANGE[1]})"
+            )
+        return failures
+
     if any(pose not in nfg for pose in required):
         return []
-    contacts = max(nfg[p] for p in BOB_CONTACTS)
-    passings = min(nfg[p] for p in BOB_PASSINGS)
-    values = [nfg[p] for p in required]
-    failures: list[str] = []
-    if contacts > passings - BOB_CONTRAST_MIN:
-        failures.append(
-            f"bob phase broken: contact neck heights "
-            f"{[nfg[p] for p in BOB_CONTACTS]} must sit ≥{BOB_CONTRAST_MIN}px "
-            f"below passing heights {[nfg[p] for p in BOB_PASSINGS]} — "
-            f"re-run the walk lane (prescribed bob), do not hand-edit anchors"
-        )
-    pp = max(values) - min(values)
-    if not BOB_PP_RANGE[0] <= pp <= BOB_PP_RANGE[1]:
-        failures.append(
-            f"bob amplitude {pp}px peak-to-peak outside {BOB_PP_RANGE} — "
-            f"a frozen face (<{BOB_PP_RANGE[0]}) or a seasick bounce "
-            f"(>{BOB_PP_RANGE[1]})"
-        )
-    return failures
+    neck_failures = signal_failures(nfg)
+    if not neck_failures or crown is None or any(p not in crown for p in required):
+        return neck_failures
+    return [] if not signal_failures(crown) else neck_failures
 
 
 # The held-item anchor must land ON drawn hand pixels: the carry v2 sheet
@@ -459,6 +479,25 @@ def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
     return failures
 
 
+def load_pose_frame(base: Path, pose: dict) -> Image.Image:
+    """The pose's full drawn frame, arm layers composited back on.
+
+    3rd-layer poses (factory v2 手順 3) ship SPLIT — armless body + far/near
+    arm with offsets — but every check here judges the art the player sees,
+    and body → far → near is an exact partition (arm_layers.split_arm_layers)
+    that reconstructs the drawn frame, so lint runs on the composite.
+    """
+    frame = Image.open(base / pose["file"]).convert("RGBA")
+    for key in ("far", "near"):
+        layer = (pose.get("armLayers") or {}).get(key)
+        if layer:
+            frame.alpha_composite(
+                Image.open(base / layer["file"]).convert("RGBA"),
+                tuple(layer["offset"]),
+            )
+    return frame
+
+
 def lint_avatar(
     manifest_path: Path,
     *,
@@ -485,18 +524,22 @@ def lint_avatar(
         )
 
     stand_path = base / stand["file"]
-    stand_frame = (
-        Image.open(stand_path).convert("RGBA") if stand_path.is_file() else None
-    )
+    stand_frame = load_pose_frame(base, stand) if stand_path.is_file() else None
     stand_neck = stand.get("anchors", {}).get("neck")
 
     loaded: dict[str, Image.Image] = {}
     for name, pose in poses.items():
         frame_path = base / pose["file"]
-        if not frame_path.is_file():
-            failures.append(f"{name}: missing file {pose['file']}")
+        layer_files = [
+            layer["file"] for layer in (pose.get("armLayers") or {}).values()
+        ]
+        missing = [
+            f for f in [pose["file"], *layer_files] if not (base / f).is_file()
+        ]
+        if missing:
+            failures.append(f"{name}: missing file {', '.join(missing)}")
             continue
-        frame = Image.open(frame_path).convert("RGBA")
+        frame = load_pose_frame(base, pose)
         loaded[name] = frame
         residue = chroma_residue_ratio(frame)
         if residue > 0.01:
@@ -550,7 +593,11 @@ def lint_avatar(
                         f"> {NECK_DIVERGENCE_PX}"
                     )
 
-        if expect_carry_hand or (name == "stand" and manifest.get("handLayer")):
+        if (
+            expect_carry_hand
+            or pose.get("armLayers")
+            or (name == "stand" and manifest.get("handLayer"))
+        ):
             recorded_hand = pose.get("anchors", {}).get("hand")
             if recorded_hand:
                 hx, hy = recorded_hand
@@ -581,7 +628,10 @@ def lint_avatar(
         for name, pose in poses.items()
         if pose.get("size") and pose.get("anchors", {}).get("neck")
     }
-    failures += check_bob_phase(nfg)
+    crown = {
+        name: pose["size"][1] for name, pose in poses.items() if pose.get("size")
+    }
+    failures += check_bob_phase(nfg, crown)
 
     if base_palette:
         sheet_palette = [_parse_hex(c) for c in manifest.get("palette", [])]
