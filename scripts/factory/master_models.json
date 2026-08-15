@@ -1,0 +1,160 @@
+{
+  "registrationRequirements": [
+    "R2 保管が正本(register が sha256 照合 — Meshy のタスクは ~3 日で削除されるため、リターゲットは保管 remesh GLB の model_url 再リグで行う)",
+    "オーナー承認済み(approval に承認の出所を記録)",
+    "骨署名ループゲート(bone_signature.py — 金型段階で真のフルサイクルを特定・運転知見 22): 相対閉包 ≤ 0.35・2 周入りクリップはループ整合 ≤ 1.0・歩行系は L−R 足の先行交代 2 回/両振幅 ≥ 0.5/半周期反相 ≥ 0.8",
+    "緑参照動画(bpy yaw45・サイクル正確なサブフレーム標本化・タイル×3)がマスター採用水準のシルエットループゲート(loop_scan ≥ 0.94/0.93)を通過し R2 保管済み"
+  ],
+  "canonicalForm": "riggedGlbSha256 = キャラの 3D 正本(同一性・ポーズの権威)。remeshGlbSha256 = 再リグ用の恒久ソース(rigging model_url 入力)。motions.*.glbSha256 = プリセットをそのリグへリターゲットしたモーション GLB。motions.*.reference = 骨署名で確定したループ窓の緑参照動画(第 2 層の清書入力)。",
+  "models": {
+    "boy": {
+      "motions": {
+        "walk": {
+          "preset": "walking(rig 無料付属・biped)",
+          "glbSha256": "e3526d81d67511ff820138c6026a30bd344b7c2cb8de02fb8304a063c315bc4f",
+          "boneLoop": {
+            "action": "Armature|walking_man|baselayer_Armature",
+            "startFrame": 0.75,
+            "cycleFrames": 25.0,
+            "relClosure": 0.0,
+            "loopMean": null,
+            "gait": {
+              "axis": "y",
+              "posSwing": 0.98,
+              "negSwing": 1.0,
+              "signFlips": 2,
+              "antiphase": 1.0
+            }
+          },
+          "reference": {
+            "sha256": "68f5542a18be188ff3080d4102b80b2bfdf990e5bf193c63defcec726d04d9a7",
+            "frames": 75,
+            "fps": 24,
+            "tiles": 3,
+            "loop": {
+              "start": 2,
+              "period": 25,
+              "loopMeanIou": 0.998,
+              "closureIou": 1.0
+            }
+          },
+          "approval": "walk/boy 2D マスター(master_takes・PR #103 マージ)の 3D モーション源 — ハイブリッド実動作検証(videoReview「massive upgrade」・factory-yield 2026-08-10)の参照そのもの。台帳登録は本 PR のオーナーマージ = 承認",
+          "registeredAt": "2026-08-14"
+        },
+        "walk-carry": {
+          "preset": "Texting_Walk_inplace(リターゲット 3cr — カタログ 680 本の両手前保持系全列挙から採用・運転知見 22)",
+          "glbSha256": "a45de985b930b7c13095426d57cdad2ceb39801541b5b21bbf8ecdb8539432b5",
+          "boneLoop": {
+            "action": "Armature|Texting_Walk_inplace|baselayer_Armature",
+            "startFrame": 14.25,
+            "cycleFrames": 24.0,
+            "relClosure": 0.206,
+            "loopMean": 0.493,
+            "gait": {
+              "axis": "y",
+              "posSwing": 0.95,
+              "negSwing": 1.0,
+              "signFlips": 2,
+              "antiphase": 1.0
+            }
+          },
+          "reference": {
+            "sha256": "f090cc5c69d69fcb4333c2cc03a5f0efb77ddcada3c5e060696a96000cc4ce18",
+            "frames": 72,
+            "fps": 24,
+            "tiles": 3,
+            "loop": {
+              "start": 1,
+              "period": 24,
+              "loopMeanIou": 0.999,
+              "closureIou": 1.0
+            }
+          },
+          "approval": "オーナー裁定 2026-08-14「heavy=両手持ち系統は存続・両手前保持は Texting_Walk_inplace が実測最良」(asset-factory carry 規約・#110 v4 サルベージ)。台帳登録は本 PR のオーナーマージ = 承認",
+          "registeredAt": "2026-08-14"
+        }
+      },
+      "family": "boy",
+      "riggedGlbSha256": "883c0535343da533e152e629663ca52a74b6b332f6bfeb631ce45ae0405f35d3",
+      "remeshGlbSha256": "9370ebc9be2ceb69e6161d1380b617d2e698315425409f779f85eea8e7debaa0",
+      "provenance": "meshy-6 remove_lighting → Remesh 300k → rig(2026-08-10 Meshy 改善ラウンド — factory-yield の行参照。walking/running はリグ無料付属。旧 Meshy タスク(019febfd…)は削除済みのため R2 が唯一の正本)",
+      "approval": "ハイブリッド→fal replace 全実測スレッドの identity 源(avatar-rig.md §6 DP-B・PR #96〜#107 のオーナーマージ済みマスター群はすべて本リグ由来)。3D 正本としての台帳登録は本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-14"
+    },
+    "girl": {
+      "motions": {
+        "walk": {
+          "preset": "walking(rig 無料付属・biped)",
+          "glbSha256": "e5bfd805506843b2bd314f3d8ceb879faeef6d98ce5db86b1eeb99883c0c5f92",
+          "boneLoop": {
+            "action": "Armature|walking_man|baselayer_Armature",
+            "startFrame": 0.75,
+            "cycleFrames": 25.0,
+            "relClosure": 0.0,
+            "loopMean": null,
+            "gait": {
+              "axis": "y",
+              "posSwing": 0.96,
+              "negSwing": 1.0,
+              "signFlips": 2,
+              "antiphase": 1.0
+            }
+          },
+          "reference": {
+            "sha256": "28430243865658220f627e6cee0116ea9857c965f651e7211220d44f05bc01e7",
+            "frames": 75,
+            "fps": 24,
+            "tiles": 3,
+            "loop": {
+              "start": 0,
+              "period": 25,
+              "loopMeanIou": 0.999,
+              "closureIou": 1.0
+            }
+          },
+          "approval": "girl リグ再利用可否の骨署名ゲート評価(factory v2 手順 2 — 閉包 0.000・2 歩確認合格で再利用成立、新規作成 43cr 不要)。台帳登録は本 PR のオーナーマージ = 承認",
+          "registeredAt": "2026-08-14"
+        },
+        "walk-carry": {
+          "preset": "Texting_Walk_inplace(R2 remesh の model_url 再リグ 5cr + リターゲット 3cr — Meshy タスク削除後の恒久経路・タスク 019fffe1…)",
+          "glbSha256": "4e7acf7a39bc9d6716d75f33348bf721190336bf14511b06637b3578a3244465",
+          "boneLoop": {
+            "action": "Armature|Texting_Walk_inplace|baselayer_Armature",
+            "startFrame": 14.0,
+            "cycleFrames": 24.25,
+            "relClosure": 0.297,
+            "loopMean": 0.907,
+            "gait": {
+              "axis": "y",
+              "posSwing": 0.96,
+              "negSwing": 1.0,
+              "signFlips": 2,
+              "antiphase": 1.0
+            }
+          },
+          "reference": {
+            "sha256": "4c828dc58c00c1a8ffb1b2f0ae0d4efa91288d60155b113ea0760eb3d1a092dc",
+            "frames": 72,
+            "fps": 24,
+            "tiles": 3,
+            "loop": {
+              "start": 0,
+              "period": 24,
+              "loopMeanIou": 1.0,
+              "closureIou": 1.0
+            }
+          },
+          "approval": "オーナー裁定 2026-08-14「heavy=両手持ち系統は存続・両手前保持は Texting_Walk_inplace が実測最良」の girl 展開(実測前例「キャラごとにリターゲット 3cr」)。台帳登録は本 PR のオーナーマージ = 承認",
+          "note": "前傾に注意(videoReview 指摘・ボーン実測 hips→head +20.7° vs boy texting +1.8°/girl 自身の walking +12.2° — girl リグのリターゲット姿勢ガチャの定量)。骨署名ゲートは合格。オーナー棄却時の代替: ① boy texting 参照 × girl stand identity の crosschar 清書(walk/girl・gangnam/girl マスターの実績経路・0cr)② 背骨 fcurve 合成で前傾補正(carry v3 の肩/肘編集前例 — 運転知見 22)",
+          "registeredAt": "2026-08-14"
+        }
+      },
+      "family": "girl",
+      "riggedGlbSha256": "8ef18c301a2fb99b5eecef456d67455e62022c9442d79d26fbeaf945f263003b",
+      "remeshGlbSha256": "8c3ae0f9784509f07ab1ba36024b9980da0fd9f0057d2ed225e3e78540ba282d",
+      "provenance": "girl A ポーズ(c433cc…)→ meshy-6 43cr 初期化(3D 化 30+remesh 5+rig 5+gangnam 3 — factory-yield 2026-08-11 網羅検証ラウンド)。walking/running はリグ無料付属。旧 Meshy タスク(019fee46…系)は削除済みのため R2 が唯一の正本",
+      "approval": "網羅検証ラウンド⑨⑩(videoReview「on-model・歩行は本番 girl walk より滑らか」・PR #98 スレッド)。再利用可否は骨署名ゲートで機械評価(walk 合格 — motions.walk 参照)。台帳登録は本 PR のオーナーマージ = 承認",
+      "registeredAt": "2026-08-14"
+    }
+  }
+}

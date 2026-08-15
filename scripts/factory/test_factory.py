@@ -16,7 +16,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import numpy as np
 
-from factory import templates
+from factory import bone_signature, templates
 from factory.anchors import structure_hand_carry, structure_neck
 from factory.blink import eye_openness_score, phase_candidates, select_cells
 from factory.loop_scan import find_loop, verify_loop
@@ -748,6 +748,88 @@ class ComposeTests(unittest.TestCase):
             if out.getpixel((x, y))[3] >= 128 and out.getpixel((x, y))[2] > 180
         )
         self.assertEqual(above_neck, 0)
+
+
+class BoneSignatureTests(unittest.TestCase):
+    """Synthetic joint-space loops for the 3D-master ledger gates. The real
+    calibration lives in bone_signature's module doc (measured GLBs); these
+    tests pin the mechanics: closure finds the fundamental, drift fails
+    loud, the loop-mean gate rejects coincidental pose matches (運転知見 17)
+    and the gait check rejects half/double windows (運転知見 22)."""
+
+    SUB = 4
+    PERIOD = 96  # 24 frames on the fine grid
+
+    def _loop_signature(self, n: int = 300) -> np.ndarray:
+        i = np.arange(n)[:, None]
+        phases = np.linspace(0, np.pi, 8)[None, :]
+        return np.sin(2 * np.pi * i / self.PERIOD + phases)
+
+    def test_finds_fundamental_cycle(self) -> None:
+        window = bone_signature.scan_fundamental(self._loop_signature(), self.SUB)
+        self.assertEqual(window.period, self.PERIOD)
+        self.assertLess(window.closure, 0.05)
+        self.assertIsNotNone(window.loop_mean)
+        self.assertLess(window.loop_mean, 0.05)
+
+    def test_drifting_clip_fails_loud(self) -> None:
+        sig = self._loop_signature()
+        sig += np.linspace(0, 40, len(sig))[:, None]
+        with self.assertRaises(SystemExit):
+            bone_signature.scan_fundamental(sig, self.SUB)
+
+    def test_coincidental_pose_match_fails_the_loop_mean_gate(self) -> None:
+        # A clean loop under a slow incommensurate envelope: one pair of
+        # samples straddles the envelope peak symmetrically, so the
+        # single-pair closure matches (≈ one full loop turn at equal
+        # amplitude) while the cycle between the two instances drifts —
+        # the girl-gangnam shape a closure-only gate would have registered
+        # (運転知見 17).
+        i = np.arange(400)[:, None]
+        phases = np.linspace(0, np.pi, 8)[None, :]
+        loop = np.sin(2 * np.pi * i / self.PERIOD + phases)
+        envelope = 1 + 0.8 * np.sin(2 * np.pi * i / 250)
+        with self.assertRaises(SystemExit) as ctx:
+            bone_signature.scan_fundamental(loop * envelope, self.SUB)
+        self.assertIn("運転知見 17", str(ctx.exception))
+
+    def _feet(self, n: int = 300) -> tuple[np.ndarray, np.ndarray]:
+        """In-place gait: constant lateral stance on x, alternating forward
+        swing on y, z quiet — the measured Meshy rig shape."""
+        i = np.arange(n)
+        swing = np.sin(2 * np.pi * i / self.PERIOD)
+        left = np.stack([np.full(n, 0.06), 0.1 * swing, 0.02 * np.cos(2 * np.pi * i / self.PERIOD)], axis=1)
+        right = np.stack([np.full(n, -0.06), -0.1 * swing, left[:, 2]], axis=1)
+        return left, right
+
+    def test_full_cycle_gait_passes(self) -> None:
+        left, right = self._feet()
+        metrics = bone_signature.gait_metrics(left, right, 10, self.PERIOD)
+        self.assertEqual(metrics.axis, 1)
+        self.assertEqual(bone_signature.check_gait(metrics), [])
+
+    def test_half_cycle_window_fails(self) -> None:
+        left, right = self._feet()
+        metrics = bone_signature.gait_metrics(left, right, 0, self.PERIOD // 2)
+        self.assertTrue(
+            any("half-cycle" in f or "one-sided" in f for f in bone_signature.check_gait(metrics))
+        )
+
+    def test_double_period_window_fails(self) -> None:
+        left, right = self._feet()
+        metrics = bone_signature.gait_metrics(left, right, 10, 2 * self.PERIOD)
+        failures = bone_signature.check_gait(metrics)
+        self.assertTrue(failures)
+        self.assertEqual(metrics.sign_flips, 4)
+
+    def test_one_sided_gait_fails(self) -> None:
+        left, right = self._feet()
+        left[:, 1] = 0.2 + 0.05 * np.sin(2 * np.pi * np.arange(len(left)) / self.PERIOD)
+        right[:, 1] = 0.0
+        metrics = bone_signature.gait_metrics(left, right, 0, self.PERIOD)
+        self.assertTrue(
+            any("one-sided" in f for f in bone_signature.check_gait(metrics))
+        )
 
 
 if __name__ == "__main__":
