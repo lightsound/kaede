@@ -57,6 +57,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from factory import fal_client  # noqa: E402
+from factory.art_lint import check_palette_drift  # noqa: E402
 from factory.compose_sheet import chroma_key_greenwear, content_bbox  # noqa: E402
 from factory.loop_scan import (  # noqa: E402
     best_loop_start,
@@ -87,19 +88,31 @@ GREEN_REFS = {
     },
 }
 V1_CARRY_TAKE = "fb6d4ef63a349d871f62933447bda9ffd6376d7d6791fc2aab044daac030800d"
-IDENTITY_SOURCE = (
-    ROOT / "packages/client/src/game.package/avatar/stand.png"
+# Identity source is the R2 ORIGINAL sheet (運転知見 32 — the shipped 192px
+# cell must never be an identity input; the original's stand cell measures
+# ~380x418). The sha comes from the committed avatar order's originals map.
+IDENTITY_SHEET_SHA256 = (
+    "6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12"
 )
+IDENTITY_SHEET_COLS = 5
+# Machine floor for identity inputs — a low-res identity uniformly degrades
+# every lane's redraw and understates the whole bench (運転知見 32 ②).
+IDENTITY_MIN_HEIGHT = 300
 REF_FPS = 24
 # Keep at least this much fal balance unspent — a lane that would dip below
 # it stops the bench instead of stranding a half-billed queue job.
 BALANCE_FLOOR = 0.20
 GAME_PREVIEW_HEIGHT = 192
 
+# 運転知見 32 ①: the prompt must NOT describe the character's appearance
+# (hair, outfit, colors) — the identity image is the only appearance
+# authority. A wrong hand-written description measurably OVERRIDES the
+# image on text-following models (seedance 2.5, 2026-08-15) and inverts
+# the identity verdict.
 STYLE = (
-    "a cute chibi anime boy with neat brown hair, big eyes, a white t-shirt, "
-    "blue-gray shorts and sneakers, soft anime style with clean outlines "
-    "(exactly the character in the reference image)"
+    "EXACTLY the character shown in the reference image — do not change "
+    "his hairstyle, face, outfit, colors or proportions. Soft chibi anime "
+    "style with clean outlines"
 )
 MOTION_TEXT = {
     "walk": "walking in place with strictly alternating legs and "
@@ -185,21 +198,51 @@ def cmd_prepare(work: Path) -> None:
         v1_carry.write_bytes(get_object(V1_CARRY_TAKE))
     manifest["v1CarrySha256"] = V1_CARRY_TAKE
 
-    # Identity: committed boy stand cell, white-composited and squared (the
-    # replace lane's squarify precedent), nearest-upscaled 4x so tiny-canvas
-    # rejections cannot skew the bench (no information is added).
-    cell = Image.open(IDENTITY_SOURCE).convert("RGBA")
+    # Identity: the stand cell cut from the R2 ORIGINAL sheet (green-backed
+    # 5-cell row), keyed, content-cropped, white-composited and squared (the
+    # replace lane's squarify precedent).
+    sheet_path = work / "identity_sheet_original.png"
+    if not sheet_path.exists():
+        sheet_path.write_bytes(get_object(IDENTITY_SHEET_SHA256))
+    sheet = Image.open(sheet_path).convert("RGBA")
+    stand_canvas = sheet.crop((0, 0, sheet.width // IDENTITY_SHEET_COLS, sheet.height))
+    cell = chroma_key_greenwear(stand_canvas)
+    cell = cell.crop(content_bbox(cell))
+    if cell.height < IDENTITY_MIN_HEIGHT:
+        raise SystemExit(
+            f"identity cell is {cell.height}px tall (< {IDENTITY_MIN_HEIGHT}) "
+            "— a shipped/downscaled cell slipped in; use the R2 original "
+            "(運転知見 32)"
+        )
+    cell.save(work / "identity_cell.png")  # keyed RGBA — the palette anchor
     side = max(cell.size)
     canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
     canvas.paste(cell, ((side - cell.width) // 2, side - cell.height), cell)
-    identity = canvas.convert("RGB").resize(
-        (side * 4, side * 4), Image.NEAREST
-    )
+    identity = canvas.convert("RGB")
     identity_path = work / "identity_square.png"
     identity.save(identity_path)
-    manifest["identity"] = {"file": identity_path.name, "size": identity.size}
+    manifest["identity"] = {
+        "file": identity_path.name,
+        "size": identity.size,
+        "sheetSha256": IDENTITY_SHEET_SHA256,
+    }
     manifest_path(work).write_text(json.dumps(manifest, indent=1) + "\n")
-    print(f"prepared inputs — identity {identity.size}, balance ${balance():.2f}")
+
+    # Input preflight (運転知見 32): the exact prompts and a zoomed identity
+    # ship as verdict material, so a prompt-vs-image contradiction is
+    # visible BEFORE any paid run and in the PR.
+    zoom = identity.resize((identity.width * 2, identity.height * 2), Image.NEAREST)
+    montage_rows([[identity.convert("RGBA"), zoom.convert("RGBA")]],
+                 work / "identity_preflight.png")
+    prompts = [f"[style]\n{STYLE}\n"]
+    for motion in GREEN_REFS:
+        prompts.append(f"[r2v/{motion}]\n{r2v_prompt(motion, '<image>', '<video>')}\n")
+        prompts.append(f"[scail/{motion}]\n"
+                       f"{SCAIL_PROMPT.format(style=STYLE, motion=MOTION_TEXT[motion])}\n")
+    prompts.append(f"[edit]\n{EDIT_PROMPT.format(style=STYLE)}\n")
+    (work / "prompt_preflight.txt").write_text("\n".join(prompts))
+    print(f"prepared inputs — identity {identity.size} (cell {cell.size}), "
+          f"preflight written, balance ${balance():.2f}")
 
 
 # -------------------------------------------------------------------- run
@@ -430,6 +473,9 @@ def analyze_clip(path: Path, motion: str, work: Path) -> dict:
     ref_period_s = GREEN_REFS[motion]["period"] / REF_FPS
     entry["refCycleSeconds"] = round(ref_period_s, 3)
     if green >= 0.90:
+        keyed_mid = chroma_key_greenwear(
+            Image.open(frame_paths[len(frame_paths) // 2])
+        )
         masks = [
             silhouette_mask(chroma_key_greenwear(Image.open(p)))
             for p in frame_paths
@@ -438,6 +484,15 @@ def analyze_clip(path: Path, motion: str, work: Path) -> dict:
         if loop:
             loop["cycleSeconds"] = round(loop["period"] / info.fps, 3)
         entry["loop"] = loop
+        # Identity fidelity is MEASURED against the actual identity cell's
+        # palette (the walk lint's calibrated drift check), never asserted
+        # from a hand-written description (運転知見 32).
+        identity_cell = work / "identity_cell.png"
+        if identity_cell.exists():
+            entry["identityPaletteDrift"] = check_palette_drift(
+                Image.open(identity_cell).convert("RGBA"),
+                keyed_mid.crop(content_bbox(keyed_mid)),
+            )
     return entry
 
 
@@ -510,6 +565,14 @@ def phase_cells(path: Path, motion: str, work: Path, n: int = 8) -> list[Image.I
 def cmd_material(work: Path) -> None:
     for motion in ("walk", "carry"):
         rows, labels = [], []
+        # Ground-truth first row: the ACTUAL identity cell, so every montage
+        # carries the real appearance next to the outputs (運転知見 32 —
+        # the identity verdict must never rest on a written description).
+        identity_cell = work / "identity_cell.png"
+        if identity_cell.exists():
+            truth = Image.open(identity_cell).convert("RGBA")
+            rows.append([scaled(truth, 320 / truth.height)])
+            labels.append("identity")
         ref = work / f"ref_{motion}_2cycles.mp4"
         entries = [("green-ref", ref)] + [
             (lane, path) for lane, m, path in bench_outputs(work) if m == motion
