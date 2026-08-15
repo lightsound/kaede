@@ -289,7 +289,7 @@ def cmd_style(spike: Spike, args: argparse.Namespace) -> None:
     style = Path(args.style_image)
     with Image.open(style) as im:
         width, height = im.size
-    key = f"{args.key}_{digest_of(style.read_bytes(), args.description)}"
+    key = f"{args.key}_{digest_of(style.read_bytes(), args.description, str(args.style_description))}"
 
     def run() -> dict:
         response = spike.submit(
@@ -318,7 +318,7 @@ def cmd_style(spike: Spike, args: argparse.Namespace) -> None:
 
 def cmd_character(spike: Spike, args: argparse.Namespace) -> None:
     reference = Path(args.reference_image)
-    key = f"{args.key}_{digest_of(reference.read_bytes(), args.description)}"
+    key = f"{args.key}_{digest_of(reference.read_bytes(), args.description, args.view)}"
 
     def run() -> dict:
         response = spike.submit(
