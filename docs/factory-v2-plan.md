@@ -252,3 +252,33 @@ R3（headless 体セル＋頭グループ — [docs/avatar-head-group.md](./avat
 並行/選択）。総コスト見込み ~$30〜70（トレーニング込み・都度上限で停止
 報告は従来どおり）。fal に Wan-Animate-2 の専用エンドポイントが出た場合は
 4b の該当部分を fal へ移すだけ（最安経路の原則は不変）。
+
+### 追補（同日 — オーナー問い「より良い案・Comfy Cloud 超え・fal 完結の上位案」への再調査）
+
+- **4b の実行経路は Comfy Cloud より [fal Serverless](https://fal.ai/docs/documentation/serverless)
+  （自前デプロイ）が上位候補**: fal は任意の Python アプリ/コンテナを
+  GPU 秒課金でデプロイできる（H100 80GB $3.99/時 ≈ $0.0011/秒・秒課金・
+  private エンドポイント・重みは fal データボリューム常駐）。ベンチは
+  1〜2 GPU 時間 ≈ **$4〜8 で Comfy Cloud のサブスク $20/月より安く**、
+  ベンダー追加もない（fal アカウント・鍵管理の枠は既存 — ただしデプロイ
+  には raw FAL_KEY の Secrets 登録がオーナー作業として要る）。
+  Wan-Animate-2 は Diffusers パイプライン（PR #14412 — **未マージ・PR
+  ブランチ install か公式推論スクリプトで代替**）＋ **fal 名義の
+  FlashPack 変換済み重み**（高速ロード形式 — fal 自身のデプロイ用の
+  お膳立てと読める）が揃っており、Distilled 変種（10 steps・CFG なし）
+  なら GPU 時間も短い。SCAIL-2 も公式推論コードで同経路に載る。
+  **hosted では不可能だった「animate/replace 系 × 自作 LoRA」の組合せも
+  自前デプロイなら開く**（4c との合流点）。Comfy Cloud の残る優位は
+  既製ワークフロー（組む手間ゼロ）のみ — fal Serverless 経路が詰まった
+  場合の保険に降格を提案
+- **4a に無課金設営の追加レーン 2 本**: ① [wan 2.7 edit-video]（fal
+  ホスト済み — 命令ベース動画編集。「replace/r2v で identity を差す」の
+  代わりに「3D 緑参照を kaede 絵柄へ描き直す」直接編集パラダイムの対照
+  実験）② **SeedVR2 動画アップスケール後段**（`fal-ai/seedvr/upscale/video`
+  — 時間一貫アップスケール。720p 上限の勝者や現行 v1 出力の
+  ディテール救済として、どの勝者にも足せる独立後段）
+- **モデル開発元の一次ホスト（Alibaba Model Studio / DashScope）も確認**:
+  wan2.2-animate-move/mix（v1）と wan2.7-r2v/videoedit は公式ホスト済み
+  だが **Animate-2 は未掲載**（2026-08-15 時点）。国際リージョンあり。
+  fal 非依存の保険として記録のみ（新規ベンダー契約になるため採用は
+  fal 経路が全滅した場合のみ）
