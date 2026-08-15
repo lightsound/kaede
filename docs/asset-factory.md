@@ -518,3 +518,17 @@ pnpm --filter @kaede/client assets:pack   # 任意・アトラス派生物の確
     そちらが identity の正（手順 3 recast の前例どおり。§4 解像度方針
     「静止画は高解像度」とも整合）。低解像度 identity は全レーンの
     描き直し精度を一様に下げ、ベンチの絶対品質も過小評価になる
+33. **r2v の identity はポーズ/視点まで出力を上書きする — 高解像度化は
+    「正準右 3/4 のまま」行うこと**（identity 解像度 A/B・オーナー承認
+    2026-08-15）: seedance 2.5 720p の同条件 A/B で、identity を原本
+    stand セル（右 3/4・400px）→ 高解像度 A ポーズ（正面・784px）に
+    替えると**顔の可愛さ・服のディテールは明確に向上する一方、出力の
+    歩行が正面向きに化けて正準右 3/4 が壊れる**（videoReview「completely
+    overrides the motion reference's spatial orientation」— 緑参照の
+    視点よりも identity のポーズが勝つ）。wan replace（v1）は視点を元
+    動画から厳密継承するためこの結合がなく、A ポーズ identity の従来
+    運用は replace 限定の作法だった。r2v 世代でディテールと視点を両取り
+    するには「右 3/4 の高解像度 identity」が必要 — 候補は ① stand 原本
+    の SeedVR2 画像アップスケール（ポーズ不変・数セント）② stand（視点）
+    ＋A ポーズ（ディテール）の 2 枚同時条件付け（seedance は複数参照
+    可）。どちらも 1 テイク $2.45 で検証可能（未実施・オーナー判定待ち）

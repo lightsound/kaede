@@ -95,6 +95,13 @@ IDENTITY_SHEET_SHA256 = (
     "6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12"
 )
 IDENTITY_SHEET_COLS = 5
+# Identity-resolution A/B (owner-approved 2026-08-15): the boy's hi-res
+# A-pose original (784x1355 — the Tripo round-3 input, an existing R2
+# asset) rides the first 720p master-minting take as the alternate
+# identity, against the 400px original stand cell.
+APOSE_SHA256 = (
+    "9c9a6917bb3479566cb0b9f88266ef58901d249e72eb21b38373ea60e5102182"
+)
 # Machine floor for identity inputs — a low-res identity uniformly degrades
 # every lane's redraw and understates the whole bench (運転知見 32 ②).
 IDENTITY_MIN_HEIGHT = 300
@@ -289,6 +296,47 @@ def lane_request(
             # Input video seconds bill too: $0.57 measured vs the 5s-output
             # nominal $0.40 (運転知見 31).
             (in_s + 5) * 0.08,
+        )
+    if lane == "seedance25-r2v-720p-apose":
+        apose_raw = work / "identity_apose.png"
+        if not apose_raw.exists():
+            apose_raw.write_bytes(get_object(APOSE_SHA256))
+        img = Image.open(apose_raw).convert("RGB")
+        if img.height < IDENTITY_MIN_HEIGHT:
+            raise SystemExit(f"A-pose is {img.height}px tall — not the hi-res original")
+        side = max(img.size)
+        canvas = Image.new("RGB", (side, side), (255, 255, 255))
+        canvas.paste(img, ((side - img.width) // 2, (side - img.height) // 2))
+        apose_path = work / "identity_apose_square.png"
+        canvas.save(apose_path)
+        return (
+            "bytedance/seedance-2.5/reference-to-video",
+            {
+                "prompt": r2v_prompt(motion, "@Image1", "@Video1"),
+                "image_urls": [jobs.upload(apose_path)],
+                "video_urls": [ref],
+                "resolution": "720p",
+                "aspect_ratio": "1:1",
+                "duration": "4",
+                "generate_audio": False,
+            },
+            1.09 * 2.25,
+        )
+    if lane == "seedance25-r2v-720p":
+        # Resolution probe on the winner candidate: token billing is
+        # pixel-proportional, so 720p ≈ 2.25x the measured 480p actual.
+        return (
+            "bytedance/seedance-2.5/reference-to-video",
+            {
+                "prompt": r2v_prompt(motion, "@Image1", "@Video1"),
+                "image_urls": [identity],
+                "video_urls": [ref],
+                "resolution": "720p",
+                "aspect_ratio": "1:1",
+                "duration": "4",
+                "generate_audio": False,
+            },
+            1.09 * 2.25,
         )
     if lane == "seedance25-r2v":
         # The nominal token formula (h*w*(in+out)*24/1024, $0.0214/1000,
