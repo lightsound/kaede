@@ -256,21 +256,28 @@ R3（headless 体セル＋頭グループ — [docs/avatar-head-group.md](./avat
 ### 追補（同日 — オーナー問い「より良い案・Comfy Cloud 超え・fal 完結の上位案」への再調査）
 
 - **4b の実行経路は Comfy Cloud より [fal Serverless](https://fal.ai/docs/documentation/serverless)
-  （自前デプロイ）が上位候補**: fal は任意の Python アプリ/コンテナを
-  GPU 秒課金でデプロイできる（H100 80GB $3.99/時 ≈ $0.0011/秒・秒課金・
-  private エンドポイント・重みは fal データボリューム常駐）。ベンチは
-  1〜2 GPU 時間 ≈ **$4〜8 で Comfy Cloud のサブスク $20/月より安く**、
-  ベンダー追加もない（fal アカウント・鍵管理の枠は既存 — ただしデプロイ
-  には raw FAL_KEY の Secrets 登録がオーナー作業として要る）。
+  （自前デプロイ）が上位候補 — ただし両製品とも Request Access 制**
+  （訂正 2026-08-15: fal Serverless は「Enterprise Feature」でダッシュ
+  ボードからのアクセス申請＋承認が必要 — 個人開発者が申請ゲートに当たる
+  事例報告あり。同日ベータの **fal Compute**（SSH 直結の専有 GPU
+  インスタンス 1x/8x H100-SXM・時間課金 $3.99/時〜スポット $1.89/時）も
+  同じくエンタープライズ表記の申請制。**「fal 内で完結」は申請が通る
+  ことが前提条件**）。通れば: 任意の Python アプリ/コンテナを GPU 秒課金
+  でデプロイでき（H100 80GB・private エンドポイント・重みは fal データ
+  ボリューム常駐）、ベンチは 1〜2 GPU 時間 ≈ **$4〜8 で Comfy Cloud の
+  サブスク $20/月より安い**（デプロイには raw FAL_KEY の Secrets 登録が
+  オーナー作業として要る）。単発ベンチだけなら Compute（SSH 箱に
+  diffusers を入れて回す）の方が app 化より軽い。
   Wan-Animate-2 は Diffusers パイプライン（PR #14412 — **未マージ・PR
   ブランチ install か公式推論スクリプトで代替**）＋ **fal 名義の
   FlashPack 変換済み重み**（高速ロード形式 — fal 自身のデプロイ用の
   お膳立てと読める）が揃っており、Distilled 変種（10 steps・CFG なし）
   なら GPU 時間も短い。SCAIL-2 も公式推論コードで同経路に載る。
   **hosted では不可能だった「animate/replace 系 × 自作 LoRA」の組合せも
-  自前デプロイなら開く**（4c との合流点）。Comfy Cloud の残る優位は
-  既製ワークフロー（組む手間ゼロ）のみ — fal Serverless 経路が詰まった
-  場合の保険に降格を提案
+  自前デプロイなら開く**（4c との合流点）。**現実的な段取り**: fal の
+  アクセス申請（オーナー作業・ダメ元）を先に出し、承認待ち/却下の間は
+  Comfy Cloud（$20/月・審査なし・API 込み・既製ワークフロー）が確実な
+  次善 — どちらが先に通っても 4b の中身（同一入力・同一ゲート）は不変
 - **4a に無課金設営の追加レーン 2 本**: ① [wan 2.7 edit-video]（fal
   ホスト済み — 命令ベース動画編集。「replace/r2v で identity を差す」の
   代わりに「3D 緑参照を kaede 絵柄へ描き直す」直接編集パラダイムの対照
