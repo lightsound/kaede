@@ -138,15 +138,29 @@ class Spike:
         self.state_path.write_text(json.dumps(self.state, indent=1))
 
     def check_budget(self) -> None:
-        if self.state["spent_usd"] >= self.budget_usd:
+        # Trial `usage` objects mix meters (animate jobs report usd while
+        # consuming generations — 運転知見 30), so the metered counters are
+        # cross-checked against the authoritative GET /balance delta and the
+        # larger figure gates the spend.
+        balance = api("GET", "/balance")
+        usd = float((balance.get("credits") or {}).get("usd") or 0.0)
+        generations = float((balance.get("subscription") or {}).get("generations") or 0.0)
+        if "balance_start" not in self.state:
+            self.state["balance_start"] = {"usd": usd, "generations": generations}
+            self.save()
+        start = self.state["balance_start"]
+        spent_usd = max(self.state["spent_usd"], start["usd"] - usd)
+        spent_generations = max(
+            self.state["spent_generations"], start["generations"] - generations
+        )
+        if spent_usd >= self.budget_usd:
             raise SystemExit(
-                f"USD budget exhausted: {self.state['spent_usd']:.4f} >= "
-                f"{self.budget_usd} — stopping"
+                f"USD budget exhausted: {spent_usd:.4f} >= {self.budget_usd} — stopping"
             )
-        if self.state["spent_generations"] >= self.budget_generations:
+        if spent_generations >= self.budget_generations:
             raise SystemExit(
                 "generation budget exhausted: "
-                f"{self.state['spent_generations']} >= {self.budget_generations} — stopping"
+                f"{spent_generations:g} >= {self.budget_generations} — stopping"
             )
 
     def meter(self, usage: dict | None) -> None:
@@ -170,12 +184,28 @@ class Spike:
         )
         return self.state[key]
 
+    def submit(self, key: str, request) -> dict:
+        """Persist a paid POST response the moment it returns, so a crash
+        during the minutes-long poll resumes the same job instead of paying
+        for a new one (the spike_meshy_rig submit pattern)."""
+        submits = self.state.setdefault("submits", {})
+        if key not in submits:
+            submits[key] = request()
+            self.save()
+            self.meter(submits[key].get("usage"))
+        return submits[key]
+
     def poll_job(self, job_id: str) -> dict:
         deadline = time.time() + POLL_TIMEOUT_SECONDS
         while True:
             data = api("GET", f"/background-jobs/{job_id}")
             status = data["status"]
             if status == "completed":
+                metered = self.state.setdefault("metered_jobs", [])
+                if job_id not in metered:
+                    metered.append(job_id)
+                    self.meter(data.get("usage"))
+                    self.save()
                 return data
             if status == "failed":
                 raise SystemExit(f"job {job_id} failed: {json.dumps(data)[:800]}")
@@ -222,7 +252,18 @@ def cmd_pixelart(spike: Spike, args: argparse.Namespace) -> None:
 
 def cmd_bitforge(spike: Spike, args: argparse.Namespace) -> None:
     style = Path(args.style_image)
-    key = f"{args.key}_{digest_of(style.read_bytes(), args.description, str(args.seed))}"
+    # Fingerprint every input that changes the billed result, so re-running
+    # the same --key with e.g. a different --style-strength never reuses a
+    # stale cache entry.
+    fingerprint = digest_of(
+        style.read_bytes(),
+        args.description,
+        str(args.seed),
+        str(args.style_strength),
+        str(args.width),
+        str(args.height),
+    )
+    key = f"{args.key}_{fingerprint}"
 
     def run() -> dict:
         payload = {
@@ -251,21 +292,22 @@ def cmd_style(spike: Spike, args: argparse.Namespace) -> None:
     key = f"{args.key}_{digest_of(style.read_bytes(), args.description)}"
 
     def run() -> dict:
-        response = api(
-            "POST",
-            "/generate-with-style-v2",
-            {
-                "style_images": [
-                    {"image": image_b64(style), "width": width, "height": height}
-                ],
-                "description": args.description,
-                "style_description": args.style_description,
-                "no_background": True,
-            },
+        response = spike.submit(
+            key,
+            lambda: api(
+                "POST",
+                "/generate-with-style-v2",
+                {
+                    "style_images": [
+                        {"image": image_b64(style), "width": width, "height": height}
+                    ],
+                    "description": args.description,
+                    "style_description": args.style_description,
+                    "no_background": True,
+                },
+            ),
         )
-        spike.meter(response.get("usage"))
         job = spike.poll_job(response["background_job_id"])
-        spike.meter(job.get("usage"))
         images = (job.get("last_response") or {}).get("images") or []
         for index, image in enumerate(images):
             save_b64(image, spike.work / f"{args.key}_{index}.png")
@@ -279,21 +321,22 @@ def cmd_character(spike: Spike, args: argparse.Namespace) -> None:
     key = f"{args.key}_{digest_of(reference.read_bytes(), args.description)}"
 
     def run() -> dict:
-        response = api(
-            "POST",
-            "/create-character-v3",
-            {
-                "description": args.description,
-                "reference_image": image_b64(reference),
-                "view": args.view,
-                "no_background": True,
-            },
+        response = spike.submit(
+            key,
+            lambda: api(
+                "POST",
+                "/create-character-v3",
+                {
+                    "description": args.description,
+                    "reference_image": image_b64(reference),
+                    "view": args.view,
+                    "no_background": True,
+                },
+            ),
         )
-        spike.meter(response.get("usage"))
         character_id = response["character_id"]
         print(f"  character {character_id}")
-        job = spike.poll_job(response["background_job_id"])
-        spike.meter(job.get("usage"))
+        spike.poll_job(response["background_job_id"])
         return {"usage": response.get("usage"), "character_id": character_id}
 
     result = spike.step(key, run)
@@ -324,20 +367,22 @@ def cmd_animate(spike: Spike, args: argparse.Namespace) -> None:
     key = f"{args.key}_{digest_of(args.character_id, args.template, ','.join(args.directions))}"
 
     def run() -> dict:
-        response = api(
-            "POST",
-            "/animate-character",
-            {
-                "character_id": args.character_id,
-                "mode": "template",
-                "template_animation_id": args.template,
-                "directions": args.directions,
-            },
+        response = spike.submit(
+            key,
+            lambda: api(
+                "POST",
+                "/animate-character",
+                {
+                    "character_id": args.character_id,
+                    "mode": "template",
+                    "template_animation_id": args.template,
+                    "directions": args.directions,
+                },
+            ),
         )
         job_ids = response.get("background_job_ids") or []
         for job_id in job_ids:
-            job = spike.poll_job(job_id)
-            spike.meter(job.get("usage"))
+            spike.poll_job(job_id)
         return {"jobs": job_ids}
 
     spike.step(key, run)
