@@ -434,24 +434,30 @@ def cmd_retarget(args: argparse.Namespace) -> None:
     )
     print(f"[rig] task {rig_id}")
     rig = jobs.poll("rigging", rig_id)["result"]
+    # Download names carry the task id: a purged-and-re-submitted rig is a
+    # NEW rig, and a cached file from its predecessor must never shadow the
+    # fresh outputs (download_url skips existing files).
     outputs: dict[str, Path] = {}
     outputs["rigged"] = download_url(
-        rig["rigged_character_glb_url"], work / f"{rig_key}_character.glb"
+        rig["rigged_character_glb_url"], work / f"{rig_key}_{rig_id[:8]}_character.glb"
     )
     basic = rig.get("basic_animations") or {}
     for name in ("walking", "running"):
         url = basic.get(f"{name}_glb_url", "")
         if url:
-            outputs[name] = download_url(url, work / f"{rig_key}_{name}.glb")
+            outputs[name] = download_url(url, work / f"{rig_key}_{rig_id[:8]}_{name}.glb")
 
-    anim_key = f"anim_{rig_key}_{args.preset}"
+    # The rig id is part of the animation's cache key: a re-submitted rig
+    # needs its own retarget — a cached animation minted against a purged
+    # rig may itself still resolve, but its outputs belong to the old rig.
+    anim_key = f"anim_{rig_key}_{rig_id[:8]}_{args.preset}"
     anim_id = jobs.submit(
         anim_key, "animations", {"rig_task_id": rig_id, "action_id": action_id}
     )
     print(f"[anim {args.preset}] task {anim_id}")
     anim = jobs.poll("animations", anim_id)["result"]
     outputs[args.preset] = download_url(
-        anim["animation_glb_url"], work / f"{anim_key}.glb"
+        anim["animation_glb_url"], work / f"{anim_key}_{anim_id[:8]}.glb"
     )
 
     print(f"credits spent this session: {jobs.state['spent']}")
