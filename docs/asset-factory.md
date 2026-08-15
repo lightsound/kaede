@@ -426,3 +426,31 @@ pnpm --filter @kaede/client assets:pack   # 任意・アトラス派生物の確
     消えたように見える**（引数名を `--span` に改名して回避）③ ディストロの
     blender パッケージは Cycles が壊れていることがある — 公式 tarball
     ビルドを使う（`BLENDER_BIN` で指定可能）
+26. **recast（3D 緑参照 × 原本 identity の replace）はコマ 1:1 同期を
+    保証し、3D 由来メタデータをそのまま清書コマへ持ち込める**（第 3 層
+    スパイク 2026-08-15）: replace はタイミングを継承する（出力コマ数 =
+    参照コマ数 — `recast` が機械強制）ため、register の `sourceStart`
+    記録だけで「マスターコマ i ↔ 参照コマ sourceStart+i ↔ ID レンダー
+    位相 (sourceStart+i) mod 周期」の対応が決定論で成立する。腕 ID
+    レンダー（参照と同カメラ・同ループ窓）はマスターに対しても位置
+    ズレ ≲2px@960px（清書の identity 再描画が 3D マスク縁を僅かに
+    超えるだけ — シルエット IoU は参照 0.97 / 清書 ~0.87）で、出荷
+    スケールの **dilate 2px＋near 優先**で完全吸収できる。層分割は
+    「厳密分割」（全画素がちょうど 1 層に属す）にする — body→far→near
+    の合成が元コマとバイト一致になり、アイテムを far と near の間に
+    差し込んでも継ぎ目リスクがゼロになる
+27. **glTF のリーフボーンの tail は importer の捏造**（同上）: 手ボーン
+    のような子なしボーンは glTF に tail 概念がなく、Blender importer が
+    向き・長さを発明する — mid/tail の投影は使わず **head だけ**を
+    投影・記録する（`bpy_render_arm_ids.py` の bones.json）。手前/奥の
+    腕判定は両手ボーン head のカメラ深度比較（`world_to_camera_view`
+    の z）で全コマ機械決定でき、解剖学の目視判定（旧 handLayerSide）を
+    置き換える
+28. **首ボブ検定は chin 埋まりで under-read する — crown 併用の 2 信号
+    ゲート**（同上）: 処方 LOW 貼りが顎を肩ラインに埋めると、幅
+    プロファイルのくびれ（neck 信号）が実移動より小さく出る（第 3 層
+    carry マスターで実測: 400 作業スケールの処方 12px 移動に対し crown
+    =コマ高は 12px・neck ピンチは 8px）。コマは接地基準でレンダーされる
+    ため **crown（コマ高）はプレイヤーが見るボブそのもの** — neck か
+    crown の**どちらか**がパターンを満たせば合格・両方凍結/暴走なら不合格
+    の 2 信号ゲートに較正（art_lint `check_bob_phase`）
