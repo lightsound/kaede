@@ -317,9 +317,11 @@ def lane_request(
 def guarded_run(
     jobs: fal_client.FalJobs, key: str, model: str, payload: dict, est: float
 ) -> dict:
-    """FalJobs.run behind the live-balance floor (skipped for cached keys)."""
+    """FalJobs.run behind the live-balance floor. Only a FRESH submission is
+    guarded: a record without a result is an already-paid job being re-polled,
+    and blocking that would strand the money already spent."""
     record = jobs.state.get("runs", {}).get(key)
-    if record is None or "result" not in record:
+    if record is None:
         remaining = balance()
         if remaining - est < BALANCE_FLOOR:
             raise SystemExit(
@@ -433,7 +435,13 @@ def bench_outputs(work: Path) -> list[tuple[str, str, Path]]:
     baseline included."""
     out = []
     for path in sorted(work.glob("*_t*.mp4")):
+        # Derived material (loop_*.mp4) and the post-stage outputs also
+        # match the take glob — only <lane>_<motion>_t<N> stems are lanes.
+        if path.stem.startswith(("seedvr_", "loop_", "loops_")):
+            continue
         lane, motion, _ = path.stem.rsplit("_", 2)
+        if motion not in GREEN_REFS:
+            continue
         out.append((lane, motion, path))
     if (work / "v1_carry_720p.mp4").exists():
         out.append(("v1-replace", "carry", work / "v1_carry_720p.mp4"))
