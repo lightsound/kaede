@@ -181,11 +181,12 @@ describe('stageOverlays', () => {
   });
   const carry = avatar('avatar.boy-basic-carry', { handLayer });
   const mug = item('item.mug');
+  const entry = { pose: 'stand', frame: frame() };
 
   it('stacks the bare item then the sheet hand cutout, grips landing on the hand anchor', () => {
     const look = { outfit: carry, body: carry, item: mug, note: undefined };
     // hand (26,64): item grip (5,12) → (21,52); hand-layer grip (14,4) → (12,60).
-    expect(stageOverlays(look, frame())).toEqual([
+    expect(stageOverlays(look, entry)).toEqual([
       { url: '/items/item.mug.png', left: 21, top: 52, width: 10 },
       { url: '/carry/hand.png', left: 12, top: 60, width: 16 },
     ]);
@@ -193,9 +194,11 @@ describe('stageOverlays', () => {
 
   it('is empty with nothing held or no hand anchor, and skips layers lacking url/grip/size', () => {
     const bare = { outfit: carry, body: carry, item: undefined, note: undefined };
-    expect(stageOverlays(bare, frame())).toEqual([]);
+    expect(stageOverlays(bare, entry)).toEqual([]);
     const held = { outfit: carry, body: carry, item: mug, note: undefined };
-    expect(stageOverlays(held, frame({ anchors: { neck: [25, 49] } }))).toEqual([]);
+    expect(
+      stageOverlays(held, { pose: 'stand', frame: frame({ anchors: { neck: [25, 49] } }) }),
+    ).toEqual([]);
     const brokenItem = {
       outfit: carry,
       body: carry,
@@ -204,8 +207,42 @@ describe('stageOverlays', () => {
     };
     brokenItem.item.frame.url = undefined;
     // The broken item drops out; the hand cutout still renders over the empty hand.
-    expect(stageOverlays(brokenItem, frame())).toEqual([
+    expect(stageOverlays(brokenItem, entry)).toEqual([
       { url: '/carry/hand.png', left: 12, top: 60, width: 16 },
+    ]);
+  });
+
+  it('a 3rd-layer pose sandwiches the item between the far and near arm cutouts', () => {
+    // The arm-mask split (factory v2 手順 3): the body frame is armless and
+    // the pose carries far/near cutouts pinned by their manifest offsets —
+    // no grip math, no handLayer.
+    const armed = {
+      pose: 'stand',
+      frame: frame(),
+      armLayers: {
+        far: frame({ file: 'stand-arm-far.png', url: '/c/far.png', size: [7, 8], offset: [6, 50] }),
+        near: frame({
+          file: 'stand-arm-near.png',
+          url: '/c/near.png',
+          size: [9, 8],
+          offset: [30, 48],
+        }),
+      },
+    };
+    const look = { outfit: carry, body: carry, item: mug, note: undefined };
+    expect(stageOverlays(look, armed)).toEqual([
+      { url: '/c/far.png', left: 6, top: 50, width: 7 },
+      { url: '/items/item.mug.png', left: 21, top: 52, width: 10 },
+      { url: '/c/near.png', left: 30, top: 48, width: 9 },
+    ]);
+    // A layer missing its offset (or PNG) drops out rather than floating.
+    const noOffset = {
+      ...armed,
+      armLayers: { ...armed.armLayers, far: frame({ url: '/c/far.png', size: [7, 8] }) },
+    };
+    expect(stageOverlays(look, noOffset).map((l) => l.url)).toEqual([
+      '/items/item.mug.png',
+      '/c/near.png',
     ]);
   });
 });

@@ -55,6 +55,14 @@ def main() -> None:
                 raise SystemExit(f"missing {src}")
             shutil.copy(src, dest / f"{pose}.png")
             count += 1
+            # 3rd-layer poses (factory v2 手順 3) ship far/near arm cutouts
+            # alongside their armless body frame — stage them too.
+            for side, layer in (meta.get("armLayers") or {}).items():
+                layer_src = _contained(base / layer["file"], ASSET_ROOT, "arm layer")
+                if not layer_src.is_file():
+                    raise SystemExit(f"missing {layer_src}")
+                shutil.copy(layer_src, dest / f"{pose}-arm-{side}.png")
+                count += 1
         hand = manifest.get("handLayer")
         if hand:
             src = _contained(base / hand["file"], ASSET_ROOT, "hand layer")

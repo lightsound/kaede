@@ -77,7 +77,7 @@ function StageFigure(props: { look: StageLook; pose: string }) {
           alt={look.body.name}
           style={{ imageRendering: 'pixelated', width: w * STAGE_SCALE, height: h * STAGE_SCALE }}
         />
-        {stageOverlays(look, resolved.frame).map((layer) => (
+        {stageOverlays(look, resolved).map((layer) => (
           <img
             key={layer.url}
             data-testid="stage-overlay"

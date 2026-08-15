@@ -20,6 +20,17 @@ export interface AvatarSheetTextures {
 }
 
 /**
+ * One arm-layer cutout of a 3rd-layer carry pose (factory v2 手順 3):
+ * `offset` is the layer's top-left in its pose frame (source pixels, 4x),
+ * so pinning it back needs no anchor math — the import line cut it from
+ * exactly there.
+ */
+export interface ArmLayerDisplay {
+  texture: Texture;
+  offset: readonly number[];
+}
+
+/**
  * A held item composited onto the avatar's hand anchor (avatar-rig.md §2 —
  * the held-item layer). All coordinates are pixels in the source frames
  * (4x display resolution, origin top-left, straight from the manifests):
@@ -38,17 +49,28 @@ export interface AvatarSheetTextures {
  * (bottom-center for resting items, the measured shaft point for long
  * ones) lands on the hand anchor — one rule for every item class, no
  * per-item baked hands (rejected: too realistic for the chibi style and
- * not generic). The `hand` layer (the sheet's own bare hand/forearm, cut
- * by the import line) renders ON TOP of the item, so the mitten reads as
- * being in front of what it carries — MapleStory's hand-over-item
- * layering, the owner's z rule.
+ * not generic).
+ *
+ * Exactly one of `arms` / `hand` is set — which layering the worn carry
+ * sheet ships:
+ * - `arms` (3rd-layer sheets, factory v2 手順 3): the pose frames are
+ *   ARMLESS bodies and both arms come as per-pose cutouts cut by the 3D
+ *   arm mask; render body → far arm → item → near arm, so the item sits
+ *   structurally between the arms with zero heuristics.
+ * - `hand` (legacy sheets): the sheet's own bare hand/forearm cutout
+ *   renders ON TOP of the whole-body frame and the item — MapleStory's
+ *   hand-over-item layering, the owner's z rule.
  */
 export interface HeldItemDisplay {
   texture: Texture;
   grip: readonly number[];
   hands: { readonly [P in keyof AvatarSheetTextures]: readonly number[] };
-  /** The carry sheet's hand overlay (manifest handLayer), drawn over the item. */
-  hand: { texture: Texture; grip: readonly number[] };
+  /** Legacy carry sheets: the hand overlay (manifest handLayer), drawn over the item. */
+  hand?: { texture: Texture; grip: readonly number[] };
+  /** 3rd-layer carry sheets: per-pose far/near arm cutouts (manifest armLayers). */
+  arms?: {
+    readonly [P in keyof AvatarSheetTextures]: { far: ArmLayerDisplay; near: ArmLayerDisplay };
+  };
 }
 
 /**
@@ -156,23 +178,76 @@ function placeHeldItem(item: Sprite, frame: Texture, hand: readonly number[]): v
   item.y = PLAYER_HALF_H - (frame.height - (handY ?? 0)) * ASSET_SCALE;
 }
 
-/** The two carried sprites, stacked item-then-hand (see createGripSprite). */
+/**
+ * The carried sprites in stacking order (see HeldItemDisplay): 3rd-layer
+ * sheets fill far/near (far → item → near), legacy sheets fill hand
+ * (item → hand). Layers absent from the display stay undefined.
+ */
 interface CarriedSprites {
+  far?: Sprite;
   item: Sprite;
-  hand: Sprite;
+  near?: Sprite;
+  hand?: Sprite;
+}
+
+/** A plain top-left-anchored sprite for an arm-layer cutout. */
+function createArmSprite(): Sprite {
+  const sprite = new Sprite();
+  sprite.scale.set(ASSET_SCALE);
+  return sprite;
 }
 
 function createCarriedSprites(held: HeldItemDisplay): CarriedSprites {
   return {
+    far: held.arms && createArmSprite(),
     item: createGripSprite(held.texture, held.grip),
-    hand: createGripSprite(held.hand.texture, held.hand.grip),
+    near: held.arms && createArmSprite(),
+    hand: held.hand && createGripSprite(held.hand.texture, held.hand.grip),
   };
 }
 
-/** Parks both carried sprites on the pose's hand anchor. */
-function placeCarried(carried: CarriedSprites, frame: Texture, hand: readonly number[]): void {
+/** The carried sprites in z-order, bottom-up — the addChild order. */
+function carriedStack(carried: CarriedSprites): Sprite[] {
+  return [carried.far, carried.item, carried.near, carried.hand].filter(
+    (sprite): sprite is Sprite => sprite !== undefined,
+  );
+}
+
+/** Swaps an arm sprite to the pose's cutout and pins it at the layer offset. */
+function placeArmLayer(sprite: Sprite, frame: Texture, layer: ArmLayerDisplay): void {
+  sprite.texture = layer.texture;
+  // A top-left-anchored sprite at the offset point: the same frame→body
+  // transform as placeHeldItem, the "grip" being the cutout's own corner.
+  placeHeldItem(sprite, frame, layer.offset);
+}
+
+/** Parks the pose's far/near arm cutouts, when the sheet ships them. */
+function placeArms(
+  carried: CarriedSprites,
+  arms: { far: ArmLayerDisplay; near: ArmLayerDisplay } | undefined,
+  frame: Texture,
+): void {
+  if (!carried.far || !carried.near || !arms) return;
+  placeArmLayer(carried.far, frame, arms.far);
+  placeArmLayer(carried.near, frame, arms.near);
+}
+
+/** Parks every carried sprite for `pose`: the item (and legacy hand) on the hand anchor, the arm layers at their cutout offsets. */
+function placeCarried(
+  carried: CarriedSprites,
+  held: HeldItemDisplay,
+  pose: keyof AvatarSheetTextures,
+  frame: Texture,
+  hand: readonly number[],
+): void {
   placeHeldItem(carried.item, frame, hand);
-  placeHeldItem(carried.hand, frame, hand);
+  if (carried.hand) placeHeldItem(carried.hand, frame, hand);
+  placeArms(carried, held.arms?.[pose], frame);
+}
+
+/** Shows/hides every carried sprite as one unit. */
+function setCarriedVisible(carried: CarriedSprites, visible: boolean): void {
+  for (const sprite of carriedStack(carried)) sprite.visible = visible;
 }
 
 /** The dance loop's frame keys in play order (100ms each — DANCE_FRAME_MS). */
@@ -236,7 +311,7 @@ export function createAvatarView(
   body.addChild(sprite);
 
   const carried = held ? createCarriedSprites(held) : undefined;
-  if (carried) body.addChild(carried.item, carried.hand);
+  if (carried) body.addChild(...carriedStack(carried));
 
   const gear = createGearSprite(body, kit?.headgear);
 
@@ -266,9 +341,10 @@ export function createAvatarView(
   /** The held item follows poses with measured hand anchors, hides elsewhere. */
   function updateCarried(pose: string, frame: Texture): void {
     if (!carried || !held) return;
-    const hands = held.hands[pose as keyof AvatarSheetTextures];
-    carried.item.visible = carried.hand.visible = hands !== undefined;
-    if (hands) placeCarried(carried, frame, hands);
+    const key = pose as keyof AvatarSheetTextures;
+    const hands = held.hands[key];
+    setCarriedVisible(carried, hands !== undefined);
+    if (hands) placeCarried(carried, held, key, frame, hands);
   }
 
   /**
