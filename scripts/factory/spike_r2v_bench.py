@@ -243,11 +243,14 @@ def lane_request(
                 "duration": 5,
                 "enable_prompt_expansion": False,
             },
-            5 * 0.08,
+            # Input video seconds bill too: $0.57 measured vs the 5s-output
+            # nominal $0.40 (運転知見 31).
+            (in_s + 5) * 0.08,
         )
     if lane == "seedance25-r2v":
-        # Token-priced: h*w*(in+out)*24/1024 tokens, $0.0214/1000, ×0.6 with
-        # video inputs. 560² overestimates a 480p square output (~35% pad).
+        # The nominal token formula (h*w*(in+out)*24/1024, $0.0214/1000,
+        # ×0.6 with video inputs ≈ $0.57) underbills ~2x: $1.09 measured
+        # per 480p 4s take with a 2s input (運転知見 31).
         return (
             "bytedance/seedance-2.5/reference-to-video",
             {
@@ -259,7 +262,7 @@ def lane_request(
                 "duration": "4",
                 "generate_audio": False,
             },
-            560 * 560 * (in_s + 4) * 24 / 1024 / 1000 * 0.0214 * 0.6,
+            1.09,
         )
     if lane == "kling-o3-r2v":
         # Kling requires element videos ≥ 3.0 s (422 measured on t2) and
@@ -346,7 +349,15 @@ def cmd_run(work: Path, args: argparse.Namespace) -> None:
 
 
 def cmd_seedvr(work: Path, args: argparse.Namespace) -> None:
-    source = work / f"{args.source.replace(':', '_')}.mp4"
+    # <lane>:<motion>[:take] — run outputs are named <lane>_<motion>_t<N>,
+    # so an omitted take defaults to t1 and a bare number gets the t prefix.
+    parts = args.source.split(":")
+    if len(parts) == 2:
+        parts.append("t1")
+    if not parts[-1].startswith("t"):
+        parts[-1] = f"t{parts[-1]}"
+    stem = "_".join(parts)
+    source = work / f"{stem}.mp4"
     if not source.exists():
         raise SystemExit(f"{source} missing — run that lane first")
     info = probe(source)
@@ -354,7 +365,7 @@ def cmd_seedvr(work: Path, args: argparse.Namespace) -> None:
         width, height = first.size
     est = width * height * info.frames * args.factor**2 / 1e6 * 0.001
     jobs = fal_client.FalJobs(work, args.budget)
-    key = f"seedvr_{args.source.replace(':', '_')}_x{args.factor}"
+    key = f"seedvr_{stem}_x{args.factor}"
     payload = {
         "video_url": jobs.upload(source),
         "upscale_mode": "factor",
@@ -439,9 +450,13 @@ def bench_outputs(work: Path) -> list[tuple[str, str, Path]]:
         # match the take glob — only <lane>_<motion>_t<N> stems are lanes.
         if path.stem.startswith(("seedvr_", "loop_", "loops_")):
             continue
-        lane, motion, _ = path.stem.rsplit("_", 2)
+        lane, motion, take = path.stem.rsplit("_", 2)
         if motion not in GREEN_REFS:
             continue
+        # Keep retakes distinct (t1 keeps the bare lane name so single-take
+        # report keys and R2 slugs stay stable).
+        if take != "t1":
+            lane = f"{lane}:{take}"
         out.append((lane, motion, path))
     if (work / "v1_carry_720p.mp4").exists():
         out.append(("v1-replace", "carry", work / "v1_carry_720p.mp4"))
