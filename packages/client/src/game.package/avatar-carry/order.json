@@ -10,29 +10,26 @@
   },
   "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
   "standHeightPx": 192,
-  "handAnchors": {
-    "stand": [52, 128],
-    "walk-a": [92, 102],
-    "walk-b": [92, 116],
-    "walk-c": [94, 106],
-    "walk-d": [94, 116]
-  },
   "references": ["../avatar/sheet-original.png"],
-  "prompt": "Carry-walk pose variant of avatar.boy-basic, v5 — the near-arm mitten spec (owner directions 2026-08-09, final round: ①the carrying arm must be the NEAR arm, its shoulder/upper arm/elbow drawn visibly in front of the torso — earlier takes bent an arm that emerged from behind the torso and read as the far arm ②the hand is a complete round MITTEN with no fingers ③the mitten renders IN FRONT of the held item — the handLayer cut below; earlier: the elbow must be bent standing and walking, items rest on the hand as bare sprites). Stage 0 (bent-mitten STAND): nano-banana-2 single-frame edits of the base stand — three takes to land the pose (take 1 put the mitten at chest height so tall items covered the face; take 2 lowered it to the waist but bent both arms forward; take 3 edited take 2's far arm back down to hang behind the torso). Final wording: 'his NEAR arm — shoulder, upper arm and elbow FULLY VISIBLE drawn in front of his torso — bent at the elbow, forearm forward and slightly downward, the hand a SIMPLE ROUND MITTEN with NO fingers in front of his WAIST; his far arm hangs straight down behind his torso; everything else identical.' Cleaned through the standard post-composition (chroma flatten, key, scale to the base stand height, base stand's head composited at the neck pinch — pose edits drift face/hair, the head composite makes them pixel-identical again). Stage 1: the clean bent-mitten stand on a 720x720 pure #00FF00 canvas (feet y=640). Stage 2: alibaba/wan-2.7-i2v ($0.50, first try obeyed): walk-in-place with BIG strides, 'his near arm stays PERFECTLY STILL exactly as in the image — bent at the elbow with the round mitten hand held in front of his waist... His far arm also stays still, hanging at his side behind his body. Only his legs move.' Committed cells: the bent-mitten stand plus video frames n60 (contact) / n68 (passing) / n75 (opposite contact) / n82 (opposite passing), each center-cropped 760px, downscaled 2x, shadowed-green flattened, base head composited at each frame's own neck anchor. handAnchors = the mitten's top-center per frame (the item rest point; the still arm keeps it within ±1px across the stride — re-measured at the MITTEN BALL's top-center (26,64) white / (23,64) red after an owner review round: the first measurement anchored mid-forearm, so items sat halfway between elbow and mitten). handLayer: true cuts the mitten+visible skin around the stand hand anchor as hand.png, rendered ON TOP of the held item (body → item → hand, the MapleStory hand-over-item layering).",
-  "handLayer": true,
+  "prompt": "Carry-walk variant of avatar.boy-basic, v6 — the 3rd-layer arm-mask recast (factory v2 手順 3, docs/factory-v2-plan.md §2.1/§6-3; replaces the v5 skin-heuristic era wholesale). Every cell is a frame of the walk-carry/boy master v5 (master_takes.json — replace_lane `recast`: the 3D ledger's boy Carry_Heavy_Object green reference f090cc… × the committed boy stand cell identity, wan-2.2 animate/replace 720p, frame-synced 1:1 so master frame i ↔ reference frame sourceStart+i). walk_lane `produce --mode extract --arm-ids`: drift-aware cycle scan picked walk cells 22/28/34/40 (period 24), the stand cell is the chosen PASSING frame (legs together = the natural idle of a walk-in-place motion) at bob 0, and every head is the committed carry stand cell's (the base boy head — the master's video-drawn head never ships). arm-masks-original.png is the bpy_render_arm_ids render (same yaw45 camera, same ledger loop window; red=left chain, blue=right chain) composed through the identical crop/scale/pad chain, and arm-layers.json carries the bone projections: near arm = the hand bone nearer the camera (left, all phases), hand anchor = the midpoint of the two wrist joints (the two-hand carry's item rest). Import splits each frame into an armless body + far/near arm layers (exact partition, dilate 2px at shipping scale) — runtime composes body → far arm → item → near arm. No handAnchors measurements, no handLayer skin flood, no handLayerSide anatomy calls.",
   "originals": {
     "../avatar/sheet-original.png": "6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12",
-    "sheet-original.png": "109b51c34afb80b91ec745554dc50078b7fdede597cae35a98e37c991d45e0bf"
+    "arm-masks-original.png": "47d34efade60c52990cf528fe041ab3425374cc28f173d5c4873264c8c6659ad",
+    "sheet-original.png": "688eaaed1ad5883433b7816af2d31fcbedaca6184476a1abfcde1e6b7e929f20"
   },
   "walkMaster": "walk-carry/boy",
-  "walkMasterSha256": "b4102f1f732e319bf1be9416ed4f8451f4bf3bf98d1a1de8338ebe189fb9de66",
+  "walkMasterSha256": "fb6d4ef63a349d871f62933447bda9ffd6376d7d6791fc2aab044daac030800d",
   "walkLane": {
     "mode": "extract",
     "cells": {
-      "walk-a": 28,
-      "walk-b": 80,
-      "walk-c": 48,
-      "walk-d": 58
+      "walk-a": 22,
+      "walk-b": 28,
+      "walk-c": 34,
+      "walk-d": 40
     }
+  },
+  "armLayers": {
+    "maskSheet": "arm-masks-original.png",
+    "meta": "arm-layers.json"
   }
 }
