@@ -129,13 +129,22 @@ MOTION_TEXT = {
 }
 
 
-def r2v_prompt(motion: str, image_ref: str, video_ref: str) -> str:
+def r2v_prompt(motion: str, image_ref: str, video_ref: str, *, side_lock: bool = False) -> str:
+    # side_lock: viewpoint language ONLY (appearance words stay banned —
+    # 運転知見 32). Counters the frontal drift a frontal identity image
+    # induces (運転知見 33).
+    side = (
+        f" STRICT right-facing 3/4 side view with EXACTLY the same camera "
+        f"angle as {video_ref} — a side-scrolling game sprite view. The "
+        "character must NEVER face or turn toward the camera."
+        if side_lock else ""
+    )
     return (
         f"{image_ref} is the character: {STYLE}. {video_ref} is the motion "
         f"reference: an untextured 3D mannequin {MOTION_TEXT[motion]}. "
         f"Recreate the video with the character from {image_ref} performing "
         "EXACTLY the same motion, pose timing and cycle rhythm as "
-        f"{video_ref}. Full body always visible, the character stays "
+        f"{video_ref}.{side} Full body always visible, the character stays "
         "centered and does not travel across the frame. Flat pure green "
         "#00FF00 chroma-key background, no shadows, no ground line, no "
         "props, static camera, no cuts, no camera motion."
@@ -314,6 +323,38 @@ def lane_request(
             {
                 "prompt": r2v_prompt(motion, "@Image1", "@Video1"),
                 "image_urls": [jobs.upload(apose_path)],
+                "video_urls": [ref],
+                "resolution": "720p",
+                "aspect_ratio": "1:1",
+                "duration": "4",
+                "generate_audio": False,
+            },
+            1.09 * 2.25,
+        )
+    if lane in ("seedance25-r2v-720p-apose-side", "seedance25-r2v-720p-dual"):
+        # 運転知見 33 の正面化対策 2 経路(オーナー指示 2026-08-15):
+        # apose-side = A ポーズ identity + 視点ロック文言のみ。
+        # dual = @Image1 A ポーズ(見た目) + @Image2 stand(視点)の 2 枚条件付け。
+        apose_path = work / "identity_apose_square.png"
+        if not apose_path.exists():
+            raise SystemExit("run the apose lane once first (prepares the square)")
+        if lane == "seedance25-r2v-720p-apose-side":
+            prompt = r2v_prompt(motion, "@Image1", "@Video1", side_lock=True)
+            images = [jobs.upload(apose_path)]
+        else:
+            upid = work / "identity_upscaled_square.png"
+            prompt = (
+                f"@Image1 defines the character. @Image2 shows the SAME "
+                f"character from the correct right-facing 3/4 camera angle "
+                f"— match this viewpoint EXACTLY. "
+                + r2v_prompt(motion, "@Image1", "@Video1", side_lock=True)
+            )
+            images = [jobs.upload(apose_path), jobs.upload(upid)]
+        return (
+            "bytedance/seedance-2.5/reference-to-video",
+            {
+                "prompt": prompt,
+                "image_urls": images,
                 "video_urls": [ref],
                 "resolution": "720p",
                 "aspect_ratio": "1:1",
