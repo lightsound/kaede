@@ -88,6 +88,13 @@ GREEN_REFS = {
     },
 }
 V1_CARRY_TAKE = "fb6d4ef63a349d871f62933447bda9ffd6376d7d6791fc2aab044daac030800d"
+# Head-raised carry reference (Head X-20 via bpy_pose_offset — the adopted
+# carry master's motion source, ledger boy/walk-carry as of 2026-08-16).
+HEADUP_REF = {
+    "sha256": "155a7af828a34835d33069d112e59093fc16c1a220f2a0699e46862daeaf84f6",
+    "loopStart": 5,
+    "period": 24,
+}
 # Identity source is the R2 ORIGINAL sheet (運転知見 32 — the shipped 192px
 # cell must never be an identity input; the original's stand cell measures
 # ~380x418). The sha comes from the committed avatar order's originals map.
@@ -213,6 +220,18 @@ def cmd_prepare(work: Path) -> None:
     if not v1_carry.exists():
         v1_carry.write_bytes(get_object(V1_CARRY_TAKE))
     manifest["v1CarrySha256"] = V1_CARRY_TAKE
+
+    # The adopted carry master's motion source (head-raised re-render) —
+    # trimmed the same two-cycle way so the headup lane is CLI-reachable.
+    headup_raw = work / "ref_carry_headup.mp4"
+    if not headup_raw.exists():
+        headup_raw.write_bytes(get_object(HEADUP_REF["sha256"]))
+    headup_trim = work / "ref_carry_headup_2cycles.mp4"
+    if not headup_trim.exists():
+        start = HEADUP_REF["loopStart"]
+        trim(headup_raw, start, start + 2 * HEADUP_REF["period"] - 1,
+             probe(headup_raw).fps, headup_trim)
+    manifest["headupRef"] = {**HEADUP_REF, "trim": headup_trim.name}
 
     # Identity: the stand cell cut from the R2 ORIGINAL sheet (green-backed
     # 5-cell row), keyed, content-cropped, white-composited and squared (the
@@ -524,6 +543,34 @@ def cmd_run(work: Path, args: argparse.Namespace) -> None:
     print(f"[{key}] done in {time.time() - t0:.0f}s wall — "
           f"spent est ${jobs.state['spent_estimated']:.2f}/{args.budget:.2f}, "
           f"balance ${balance():.2f}")
+
+
+def cmd_upscale_identity(work: Path, args: argparse.Namespace) -> None:
+    """SeedVR2 IMAGE 4x on the squared identity — the adopted walk master's
+    identity preprocessing (運転知見 33: 右 3/4 のまま高解像度化)."""
+    source = work / "identity_square.png"
+    if not source.exists():
+        raise SystemExit("identity_square.png missing — run `prepare` first")
+    jobs = fal_client.FalJobs(work, args.budget)
+    with Image.open(source) as img:
+        est = img.width * img.height * args.factor**2 / 1e6 * 0.001
+    result = guarded_run(
+        jobs, f"upid_upscale_x{args.factor}", "fal-ai/seedvr/upscale/image",
+        {
+            "image_url": jobs.upload(source),
+            "upscale_mode": "factor",
+            "upscale_factor": args.factor,
+        },
+        max(est, 0.01),
+    )
+    import requests as _requests
+
+    response = _requests.get(result["image"]["url"], timeout=300)
+    response.raise_for_status()
+    dest = work / "identity_upscaled_square.png"
+    dest.write_bytes(response.content)
+    with Image.open(dest) as up:
+        print(f"wrote {dest} ({up.size[0]}x{up.size[1]})")
 
 
 def cmd_seedvr(work: Path, args: argparse.Namespace) -> None:
@@ -844,6 +891,9 @@ def main() -> None:
     seedvr.add_argument("--source", required=True, help="<lane>:<motion>[:tN]")
     seedvr.add_argument("--factor", type=int, default=2)
     seedvr.add_argument("--budget", type=float, default=4.0)
+    upscale = sub.add_parser("upscale-identity")
+    upscale.add_argument("--factor", type=int, default=4)
+    upscale.add_argument("--budget", type=float, default=4.0)
     sub.add_parser("analyze")
     sub.add_parser("material")
     sub.add_parser("upload")
@@ -858,6 +908,8 @@ def main() -> None:
         cmd_run(args.workdir, args)
     elif args.command == "seedvr":
         cmd_seedvr(args.workdir, args)
+    elif args.command == "upscale-identity":
+        cmd_upscale_identity(args.workdir, args)
     elif args.command == "analyze":
         cmd_analyze(args.workdir)
     elif args.command == "material":

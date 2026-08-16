@@ -433,20 +433,26 @@ ea621ba6…）と walk-carry/boy（68f・0.977/0.986・6a8bd7bc…）を seedanc
 新マスターからのシート再鋳造（全 10 シートの walk セル再抽出＋オーナー
 検品）は次ステップの仕事。
 
+**受容済みの猶予（記録）**: マスターテイク台帳の差し替えにより、committed
+の 2 発注書（avatar/order.json の walkMasterSha256 = 旧 672dc6…・
+avatar-carry/order.json = 旧 b4102f1f…）が台帳と一時的に乖離する。これは
+再鋳造前の意図した猶予窓で、次ステップの再鋳造（walk_lane が台帳 sha を
+発注書へ書き戻す）で解消する — それまで両発注書の再取り込みは行わない。
+
 **残タスク（次ステップ以降）**:
 
 1. **新マスターからのシート再鋳造**（walk レーン extract — モデル呼び出し
-   ゼロ・無課金。girl 系は girl マスターの同方式再鋳造の要否をまず判定)。
-2. **4b（fal Compute 経由 Wan-Animate-2）**: オーナーのインスタンス作成
+   ゼロ・無課金。girl 系は girl マスターの同方式再鋳造の要否をまず判定。
+   上記の発注書 sha 乖離もここで解消）。
+2. **God Mode AI ベンチ**（オーナー承認 2026-08-16 — 別チャットで実施）:
+   1 枚絵 → AI パーツ分解 → 自動リグ → テンプレ ~400 本リターゲット →
+   Spine 出力の専業 SaaS（DP-4 の市場実証として記録済み・生産ツール
+   としては未評価）。ゲートは一点 — **変形ベースの歩きが現行の動画清書
+   マスターよりかわいいか**（変形は新しい絵を生まない系統 = v1 回転
+   リグ・Blender ベイク・3D 素レンダーで 3 回負けた弱点が、専業の自動化で
+   覆るか）。手順 5（PixelLab）と同型の即断ベンチ・数ドル規模。
+3. **4b（fal Compute 経由 Wan-Animate-2）**: オーナーのインスタンス作成
    （1x H100・SSH 鍵・Secrets 登録）待ち。SCAIL-2 hosted の pose/
    replacement 追試（各 ~$0.4）が安い先行選択肢。
-3. **4c（LoRA）**: H3 脱落により保留。wan 系 LoRA は 4b と合流。flux-2
+4. **4c（LoRA）**: H3 脱落により保留。wan 系 LoRA は 4b と合流。flux-2
    静止画 LoRA は独立着手可能。
-2. **4b（fal Compute 経由 Wan-Animate-2）**: fal ホストは依然なし・
-   SCAIL-2 hosted は不合格のため、Wan-Animate-2 本体の検証価値は残る。
-   実施はオーナーのインスタンス作成（1x H100・SSH 鍵・Secrets 登録）
-   待ち。SCAIL-2 は hosted の pose 駆動/replacement モード追試（各 $0.4）
-   を先に安く済ませる選択肢もある。
-3. **4c（LoRA）**: H3 が脱落したため H3 ref2va LoRA は保留。seedance
-   2.5 に LoRA トレーナーはなく、wan 系 LoRA は Compute 経路（4b）と
-   合流。静止画側の flux-2 LoRA は独立に着手可能。
