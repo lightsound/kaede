@@ -410,9 +410,13 @@ def refine_gait_period(frame_paths: list[Path], loop: dict) -> dict:
     walk_t1: P=6 diff 8.96 vs 2P=12 diff 5.63)."""
     start, period = loop["start"], loop["period"]
     gait = period
-    if start + 2 * period < len(frame_paths):
-        at_p = rgb_wrap_difference(frame_paths, start, period)
-        at_2p = rgb_wrap_difference(frame_paths, start, 2 * period)
+    # best_loop_start legitimately returns start == len - 2 * period, which
+    # puts the 2P wrap one frame past the clip; anchor the comparison earlier
+    # so the check always fits (measure_loop guarantees len >= 2P + 1).
+    anchor = min(start, len(frame_paths) - 1 - 2 * period)
+    if anchor >= 0:
+        at_p = rgb_wrap_difference(frame_paths, anchor, period)
+        at_2p = rgb_wrap_difference(frame_paths, anchor, 2 * period)
         if at_2p < at_p * 0.8:
             gait = 2 * period
     return {**loop, "gaitPeriod": gait}
