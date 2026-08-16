@@ -363,6 +363,29 @@ def lane_request(
             },
             1.09 * 2.25,
         )
+    if lane == "seedance25-r2v-headup":
+        # Head-raised carry remake (owner order 2026-08-16): the Texting_Walk
+        # motion GLB with Head X-20 composed in (bpy_pose_offset.py), re-cast
+        # at the owner-chosen cheap tier (480p) with the upscaled stand
+        # identity (the adopted walk recipe's identity).
+        headup_ref = work / "ref_carry_headup_2cycles.mp4"
+        upid = work / "identity_upscaled_square.png"
+        for path in (headup_ref, upid):
+            if not path.exists():
+                raise SystemExit(f"{path.name} missing — prepare it first")
+        return (
+            "bytedance/seedance-2.5/reference-to-video",
+            {
+                "prompt": r2v_prompt(motion, "@Image1", "@Video1"),
+                "image_urls": [jobs.upload(upid)],
+                "video_urls": [jobs.upload(headup_ref)],
+                "resolution": "480p",
+                "aspect_ratio": "1:1",
+                "duration": "4",
+                "generate_audio": False,
+            },
+            1.09,
+        )
     if lane == "seedance25-r2v-720p-upid":
         # Both-worlds lever ① (運転知見 33): the stand identity upscaled 4x
         # by SeedVR2 image (pose unchanged — right-3/4 is preserved by
