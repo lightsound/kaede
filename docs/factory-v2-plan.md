@@ -451,6 +451,17 @@ avatar-carry/order.json = 旧 b4102f1f…）が台帳と一時的に乖離する
    マスターよりかわいいか**（変形は新しい絵を生まない系統 = v1 回転
    リグ・Blender ベイク・3D 素レンダーで 3 回負けた弱点が、専業の自動化で
    覆るか）。手順 5（PixelLab）と同型の即断ベンチ・数ドル規模。
+   **実施済（2026-08-16 — オーナー判定待ち）**: ①**Spine レーン
+   （リグ化→Spine zip = ゲート本命の変形出力）は API 非公開で停止** —
+   `/api/spine-pipeline/*` は Web セッション専用・gmd_ トークン 401
+   （運転知見 35。評価継続はオーナーのブラウザ実行が前提）②スプライト
+   レーンは walk 2 テイク＋carry プローブを 6cr で完走: パレット保持・
+   輪郭ブレゼロ（変形系の強み）だが様式は一次再描画（太輪郭・つや髪）、
+   ループ機械値 0.889〜0.94 はマスター 0.988 に未達、**carry 相当は
+   カタログ不在＋positive_prompt 無視で不成立**。videoReview（実物
+   identity 添付）はかわいさで God Mode > マスターと採点したが最終判定は
+   オーナー目視（運転知見 14）。実測・R2 ハッシュは factory-yield.md の
+   2026-08-16 行、再現は `spike_godmode.py`。
 3. **4b（fal Compute 経由 Wan-Animate-2）**: オーナーのインスタンス作成
    （1x H100・SSH 鍵・Secrets 登録）待ち。SCAIL-2 hosted の pose/
    replacement 追試（各 ~$0.4）が安い先行選択肢。
