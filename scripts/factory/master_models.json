@@ -42,14 +42,14 @@
           "registeredAt": "2026-08-14"
         },
         "walk-carry": {
-          "preset": "Texting_Walk_inplace(リターゲット 3cr — カタログ 680 本の両手前保持系全列挙から採用・運転知見 22)",
-          "glbSha256": "a45de985b930b7c13095426d57cdad2ceb39801541b5b21bbf8ecdb8539432b5",
+          "preset": "Texting_Walk_inplace + Head X-20° 頭起こし補正(bpy_pose_offset — スマホ視線の解消・オーナー指示 2026-08-16。元 GLB a45de985…)",
+          "glbSha256": "e9c3623e05d98e0d4309c74c50b17d08fb0934fa8d7724ac127298a512a6dc49",
           "boneLoop": {
             "action": "Armature|Texting_Walk_inplace|baselayer_Armature",
-            "startFrame": 14.25,
+            "startFrame": 14.0,
             "cycleFrames": 24.0,
-            "relClosure": 0.206,
-            "loopMean": 0.493,
+            "relClosure": 0.214,
+            "loopMean": 0.502,
             "gait": {
               "axis": "y",
               "posSwing": 0.95,
@@ -59,19 +59,19 @@
             }
           },
           "reference": {
-            "sha256": "f090cc5c69d69fcb4333c2cc03a5f0efb77ddcada3c5e060696a96000cc4ce18",
+            "sha256": "155a7af828a34835d33069d112e59093fc16c1a220f2a0699e46862daeaf84f6",
             "frames": 72,
             "fps": 24,
             "tiles": 3,
             "loop": {
-              "start": 1,
+              "start": 5,
               "period": 24,
               "loopMeanIou": 0.999,
               "closureIou": 1.0
             }
           },
-          "approval": "オーナー裁定 2026-08-14「heavy=両手持ち系統は存続・両手前保持は Texting_Walk_inplace が実測最良」(asset-factory carry 規約・#110 v4 サルベージ)。台帳登録は本 PR のオーナーマージ = 承認",
-          "registeredAt": "2026-08-14"
+          "approval": "オーナー判定 2026-08-16「carry【2】は合格で OK」(PR #119 スレッド — 手順 4a 頭起こし補正版)",
+          "registeredAt": "2026-08-16"
         }
       },
       "family": "boy",
