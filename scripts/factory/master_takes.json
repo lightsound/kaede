@@ -27,20 +27,20 @@
     "walk/boy": {
       "motion": "walk",
       "family": "boy",
-      "masterSha256": "672dc63cf6ffc3fc263f9f1724e089f48bb6d37dc41aee44e9651e80923fc956",
-      "sourceSha256": "d83d580bd1932de01438f9f179ebef7d8fd9752754f1fded51b07a429f20efd8",
-      "frames": 62,
+      "masterSha256": "ea621ba6fa7b1a3d9cc4b62737352d179628b8c7f64c861ea1f96a3a89488725",
+      "sourceSha256": "6149715fd35785e44f16ac1f9b18753dc10116551b0c8c48cf731dd3711cbac0",
+      "frames": 71,
       "fps": 24.0,
-      "width": 640,
-      "height": 640,
+      "width": 960,
+      "height": 960,
       "loop": {
         "start": 0,
         "period": 24,
-        "loopMeanIou": 0.986,
-        "closureIou": 0.988
+        "loopMeanIou": 0.988,
+        "closureIou": 0.99
       },
-      "approval": "ハイブリッド実動作検証 walk 承認テイク(videoReview「massive upgrade」・factory-yield 2026-08-10)— PR #101 replace 元動画",
-      "registeredAt": "2026-08-11"
+      "approval": "手順 4a オーナー裁定 2026-08-16「そしたら【4】で良いです」= seedance 2.5 720p × 立ちセル SeedVR2 4x identity テイクを walk マスターに採用(PR #119 判定シート hantei4_walk【4】)",
+      "registeredAt": "2026-08-16"
     },
     "walk/girl": {
       "motion": "walk",
@@ -81,20 +81,20 @@
     "walk-carry/boy": {
       "motion": "walk-carry",
       "family": "boy",
-      "masterSha256": "b4102f1f732e319bf1be9416ed4f8451f4bf3bf98d1a1de8338ebe189fb9de66",
-      "sourceSha256": "83ab5d1518f9883e0581dc84e6a3be1b5ecc20d919fcce78972f18b74fc568e0",
-      "frames": 97,
+      "masterSha256": "6a8bd7bc7e1f54532a3cf92cb22e9f9c77fe6013d03188aabfd563e5e5751e2c",
+      "sourceSha256": "4e6785869f421031aa587ba50116ef6e943541b2bea7cea1608f950e7149dd32",
+      "frames": 68,
       "fps": 24.0,
-      "width": 496,
-      "height": 496,
+      "width": 640,
+      "height": 640,
       "loop": {
         "start": 0,
-        "period": 42,
-        "loopMeanIou": 0.97,
-        "closureIou": 0.978
+        "period": 24,
+        "loopMeanIou": 0.977,
+        "closureIou": 0.986
       },
-      "approval": "carry 歩行マスター v2(2026-08-12・オーナー差し戻し対応)— v1 の真横視点・後傾・巨大髪を、Meshy Carry_Heavy_Object_Walk_inplace GLB(タスク 019fee15…・0cr 再取得)を bpy yaw45=右向き 3/4 で緑レンダー(75〜116 の 42 コマループ・タイル×3)し直して解消。boy 原本 stand セル identity × seedance 480p 4 秒(素手・直立寄り・v1 実証プロンプト+2D 様式強化)。テイク c(a=3D 様式化・b=箱焼き込みで棄却)。本 PR のオーナーマージ = 承認",
-      "registeredAt": "2026-08-12"
+      "approval": "手順 4a オーナー判定 2026-08-16「carry【2】は合格で OK」= 頭起こし補正モーション(e9c3623e…)の緑参照 × seedance 2.5 480p × 立ちセル SeedVR2 4x identity テイクを walk-carry マスターに採用(PR #119 判定シート hantei5_carry【2】)",
+      "registeredAt": "2026-08-16"
     },
     "walk-carry-light/boy": {
       "motion": "walk-carry-light",
