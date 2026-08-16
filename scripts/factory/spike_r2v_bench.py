@@ -646,6 +646,71 @@ def cmd_analyze(work: Path) -> None:
 
 # --------------------------------------------------------------- material
 
+# Judgment-sheet rendering (運転知見 34): every row carries its recipe and
+# measured cost burned into the image, the ground-truth identity is row 1,
+# and no text may be cut off — the header band wraps to as many lines as
+# the caller's text needs at the sheet's width.
+JUDGMENT_FONT = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"
+
+
+def wrap_text(draw, text: str, font, max_width: int) -> list[str]:
+    lines, current = [], ""
+    for token in text.split(" "):
+        candidate = f"{current} {token}".strip()
+        if current and draw.textlength(candidate, font=font) > max_width:
+            lines.append(current)
+            current = token
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines
+
+
+def judgment_sheet(
+    rows: list[tuple[str, str, list[Image.Image]]], out_path: Path,
+    *, cell_height: int = 300,
+) -> None:
+    from PIL import ImageDraw, ImageFont
+
+    font = ImageFont.truetype(JUDGMENT_FONT, 30)
+    font_s = ImageFont.truetype(JUDGMENT_FONT, 23)
+    pad = 16
+    prepared = [
+        (title, recipe, [scaled(c, cell_height / max(x.height for x in cells)) for c in cells])
+        for title, recipe, cells in rows
+    ]
+    width = max(
+        sum(c.width for c in cs) + pad * (len(cs) + 1) for _, _, cs in prepared
+    )
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    # Titles never wrap — widen the sheet to fit the longest one instead.
+    width = max(width, max(
+        int(probe.textlength(t, font=font)) + 2 * pad for t, _, _ in prepared
+    ))
+    banded = []
+    for title, recipe, cells in prepared:
+        lines = wrap_text(probe, recipe, font_s, width - 2 * pad) if recipe else []
+        band_h = 44 + 30 * len(lines)
+        banded.append((title, lines, band_h, cells))
+    total_h = pad + sum(band_h + cell_height + pad for _, _, band_h, _ in banded)
+    canvas = Image.new("RGB", (width, total_h), (250, 250, 252))
+    draw = ImageDraw.Draw(canvas)
+    y = pad
+    for title, lines, band_h, cells in banded:
+        draw.rectangle([0, y, width, y + band_h - 6], fill=(38, 44, 66))
+        draw.text((pad, y + 4), title, font=font, fill=(255, 255, 255))
+        for i, line in enumerate(lines):
+            draw.text((pad, y + 42 + 30 * i), line, font=font_s, fill=(170, 200, 255))
+        x = pad
+        for c in cells:
+            canvas.paste(c, (x, y + band_h + (cell_height - c.height)), c)
+            x += c.width + pad
+        y += band_h + cell_height + pad
+    canvas.save(out_path)
+    print(f"wrote {out_path}")
+
+
 
 def phase_cells(path: Path, motion: str, work: Path, n: int = 8) -> list[Image.Image]:
     """n cells sampled over one measured (or expected) cycle, keyed when the
