@@ -1,4 +1,4 @@
-import { type Facing, INTERP_DELAY_MS } from '@kaede/shared';
+import { type Facing, GRAVITY, INTERP_DELAY_MS, MAX_FALL_SPEED } from '@kaede/shared';
 import { describe, expect, it } from 'vitest';
 import {
   createRemoteViews,
@@ -8,9 +8,21 @@ import {
 
 const facing: Facing = 1;
 
-/** A snapshot on the server timeline with sensible defaults. */
-function snap(t: number, x: number, over: Partial<{ y: number; vx: number; vy: number }> = {}) {
-  return { t, x, y: over.y ?? 0, vx: over.vx ?? 0, vy: over.vy ?? 0, facing };
+/** A snapshot on the server timeline with sensible defaults (grounded, at rest). */
+function snap(
+  t: number,
+  x: number,
+  over: Partial<{ y: number; vx: number; vy: number; airborne: boolean }> = {},
+) {
+  return {
+    t,
+    x,
+    y: over.y ?? 0,
+    vx: over.vx ?? 0,
+    vy: over.vy ?? 0,
+    facing,
+    airborne: over.airborne ?? false,
+  };
 }
 
 describe('sampleAt', () => {
@@ -45,12 +57,36 @@ describe('sampleAt', () => {
     const buf = [snap(1100, 20)];
     expect(sampleAt(buf, 9999).x).toBe(20);
   });
+
+  it('extrapolates an airborne sample under gravity, not in a straight line', () => {
+    // Rising at -840px/s: 200ms of gravity bends the path well below the
+    // straight-line continuation (the "floating remote player" bug).
+    const buf = [snap(1100, 20, { y: 0, vy: -840, airborne: true })];
+    const s = sampleAt(buf, 1300);
+    expect(s.y).toBeCloseTo(-840 * 0.2 + (GRAVITY * 0.2 * 0.2) / 2, 10);
+    expect(s.y).toBeGreaterThan(-840 * 0.2); // higher y = lower on screen
+  });
+
+  it('extrapolates an airborne fall at terminal velocity without further acceleration', () => {
+    // stepPlayer clamps vy at MAX_FALL_SPEED, so a terminal-velocity sample
+    // must keep falling linearly — no gravity on top of the clamp.
+    const buf = [snap(1100, 20, { y: 0, vy: MAX_FALL_SPEED, airborne: true })];
+    expect(sampleAt(buf, 1300).y).toBeCloseTo(MAX_FALL_SPEED * 0.2, 10);
+  });
+
+  it('does not pull a grounded sample down when extrapolating', () => {
+    // Grounded rows carry vy = 0; gravity would sink them through the floor.
+    const buf = [snap(1100, 20, { y: 50, vx: 100 })];
+    const s = sampleAt(buf, 1300);
+    expect(s.y).toBe(50);
+    expect(s.x).toBeCloseTo(40, 10);
+  });
 });
 
 describe('createRemoteViews', () => {
   /** Row shape record() expects, built from a server-time position sample. */
   function row(updatedAtMs: number, x: number, vx = 0) {
-    return { x, y: 0, vx, vy: 0, facing: 1, updatedAtMs };
+    return { x, y: 0, vx, vy: 0, facing: 1, onGround: true, rope: -1, updatedAtMs };
   }
 
   /** The display attributes record() expects; everything but the name defaults to "none". */
@@ -95,6 +131,14 @@ describe('createRemoteViews', () => {
     const drawn = render(views, 1240);
     expect(drawn).toHaveLength(1);
     expect(drawn[0].x).toBeCloseTo((1200 - INTERP_DELAY_MS) / 10, 5);
+  });
+
+  it('derives airborne from the row (onGround/rope), so run-dry extrapolation falls', () => {
+    const views = createRemoteViews();
+    views.record('a', label('A'), { ...row(0, 0), onGround: false, vy: -840 }, 40);
+    // Local 640 maps to server 600; renderTime sits 50ms past the only snapshot.
+    const drawn = render(views, 640);
+    expect(drawn[0].y).toBeCloseTo(-840 * 0.05 + (GRAVITY * 0.05 * 0.05) / 2, 8);
   });
 
   it('is immune to delivery jitter of individual updates', () => {

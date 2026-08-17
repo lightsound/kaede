@@ -1,5 +1,11 @@
+import { GRAVITY, INPUT_FLUSH_INTERVAL_MS } from '@kaede/shared';
 import { describe, expect, it } from 'vitest';
-import { correctionOffset, decayOffset, hermite } from '../src/smoothing.package/smoothing';
+import {
+  correctionOffset,
+  decayOffset,
+  HERMITE_MAX_SEGMENT_MS,
+  hermite,
+} from '../src/smoothing.package/smoothing';
 
 describe('correctionOffset', () => {
   it('carries the render error after a small correction', () => {
@@ -44,5 +50,32 @@ describe('hermite', () => {
     const far = { t: 1000, x: 10, y: 0, vx: -10_000, vy: 0 };
     // With hermite tangents this would swing wildly; linear gives the midpoint.
     expect(hermite(a, far, 500)).toEqual({ x: 5, y: 0 });
+  });
+
+  it('covers a full input-flush segment, so per-batch snapshots interpolate curved', () => {
+    // Remote snapshots arrive one per flush; a cap below the flush interval
+    // would make hermite dead code and render jump arcs as straight lines.
+    expect(HERMITE_MAX_SEGMENT_MS).toBeGreaterThan(INPUT_FLUSH_INTERVAL_MS);
+  });
+
+  it('reconstructs a gravity arc exactly from one flush-length segment', () => {
+    // A jump sampled only at flush boundaries: both endpoints carry the
+    // authoritative position and velocity of the same parabola, and the cubic
+    // through them IS that parabola — so the remote arc renders curved even
+    // at one snapshot per flush.
+    const dtS = INPUT_FLUSH_INTERVAL_MS / 1000;
+    const vy0 = -840;
+    const arcY = (t: number) => vy0 * t + (GRAVITY * t * t) / 2;
+    const start = { t: 0, x: 0, y: 0, vx: 240, vy: vy0 };
+    const end = {
+      t: INPUT_FLUSH_INTERVAL_MS,
+      x: 240 * dtS,
+      y: arcY(dtS),
+      vx: 240,
+      vy: vy0 + GRAVITY * dtS,
+    };
+    const mid = hermite(start, end, INPUT_FLUSH_INTERVAL_MS / 2);
+    expect(mid.x).toBeCloseTo(240 * (dtS / 2), 8);
+    expect(mid.y).toBeCloseTo(arcY(dtS / 2), 8);
   });
 });
