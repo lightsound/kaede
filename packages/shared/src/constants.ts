@@ -34,7 +34,9 @@ export const PLATFORM_DROP_NUDGE = 1;
  * 「移動中 2〜3 calls/秒・静止中 0」の中央値(ROADMAP)。ローカル予測は
  * 60fps のまま(1フラッシュに約24 tick を同梱する)ので、延ばして変わるのは
  * ネットワーク送信の頻度とリモートから見た遅延だけ。静止中の 0 は
- * evaluateSendWindow(sendGate.ts)が担う。
+ * evaluateSendWindow(sendGate.ts)が担う。踏切・着地の tick だけは周期を
+ * 待たず即フラッシュされる(isGroundContactEdge — 床接触がサンプルに
+ * 写らないと連打ジャンプが2段ジャンプに見えるため)。
  */
 export const INPUT_FLUSH_INTERVAL_MS = 400;
 /**
