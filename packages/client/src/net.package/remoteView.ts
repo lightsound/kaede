@@ -224,10 +224,27 @@ export function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
       const span = b.t - a.t;
       if (span <= 0) return { ...b, t: renderTime };
       const p = hermite(a, b, renderTime);
-      return { ...b, t: renderTime, x: p.x, y: p.y };
+      return { ...b, t: renderTime, x: p.x, y: clampAtFloor(a, b, p.y) };
     }
   }
   return last;
+}
+
+/**
+ * Keeps an interpolated y on the walkable side of a segment's floor. A
+ * landing segment pairs an airborne endpoint's steep falling tangent with a
+ * grounded endpoint's zero tangent, so the cubic can swing well below the
+ * floor before returning to it — but the true path stops AT b's floor: a
+ * rebound is impossible, and re-jumping back onto it takes longer than a
+ * flush window. Symmetrically, a walk-off-a-ledge segment (grounded a,
+ * airborne b below) only ever descends from a's floor, so the curve must
+ * not hover above it. Rising landings (a below b's floor) legitimately arc
+ * over it and pass through untouched. y grows downward (screen coords).
+ */
+function clampAtFloor(a: Snapshot, b: Snapshot, y: number): number {
+  if (a.airborne && !b.airborne && a.y <= b.y) return Math.min(y, b.y);
+  if (!a.airborne && b.airborne && b.y >= a.y) return Math.max(y, a.y);
+  return y;
 }
 
 /**

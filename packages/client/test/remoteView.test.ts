@@ -58,6 +58,52 @@ describe('sampleAt', () => {
     expect(sampleAt(buf, 9999).x).toBe(20);
   });
 
+  it('does not sink a landing below the floor the grounded endpoint stands on', () => {
+    // Airborne endpoint falling near terminal velocity, grounded endpoint on
+    // the floor 5px below: the cubic's steep falling tangent would swing tens
+    // of pixels past the floor mid-segment (the Bugbot finding on raising the
+    // hermite cap); the true path lands early and stays put.
+    const floorY = 100;
+    const buf = [
+      snap(1000, 0, { y: floorY - 5, vy: 1200, airborne: true }),
+      snap(1400, 0, { y: floorY }),
+    ];
+    for (const t of [1100, 1133, 1200, 1300]) {
+      expect(sampleAt(buf, t).y).toBeLessThanOrEqual(floorY);
+    }
+    // The clamp engages (the raw cubic would sit below the floor here)...
+    expect(sampleAt(buf, 1133).y).toBe(floorY);
+    // ...and the endpoints stay exact.
+    expect(sampleAt(buf, 1400).y).toBeCloseTo(floorY, 10);
+  });
+
+  it('does not hover a walk-off-a-ledge segment above the ledge it left', () => {
+    // Grounded endpoint on the ledge, airborne endpoint already falling fast
+    // below it: the falling tangent can bow the curve above the ledge level
+    // early in the segment; the true path only ever descends from it.
+    const ledgeY = 100;
+    const buf = [
+      snap(1000, 0, { y: ledgeY }),
+      snap(1400, 0, { y: ledgeY + 100, vy: 1200, airborne: true }),
+    ];
+    for (const t of [1050, 1100, 1150, 1200, 1300]) {
+      expect(sampleAt(buf, t).y).toBeGreaterThanOrEqual(ledgeY);
+    }
+  });
+
+  it('leaves a rising landing free to arc above the platform it lands on', () => {
+    // Jumping up onto a platform overshoots its level mid-flight (the apex),
+    // so the landing clamp must not flatten a segment whose airborne endpoint
+    // starts BELOW the platform.
+    const platformY = 100;
+    const buf = [
+      snap(1000, 0, { y: platformY + 40, vy: -600, airborne: true }),
+      snap(1400, 0, { y: platformY }),
+    ];
+    const apexish = sampleAt(buf, 1250).y;
+    expect(apexish).toBeLessThan(platformY); // above the platform (y grows down)
+  });
+
   it('extrapolates an airborne sample under gravity, not in a straight line', () => {
     // Rising at -840px/s: 200ms of gravity bends the path well below the
     // straight-line continuation (the "floating remote player" bug).
