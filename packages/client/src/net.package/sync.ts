@@ -285,7 +285,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
 
   // 前 tick の接地状態(接地エッジ検出用)。undefined = まだ tick がない。
   // prediction の作り直し(再接続・マップ切替)を跨いでも高々1回の余分な
-  // フラッシュにしかならないので、prevPackedInput と同じく张り替えない。
+  // フラッシュにしかならないので、prevPackedInput と同じく張り替えない。
   let prevOnGround: boolean | undefined;
 
   /**
