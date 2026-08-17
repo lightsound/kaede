@@ -203,11 +203,13 @@ function prune(buf: Snapshot[], serverNowMs: number): void {
  * Returns the position at renderTime (server timeline). Between snapshots,
  * cubic-Hermite interpolates using the authoritative velocities as tangents
  * (a cubic through two position+velocity endpoints of a gravity arc IS that
- * parabola, so jump segments reconstruct exactly). Past the newest snapshot,
- * extrapolates along its velocity — integrating gravity when the sample is
- * airborne, so a stale upward velocity arcs over instead of floating — for at
- * most REMOTE_EXTRAPOLATION_MAX_MS, then freezes. Before the oldest, clamps.
- * facing comes from the nearest later (or last) snapshot.
+ * parabola, so airborne segments reconstruct exactly) — except LANDING
+ * segments, which are reconstructed ballistically (see interpolate). Past
+ * the newest snapshot, extrapolates along its velocity — integrating gravity
+ * when the sample is airborne, so a stale upward velocity arcs over instead
+ * of floating — for at most REMOTE_EXTRAPOLATION_MAX_MS, then freezes.
+ * Before the oldest, clamps. facing comes from the nearest later (or last)
+ * snapshot.
  */
 export function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
   if (renderTime <= buf[0].t) return buf[0];
@@ -221,25 +223,81 @@ export function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
     const b = buf[i];
     if (renderTime <= b.t) {
       const a = buf[i - 1];
-      const span = b.t - a.t;
-      if (span <= 0) return { ...b, t: renderTime };
-      const p = hermite(a, b, renderTime);
-      return { ...b, t: renderTime, x: p.x, y: clampAtFloor(a, b, p.y) };
+      if (b.t - a.t <= 0) return { ...b, t: renderTime };
+      return interpolate(a, b, renderTime);
     }
   }
   return last;
 }
 
 /**
- * Keeps an interpolated y on the walkable side of a segment's floor. A
- * landing segment pairs an airborne endpoint's steep falling tangent with a
- * grounded endpoint's zero tangent, so the cubic can swing well below the
+ * One interpolated point on the segment [a, b] (a.t <= renderTime <= b.t,
+ * a.t < b.t). Landing segments — airborne a ending on a grounded b — are
+ * reconstructed ballistically: follow a's gravity arc at full speed, hit
+ * b's floor at the arc's own touchdown time, then rest there for the rest
+ * of the segment. Hermite is wrong for these: its zero tangent at the
+ * grounded endpoint decelerates the fall into a cushioned touch (the last
+ * frames ease from ~18px/frame to ~1px/frame), which reads as "never
+ * landed, just re-jumped mid-air" — most visibly on long falls from a
+ * platform. x stays linear (walking speed is constant, and the endpoints
+ * are authoritative). When jitter-stretched timestamps leave the arc short
+ * of the floor within the segment (touchdown NaN or past b.t), fall back
+ * to floor-clamped Hermite rather than tearing the path. Every non-landing
+ * segment is floor-clamped Hermite as before.
+ */
+function interpolate(a: Snapshot, b: Snapshot, renderTime: number): Snapshot {
+  if (a.airborne && !b.airborne) {
+    const touchdownS = fallTimeTo(b.y - a.y, a.vy);
+    if (touchdownS <= (b.t - a.t) / 1000) {
+      const tS = (renderTime - a.t) / 1000;
+      const s = (renderTime - a.t) / (b.t - a.t);
+      return {
+        ...b,
+        t: renderTime,
+        x: a.x + (b.x - a.x) * s,
+        y: tS < touchdownS ? ballisticY(a.y, a.vy, tS) : b.y,
+      };
+    }
+  }
+  const p = hermite(a, b, renderTime);
+  return { ...b, t: renderTime, x: p.x, y: clampAtFloor(a, b, p.y) };
+}
+
+/**
+ * Seconds for a free-falling sample with initial velocity vy (px/s, down
+ * positive; stepPlayer guarantees vy <= MAX_FALL_SPEED) to DESCEND onto a
+ * level dy px below (gravity-integrated, switching to constant
+ * MAX_FALL_SPEED once reached, like ballisticY). A rising sample (vy < 0)
+ * arcs over first, so the downward crossing is returned. NaN when the arc
+ * never reaches the level (dy < 0 above the apex — jitter-stretched data);
+ * callers must fall back.
+ */
+function fallTimeTo(dy: number, vy: number): number {
+  const disc = vy * vy + 2 * GRAVITY * dy;
+  if (disc < 0) return Number.NaN;
+  const tQuad = (-vy + Math.sqrt(disc)) / GRAVITY;
+  // A falling sample (vy > 0) whose landing level lies ABOVE it (dy < 0)
+  // only crosses that level backward in time: no real touchdown, same
+  // fallback as the negative discriminant.
+  if (tQuad < 0) return Number.NaN;
+  const tCap = (MAX_FALL_SPEED - vy) / GRAVITY;
+  if (tQuad <= tCap) return tQuad;
+  const dAtCap = vy * tCap + (GRAVITY * tCap * tCap) / 2;
+  return tCap + (dy - dAtCap) / MAX_FALL_SPEED;
+}
+
+/**
+ * Keeps a Hermite-interpolated y on the walkable side of a segment's floor.
+ * A landing segment pairs an airborne endpoint's steep falling tangent with
+ * a grounded endpoint's zero tangent, so the cubic can swing well below the
  * floor before returning to it — but the true path stops AT b's floor: a
  * rebound is impossible, and re-jumping back onto it takes longer than a
- * flush window. Symmetrically, a walk-off-a-ledge segment (grounded a,
- * airborne b below) only ever descends from a's floor, so the curve must
- * not hover above it. Rising landings (a below b's floor) legitimately arc
- * over it and pass through untouched. y grows downward (screen coords).
+ * flush window. (Landing segments normally take interpolate()'s ballistic
+ * reconstruction instead; this clamp guards its jitter fallback.)
+ * Symmetrically, a walk-off-a-ledge segment (grounded a, airborne b below)
+ * only ever descends from a's floor, so the curve must not hover above it.
+ * Rising landings (a below b's floor) legitimately arc over it and pass
+ * through untouched. y grows downward (screen coords).
  */
 function clampAtFloor(a: Snapshot, b: Snapshot, y: number): number {
   if (a.airborne && !b.airborne && a.y <= b.y) return Math.min(y, b.y);

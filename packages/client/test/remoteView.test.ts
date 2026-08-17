@@ -91,6 +91,67 @@ describe('sampleAt', () => {
     }
   });
 
+  it('reconstructs a landing at full fall speed with a floor dwell (no cushioned easing)', () => {
+    // Terminal-velocity fall of 120px onto the floor: touchdown after 100ms,
+    // full speed until contact, then resting on the floor for the remaining
+    // 300ms of the segment. Hermite would instead ease the last frames
+    // toward the grounded endpoint's zero tangent (the "never landed" look).
+    const buf = [
+      snap(1000, 0, { y: 0, vy: MAX_FALL_SPEED, airborne: true }),
+      snap(1400, 40, { y: 120 }),
+    ];
+    expect(sampleAt(buf, 1050).y).toBeCloseTo(60, 10); // mid-fall, undecelerated
+    expect(sampleAt(buf, 1100).y).toBeCloseTo(120, 10); // touchdown at full speed
+    expect(sampleAt(buf, 1250).y).toBe(120); // dwelling on the floor
+    expect(sampleAt(buf, 1250).x).toBeCloseTo(25, 10); // x stays linear
+  });
+
+  it('reconstructs a rising-then-landing segment over the full gravity arc', () => {
+    // Sampled just after a jump from below: rises past the floor level,
+    // arcs over, and lands. Touchdown = the arc's downward crossing.
+    const floorY = 200;
+    const vy0 = -600;
+    // Downward crossing of the arc y(t) = 100 - 600t + 1200t^2 with y = 200:
+    // t = (600 + sqrt(600^2 + 2*2400*100)) / 2400 ≈ 0.632s < span 0.65s.
+    const buf = [snap(1000, 0, { y: 100, vy: vy0, airborne: true }), snap(1650, 0, { y: floorY })];
+    const apex = sampleAt(buf, 1250); // t = 0.25s: y = 100 - 150 + 75 = 25
+    expect(apex.y).toBeCloseTo(25, 8);
+    expect(sampleAt(buf, 1640).y).toBe(floorY); // landed and dwelling
+  });
+
+  it('falls back to clamped hermite when jitter leaves the arc short of the floor', () => {
+    // The arc from a cannot descend 500px within 300ms, so the ballistic
+    // reconstruction would end mid-air; keep the floor-clamped hermite.
+    const buf = [snap(1000, 0, { y: 0, vy: 100, airborne: true }), snap(1300, 0, { y: 500 })];
+    for (const t of [1100, 1200, 1299]) {
+      const y = sampleAt(buf, t).y;
+      expect(Number.isFinite(y)).toBe(true);
+      expect(y).toBeLessThanOrEqual(500);
+    }
+  });
+
+  it('falls back when a falling sample ends grounded ABOVE itself (no negative touchdown)', () => {
+    // Jitter/mid-segment-jump artifact: a is falling, yet b stands on a floor
+    // 50px higher. The arc only crosses that level backward in time, so the
+    // reconstruction must fall back to hermite instead of pinning the whole
+    // segment onto b's floor (the negative-touchdown bug Bugbot flagged).
+    const buf = [snap(1000, 0, { y: 200, vy: 1000, airborne: true }), snap(1400, 0, { y: 150 })];
+    const early = sampleAt(buf, 1050).y;
+    expect(Number.isFinite(early)).toBe(true);
+    expect(early).not.toBe(150); // not glued to b's floor from the segment start
+    expect(sampleAt(buf, 1399).y).toBeCloseTo(150, 0); // endpoint still lands on b
+  });
+
+  it('falls back (no NaN) when a rising sample cannot reach the platform it landed on', () => {
+    // Jitter artifact: the recorded rise is too weak to reach the landing
+    // level (apex 2px, platform 100px up). fallTimeTo has no real root;
+    // the segment must render finite, clamped hermite positions.
+    const buf = [snap(1000, 0, { y: 200, vy: -100, airborne: true }), snap(1400, 0, { y: 100 })];
+    for (const t of [1100, 1200, 1300]) {
+      expect(Number.isFinite(sampleAt(buf, t).y)).toBe(true);
+    }
+  });
+
   it('leaves a rising landing free to arc above the platform it lands on', () => {
     // Jumping up onto a platform overshoots its level mid-flight (the apex),
     // so the landing clamp must not flatten a segment whose airborne endpoint
