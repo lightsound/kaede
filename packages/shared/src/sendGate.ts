@@ -39,3 +39,19 @@ export function evaluateSendWindow(window: {
   if (anyInput || !fullyAcked) return 'send';
   return isQuiescent(windowStartState) ? 'skip' : 'send';
 }
+
+/**
+ * 接地エッジ(踏切・着地)の即時フラッシュ判定: この tick で onGround が
+ * 反転したら、フラッシュ周期(INPUT_FLUSH_INTERVAL_MS)を待たずに送る。
+ *
+ * 周期送信だけでは、着地と次のジャンプ開始が1ウィンドウ(400ms)に丸ごと
+ * 収まると床接触がどのスナップショットにも写らず、観測側の補間は両端とも
+ * 空中のサンプルを結んで「地面に触れずに空中で反転する」= 2段ジャンプに
+ * 見える弧を描く(連打ジャンプで顕著)。踏切・着地の tick を即時送信すれば
+ * 「接地・vy=0 の床サンプル」と「跳び出しサンプル」が必ず届き、落ちる→
+ * 床に着く→跳ぶ、が再構成できる。コスト増はジャンプ1回あたり reducer
+ * 呼び出し+行書き込み約2回で、接地遷移が起きない間はゼロ。
+ */
+export function isGroundContactEdge(prevOnGround: boolean, currOnGround: boolean): boolean {
+  return prevOnGround !== currOnGround;
+}

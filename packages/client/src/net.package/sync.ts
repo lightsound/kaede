@@ -6,6 +6,7 @@ import {
   decidePortalCall,
   type E2ENetStats,
   HEARTBEAT_INTERVAL_MS,
+  isGroundContactEdge,
   mapFor,
   type PlayerState,
   type StatusView,
@@ -282,6 +283,11 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // The previous tick's packed input, for the portal intent's press edge.
   let prevPackedInput = 0;
 
+  // 前 tick の接地状態(接地エッジ検出用)。undefined = まだ tick がない。
+  // prediction の作り直し(再接続・マップ切替)を跨いでも高々1回の余分な
+  // フラッシュにしかならないので、prevPackedInput と同じく张り替えない。
+  let prevOnGround: boolean | undefined;
+
   /**
    * Fires enter_portal when this tick's input asks for it (standing in a
    * portal, up pressed this tick, no call already pending —
@@ -315,8 +321,16 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   gameApp.onLocalTick((state, tick, packedInput) => {
     const prevPacked = prevPackedInput;
     prevPackedInput = packedInput;
+    const wasOnGround = prevOnGround;
+    prevOnGround = state.onGround;
     if (!prediction) return;
     prediction.onTick(state, tick, packedInput, performance.now());
+    // 踏切・着地の tick は周期を待たず即フラッシュする(理由と費用は
+    // isGroundContactEdge のコメントを参照)。ポータルと同じ flushNow なので
+    // 周期時計もリセットされ、直後の定期便と二重にはならない。
+    if (wasOnGround !== undefined && isGroundContactEdge(wasOnGround, state.onGround)) {
+      prediction.flushNow(performance.now());
+    }
     maybeEnterPortal(state, packedInput, prevPacked);
   });
 

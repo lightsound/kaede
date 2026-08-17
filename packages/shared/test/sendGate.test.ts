@@ -3,6 +3,7 @@ import {
   DEFAULT_MAP,
   evaluateSendWindow,
   GROUND_TOP,
+  isGroundContactEdge,
   isQuiescent,
   PLAYER_HALF_H,
   type PlayerInput,
@@ -98,5 +99,17 @@ describe('evaluateSendWindow (送信ゲート)', () => {
     expect(
       evaluateSendWindow({ anyInput: false, windowStartState: onRope, fullyAcked: true }),
     ).toBe('send');
+  });
+});
+
+describe('isGroundContactEdge (接地エッジの即時フラッシュ判定)', () => {
+  it('踏切(接地→空中)と着地(空中→接地)でフラッシュする', () => {
+    expect(isGroundContactEdge(true, false)).toBe(true);
+    expect(isGroundContactEdge(false, true)).toBe(true);
+  });
+
+  it('接地継続・滞空継続ではフラッシュしない(歩行や滞空で送信レートは増えない)', () => {
+    expect(isGroundContactEdge(true, true)).toBe(false);
+    expect(isGroundContactEdge(false, false)).toBe(false);
   });
 });
