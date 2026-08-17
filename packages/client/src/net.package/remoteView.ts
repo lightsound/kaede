@@ -1,4 +1,4 @@
-import { type Facing, INTERP_DELAY_MS, toFacing } from '@kaede/shared';
+import { type Facing, GRAVITY, INTERP_DELAY_MS, MAX_FALL_SPEED, toFacing } from '@kaede/shared';
 import type { PlayerLabel } from '../game.package';
 import {
   correctionOffset,
@@ -13,6 +13,12 @@ import { createServerClock } from './serverClock';
 /** One position sample for a remote player, timestamped on the SERVER clock. */
 export interface Snapshot extends HermitePoint {
   facing: Facing;
+  /**
+   * True when the sampled state is in free fall (neither grounded nor on a
+   * rope), so extrapolation past this sample must integrate gravity: carrying
+   * a stale upward velocity in a straight line makes the player float.
+   */
+  airborne: boolean;
 }
 
 /**
@@ -58,7 +64,16 @@ export function createRemoteViews() {
   function record(
     idHex: string,
     label: PlayerLabel,
-    row: { x: number; y: number; vx: number; vy: number; facing: number; updatedAtMs: number },
+    row: {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      facing: number;
+      onGround: boolean;
+      rope: number;
+      updatedAtMs: number;
+    },
     nowMs: number,
   ): void {
     clock.record(row.updatedAtMs, nowMs);
@@ -75,6 +90,7 @@ export function createRemoteViews() {
       vx: row.vx,
       vy: row.vy,
       facing: toFacing(row.facing),
+      airborne: !row.onGround && row.rope < 0,
     });
   }
 
@@ -185,9 +201,12 @@ function prune(buf: Snapshot[], serverNowMs: number): void {
 
 /**
  * Returns the position at renderTime (server timeline). Between snapshots,
- * cubic-Hermite interpolates using the authoritative velocities as tangents.
- * Past the newest snapshot, extrapolates along its velocity for at most
- * REMOTE_EXTRAPOLATION_MAX_MS, then freezes. Before the oldest, clamps.
+ * cubic-Hermite interpolates using the authoritative velocities as tangents
+ * (a cubic through two position+velocity endpoints of a gravity arc IS that
+ * parabola, so jump segments reconstruct exactly). Past the newest snapshot,
+ * extrapolates along its velocity — integrating gravity when the sample is
+ * airborne, so a stale upward velocity arcs over instead of floating — for at
+ * most REMOTE_EXTRAPOLATION_MAX_MS, then freezes. Before the oldest, clamps.
  * facing comes from the nearest later (or last) snapshot.
  */
 export function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
@@ -195,7 +214,8 @@ export function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
   const last = buf[buf.length - 1];
   if (renderTime >= last.t) {
     const dtS = Math.min(renderTime - last.t, REMOTE_EXTRAPOLATION_MAX_MS) / 1000;
-    return { ...last, t: renderTime, x: last.x + last.vx * dtS, y: last.y + last.vy * dtS };
+    const y = last.airborne ? ballisticY(last.y, last.vy, dtS) : last.y + last.vy * dtS;
+    return { ...last, t: renderTime, x: last.x + last.vx * dtS, y };
   }
   for (let i = 1; i < buf.length; i++) {
     const b = buf[i];
@@ -204,8 +224,39 @@ export function sampleAt(buf: Snapshot[], renderTime: number): Snapshot {
       const span = b.t - a.t;
       if (span <= 0) return { ...b, t: renderTime };
       const p = hermite(a, b, renderTime);
-      return { t: renderTime, x: p.x, y: p.y, vx: b.vx, vy: b.vy, facing: b.facing };
+      return { ...b, t: renderTime, x: p.x, y: clampAtFloor(a, b, p.y) };
     }
   }
   return last;
+}
+
+/**
+ * Keeps an interpolated y on the walkable side of a segment's floor. A
+ * landing segment pairs an airborne endpoint's steep falling tangent with a
+ * grounded endpoint's zero tangent, so the cubic can swing well below the
+ * floor before returning to it — but the true path stops AT b's floor: a
+ * rebound is impossible, and re-jumping back onto it takes longer than a
+ * flush window. Symmetrically, a walk-off-a-ledge segment (grounded a,
+ * airborne b below) only ever descends from a's floor, so the curve must
+ * not hover above it. Rising landings (a below b's floor) legitimately arc
+ * over it and pass through untouched. y grows downward (screen coords).
+ */
+function clampAtFloor(a: Snapshot, b: Snapshot, y: number): number {
+  if (a.airborne && !b.airborne && a.y <= b.y) return Math.min(y, b.y);
+  if (!a.airborne && b.airborne && b.y >= a.y) return Math.max(y, a.y);
+  return y;
+}
+
+/**
+ * Vertical free-fall position after dtS seconds: integrates the shared
+ * GRAVITY from the sampled vy, switching to constant MAX_FALL_SPEED once
+ * reached (the same clamp stepPlayer applies, which also guarantees
+ * vy <= MAX_FALL_SPEED here). No collision — a landing inside the window
+ * overshoots the floor by at most half a flush of fall, and the offset
+ * smoothing eases it back like any other correction.
+ */
+function ballisticY(y: number, vy: number, dtS: number): number {
+  const accelS = Math.min(dtS, (MAX_FALL_SPEED - vy) / GRAVITY);
+  const terminalS = dtS - accelS;
+  return y + vy * accelS + (GRAVITY * accelS * accelS) / 2 + MAX_FALL_SPEED * terminalS;
 }

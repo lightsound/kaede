@@ -16,8 +16,17 @@ const SMOOTH_MAX_OFFSET_PX = 160;
 const SMOOTH_EPSILON_PX = 0.5;
 /** Frame-to-frame remote target motion above this (px/s) is a discontinuity. */
 export const REMOTE_DISCONTINUITY_SPEED = 2000;
-/** Hermite segments longer than this (ms) fall back to linear interpolation. */
-const HERMITE_MAX_SEGMENT_MS = 250;
+/**
+ * Hermite segments longer than this (ms) fall back to linear interpolation.
+ * Must stay ABOVE the input-flush cadence (INPUT_FLUSH_INTERVAL_MS, 400ms)
+ * plus delivery jitter: remote snapshots arrive one per flush, so a cap below
+ * that makes Hermite dead code and renders jump arcs as straight lines (the
+ * "floating" remote-player bug). A cross-constant test in smoothing.test.ts
+ * pins this invariant. Segments past the cap are delivery gaps (resends,
+ * throttled tabs) whose endpoint velocities say nothing about the middle —
+ * scaled by such a long span they would swing the curve wildly.
+ */
+export const HERMITE_MAX_SEGMENT_MS = 600;
 
 /**
  * The render-error offset to carry after a correction: how far the previously
