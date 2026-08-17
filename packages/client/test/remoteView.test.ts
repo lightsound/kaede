@@ -130,6 +130,18 @@ describe('sampleAt', () => {
     }
   });
 
+  it('falls back when a falling sample ends grounded ABOVE itself (no negative touchdown)', () => {
+    // Jitter/mid-segment-jump artifact: a is falling, yet b stands on a floor
+    // 50px higher. The arc only crosses that level backward in time, so the
+    // reconstruction must fall back to hermite instead of pinning the whole
+    // segment onto b's floor (the negative-touchdown bug Bugbot flagged).
+    const buf = [snap(1000, 0, { y: 200, vy: 1000, airborne: true }), snap(1400, 0, { y: 150 })];
+    const early = sampleAt(buf, 1050).y;
+    expect(Number.isFinite(early)).toBe(true);
+    expect(early).not.toBe(150); // not glued to b's floor from the segment start
+    expect(sampleAt(buf, 1399).y).toBeCloseTo(150, 0); // endpoint still lands on b
+  });
+
   it('falls back (no NaN) when a rising sample cannot reach the platform it landed on', () => {
     // Jitter artifact: the recorded rise is too weak to reach the landing
     // level (apex 2px, platform 100px up). fallTimeTo has no real root;

@@ -276,6 +276,10 @@ function fallTimeTo(dy: number, vy: number): number {
   const disc = vy * vy + 2 * GRAVITY * dy;
   if (disc < 0) return Number.NaN;
   const tQuad = (-vy + Math.sqrt(disc)) / GRAVITY;
+  // A falling sample (vy > 0) whose landing level lies ABOVE it (dy < 0)
+  // only crosses that level backward in time: no real touchdown, same
+  // fallback as the negative discriminant.
+  if (tQuad < 0) return Number.NaN;
   const tCap = (MAX_FALL_SPEED - vy) / GRAVITY;
   if (tQuad <= tCap) return tQuad;
   const dAtCap = vy * tCap + (GRAVITY * tCap * tCap) / 2;
