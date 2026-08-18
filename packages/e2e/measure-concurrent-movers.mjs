@@ -99,14 +99,21 @@ function parseBotLine(line, tag) {
 
 function takeBotLine(line, state) {
   if (line.length === 0) return;
-  state.lines.push(line);
   const parsed = parseBotLine(line, 'KAEDE_LOAD_RESULT');
   if (parsed) state.result = parsed;
   const err = parseBotLine(line, 'KAEDE_LOAD_ERROR');
   if (err) state.error = err;
 }
 
+function consumeStdout(state, chunk, carry) {
+  const parts = (carry + chunk).split('\n');
+  const nextCarry = parts.pop() ?? '';
+  for (const line of parts) takeBotLine(line, state);
+  return nextCarry;
+}
+
 function startBots() {
+  // fallow-ignore-next-line security-sink -- argv is numeric flags built in this file; the binary is this process's node, not attacker input
   const child = spawn(
     process.execPath,
     [
@@ -116,16 +123,18 @@ function startBots() {
       '--movers',
       String(movers),
       '--seconds',
-      String(seconds + 8),
+      String(seconds),
       '--stagger-ms',
       String(staggerMs),
     ],
     { cwd: clientDir, stdio: ['ignore', 'pipe', 'pipe'] },
   );
-  const state = { lines: [], result: null, error: null };
+  const state = { result: null, error: null };
+  let carry = '';
   child.stdout.on('data', (buf) => {
-    for (const line of buf.toString().split('\n')) takeBotLine(line, state);
+    carry = consumeStdout(state, buf.toString(), carry);
   });
+  child.stdout.on('end', () => takeBotLine(carry, state));
   child.stderr.on('data', (buf) => process.stderr.write(buf));
   return {
     child,
@@ -213,10 +222,10 @@ async function waitUntilRemotes(page, bots, want) {
   return sampleObserver(page);
 }
 
-function requireJoined(snap, want, bots, browser) {
+async function requireJoined(snap, want, bots, browser) {
   if (snap && snap.remotes >= want) return snap;
   bots.stop();
-  void browser.close();
+  await browser.close();
   throw new Error(`observer saw ${snap?.remotes ?? 0} remotes after join window, expected ${want}`);
 }
 
@@ -338,7 +347,7 @@ async function main() {
   const procStart = pid === null ? null : readProc(pid);
   const session = await openObserver();
   const bots = startBots();
-  const joinedSnap = requireJoined(
+  const joinedSnap = await requireJoined(
     await waitUntilRemotes(session.page, bots, count),
     count,
     bots,

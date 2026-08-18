@@ -334,20 +334,18 @@ function summarize(bots: LiveBot[], elapsedMs: number): unknown {
   };
 }
 
-async function spawnAll(opts: ReturnType<typeof parseArgs>): Promise<LiveBot[]> {
-  const bots: LiveBot[] = [];
+async function spawnAll(bots: LiveBot[], opts: ReturnType<typeof parseArgs>): Promise<void> {
   for (let i = 0; i < opts.count; i++) {
     bots.push(await spawnBot(i, i < opts.movers, opts.uri, opts.db));
     await sleep(opts.staggerMs);
   }
-  return bots;
 }
 
-async function runUntil(bots: LiveBot[], seconds: number, t0: number): Promise<void> {
-  const deadline = Date.now() + seconds * 1000;
+async function runUntil(bots: LiveBot[], seconds: number, tWalk: number): Promise<void> {
+  const deadline = tWalk + seconds * 1000;
   while (Date.now() < deadline) {
     await sleep(1000);
-    emit('KAEDE_LOAD_PROGRESS', summarize(bots, Date.now() - t0));
+    emit('KAEDE_LOAD_PROGRESS', summarize(bots, Date.now() - tWalk));
   }
 }
 
@@ -357,15 +355,16 @@ function stopAll(bots: LiveBot[]): void {
 
 async function main(): Promise<void> {
   const opts = parseArgs(nodeProc().argv.slice(2));
-  const t0 = Date.now();
   emit('KAEDE_LOAD_START', opts);
   const bots: LiveBot[] = [];
+  let tWalk = Date.now();
   try {
-    bots.push(...(await spawnAll(opts)));
-    emit('KAEDE_LOAD_JOINED', { joined: bots.length, ms: Date.now() - t0 });
-    await runUntil(bots, opts.seconds, t0);
+    await spawnAll(bots, opts);
+    tWalk = Date.now();
+    emit('KAEDE_LOAD_JOINED', { joined: bots.length });
+    await runUntil(bots, opts.seconds, tWalk);
   } finally {
-    emit('KAEDE_LOAD_RESULT', summarize(bots, Date.now() - t0));
+    emit('KAEDE_LOAD_RESULT', summarize(bots, Date.now() - tWalk));
     stopAll(bots);
   }
 }

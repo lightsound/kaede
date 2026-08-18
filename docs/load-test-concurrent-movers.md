@@ -43,7 +43,9 @@ node packages/e2e/measure-concurrent-movers.mjs --count 50 --movers 50 --seconds
 | 50 人全員移動 | 50 | 60.0 / 59.8 | ~125 | 13.8% | 2 / 7 / 11 ms | 0 / 0 |
 | 50 接続・12 人移動 | 50 | 60.0 / 59.9 | ~30 | 4.9% | 2 / 7 / 13 ms | 0 / 0 |
 
-移動中の flush はどのランも約 2.4 batches/秒/人（目標 2〜3）。standalone の RSS は
+移動中の flush はどのランも約 2.4 batches/秒/人（目標 2〜3。当時の分母は
+入場の stagger と観測後の尾を含んでおり、24 tick / 400ms = 2.5 よりやや低い）。
+standalone の RSS は
 110〜132 MB。観測側の x-spread は時間とともに広がっており、スプライトは止まっていない。
 
 50 接続・12 人移動は、オフィス用途の「在席の約 25% が歩く」という Phase 2
