@@ -451,8 +451,25 @@ avatar-carry/order.json = 旧 b4102f1f…）が台帳と一時的に乖離する
    マスターよりかわいいか**（変形は新しい絵を生まない系統 = v1 回転
    リグ・Blender ベイク・3D 素レンダーで 3 回負けた弱点が、専業の自動化で
    覆るか）。手順 5（PixelLab）と同型の即断ベンチ・数ドル規模。
-3. **4b（fal Compute 経由 Wan-Animate-2）**: オーナーのインスタンス作成
-   （1x H100・SSH 鍵・Secrets 登録）待ち。SCAIL-2 hosted の pose/
-   replacement 追試（各 ~$0.4）が安い先行選択肢。
+3. **4b（Wan-Animate-2 清書ベンチ — fal ホスト版）**: 前提を更新
+   （2026-08-18 実査）— **`fal-ai/wan-animate-2` の fal ホストを確認**
+   （モデルカタログのキーワード検索には未掲載だが llms.txt は生きている）。
+   よって旧前提「fal Compute 経由（オーナーのインスタンス作成・SSH 鍵・
+   Secrets 登録待ち）」は失効し、**4b は設営ゼロの hosted ベンチに変更**
+   （Compute・SSH 鍵・新規アカウントは一切不要）。スキーマ（llms.txt
+   2026-08-18 実査）: `video_url`（駆動動画 — モーション・カメラ・
+   フレーミングをキャラへ転写）+ `image_url`（identity）+ `prompt` 任意
+   （「外見と背景を記述する」仕様だが運転知見 32 により外見は書かない・
+   空指定可）・resolution 480p/580p/720p・aspect_ratio auto/16:9/9:16/1:1・
+   frames_per_second 8〜30（既定 24）・蒸留版ベース（num_inference_steps
+   既定 10・guidance_scale 既定 1 = ガイダンス無効）・seed あり・
+   **loras パラメータなし**（hosted では 4c の wan 系 LoRA は挿せない）。
+   v1 の move/replace の区別はない単一エンドポイント。**料金は llms.txt で
+   「$0 per compute seconds」と未整備 = 実単価不明** — 最初に最小プローブ
+   （480p・2 周期トリム・既定 fps）を 1 本だけ投げ、fal 残高 API の前後
+   照合で実単価を確定してから本テイクに進む（見積は 4a 前例どおり
+   `spike_r2v_bench.py` のレーン定義側で保守的に置き、プローブ後に実測へ
+   較正）。SCAIL-2 hosted の pose/replacement 追試（各 ~$0.4）は残高と
+   相談のオプションのまま。
 4. **4c（LoRA）**: H3 脱落により保留。wan 系 LoRA は 4b と合流。flux-2
    静止画 LoRA は独立着手可能。
