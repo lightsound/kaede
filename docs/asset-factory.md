@@ -550,3 +550,32 @@ pnpm --filter @kaede/client assets:pack   # 任意・アトラス派生物の確
     （正解）。「どれがどれか」をチャット本文の説明に依存させない —
     日本語フォントは `wqy-microhei.ttc`（DroidSansFallback はラテン
     文字が豆腐化する実測）
+35. **God Mode AI の運転実測（§7 残タスク 2 ベンチ 2026-08-16）**:
+    ①**Spine ジェネレーター（変形レーンの本命）は API 非公開** — Web の
+    `/api/spine-pipeline/*` はブラウザセッション（Supabase）専用で、
+    gmd_ API トークンは全ルート 401（`spike_godmode.py probe-spine` が
+    証跡を記録）。公開 REST 面（generation-api/v1）は sprite・
+    bg-removal・files・actions/catalog・models のみ（405 走査で確定）、
+    公式 MCP にも spine ツールなし。②**残高 API が存在しない** —
+    ダッシュボードはセッション経由の Supabase 読みで、PixelLab/fal 流の
+    残高前後照合（運転知見 30）が構造的に不可能。ベンチはローカル計測
+    （sprite 1cr・bg-removal 1cr の公表単価）＋オーナーのダッシュボード
+    目視照合で代替する。③スプライト出力は**「一次再描画＋テンプレ変形」**:
+    パレットは保持（較正済みドリフト lint 0 件）するが線の太さ・髪の
+    つやはハウス寄りに再レンダリングされる。動きはテンプレロックで
+    **positive_prompt のポーズ指示は効かない**（両手前保持を指示しても
+    通常歩行 — carry 系統は作れない。カタログ側にも両手前保持歩行は
+    ない）。コマ間の輪郭ブレはゼロ（変形系の強み）。④bg-removal の
+    `bounding_boxes` は**repack された座標で clean シートと一致しない**
+    — clean シートは元の 4 列グリッドのままなのでグリッド切りが正
+36. **シルエットループの半サイクル罠は 2D 出力にも出る — RGB 全解像度の
+    wrap 照合で歩行周期を補正する**（God Mode ベンチ 2026-08-16 —
+    運転知見 22 の 2D 版）: 3/4 チビの鏡像ステップはシルエット IoU では
+    区別できず、God Mode walk の周期 6 は半サイクルだった（判定材料を
+    その周期で標本化すると**存在しない片脚スキップを捏造**し videoReview
+    まで汚染する — 実測）。全解像度 RGB の平均絶対差は前脚/奥脚の陰影を
+    区別でき、2P の wrap 差 < P の 0.8 倍なら歩行周期 = 2P と機械判定
+    （`spike_godmode.py` `refine_gait_period`。walk_t1 実測 P=8.96 vs
+    2P=5.63）。おまけ 2 件: ffmpeg drawtext はクォート内でも `:` の
+    エスケープが必要（未エスケープはラベル全体が豆腐化）・比較動画の
+    列ラベルは短文に限る（長文は隣列に衝突 — 詳細は判定シート側に書く）
