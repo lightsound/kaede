@@ -40,6 +40,10 @@ const outFile = argValue(args, '--out', join('/tmp', `kaede-load-${count}x${move
 const artifactsDir = argValue(args, '--artifacts', '/opt/cursor/artifacts');
 const staggerMs = argValue(args, '--stagger-ms', '40');
 const label = argValue(args, '--label', `${count}n-${movers}m`);
+// Bots self-time from the post-join walk start. Observer sampling starts only
+// after waitUntilRemotes, so keep them walking past `--seconds` or they can
+// disconnect mid-sample.
+const SAMPLE_OVERLAP_SEC = 8;
 
 function requireFrom(fromFile, spec) {
   return createRequire(fromFile).resolve(spec);
@@ -123,7 +127,7 @@ function startBots() {
       '--movers',
       String(movers),
       '--seconds',
-      String(seconds),
+      String(seconds + SAMPLE_OVERLAP_SEC),
       '--stagger-ms',
       String(staggerMs),
     ],

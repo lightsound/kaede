@@ -45,6 +45,8 @@ node packages/e2e/measure-concurrent-movers.mjs --count 50 --movers 50 --seconds
 
 移動中の flush はどのランも約 2.4 batches/秒/人（目標 2〜3。当時の分母は
 入場の stagger と観測後の尾を含んでおり、24 tick / 400ms = 2.5 よりやや低い）。
+再実行では入場完了後に一斉歩行を始め、分母もその窓だけなので ~2.5 になる。
+ボットは観測の `waitUntilRemotes` 遅れを食わないよう `--seconds` より 8 秒長く歩く。
 standalone の RSS は
 110〜132 MB。観測側の x-spread は時間とともに広がっており、スプライトは止まっていない。
 

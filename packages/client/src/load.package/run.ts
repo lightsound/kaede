@@ -104,6 +104,7 @@ interface Walker {
 interface LiveBot {
   conn: DbConnection;
   metrics: BotMetrics;
+  beginWalk(): void;
   stop(): void;
 }
 
@@ -252,13 +253,13 @@ function startBot(
     onPlayerUpdate(walker, ownHex, row.identity.toHexString(), row.tick, row.x);
   });
 
-  if (walks) {
-    timer = setInterval(() => tickPatrol(walker), INPUT_FLUSH_INTERVAL_MS);
-  }
-
   return {
     conn,
     metrics: walker.metrics,
+    beginWalk() {
+      if (!walks || timer !== undefined) return;
+      timer = setInterval(() => tickPatrol(walker), INPUT_FLUSH_INTERVAL_MS);
+    },
     stop() {
       if (timer !== undefined) clearInterval(timer);
       conn.disconnect();
@@ -341,6 +342,10 @@ async function spawnAll(bots: LiveBot[], opts: ReturnType<typeof parseArgs>): Pr
   }
 }
 
+function startWalking(bots: LiveBot[]): void {
+  for (const bot of bots) bot.beginWalk();
+}
+
 async function runUntil(bots: LiveBot[], seconds: number, tWalk: number): Promise<void> {
   const deadline = tWalk + seconds * 1000;
   while (Date.now() < deadline) {
@@ -360,6 +365,7 @@ async function main(): Promise<void> {
   let tWalk = Date.now();
   try {
     await spawnAll(bots, opts);
+    startWalking(bots);
     tWalk = Date.now();
     emit('KAEDE_LOAD_JOINED', { joined: bots.length });
     await runUntil(bots, opts.seconds, tWalk);
