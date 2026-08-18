@@ -1,5 +1,10 @@
 // fallow-ignore-file coverage-gaps -- a React component that mounts the canvas and renders connection status; needs a DOM, and no DOM test environment is configured
-import { DEFAULT_STATUS, membershipPrompt, type StatusView } from '@kaede/shared';
+import {
+  DEFAULT_STATUS,
+  type E2EWorldSnapshot,
+  membershipPrompt,
+  type StatusView,
+} from '@kaede/shared';
 import { type CSSProperties, useContext, useEffect, useRef, useState } from 'react';
 import { AuthSessionContext } from './auth.package';
 import { CallDock, RecordingsDock } from './call.package';
@@ -65,6 +70,43 @@ function perfHudEnabled(): boolean {
   return import.meta.env.DEV && new URLSearchParams(window.location.search).get('perf') === '1';
 }
 
+function perSecond(delta: number, dt: number): number {
+  if (dt <= 0) return 0;
+  return delta / dt;
+}
+
+function xSpreadPx(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  return Math.max(...xs) - Math.min(...xs);
+}
+
+function perfHudLine(snap: E2EWorldSnapshot, updateRate: number): string {
+  return [
+    `FPS        ${snap.fps.toFixed(0)}`,
+    `remotes    ${snap.remotePlayers.length}`,
+    `row upd/s  ${updateRate.toFixed(0)}`,
+    `x-spread   ${xSpreadPx(snap.remotePlayers.map((p) => p.x)).toFixed(0)}px`,
+  ].join('\n');
+}
+
+function worldSnap(): E2EWorldSnapshot | undefined {
+  const snap = window.__kaedeE2E?.snapshot();
+  if (snap === undefined || snap.tick < 0) return undefined;
+  return snap;
+}
+
+function samplePerfHud(
+  lastUpdates: number,
+  lastAt: number,
+): { text: string; updates: number; at: number } {
+  const now = performance.now();
+  const updates = window.__kaedeE2ENet?.playerRowUpdates ?? 0;
+  const updateRate = perSecond(updates - lastUpdates, (now - lastAt) / 1000);
+  const snap = worldSnap();
+  if (!snap) return { text: 'waiting for world…', updates, at: now };
+  return { text: perfHudLine(snap, updateRate), updates, at: now };
+}
+
 /** Dev-only `?perf=1` overlay for the concurrent-mover probe. */
 function PerfHud() {
   const [text, setText] = useState('measuring…');
@@ -72,32 +114,19 @@ function PerfHud() {
     let lastUpdates = 0;
     let lastAt = performance.now();
     const id = window.setInterval(() => {
-      const snap = window.__kaedeE2E?.snapshot();
-      const net = window.__kaedeE2ENet;
-      const now = performance.now();
-      const updates = net?.playerRowUpdates ?? 0;
-      const dt = (now - lastAt) / 1000;
-      const updateRate = dt > 0 ? (updates - lastUpdates) / dt : 0;
-      lastUpdates = updates;
-      lastAt = now;
-      if (!snap || snap.tick < 0) {
-        setText('waiting for world…');
-        return;
-      }
-      const xs = snap.remotePlayers.map((p) => p.x);
-      const spread = xs.length === 0 ? 0 : Math.max(...xs) - Math.min(...xs);
-      setText(
-        [
-          `FPS        ${snap.fps.toFixed(0)}`,
-          `remotes    ${snap.remotePlayers.length}`,
-          `row upd/s  ${updateRate.toFixed(0)}`,
-          `x-spread   ${spread.toFixed(0)}px`,
-        ].join('\n'),
-      );
+      const sample = samplePerfHud(lastUpdates, lastAt);
+      lastUpdates = sample.updates;
+      lastAt = sample.at;
+      setText(sample.text);
     }, 250);
     return () => window.clearInterval(id);
   }, []);
   return <div style={PERF_HUD_STYLE}>{text}</div>;
+}
+
+function DevPerfHud() {
+  if (!perfHudEnabled()) return null;
+  return <PerfHud />;
 }
 
 /**
@@ -281,7 +310,7 @@ export function App() {
   return (
     <div style={{ position: 'relative' }}>
       <div ref={hostRef} />
-      {perfHudEnabled() ? <PerfHud /> : null}
+      <DevPerfHud />
       <AdmissionOverlay
         connected={connected}
         admission={admission}

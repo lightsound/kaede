@@ -348,6 +348,20 @@ function withUnderlineSnapshots(view: PlayerView, snap: E2EPlayerSnapshot): E2EP
  * builds, so the build-time DEV constant lets production bundles drop the
  * hook code entirely.
  */
+/** Rolling Pixi FPS over ~500ms. Production builds compile this to `return 0`. */
+function sampleFpsWindow(
+  now: number,
+  state: { frames: number; windowStart: number; fps: number },
+): number {
+  if (!import.meta.env.DEV) return 0;
+  state.frames += 1;
+  if (now - state.windowStart < 500) return state.fps;
+  state.fps = (state.frames * 1000) / (now - state.windowStart);
+  state.frames = 0;
+  state.windowStart = now;
+  return state.fps;
+}
+
 function createE2EHook(
   local: PlayerView,
   remotes: Map<string, PlayerView>,
@@ -919,20 +933,11 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     for (const view of remotes.values()) view.avatar.update(view.root.x, deltaMS);
   }
 
-  let fpsFrames = 0;
-  let fpsWindowStart = performance.now();
-  let fps = 0;
+  const fpsWindow = { frames: 0, windowStart: performance.now(), fps: 0 };
 
   app.ticker.add((ticker) => {
     const now = performance.now();
-    if (import.meta.env.DEV) {
-      fpsFrames += 1;
-      if (now - fpsWindowStart >= 500) {
-        fps = (fpsFrames * 1000) / (now - fpsWindowStart);
-        fpsFrames = 0;
-        fpsWindowStart = now;
-      }
-    }
+    fpsWindow.fps = sampleFpsWindow(now, fpsWindow);
     for (const cb of frameCbs) cb(now);
     // Simulation is gated until start(): never pre-accumulate before it runs.
     acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
@@ -952,7 +957,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     () => currentMap.id,
     () => currentZones,
     () => huddleLayer.snapshot(),
-    () => fps,
+    () => fpsWindow.fps,
   );
 
   /** Runs `act` on the remote player's view; a no-op while it has no sprite. */

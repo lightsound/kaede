@@ -85,6 +85,22 @@ interface BotMetrics {
   stalled: boolean;
 }
 
+interface InFlight {
+  startTick: number;
+  inputs: Uint8Array;
+  sentAt: number;
+  firstSentAt: number;
+}
+
+interface Walker {
+  conn: DbConnection;
+  metrics: BotMetrics;
+  lastAcked: number;
+  x: number;
+  dir: number;
+  inFlight: InFlight | undefined;
+}
+
 interface LiveBot {
   conn: DbConnection;
   metrics: BotMetrics;
@@ -136,6 +152,74 @@ async function waitForOwnRow(
   throw new Error('own player row did not appear after join');
 }
 
+function firstSentAtOf(inFlight: InFlight | undefined, resend: boolean, now: number): number {
+  if (resend && inFlight) return inFlight.firstSentAt;
+  return now;
+}
+
+function noteSend(walker: Walker, startTick: number, inputs: Uint8Array, resend: boolean): void {
+  const now = Date.now();
+  walker.inFlight = {
+    startTick,
+    inputs,
+    sentAt: now,
+    firstSentAt: firstSentAtOf(walker.inFlight, resend, now),
+  };
+  if (resend) walker.metrics.resends += 1;
+  else walker.metrics.batchesSent += 1;
+  walker.conn.reducers.submitInputs({ startTick, inputs }).catch(() => {});
+}
+
+function patrolDir(x: number, dir: number): number {
+  if (x >= WORLD_WIDTH - EDGE) return LEFT;
+  if (x <= EDGE) return RIGHT;
+  return dir;
+}
+
+function tickInFlight(walker: Walker, now: number): void {
+  const flight = walker.inFlight;
+  if (!flight) return;
+  if (now - flight.sentAt >= RESEND_TIMEOUT_MS) {
+    noteSend(walker, flight.startTick, flight.inputs, true);
+  }
+  if (now - flight.firstSentAt >= RESEND_TIMEOUT_MS * 4) walker.metrics.stalled = true;
+}
+
+function tickPatrol(walker: Walker): void {
+  const now = Date.now();
+  if (walker.inFlight) {
+    tickInFlight(walker, now);
+    return;
+  }
+  walker.dir = patrolDir(walker.x, walker.dir);
+  noteSend(walker, walker.lastAcked, new Uint8Array(TICKS_PER_FLUSH).fill(walker.dir), false);
+}
+
+function applyOwnRow(walker: Walker, tick: number, x: number): void {
+  walker.lastAcked = tick;
+  walker.x = x;
+  walker.metrics.lastX = x;
+  const flight = walker.inFlight;
+  if (!flight || tick < flight.startTick + flight.inputs.length) return;
+  walker.metrics.acks += 1;
+  walker.metrics.ackLatencyMs.push(Date.now() - flight.firstSentAt);
+  walker.inFlight = undefined;
+}
+
+function onPlayerUpdate(
+  walker: Walker,
+  ownHex: string,
+  rowHex: string,
+  tick: number,
+  x: number,
+): void {
+  if (rowHex !== ownHex) {
+    walker.metrics.remoteUpdates += 1;
+    return;
+  }
+  applyOwnRow(walker, tick, x);
+}
+
 function startBot(
   id: number,
   conn: DbConnection,
@@ -143,68 +227,38 @@ function startBot(
   walks: boolean,
   start: { tick: number; x: number },
 ): LiveBot {
-  const metrics: BotMetrics = {
-    id,
-    joined: true,
-    batchesSent: 0,
-    resends: 0,
-    acks: 0,
-    ackLatencyMs: [],
-    remoteUpdates: 0,
-    lastX: start.x,
-    stalled: false,
+  const walker: Walker = {
+    conn,
+    metrics: {
+      id,
+      joined: true,
+      batchesSent: 0,
+      resends: 0,
+      acks: 0,
+      ackLatencyMs: [],
+      remoteUpdates: 0,
+      lastX: start.x,
+      stalled: false,
+    },
+    lastAcked: start.tick,
+    x: start.x,
+    dir: id % 2 === 0 ? RIGHT : LEFT,
+    inFlight: undefined,
   };
-  const hex = identity.toHexString();
-  let lastAcked = start.tick;
-  let x = start.x;
-  let dir: number = id % 2 === 0 ? RIGHT : LEFT;
-  let inFlight: { startTick: number; inputs: Uint8Array; sentAt: number } | undefined;
+  const ownHex = identity.toHexString();
   let timer: ReturnType<typeof setInterval> | undefined;
 
-  const send = (startTick: number, inputs: Uint8Array, resend: boolean): void => {
-    inFlight = { startTick, inputs, sentAt: Date.now() };
-    if (resend) metrics.resends += 1;
-    else metrics.batchesSent += 1;
-    conn.reducers.submitInputs({ startTick, inputs }).catch(() => {});
-  };
-
   conn.db.player.onUpdate((_ctx, _old, row) => {
-    const rowHex = row.identity.toHexString();
-    if (rowHex !== hex) {
-      metrics.remoteUpdates += 1;
-      return;
-    }
-    lastAcked = row.tick;
-    x = row.x;
-    metrics.lastX = x;
-    if (inFlight && row.tick >= inFlight.startTick + inFlight.inputs.length) {
-      metrics.acks += 1;
-      metrics.ackLatencyMs.push(Date.now() - inFlight.sentAt);
-      inFlight = undefined;
-    }
+    onPlayerUpdate(walker, ownHex, row.identity.toHexString(), row.tick, row.x);
   });
 
   if (walks) {
-    timer = setInterval(() => {
-      const now = Date.now();
-      if (inFlight) {
-        if (now - inFlight.sentAt >= RESEND_TIMEOUT_MS) {
-          send(inFlight.startTick, inFlight.inputs, true);
-        }
-        if (now - inFlight.sentAt >= RESEND_TIMEOUT_MS * 4) metrics.stalled = true;
-        return;
-      }
-      if (x >= WORLD_WIDTH - EDGE) dir = LEFT;
-      else if (x <= EDGE) dir = RIGHT;
-      const inputs = new Uint8Array(TICKS_PER_FLUSH).fill(dir);
-      const startTick = lastAcked;
-      send(startTick, inputs, false);
-    }, INPUT_FLUSH_INTERVAL_MS);
+    timer = setInterval(() => tickPatrol(walker), INPUT_FLUSH_INTERVAL_MS);
   }
 
   return {
     conn,
-    metrics,
+    metrics: walker.metrics,
     stop() {
       if (timer !== undefined) clearInterval(timer);
       conn.disconnect();
@@ -225,62 +279,94 @@ function percentile(sorted: number[], p: number): number {
   return sorted[i] ?? 0;
 }
 
+function sumBy(metrics: BotMetrics[], pick: (m: BotMetrics) => number): number {
+  return metrics.reduce((n, m) => n + pick(m), 0);
+}
+
+function perBotPerSec(n: number, joined: number, sec: number): number {
+  if (joined === 0 || sec === 0) return 0;
+  return n / joined / sec;
+}
+
+function xSpread(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  return Math.max(...xs) - Math.min(...xs);
+}
+
+function latencySummary(latencies: number[]): {
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+  n: number;
+} {
+  return {
+    p50: percentile(latencies, 50),
+    p95: percentile(latencies, 95),
+    p99: percentile(latencies, 99),
+    max: latencies[latencies.length - 1] ?? 0,
+    n: latencies.length,
+  };
+}
+
 function summarize(bots: LiveBot[], elapsedMs: number): unknown {
   const metrics = bots.map((b) => b.metrics);
   const latencies = metrics.flatMap((m) => m.ackLatencyMs).sort((a, b) => a - b);
   const joined = metrics.filter((m) => m.joined).length;
-  const stalled = metrics.filter((m) => m.stalled).length;
-  const batches = metrics.reduce((n, m) => n + m.batchesSent, 0);
-  const acks = metrics.reduce((n, m) => n + m.acks, 0);
-  const resends = metrics.reduce((n, m) => n + m.resends, 0);
-  const remoteUpdates = metrics.reduce((n, m) => n + m.remoteUpdates, 0);
-  const xs = metrics.map((m) => m.lastX);
-  const spread = xs.length === 0 ? 0 : Math.max(...xs) - Math.min(...xs);
   const sec = elapsedMs / 1000;
+  const batches = sumBy(metrics, (m) => m.batchesSent);
+  const acks = sumBy(metrics, (m) => m.acks);
+  const resends = sumBy(metrics, (m) => m.resends);
+  const remoteUpdates = sumBy(metrics, (m) => m.remoteUpdates);
   return {
     bots: metrics.length,
     joined,
-    stalled,
+    stalled: metrics.filter((m) => m.stalled).length,
     batches,
     acks,
     resends,
-    batchesPerBotPerSec: joined === 0 || sec === 0 ? 0 : batches / joined / sec,
-    acksPerBotPerSec: joined === 0 || sec === 0 ? 0 : acks / joined / sec,
-    remoteUpdatesPerBotPerSec: joined === 0 || sec === 0 ? 0 : remoteUpdates / joined / sec,
-    ackLatencyMs: {
-      p50: percentile(latencies, 50),
-      p95: percentile(latencies, 95),
-      p99: percentile(latencies, 99),
-      max: latencies[latencies.length - 1] ?? 0,
-      n: latencies.length,
-    },
-    xSpreadPx: spread,
+    batchesPerBotPerSec: perBotPerSec(batches, joined, sec),
+    acksPerBotPerSec: perBotPerSec(acks, joined, sec),
+    remoteUpdatesPerBotPerSec: perBotPerSec(remoteUpdates, joined, sec),
+    ackLatencyMs: latencySummary(latencies),
+    xSpreadPx: xSpread(metrics.map((m) => m.lastX)),
     elapsedMs,
   };
 }
 
+async function spawnAll(opts: ReturnType<typeof parseArgs>): Promise<LiveBot[]> {
+  const bots: LiveBot[] = [];
+  for (let i = 0; i < opts.count; i++) {
+    bots.push(await spawnBot(i, i < opts.movers, opts.uri, opts.db));
+    await sleep(opts.staggerMs);
+  }
+  return bots;
+}
+
+async function runUntil(bots: LiveBot[], seconds: number, t0: number): Promise<void> {
+  const deadline = Date.now() + seconds * 1000;
+  while (Date.now() < deadline) {
+    await sleep(1000);
+    emit('KAEDE_LOAD_PROGRESS', summarize(bots, Date.now() - t0));
+  }
+}
+
+function stopAll(bots: LiveBot[]): void {
+  for (const bot of bots) bot.stop();
+}
+
 async function main(): Promise<void> {
   const opts = parseArgs(nodeProc().argv.slice(2));
-  const bots: LiveBot[] = [];
   const t0 = Date.now();
   emit('KAEDE_LOAD_START', opts);
+  const bots: LiveBot[] = [];
   try {
-    for (let i = 0; i < opts.count; i++) {
-      const walks = i < opts.movers;
-      const bot = await spawnBot(i, walks, opts.uri, opts.db);
-      bots.push(bot);
-      if (opts.staggerMs > 0) await sleep(opts.staggerMs);
-    }
+    bots.push(...(await spawnAll(opts)));
     emit('KAEDE_LOAD_JOINED', { joined: bots.length, ms: Date.now() - t0 });
-    const deadline = Date.now() + opts.seconds * 1000;
-    while (Date.now() < deadline) {
-      await sleep(1000);
-      emit('KAEDE_LOAD_PROGRESS', summarize(bots, Date.now() - t0));
-    }
+    await runUntil(bots, opts.seconds, t0);
   } finally {
-    const result = summarize(bots, Date.now() - t0);
-    for (const bot of bots) bot.stop();
-    emit('KAEDE_LOAD_RESULT', result);
+    emit('KAEDE_LOAD_RESULT', summarize(bots, Date.now() - t0));
+    stopAll(bots);
   }
 }
 

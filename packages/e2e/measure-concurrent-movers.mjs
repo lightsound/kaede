@@ -97,6 +97,15 @@ function parseBotLine(line, tag) {
   }
 }
 
+function takeBotLine(line, state) {
+  if (line.length === 0) return;
+  state.lines.push(line);
+  const parsed = parseBotLine(line, 'KAEDE_LOAD_RESULT');
+  if (parsed) state.result = parsed;
+  const err = parseBotLine(line, 'KAEDE_LOAD_ERROR');
+  if (err) state.error = err;
+}
+
 function startBots() {
   const child = spawn(
     process.execPath,
@@ -113,26 +122,15 @@ function startBots() {
     ],
     { cwd: clientDir, stdio: ['ignore', 'pipe', 'pipe'] },
   );
-  const lines = [];
-  let result = null;
-  let error = null;
-  const take = (buf) => {
-    for (const line of buf.toString().split('\n')) {
-      if (line.length === 0) continue;
-      lines.push(line);
-      const parsed = parseBotLine(line, 'KAEDE_LOAD_RESULT');
-      if (parsed) result = parsed;
-      const err = parseBotLine(line, 'KAEDE_LOAD_ERROR');
-      if (err) error = err;
-    }
-  };
-  child.stdout.on('data', take);
+  const state = { lines: [], result: null, error: null };
+  child.stdout.on('data', (buf) => {
+    for (const line of buf.toString().split('\n')) takeBotLine(line, state);
+  });
   child.stderr.on('data', (buf) => process.stderr.write(buf));
   return {
     child,
-    lines,
-    getResult: () => result,
-    getError: () => error,
+    getResult: () => state.result,
+    getError: () => state.error,
     stop: () => {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
     },
@@ -151,14 +149,19 @@ function mean(values) {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
+function ext(values) {
+  if (values.length === 0) return { min: 0, max: 0 };
+  return { min: Math.min(...values), max: Math.max(...values) };
+}
+
 async function webglRenderer(page) {
   return page.evaluate(() => {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl');
     if (!gl) return 'none';
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    if (!ext) return 'webgl';
-    return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+    const extInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!extInfo) return 'webgl';
+    return gl.getParameter(extInfo.UNMASKED_RENDERER_WEBGL);
   });
 }
 
@@ -179,12 +182,7 @@ async function sampleObserver(page) {
   });
 }
 
-async function main() {
-  mkdirSync(artifactsDir, { recursive: true });
-  await bundleBots();
-  const pid = findStandalonePid();
-  const ticksPerSec = clkTick();
-  const procStart = pid === null ? null : readProc(pid);
+async function openObserver() {
   const browser = await chromium.launch();
   const context = await browser.newContext({
     viewport: { width: 1280, height: 720 },
@@ -195,54 +193,71 @@ async function main() {
   await page.waitForFunction(() => (window.__kaedeE2E?.snapshot().tick ?? -1) >= 0, undefined, {
     timeout: 60_000,
   });
-  const renderer = await webglRenderer(page);
+  return { browser, context, page, renderer: await webglRenderer(page) };
+}
 
-  const bots = startBots();
+function throwIfBotError(bots) {
+  const err = bots.getError();
+  if (!err) return;
+  throw new Error(`bot error: ${err.message}`);
+}
+
+async function waitUntilRemotes(page, bots, want) {
   const joinDeadline = Date.now() + 120_000;
   while (Date.now() < joinDeadline) {
     const snap = await sampleObserver(page);
-    if (snap && snap.remotes >= count) break;
-    const err = bots.getError();
-    if (err) throw new Error(`bot error: ${err.message}`);
+    if (snap && snap.remotes >= want) return snap;
+    throwIfBotError(bots);
     await page.waitForTimeout(250);
   }
-  const joinedSnap = await sampleObserver(page);
-  if (!joinedSnap || joinedSnap.remotes < count) {
-    bots.stop();
-    await browser.close();
-    throw new Error(
-      `observer saw ${joinedSnap?.remotes ?? 0} remotes after join window, expected ${count}`,
-    );
-  }
+  return sampleObserver(page);
+}
 
+function requireJoined(snap, want, bots, browser) {
+  if (snap && snap.remotes >= want) return snap;
+  bots.stop();
+  void browser.close();
+  throw new Error(`observer saw ${snap?.remotes ?? 0} remotes after join window, expected ${want}`);
+}
+
+function rateDelta(curr, prev, dt) {
+  if (dt <= 0) return 0;
+  return (curr - prev) / dt;
+}
+
+function pushRss(rssSamples, pid) {
+  if (pid === null) return;
+  rssSamples.push(readProc(pid).rssKb);
+}
+
+function recordSample(samples, rssSamples, pid, t0, last, snap, now) {
+  samples.push({
+    t: now - t0,
+    fps: snap.fps,
+    remotes: snap.remotes,
+    updateRate: rateDelta(snap.playerRowUpdates, last.updates, (now - last.at) / 1000),
+    spread: snap.maxX - snap.minX,
+  });
+  pushRss(rssSamples, pid);
+  return { updates: snap.playerRowUpdates, at: now };
+}
+
+async function collectSamples(page, pid, durationSec, seedUpdates) {
   const samples = [];
   const rssSamples = [];
   const t0 = Date.now();
-  let lastUpdates = joinedSnap.playerRowUpdates;
-  let lastAt = t0;
-  while (Date.now() - t0 < seconds * 1000) {
+  let last = { updates: seedUpdates, at: t0 };
+  while (Date.now() - t0 < durationSec * 1000) {
     await page.waitForTimeout(500);
     const snap = await sampleObserver(page);
-    const now = Date.now();
     if (!snap) continue;
-    const dt = (now - lastAt) / 1000;
-    const updateRate = dt > 0 ? (snap.playerRowUpdates - lastUpdates) / dt : 0;
-    lastUpdates = snap.playerRowUpdates;
-    lastAt = now;
-    samples.push({
-      t: now - t0,
-      fps: snap.fps,
-      remotes: snap.remotes,
-      updateRate,
-      spread: snap.maxX - snap.minX,
-    });
-    if (pid !== null) rssSamples.push(readProc(pid).rssKb);
+    last = recordSample(samples, rssSamples, pid, t0, last, snap, Date.now());
   }
-  const procEnd = pid === null ? null : readProc(pid);
-  const screenshotPath = join(artifactsDir, `load_${label}_observer.png`);
-  await page.screenshot({ path: screenshotPath, fullPage: false });
+  return { samples, rssSamples, procEnd: pid === null ? null : readProc(pid) };
+}
 
-  const botFinished = await new Promise((resolve) => {
+function waitForBotExit(bots) {
+  return new Promise((resolve) => {
     const timeout = setTimeout(() => resolve(false), 20_000);
     if (bots.child.exitCode !== null) {
       clearTimeout(timeout);
@@ -254,62 +269,98 @@ async function main() {
       resolve(true);
     });
   });
+}
+
+async function closeObserver(context, browser, page, bots) {
+  const botFinished = await waitForBotExit(bots);
   if (!botFinished) bots.stop();
   const botResult = bots.getResult();
   const video = page.video();
   await context.close();
   await browser.close();
-  const videoPath = video ? await video.path() : null;
+  return { botResult, videoPath: video ? await video.path() : null };
+}
 
-  const wallSec =
-    procStart && procEnd ? Math.max(0.001, (procEnd.atMs - procStart.atMs) / 1000) : 0;
-  const cpuSec = procStart && procEnd ? (procEnd.ticks - procStart.ticks) / ticksPerSec : 0;
+function cpuOf(procStart, procEnd, ticksPerSec) {
+  if (!procStart || !procEnd) return { wallSec: 0, cpuSec: 0, percent: 0 };
+  const wallSec = Math.max(0.001, (procEnd.atMs - procStart.atMs) / 1000);
+  const cpuSec = (procEnd.ticks - procStart.ticks) / ticksPerSec;
+  return { wallSec, cpuSec, percent: (cpuSec / wallSec) * 100 };
+}
+
+function observerStats(samples) {
   const fps = samples.map((s) => s.fps).filter((n) => n > 0);
   const updateRates = samples.map((s) => s.updateRate);
   const spreads = samples.map((s) => s.spread);
   const remotes = samples.map((s) => s.remotes);
-  const report = {
+  const fpsExt = ext(fps);
+  const remoteExt = ext(remotes);
+  const rateExt = ext(updateRates);
+  const spreadExt = ext(spreads);
+  return {
+    samples: samples.length,
+    remotes: { mean: mean(remotes), min: remoteExt.min, max: remoteExt.max },
+    fps: {
+      mean: mean(fps),
+      p50: percentile(fps, 50),
+      p95: percentile(fps, 95),
+      min: fpsExt.min,
+      max: fpsExt.max,
+    },
+    playerRowUpdatesPerSec: {
+      mean: mean(updateRates),
+      p50: percentile(updateRates, 50),
+      max: rateExt.max,
+    },
+    xSpreadPx: { mean: mean(spreads), max: spreadExt.max },
+  };
+}
+
+function hostStats(pid, procStart, cpu, rssSamples) {
+  const rssExt = ext(rssSamples);
+  return {
+    pid,
+    cpuCorePercent: cpu.percent,
+    cpuSeconds: cpu.cpuSec,
+    rssKb: { start: procStart?.rssKb ?? 0, mean: mean(rssSamples), max: rssExt.max },
+  };
+}
+
+function writeReport(report) {
+  writeFileSync(outFile, `${JSON.stringify(report, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+}
+
+async function main() {
+  mkdirSync(artifactsDir, { recursive: true });
+  await bundleBots();
+  const pid = findStandalonePid();
+  const procStart = pid === null ? null : readProc(pid);
+  const session = await openObserver();
+  const bots = startBots();
+  const joinedSnap = requireJoined(
+    await waitUntilRemotes(session.page, bots, count),
+    count,
+    bots,
+    session.browser,
+  );
+  const collected = await collectSamples(session.page, pid, seconds, joinedSnap.playerRowUpdates);
+  const screenshotPath = join(artifactsDir, `load_${label}_observer.png`);
+  await session.page.screenshot({ path: screenshotPath, fullPage: false });
+  const closed = await closeObserver(session.context, session.browser, session.page, bots);
+  const cpu = cpuOf(procStart, collected.procEnd, clkTick());
+  writeReport({
     at: new Date().toISOString(),
     target,
     count,
     movers,
     seconds,
-    renderer,
-    artifacts: { screenshot: screenshotPath, video: videoPath },
-    observer: {
-      samples: samples.length,
-      remotes: { mean: mean(remotes), min: Math.min(...remotes), max: Math.max(...remotes) },
-      fps: {
-        mean: mean(fps),
-        p50: percentile(fps, 50),
-        p95: percentile(fps, 95),
-        min: fps.length === 0 ? 0 : Math.min(...fps),
-        max: fps.length === 0 ? 0 : Math.max(...fps),
-      },
-      playerRowUpdatesPerSec: {
-        mean: mean(updateRates),
-        p50: percentile(updateRates, 50),
-        max: updateRates.length === 0 ? 0 : Math.max(...updateRates),
-      },
-      xSpreadPx: {
-        mean: mean(spreads),
-        max: spreads.length === 0 ? 0 : Math.max(...spreads),
-      },
-    },
-    host: {
-      pid,
-      cpuCorePercent: wallSec === 0 ? 0 : (cpuSec / wallSec) * 100,
-      cpuSeconds: cpuSec,
-      rssKb: {
-        start: procStart?.rssKb ?? 0,
-        mean: mean(rssSamples),
-        max: rssSamples.length === 0 ? 0 : Math.max(...rssSamples),
-      },
-    },
-    bots: botResult,
-  };
-  writeFileSync(outFile, `${JSON.stringify(report, null, 2)}\n`);
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    renderer: session.renderer,
+    artifacts: { screenshot: screenshotPath, video: closed.videoPath },
+    observer: observerStats(collected.samples),
+    host: hostStats(pid, procStart, cpu, collected.rssSamples),
+    bots: closed.botResult,
+  });
 }
 
 void main().catch((err) => {
