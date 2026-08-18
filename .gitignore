@@ -3,6 +3,8 @@ dist/
 coverage/
 playwright-report/
 test-results/
+packages/e2e/.load-movers.bundle.mjs
+packages/client/.load-movers.bundle.mjs
 *.tsbuildinfo
 __pycache__/
 .DS_Store

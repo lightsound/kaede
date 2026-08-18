@@ -35,6 +35,11 @@ export interface E2EWorldSnapshot {
    * of types.ts (fallow's semantic detector — the AGENTS.md gotcha).
    */
   huddles: { label: string; closed: boolean; members: number }[];
+  /**
+   * Rolling Pixi ticker FPS over the last ~500ms. 0 until the first window
+   * closes. Dev hook only (the installer is compiled out of production).
+   */
+  fps: number;
 }
 
 /**
@@ -129,6 +134,12 @@ export interface E2ENetStats {
    * outbound side of notifications).
    */
   dmNotifyDecisions: number;
+  /**
+   * player row insert+update events this client received (subscription seed
+   * plus live). The concurrent-mover probe reads the rate; a display filter
+   * cannot prove how many hot-row updates actually crossed the wire.
+   */
+  playerRowUpdates: number;
 }
 
 declare global {

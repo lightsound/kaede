@@ -355,6 +355,7 @@ function createE2EHook(
   currentMapId: () => number,
   currentZones: () => readonly ZoneRender[],
   currentHuddles: () => readonly { label: string; closed: boolean; members: number }[],
+  currentFps: () => number,
 ): E2EHook | undefined {
   if (!import.meta.env.DEV) return undefined;
   return {
@@ -365,6 +366,7 @@ function createE2EHook(
       remotePlayers: [...remotes.values()].map(playerSnapshot),
       zones: currentZones().map((zone) => ({ label: zone.label, closed: zone.closed })),
       huddles: [...currentHuddles()],
+      fps: currentFps(),
     }),
   };
 }
@@ -917,8 +919,20 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     for (const view of remotes.values()) view.avatar.update(view.root.x, deltaMS);
   }
 
+  let fpsFrames = 0;
+  let fpsWindowStart = performance.now();
+  let fps = 0;
+
   app.ticker.add((ticker) => {
     const now = performance.now();
+    if (import.meta.env.DEV) {
+      fpsFrames += 1;
+      if (now - fpsWindowStart >= 500) {
+        fps = (fpsFrames * 1000) / (now - fpsWindowStart);
+        fpsFrames = 0;
+        fpsWindowStart = now;
+      }
+    }
     for (const cb of frameCbs) cb(now);
     // Simulation is gated until start(): never pre-accumulate before it runs.
     acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
@@ -938,6 +952,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     () => currentMap.id,
     () => currentZones,
     () => huddleLayer.snapshot(),
+    () => fps,
   );
 
   /** Runs `act` on the remote player's view; a no-op while it has no sprite. */

@@ -22,7 +22,7 @@ import { dmNotifier } from './notify.package';
 import { RenameControl } from './profile.package';
 import { AdminSection, AdmissionOverlay, ApplyBanner } from './space.package';
 import { StatusControl } from './status.package';
-import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
+import { UI_FONT, UI_GOLD, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from './theme';
 
 const STATUS_MESSAGES: Record<Exclude<ConnectionStatus, 'connected'>, string> = {
   connecting: 'サーバーに接続中…',
@@ -44,6 +44,61 @@ const overlayStyle: CSSProperties = {
   whiteSpace: 'nowrap',
   pointerEvents: 'none',
 };
+
+const PERF_HUD_STYLE: CSSProperties = {
+  position: 'absolute',
+  top: 12,
+  left: 12,
+  padding: '8px 12px',
+  borderRadius: 8,
+  background: UI_PANEL_BG,
+  border: UI_GOLD_BORDER,
+  color: UI_GOLD,
+  font: '12px ui-monospace, SFMono-Regular, Menlo, monospace',
+  zIndex: 30,
+  pointerEvents: 'none',
+  whiteSpace: 'pre',
+  lineHeight: 1.45,
+};
+
+function perfHudEnabled(): boolean {
+  return import.meta.env.DEV && new URLSearchParams(window.location.search).get('perf') === '1';
+}
+
+/** Dev-only `?perf=1` overlay for the concurrent-mover probe. */
+function PerfHud() {
+  const [text, setText] = useState('measuring…');
+  useEffect(() => {
+    let lastUpdates = 0;
+    let lastAt = performance.now();
+    const id = window.setInterval(() => {
+      const snap = window.__kaedeE2E?.snapshot();
+      const net = window.__kaedeE2ENet;
+      const now = performance.now();
+      const updates = net?.playerRowUpdates ?? 0;
+      const dt = (now - lastAt) / 1000;
+      const updateRate = dt > 0 ? (updates - lastUpdates) / dt : 0;
+      lastUpdates = updates;
+      lastAt = now;
+      if (!snap || snap.tick < 0) {
+        setText('waiting for world…');
+        return;
+      }
+      const xs = snap.remotePlayers.map((p) => p.x);
+      const spread = xs.length === 0 ? 0 : Math.max(...xs) - Math.min(...xs);
+      setText(
+        [
+          `FPS        ${snap.fps.toFixed(0)}`,
+          `remotes    ${snap.remotePlayers.length}`,
+          `row upd/s  ${updateRate.toFixed(0)}`,
+          `x-spread   ${spread.toFixed(0)}px`,
+        ].join('\n'),
+      );
+    }, 250);
+    return () => window.clearInterval(id);
+  }, []);
+  return <div style={PERF_HUD_STYLE}>{text}</div>;
+}
 
 /**
  * The application affordance for this client, from the space view (see
@@ -226,6 +281,7 @@ export function App() {
   return (
     <div style={{ position: 'relative' }}>
       <div ref={hostRef} />
+      {perfHudEnabled() ? <PerfHud /> : null}
       <AdmissionOverlay
         connected={connected}
         admission={admission}
