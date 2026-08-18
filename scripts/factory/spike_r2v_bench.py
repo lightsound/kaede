@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Factory v2 step 4a spike: fal-hosted r2v-generation bench (docs/
+"""Factory v2 steps 4a/4b spike: fal-hosted layer-2 bench (docs/
 factory-v2-plan.md §7 結論 3 — the layer-2 shootout's zero-setup bracket).
 
 Baseline = the current v1 lane (wan-2.2 animate/replace 720p, the recast
@@ -7,37 +7,47 @@ form: 3D green reference × the committed boy stand cell). Challengers = the
 r2v generation hosted on fal (wan 2.7 r2v 1080p / MiniMax H3 r2v 768p /
 seedance 2.5 r2v / Kling o3 pro r2v), plus two contrast paradigms:
 wan 2.7 edit-video (repaint the green reference into the kaede style
-instead of transplanting an identity) and fal-ai/scail-2 (the 4b target
-that turned out to be fal-hosted at bench time — recorded in the run
-report). SeedVR2 video upscaling rides as an independent post-stage lever
-on promising outputs.
+instead of transplanting an identity) and fal-ai/scail-2 (hosted after
+all). SeedVR2 video upscaling rides as an independent post-stage lever on
+promising outputs. Step 4b (2026-08-18 — §7 残タスク 3 の前提更新) adds
+the fal-hosted `fal-ai/wan-animate-2` lanes: a single endpoint (no v1
+move/replace split) whose llms.txt pricing is UNSET ("$0 per compute
+seconds"), so a 480p probe's balance delta calibrates the estimates
+before any full-price take. The bench never touches the ledgers — its
+output is owner-judgment material only.
 
 Every lane gets the SAME inputs: the ledger's green reference
-(master_models.json boy walk 68f554… / walk-carry f090cc…) trimmed to two
-bone-verified cycles (wan 2.7 r2v and seedance bill input video seconds),
-and the committed boy stand cell squared on white (the replace-lane
-squarify precedent) as the identity image. Money mechanics ride
-fal_client.FalJobs unchanged (state-persisted keys — re-runs never
-re-spend, --budget stop) plus a live fal-balance floor check before every
-submission: the account balance at bench start was $4.31, so the declared
-~$10 cap is theoretical and the balance API is the real limiter.
+(master_models.json boy walk 68f554… / walk-carry — 4a used the
+pre-correction f090cc…, 4b uses the CURRENT canonical head-raised
+155a7af8…) trimmed to two bone-verified cycles (wan 2.7 r2v and seedance
+bill input video seconds), and the identity standard of the adopted
+masters (R2 original stand cell → SeedVR2 4x → white square — 運転知見
+33; 4a lanes predating that standard used the un-upscaled square). Money
+mechanics ride fal_client.FalJobs unchanged (state-persisted keys —
+re-runs never re-spend, --budget stop) plus a live fal-balance floor
+check before every submission, plus a per-run balance-delta record
+(billing.json) — the fal balance API is the only true cost reading
+(BYOK gateway logs report cost=0 — 運転知見 31).
 
 Analysis is comparative, not gating (the bench verdict is the owner's):
 chroma-key aptitude (green-border fraction), loop closure and measured
 period vs the reference's cycle seconds (period inheritance — r2v models
-are NOT frame-synced, unlike replace), and PR #98-style verdict material
-(per-model phase montage, game-scale 192px previews, side-by-side loop
-video, measured cost/time table).
+are NOT frame-synced, unlike replace; whether wan-animate-2 frame-syncs
+is a 4b measurement), and PR #98-style verdict material plus the 運転知見
+34 judgment sheets (every row labeled with model / resolution / inputs /
+measured cost, ground truth first, adopted-master rows for the win/loss
+call).
 
 Usage:
     export CLOUDFLARE_API_TOKEN=...
     python3 scripts/factory/spike_r2v_bench.py <workdir> prepare
     python3 scripts/factory/spike_r2v_bench.py <workdir> run \
-        --lane wan27-r2v --motion walk [--take 1] [--budget 4.0]
+        --lane wanimate2-480p --motion walk [--take 1] [--budget 4.0]
     python3 scripts/factory/spike_r2v_bench.py <workdir> seedvr \
         --source <lane>:<motion>[:take] [--factor 2] [--budget 4.0]
     python3 scripts/factory/spike_r2v_bench.py <workdir> analyze
     python3 scripts/factory/spike_r2v_bench.py <workdir> material
+    python3 scripts/factory/spike_r2v_bench.py <workdir> judgment
     python3 scripts/factory/spike_r2v_bench.py <workdir> upload
     python3 scripts/factory/spike_r2v_bench.py <workdir> costs
 """
@@ -112,6 +122,34 @@ APOSE_SHA256 = (
 # Machine floor for identity inputs — a low-res identity uniformly degrades
 # every lane's redraw and understates the whole bench (運転知見 32 ②).
 IDENTITY_MIN_HEIGHT = 300
+# The adopted masters' identity input (R2 original stand cell → SeedVR2 4x →
+# white square, 1600² — 運転知見 33). Content-addressed in R2, so fetching it
+# beats re-upscaling: $0 and byte-identical to the adopted walk master's
+# actual input; `upscale-identity` stays as the regeneration path.
+UPSCALED_IDENTITY_SHA256 = (
+    "c7b3f9049161e4acbfb09bf3d43c92b295d7ee7148922b25c39f0b66b179ae0b"
+)
+# The win/loss anchors (master_takes.json 2026-08-16): the bench challenges
+# these, and the judgment sheets carry them as labeled rows. Fetched read-only
+# — this spike never writes a ledger.
+ADOPTED_MASTERS = {
+    "walk": {
+        "sha256": "ea621ba6fa7b1a3d9cc4b62737352d179628b8c7f64c861ea1f96a3a89488725",
+        "recipe": "seedance 2.5 r2v 720p (960²)・駆動=台帳緑参照 2 周期・"
+        "identity=SeedVR2 4x 立ちセル・実測 $2.45/テイク (2026-08-16 採用)",
+    },
+    "carry": {
+        "sha256": "6a8bd7bc7e1f54532a3cf92cb22e9f9c77fe6013d03188aabfd563e5e5751e2c",
+        "recipe": "seedance 2.5 r2v 480p (640²)・駆動=頭起こし補正参照 2 周期・"
+        "identity=SeedVR2 4x 立ちセル・実測 $1.09/テイク (2026-08-16 採用)",
+    },
+}
+# The 4a′ v1-replace walk baseline (R2 — correct identity inputs, $0.25
+# measured 2026-08-15). Rides the walk judgment sheet as the v1 reference
+# row without re-spending.
+V1_WALK_TAKE = (
+    "b267d7f1c25ba8d38873ab83f3bc211b845611a40335b10e54600a8a7cad7cff"
+)
 REF_FPS = 24
 # Keep at least this much fal balance unspent — a lane that would dip below
 # it stops the bench instead of stranding a half-billed queue job.
@@ -157,6 +195,21 @@ def r2v_prompt(motion: str, image_ref: str, video_ref: str, *, side_lock: bool =
         "props, static camera, no cuts, no camera motion."
     )
 
+
+# wan-animate-2's prompt spec is "appearance and background" — appearance
+# stays out (運転知見 32: the identity image is the only appearance
+# authority), so only the background side is written. The green statement
+# keeps chroma-key aptitude measurable whichever source (white identity
+# square vs green driving video) the model takes its background from.
+WANIMATE2_PROMPT = (
+    "Flat pure green #00FF00 chroma-key background, no shadows, no ground "
+    "line, no props."
+)
+# llms.txt pricing is UNSET ("$0 per compute seconds" — 2026-08-18), so the
+# unit price is unknown until measured. These per-take guesses are
+# deliberately conservative (over-counting is the safe direction for the
+# budget/floor stops); the 480p probe's balance delta recalibrates them.
+WANIMATE2_EST = {"480p": 0.75, "580p": 1.20, "720p": 1.80}
 
 EDIT_PROMPT = (
     "Repaint the untextured gray 3D mannequin as {style}. Keep every "
@@ -511,7 +564,62 @@ def lane_request(
             },
             in_s * 0.20,
         )
+    if lane.startswith("wanimate2-"):
+        # 4b (fal-hosted Wan-Animate-2 — §7 残タスク 3 の 2026-08-18 更新):
+        # one endpoint transfers the driving video's motion, camera and
+        # framing onto the identity (no v1 move/replace split).
+        resolution = lane.removeprefix("wanimate2-")
+        if resolution not in WANIMATE2_EST:
+            raise SystemExit(
+                f"unknown wanimate2 resolution {resolution!r} — "
+                f"expected one of {sorted(WANIMATE2_EST)}"
+            )
+        if motion == "carry":
+            # The 4b carry driving is the CURRENT ledger canonical (the
+            # head-raised re-render 155a7af8… behind the adopted carry
+            # master), not 4a's pre-correction f090cc… trim.
+            ref = jobs.upload(work / manifest["headupRef"]["trim"])
+        return (
+            "fal-ai/wan-animate-2",
+            {
+                "prompt": WANIMATE2_PROMPT,
+                "video_url": ref,
+                "image_url": jobs.upload(upscaled_identity(work)),
+                "resolution": resolution,
+                "aspect_ratio": "1:1",
+                "frames_per_second": REF_FPS,
+            },
+            WANIMATE2_EST[resolution],
+        )
+    if lane in ("scail2-pose", "scail2-replace"):
+        # §7 残タスク 3 のオプション追試: 4a の既定設定 (end_to_end ×
+        # animation × 704p) はノイズ崩壊 — pose 駆動と replacement を
+        # 512p で 1 本ずつだけ再試する ($0.20/出力秒・出力 16fps)。
+        payload = {
+            "prompt": SCAIL_PROMPT.format(style=STYLE, motion=MOTION_TEXT[motion]),
+            "image_url": jobs.upload(upscaled_identity(work)),
+            "video_url": ref,
+            "resolution": "512p",
+        }
+        if lane == "scail2-pose":
+            payload["driving_type"] = "pose"
+        else:
+            payload["mode"] = "replacement"
+        return ("fal-ai/scail-2", payload, in_s * 0.20)
     raise SystemExit(f"unknown lane {lane!r}")
+
+
+def upscaled_identity(work: Path) -> Path:
+    """The adopted masters' identity input, fetched by content address."""
+    path = work / "identity_upscaled_square.png"
+    if not path.exists():
+        path.write_bytes(get_object(UPSCALED_IDENTITY_SHA256))
+    with Image.open(path) as img:
+        if img.height < IDENTITY_MIN_HEIGHT:
+            raise SystemExit(
+                f"upscaled identity is {img.height}px tall — not the 4x input"
+            )
+    return path
 
 
 def guarded_run(
@@ -531,18 +639,39 @@ def guarded_run(
     return jobs.run(key, model, payload, est)
 
 
+def record_billing(work: Path, key: str, before: float, after: float) -> None:
+    """Per-submission balance-delta bookkeeping. The fal balance API is the
+    only true cost reading (BYOK gateway logs report cost=0 — 運転知見 31),
+    and 4b's unit price starts unknown, so every fresh run writes its delta.
+    Charges can post late (the edit-video precedent), so a delta is an
+    attribution, not an invoice — the run report says so where it matters."""
+    path = work / "billing.json"
+    billing = json.loads(path.read_text()) if path.exists() else {}
+    billing[key] = {
+        "balanceBefore": round(before, 4),
+        "balanceAfter": round(after, 4),
+        "delta": round(before - after, 4),
+    }
+    path.write_text(json.dumps(billing, indent=1) + "\n")
+
+
 def cmd_run(work: Path, args: argparse.Namespace) -> None:
     manifest = load_manifest(work)
     jobs = fal_client.FalJobs(work, args.budget)
     key = f"{args.lane}_{args.motion}_t{args.take}"
     model, payload, est = lane_request(args.lane, args.motion, manifest, jobs, work)
     print(f"[{key}] {model} est ${est:.3f}")
+    fresh = key not in jobs.state.get("runs", {})
+    before = balance() if fresh else None
     t0 = time.time()
     result = guarded_run(jobs, key, model, payload, est)
     jobs.download(key, result["video"]["url"], dest=work / f"{key}.mp4")
+    after = balance()
+    if fresh:
+        record_billing(work, key, before, after)
     print(f"[{key}] done in {time.time() - t0:.0f}s wall — "
           f"spent est ${jobs.state['spent_estimated']:.2f}/{args.budget:.2f}, "
-          f"balance ${balance():.2f}")
+          f"balance ${after:.2f}")
 
 
 def cmd_upscale_identity(work: Path, args: argparse.Namespace) -> None:
@@ -843,6 +972,120 @@ def cmd_material(work: Path) -> None:
         stack_loop_videos(videos, labels, work / f"loops_side_by_side_{motion}.mp4")
 
 
+def measured_cost(work: Path, key: str) -> str:
+    path = work / "billing.json"
+    if path.exists():
+        entry = json.loads(path.read_text()).get(key)
+        if entry:
+            return (f"実測 ${entry['delta']:.2f} (残高 "
+                    f"{entry['balanceBefore']:.2f}→{entry['balanceAfter']:.2f})")
+    return "実測費用の記録なし"
+
+
+def lane_desc(lane: str) -> str:
+    base = lane.split(":")[0]
+    if base.startswith("wanimate2-"):
+        return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2-')}・"
+                "fps24・蒸留既定 (steps10/CFG1)")
+    if base == "scail2-pose":
+        return "fal-ai/scail-2 512p・pose 駆動・animation"
+    if base == "scail2-replace":
+        return "fal-ai/scail-2 512p・replacement"
+    return base
+
+
+def billing_key(lane: str, motion: str) -> str:
+    if ":" in lane:
+        base, take = lane.split(":")
+        return f"{base}_{motion}_{take}"
+    return f"{lane}_{motion}_t1"
+
+
+REF_DESC = {
+    "walk": "台帳 boy walk 緑参照 68f5542a… の 2 周期トリム (50f/24fps)",
+    "carry": "台帳 boy walk-carry 頭起こし補正版 155a7af8… の 2 周期トリム "
+    "(48f/24fps)",
+}
+V1_ROWS = {
+    "walk": ("wan-2.2 animate/replace 720p・4a′ テイクの R2 再利用 "
+             "(b267d7…)・実測 $0.25 (2026-08-15)"),
+    "carry": ("v1 recast 720p の R2 再利用 (fb6d4e…・$0 — 4a′ 判定で"
+              "服崩壊+手元の緑黄斑の不合格級)"),
+}
+
+
+def cmd_judgment(work: Path) -> None:
+    """運転知見 34 judgment sheets + adopted-master parallel loops: every
+    row carries model / resolution / inputs / measured cost burned into the
+    image, ground truth (the actual identity) is row 1, and the side-by-side
+    loop video puts the adopted master next to every challenger."""
+    for motion in ("walk", "carry"):
+        challengers = [
+            (lane, path) for lane, m, path in bench_outputs(work)
+            if m == motion and lane != "v1-replace"
+        ]
+        if not challengers:
+            continue
+        rows: list[tuple[str, str, list[Image.Image]]] = []
+        truth = Image.open(work / "identity_cell.png").convert("RGBA")
+        upid = Image.open(upscaled_identity(work)).convert("RGBA")
+        rows.append((
+            "1. 元画像 (正解) identity",
+            "左 = R2 原本 stand セル (クロマキー済)・右 = SeedVR2 4x 入力 "
+            "1600² (c7b3f904… — 採用マスターと同一 identity)",
+            [truth, upid],
+        ))
+        ref_path = work / (
+            "ref_carry_headup_2cycles.mp4" if motion == "carry"
+            else "ref_walk_2cycles.mp4"
+        )
+        rows.append((
+            f"2. 駆動動画 (3D 緑参照・{motion})", REF_DESC[motion],
+            phase_cells(ref_path, motion, work),
+        ))
+        master_path = work / f"master_{motion}.mp4"
+        if not master_path.exists():
+            master_path.write_bytes(get_object(ADOPTED_MASTERS[motion]["sha256"]))
+        master_cells = phase_cells(master_path, motion, work)
+        rows.append((
+            "3. 採用マスター (比較基準・master_takes.json)",
+            ADOPTED_MASTERS[motion]["recipe"], master_cells,
+        ))
+        v1_path = work / (
+            "v1_carry_720p.mp4" if motion == "carry" else "v1_walk_720p.mp4"
+        )
+        if motion == "walk" and not v1_path.exists():
+            v1_path.write_bytes(get_object(V1_WALK_TAKE))
+        number = 4
+        if v1_path.exists():
+            rows.append((
+                f"{number}. v1 replace (参考)", V1_ROWS[motion],
+                phase_cells(v1_path, motion, work),
+            ))
+            number += 1
+        loops = [(f"master-{motion}", master_cells)]
+        for lane, path in challengers:
+            cells = phase_cells(path, motion, work)
+            recipe = (f"{lane_desc(lane)}・駆動 = {REF_DESC[motion]}・identity "
+                      f"= SeedVR2 4x 立ちセル・"
+                      f"{measured_cost(work, billing_key(lane, motion))}")
+            rows.append((f"{number}. {lane}", recipe, cells))
+            number += 1
+            loops.append((lane.replace(":", "-"), cells))
+        out = work / f"judgment_{motion}.png"
+        judgment_sheet(rows, out)
+        video_paths, labels = [], []
+        for label, cells in loops:
+            # The loops_ prefix keeps these out of bench_outputs' take glob.
+            loop_path = work / f"loops_judge_{motion}_{label}.mp4"
+            loop_video(cells, loop_path)
+            video_paths.append(loop_path)
+            labels.append(label)
+        stack_loop_videos(
+            video_paths, labels, work / f"loops_vs_master_{motion}.mp4"
+        )
+
+
 def stack_loop_videos(videos: list[Path], labels: list[str], out: Path) -> None:
     existing = [(v, l) for v, l in zip(videos, labels) if v.exists()]
     if len(existing) < 2:
@@ -896,6 +1139,7 @@ def main() -> None:
     upscale.add_argument("--budget", type=float, default=4.0)
     sub.add_parser("analyze")
     sub.add_parser("material")
+    sub.add_parser("judgment")
     sub.add_parser("upload")
     costs = sub.add_parser("costs")
     costs.add_argument("--limit", type=int, default=30)
@@ -914,6 +1158,8 @@ def main() -> None:
         cmd_analyze(args.workdir)
     elif args.command == "material":
         cmd_material(args.workdir)
+    elif args.command == "judgment":
+        cmd_judgment(args.workdir)
     elif args.command == "upload":
         cmd_upload(args.workdir)
     elif args.command == "costs":
