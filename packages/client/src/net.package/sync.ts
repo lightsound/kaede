@@ -107,6 +107,7 @@ function installNetStats(): E2ENetStats | undefined {
     dmNotifyDecisions: 0,
     groupChatRowsReceived: 0,
     groupCallRowsReceived: 0,
+    playerRowUpdates: 0,
   };
   window.__kaedeE2ENet = stats;
   return stats;
@@ -727,6 +728,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // with it.
     c.db.player.onInsert((_ctx, row) => {
       if (stale()) return;
+      bumpStat('playerRowUpdates');
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) {
         // A fresh spawn lands on the session's map, but a re-join racing a
@@ -739,6 +741,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     });
     c.db.player.onUpdate((_ctx, _old, row) => {
       if (stale()) return;
+      bumpStat('playerRowUpdates');
       const idHex = row.identity.toHexString();
       if (idHex === myIdHex) applyOwnUpdate(row);
       else recordRemote(idHex, row);
