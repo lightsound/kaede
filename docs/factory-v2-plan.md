@@ -601,7 +601,7 @@ identityPaletteDrift 0 件・全コマ手元ズーム帯検品で白ゴースト
    | avatar-carry | walk-carry/boy d53b0400… extract（$0・walkLane.flip）＋ミトン handAnchors 実測し直し＋hand.png 再切り出し（stand 据え置きゆえ byte 不変） | ✅ 済（cells 23/29/35/41・period 24・walk anchors (79,127)/(81,127)/(80,123)/(79,128)） |
    | pants / red / pants-carry / red-carry | 親シートへの avatar-outfit-edit（nano $0.10/着 — walkMasterSha256 を持たない） | ⏸ **親のオーナー目視 OK 後の次チャット**（親が落ちると $0.40 が捨てになる） |
    | avatar-carry-light（＋ *-carry-light 変種） | walk-carry-light/boy 0df88e42… のまま（4b 未差し替え・対象外） | ✅ **裁定①「いったん据え置き」で確定（2026-08-19 オーナー）** — 片手持ちは製品として存続（heavy/light 2 系統は不変）。将来再鋳造するなら②は derive ツール改修が先（運転知見 38 ②）・③は有料でオーナー明示待ち |
-   | avatar-girl | walk/girl 0afe6d1c…（seedance 世代・0.993/0.995）のまま | ⏸ 要否判定材料（新 boy との 96px 並列 15 秒ループ）を PR #128 に掲示 — マルチプレイで世代差が目立つなら girl も wan 3 周期 ~$0.37 から。黙って生成しない |
+   | avatar-girl | walk/girl 0afe6d1c…（seedance 世代・0.993/0.995）のまま | ⏸ **オーナー「気になる・作り直して」（2026-08-19）→ 新候補テイクを boy 採用レシピで生成済み**（wan-animate-2 720p steps20・girl 3D 緑参照 28430243… 駆動・R2 原本 identity 4x 枠一致 e6f66fe8…・2 テイク $0.75・候補 = t2 93224789…・videoReview「現行よりよく動く・boy と世代感が揃う・破綻なし」）。committed 化は **2 裁定待ち**: ①絵の合否（PR #128 の 10 秒並列） ②コマ間パレットドリフト検査の wan 世代較正（両テイクとも walk-c の**内部境界混色シーム**が距離 73〜75 で機械落ち — 再塗装ではないことを画素分布で実測・運転知見 39。較正なしでは import ゲートを通らない） |
 
    親 2 枚の再鋳造で発注書 walkMasterSha256 書き戻しが済み、PR #119 以来の
    sha 乖離は解消。**鏡像事故が 1 件**: wan 世代マスター 2 本は committed の
