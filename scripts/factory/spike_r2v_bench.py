@@ -55,6 +55,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -358,12 +359,13 @@ def cmd_prepare(work: Path) -> None:
 def lane_request(
     lane: str, motion: str, manifest: dict, jobs: fal_client.FalJobs, work: Path,
     *, steps: int | None = None, guidance: float | None = None,
-    mitten: bool = False,
+    mitten: bool = False, seed: int | None = None,
 ) -> tuple[str, dict, float]:
-    """(model id, payload, estimated USD) for one lane × motion. steps and
-    guidance are wan-animate-2 knobs (mannequin-ghost mitigation probes —
-    the distilled default is steps 10 / guidance-free); anything else
-    rejects them so a knobbed take can never masquerade as a default one."""
+    """(model id, payload, estimated USD) for one lane × motion. steps,
+    guidance and seed are wan-animate-2 knobs (mannequin-ghost mitigation
+    probes — the distilled default is steps 10 / guidance-free); anything
+    else rejects them so a knobbed take can never masquerade as a default
+    one."""
     meta = manifest["motions"][motion]
     ref = jobs.upload(work / meta["trim"])
     identity = jobs.upload(work / manifest["identity"]["file"])
@@ -590,6 +592,7 @@ def lane_request(
         )
     if lane.startswith((
         "wanimate2-", "wanimate2g-", "wanimate2m-", "wanimate2p-", "wanimate2s-",
+        "wanimate2r-",
     )):
         # 4b (fal-hosted Wan-Animate-2 — §7 残タスク 3 の 2026-08-18 更新):
         # one endpoint transfers the driving video's motion, camera and
@@ -630,12 +633,29 @@ def lane_request(
                     "(bpy_pose_offset + bpy_render_loop s14/p24 + tile x2)"
                 )
             ref = jobs.upload(surgery)
+        est_scale = 1.0
+        if family == "wanimate2r":
+            # Registration-take lane (§7 残タスク 1 のブロッカー 1): the
+            # ADOPTED 4b recipes rerun with a THREE-cycle driving so
+            # replace_lane register's "2 loops + TRIM_MIN_MARGIN" window
+            # fits — walk = the ledger walk reference UNTRIMMED (75f =
+            # 3×25), carry = the CURRENT ledger walk-carry reference (the
+            # official mitten-mold re-render, 72f = 3×24). Recipe and
+            # identity stay the adopted ones; only the driving length
+            # changes, so compute-second billing scales by frames.
+            ref_path = (
+                work / "ref_walk.mp4" if motion == "walk"
+                else ledger_carry_reference(work)
+            )
+            ref = jobs.upload(ref_path)
+            est_scale = probe(ref_path).frames / 50
         identity_path = {
             "wanimate2": upscaled_identity,
             "wanimate2g": green_identity,
             "wanimate2m": matched_identity,
             "wanimate2p": matched_identity,
             "wanimate2s": matched_identity,
+            "wanimate2r": matched_identity,
         }[family](work)
         payload = {
             "prompt": WANIMATE2_PROMPT,
@@ -645,7 +665,9 @@ def lane_request(
             "aspect_ratio": "1:1",
             "frames_per_second": REF_FPS,
         }
-        est = WANIMATE2_EST[resolution]
+        if seed is not None:
+            payload["seed"] = seed
+        est = WANIMATE2_EST[resolution] * est_scale
         if steps is not None:
             payload["num_inference_steps"] = steps
             est *= steps / 10  # compute-second billing scales with steps
@@ -747,6 +769,118 @@ def matched_identity(work: Path) -> Path:
     return path
 
 
+def ledger_carry_reference(work: Path) -> Path:
+    """The CURRENT master_models.json boy/walk-carry green reference (the
+    registration lane's carry driving — the mitten-mold official 72f
+    re-render once 作業 1 has landed), fetched by content address."""
+    ledger = json.loads(
+        (Path(__file__).resolve().parent / "master_models.json").read_text()
+    )
+    sha = ledger["models"]["boy"]["motions"]["walk-carry"]["reference"]["sha256"]
+    path = work / "ref_carry_ledger.mp4"
+    if not (path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() == sha):
+        path.write_bytes(get_object(sha))
+    return path
+
+
+def subject_mask(frame: Image.Image) -> np.ndarray:
+    """Non-green-dominant pixels of an RGB frame (the bench's green rule)."""
+    a = np.asarray(frame.convert("RGB")).astype(int)
+    return ~((a[:, :, 1] - np.maximum(a[:, :, 0], a[:, :, 2])) >= 40)
+
+
+def cmd_cropreg(work: Path, args: argparse.Namespace) -> None:
+    """Fixed-frame content-centered square crop of one take (blocker 2 —
+    the gangnam/girl 496² precedent): loop_scan's silhouette_mask shrinks
+    the WHOLE frame to 160px before IoU, so a subject at ~43% of the frame
+    (the matched-identity framing) measures systematically low. One box —
+    the union of every frame's subject bbox + margin, squared — crops every
+    frame identically, so the loop geometry is untouched and only the
+    measurement resolution changes."""
+    src = work / f"{args.key}.mp4"
+    if not src.exists():
+        raise SystemExit(f"{src} missing — run that lane first")
+    frame_paths = extract_frames(src, work / f"frames_{src.stem}")
+    lo_x = lo_y = 10**9
+    hi_x = hi_y = -(10**9)
+    for path in frame_paths:
+        with Image.open(path) as frame:
+            ys, xs = np.where(subject_mask(frame))
+        lo_x, lo_y = min(lo_x, int(xs.min())), min(lo_y, int(ys.min()))
+        hi_x, hi_y = max(hi_x, int(xs.max())), max(hi_y, int(ys.max()))
+    with Image.open(frame_paths[0]) as first:
+        width, height = first.size
+    lo_x, lo_y = max(0, lo_x - args.margin), max(0, lo_y - args.margin)
+    hi_x, hi_y = min(width, hi_x + 1 + args.margin), min(height, hi_y + 1 + args.margin)
+    # Square the box around its center (clamped), then snap to even h264 dims.
+    side = max(hi_x - lo_x, hi_y - lo_y)
+    side = min(side + side % 2, width, height)
+    cx, cy = (lo_x + hi_x) // 2, (lo_y + hi_y) // 2
+    x0 = min(max(0, cx - side // 2), width - side)
+    y0 = min(max(0, cy - side // 2), height - side)
+    crop_dir = work / f"crop_{src.stem}"
+    crop_dir.mkdir(exist_ok=True)
+    for index, path in enumerate(frame_paths):
+        with Image.open(path) as frame:
+            frame.convert("RGB").crop((x0, y0, x0 + side, y0 + side)).save(
+                crop_dir / f"crop_{index:03d}.png"
+            )
+    out = work / f"{args.key}_crop.mp4"
+    fps = probe(src).fps
+    run_quiet([
+        "ffmpeg", "-y", "-loglevel", "error", "-framerate", f"{fps:g}",
+        "-i", str(crop_dir / "crop_%03d.png"),
+        "-an", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p",
+        str(out),
+    ])
+    print(f"wrote {out.name}: box ({x0},{y0}) {side}² of {width}x{height}, "
+          f"{len(frame_paths)} frames @ {fps:g}fps")
+
+
+# All-frame hand-zoom band (運転知見 35 ⑤ — retake inspection must read
+# EVERY frame's hands, not a sampled few). The band is cut from each
+# frame's own subject bbox so hand pixels stay in-band while the character
+# bobs; the white-ghost check rides the same strip (ghosts sit near the
+# subject, well inside the padded band).
+HAND_BAND = (0.35, 0.80)
+HANDSTRIP_COLS = 8
+
+
+def cmd_handstrip(work: Path, args: argparse.Namespace) -> None:
+    from PIL import ImageDraw, ImageFont
+
+    src = work / f"{args.key}.mp4"
+    if not src.exists():
+        raise SystemExit(f"{src} missing — run that lane first")
+    frame_paths = extract_frames(src, work / f"frames_{src.stem}")
+    font = ImageFont.truetype(JUDGMENT_FONT, 22)
+    cells = []
+    for index, path in enumerate(frame_paths):
+        frame = Image.open(path).convert("RGB")
+        ys, xs = np.where(subject_mask(frame))
+        top, bottom = int(ys.min()), int(ys.max()) + 1
+        left, right = int(xs.min()), int(xs.max()) + 1
+        band_top = top + round((bottom - top) * HAND_BAND[0])
+        band_bottom = top + round((bottom - top) * HAND_BAND[1])
+        pad = 12
+        band = frame.crop((
+            max(0, left - pad), max(0, band_top),
+            min(frame.width, right + pad), min(frame.height, band_bottom),
+        ))
+        band = band.resize((band.width * 2, band.height * 2), Image.NEAREST)
+        cell = Image.new("RGB", (band.width, band.height + 28), (250, 250, 252))
+        cell.paste(band, (0, 28))
+        ImageDraw.Draw(cell).text((4, 2), f"f{index:02d}", font=font, fill=(0, 0, 0))
+        cells.append(cell.convert("RGBA"))
+    rows = [
+        cells[i : i + HANDSTRIP_COLS]
+        for i in range(0, len(cells), HANDSTRIP_COLS)
+    ]
+    out = work / f"hands_all_{src.stem}.png"
+    montage_rows(rows, out)
+    print(f"wrote {out.name} ({len(cells)} frames)")
+
+
 def guarded_run(
     jobs: fal_client.FalJobs, key: str, model: str, payload: dict, est: float
 ) -> dict:
@@ -784,11 +918,16 @@ def cmd_run(work: Path, args: argparse.Namespace) -> None:
     manifest = load_manifest(work)
     jobs = fal_client.FalJobs(work, args.budget)
     key = f"{args.lane}_{args.motion}_t{args.take}"
-    if (args.steps or args.guidance or args.mitten) and not args.lane.startswith("wanimate2"):
-        raise SystemExit("--steps/--guidance/--mitten are wan-animate-2 knobs only")
+    if (
+        args.steps or args.guidance or args.mitten or args.seed
+    ) and not args.lane.startswith("wanimate2"):
+        raise SystemExit(
+            "--steps/--guidance/--mitten/--seed are wan-animate-2 knobs only"
+        )
     model, payload, est = lane_request(
         args.lane, args.motion, manifest, jobs, work,
         steps=args.steps, guidance=args.guidance, mitten=args.mitten,
+        seed=args.seed,
     )
     print(f"[{key}] {model} est ${est:.3f}")
     fresh = key not in jobs.state.get("runs", {})
@@ -1156,6 +1295,9 @@ def lane_desc(lane: str) -> str:
         return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2s-')}・"
                 "fps24・identity 緑地+駆動枠一致・駆動 = ミトン金型版 "
                 "(両手ボーン 0.65 縮小)")
+    if base.startswith("wanimate2r-"):
+        return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2r-')}・"
+                "fps24・identity 緑地+駆動枠一致・駆動 = 3 周期 (登録用)")
     if base == "scail2-pose":
         return "fal-ai/scail-2 512p・pose 駆動・animation"
     if base == "scail2-replace":
@@ -1173,8 +1315,6 @@ def billing_key(lane: str, motion: str) -> str:
 def input_names(work: Path, state: dict) -> dict[str, str]:
     """CDN url -> local input filename, resolved through the upload cache
     (uploads map sha256 -> url; the local inputs are hashed once)."""
-    import hashlib
-
     sha_to_name = {}
     for path in list(work.glob("ref_*.mp4")) + list(work.glob("identity_*.png")):
         sha_to_name[hashlib.sha256(path.read_bytes()).hexdigest()] = path.name
@@ -1199,6 +1339,8 @@ def take_recipe(state: dict, names: dict, lane: str, motion: str) -> str | None:
         f"steps{payload.get('num_inference_steps', 10)}"
         f"/CFG{payload.get('guidance_scale', 1):g}"
     )
+    if "seed" in payload:
+        knobs += f"・seed {payload['seed']}"
     if MITTEN_PROMPT.strip() in payload.get("prompt", ""):
         knobs += "・ミトンプロンプト"
     return (
@@ -1300,6 +1442,81 @@ def cmd_judgment(work: Path) -> None:
         )
 
 
+# The 4b owner-approved TWO-cycle takes (最終裁定 2026-08-19 — §7「4b 実施
+# 結果」)。登録用 3 周期再生成の比較基準行: 承認されたのはレシピと 2 周期版
+# の絵なので、台帳書き込み前の並列材料はこの 2 本に対して組む。
+APPROVED_TAKES = {
+    "walk": {
+        "sha256": "4f57e1405c1fed177a75fd931832edc086bd54d44e4f6bd0ee7ac83189d0d41a",
+        "recipe": ("fal-ai/wan-animate-2 720p・steps20/CFG1・seed 1974552879・"
+                   "50f/24fps・駆動 = 台帳 boy walk 緑参照 68f5542a… の 2 周期"
+                   "トリム・実測 $0.253 (4b 2026-08-18)"),
+    },
+    "carry": {
+        "sha256": "6b4838a9f1831c03a249678c8fa6f9697c5ad06c87c1aa80fab5b666cbf1e72f",
+        "recipe": ("fal-ai/wan-animate-2 720p・steps30/CFG1・seed 124940612・"
+                   "48f/24fps・駆動 = ミトン金型 2 周期緑参照 882dc2cc…・"
+                   "実測 $0.37 (4b 2026-08-18 t2)"),
+    },
+}
+
+
+def cmd_regjudgment(work: Path) -> None:
+    """登録用再生成テイク (wanimate2r) vs 4b 承認テイクの並列判定材料
+    (運転知見 34 形式)。承認テイクは R2 から内容アドレスで取得し、再生成側の
+    recipe は支払済みペイロードから読み戻す (PR #126 の教訓)。"""
+    state_path = work / "state.json"
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    names = input_names(work, state)
+    for motion in ("walk", "carry"):
+        regenerated = sorted(
+            path for path in work.glob(f"wanimate2r-*_{motion}_t*.mp4")
+            if not path.stem.endswith("_crop")
+        )
+        if not regenerated:
+            continue
+        truth = Image.open(work / "identity_cell.png").convert("RGBA")
+        upid = Image.open(upscaled_identity(work)).convert("RGBA")
+        rows: list[tuple[str, str, list[Image.Image]]] = [(
+            "1. 元画像 (正解) identity",
+            "左 = R2 原本 stand セル (クロマキー済)・右 = SeedVR2 4x 入力 "
+            "1600² (採用レシピと同一 identity)",
+            [truth, upid],
+        )]
+        approved_path = work / f"approved_{motion}.mp4"
+        if not approved_path.exists():
+            approved_path.write_bytes(get_object(APPROVED_TAKES[motion]["sha256"]))
+        approved_cells = phase_cells(approved_path, motion, work)
+        rows.append((
+            "2. 4b 承認テイク (2 周期・比較基準)",
+            APPROVED_TAKES[motion]["recipe"], approved_cells,
+        ))
+        loops = [(f"approved-{motion}", approved_cells)]
+        number = 3
+        for path in regenerated:
+            lane, _, take = path.stem.rsplit("_", 2)
+            lane_key = lane if take == "t1" else f"{lane}:{take}"
+            cells = phase_cells(path, motion, work)
+            actual = take_recipe(state, names, lane_key, motion)
+            recipe = (f"{actual or lane_desc(lane_key)}・"
+                      f"{measured_cost(work, billing_key(lane_key, motion))}")
+            rows.append((f"{number}. 登録用再生成 {path.stem} (3 周期)",
+                         recipe, cells))
+            loops.append((path.stem, cells))
+            number += 1
+        judgment_sheet(rows, work / f"regjudgment_{motion}.png")
+        video_paths, labels = [], []
+        for label, cells in loops:
+            # loops_ プレフィックスで bench_outputs のテイク glob から除外。
+            loop_path = work / f"loops_reg_{motion}_{label}.mp4"
+            loop_video(cells, loop_path)
+            video_paths.append(loop_path)
+            labels.append(label)
+        stack_loop_videos(
+            video_paths, labels, work / f"loops_reg_vs_approved_{motion}.mp4"
+        )
+
+
 def stack_loop_videos(videos: list[Path], labels: list[str], out: Path) -> None:
     existing = [(v, l) for v, l in zip(videos, labels) if v.exists()]
     if len(existing) < 2:
@@ -1347,6 +1564,7 @@ def main() -> None:
     run.add_argument("--steps", type=int)
     run.add_argument("--guidance", type=float)
     run.add_argument("--mitten", action="store_true")
+    run.add_argument("--seed", type=int)
     seedvr = sub.add_parser("seedvr")
     seedvr.add_argument("--source", required=True, help="<lane>:<motion>[:tN]")
     seedvr.add_argument("--factor", type=int, default=2)
@@ -1360,6 +1578,12 @@ def main() -> None:
     sub.add_parser("material")
     sub.add_parser("judgment")
     sub.add_parser("upload")
+    cropreg = sub.add_parser("cropreg")
+    cropreg.add_argument("--key", required=True, help="take key, e.g. wanimate2r-720p_walk_t1")
+    cropreg.add_argument("--margin", type=int, default=16)
+    handstrip = sub.add_parser("handstrip")
+    handstrip.add_argument("--key", required=True)
+    sub.add_parser("regjudgment")
     costs = sub.add_parser("costs")
     costs.add_argument("--limit", type=int, default=30)
 
@@ -1381,6 +1605,12 @@ def main() -> None:
         cmd_material(args.workdir)
     elif args.command == "judgment":
         cmd_judgment(args.workdir)
+    elif args.command == "cropreg":
+        cmd_cropreg(args.workdir, args)
+    elif args.command == "handstrip":
+        cmd_handstrip(args.workdir, args)
+    elif args.command == "regjudgment":
+        cmd_regjudgment(args.workdir)
     elif args.command == "upload":
         cmd_upload(args.workdir)
     elif args.command == "costs":
