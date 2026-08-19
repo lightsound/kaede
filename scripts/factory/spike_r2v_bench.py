@@ -205,14 +205,30 @@ WANIMATE2_PROMPT = (
     "Flat pure green #00FF00 chroma-key background, no shadows, no ground "
     "line, no props."
 )
+# Owner-ordered controlled deviation (2026-08-19): the carry pose carries an
+# item on open hands, so palms must read as UP — or the hands must be
+# orientation-less mittens (the identity's chibi hands). The driving video's
+# texting-pose hands are flat/inward, so neither gacha nor the motion source
+# provides palm-up; the mitten wording is a deliberate appearance override
+# (the 運転知見 32 lever, used ON PURPOSE and only with guidance_scale > 1 —
+# the distilled CFG-free default provably ignores prompts).
+MITTEN_PROMPT = (
+    " Both hands are simple smooth rounded mitten-shaped stubby hands with "
+    "no individual fingers, no fingernails and no palm lines, exactly like "
+    "the tiny rounded hands in the reference image."
+)
+MITTEN_NEGATIVE = (
+    "realistic detailed hands, individual fingers, fingernails, palm lines, "
+    "white ghost shapes, floating objects, extra limbs"
+)
 # llms.txt pricing is UNSET ("$0 per compute seconds" — 2026-08-18), so the
-# unit price was unknown until the probe: the 480p walk (50f/2.08s output)
-# posted a $0.052 balance delta (~2 minutes AFTER completion — the charge
-# settles late). These estimates are the measured actual with headroom, and
-# higher tiers assume pixel-proportional compute plus the documented
-# "substantially slower" 720p segments (over-counting is the safe direction
-# for the budget/floor stops).
-WANIMATE2_EST = {"480p": 0.10, "580p": 0.20, "720p": 0.40}
+# unit price was unknown until measured by balance delta (the charge settles
+# ~2 minutes AFTER completion): 480p 2-cycle $0.052 / 720p $0.140 at the
+# distilled default, ~linear in steps (720p steps30 $0.364), guidance 2
+# ×1.77 (480p steps20 $0.088 → $0.155 measured). Estimates carry ~15%
+# headroom over those actuals — enough over-counting for the budget/floor
+# stops without blocking runs the balance can afford.
+WANIMATE2_EST = {"480p": 0.06, "580p": 0.11, "720p": 0.16}
 
 EDIT_PROMPT = (
     "Repaint the untextured gray 3D mannequin as {style}. Keep every "
@@ -342,6 +358,7 @@ def cmd_prepare(work: Path) -> None:
 def lane_request(
     lane: str, motion: str, manifest: dict, jobs: fal_client.FalJobs, work: Path,
     *, steps: int | None = None, guidance: float | None = None,
+    mitten: bool = False,
 ) -> tuple[str, dict, float]:
     """(model id, payload, estimated USD) for one lane × motion. steps and
     guidance are wan-animate-2 knobs (mannequin-ghost mitigation probes —
@@ -571,7 +588,7 @@ def lane_request(
             },
             in_s * 0.20,
         )
-    if lane.startswith(("wanimate2-", "wanimate2g-", "wanimate2m-")):
+    if lane.startswith(("wanimate2-", "wanimate2g-", "wanimate2m-", "wanimate2p-")):
         # 4b (fal-hosted Wan-Animate-2 — §7 残タスク 3 の 2026-08-18 更新):
         # one endpoint transfers the driving video's motion, camera and
         # framing onto the identity (no v1 move/replace split). The g
@@ -590,10 +607,27 @@ def lane_request(
             # head-raised re-render 155a7af8… behind the adopted carry
             # master), not 4a's pre-correction f090cc… trim.
             ref = jobs.upload(work / manifest["headupRef"]["trim"])
+        if family == "wanimate2p":
+            # Palm-up wrist surgery (owner order 2026-08-19 — the carry pose
+            # carries an item on open hands): the head-up motion GLB with
+            # LeftHand/RightHand X:-90 composed in (bpy_pose_offset), cycle
+            # re-rendered and tiled ×2 by the bench round. The driving is
+            # the ONLY change; identity stays the matched green square.
+            if motion != "carry":
+                raise SystemExit("wanimate2p is a carry-only lane")
+            palmup = work / "ref_carry_palmup_2cycles.mp4"
+            if not palmup.exists():
+                raise SystemExit(
+                    f"{palmup.name} missing — render it first (wrist-surgery "
+                    "round: bpy_pose_offset X:-90 on both hands + "
+                    "bpy_render_loop s14/p24 + tile x2 on green)"
+                )
+            ref = jobs.upload(palmup)
         identity_path = {
             "wanimate2": upscaled_identity,
             "wanimate2g": green_identity,
             "wanimate2m": matched_identity,
+            "wanimate2p": matched_identity,
         }[family](work)
         payload = {
             "prompt": WANIMATE2_PROMPT,
@@ -607,9 +641,17 @@ def lane_request(
         if steps is not None:
             payload["num_inference_steps"] = steps
             est *= steps / 10  # compute-second billing scales with steps
+        if mitten:
+            if not guidance or guidance <= 1:
+                raise SystemExit(
+                    "--mitten needs --guidance > 1 — the CFG-free default "
+                    "provably ignores prompts (4b probe)"
+                )
+            payload["prompt"] += MITTEN_PROMPT
+            payload["negative_prompt"] = MITTEN_NEGATIVE
         if guidance is not None:
             payload["guidance_scale"] = guidance
-            est *= 2  # CFG re-enables the unconditional pass (2x time)
+            est *= 1.8  # CFG re-enables the unconditional pass (×1.77 measured)
         return ("fal-ai/wan-animate-2", payload, est)
     if lane in ("scail2-pose", "scail2-replace"):
         # §7 残タスク 3 のオプション追試: 4a の既定設定 (end_to_end ×
@@ -734,11 +776,11 @@ def cmd_run(work: Path, args: argparse.Namespace) -> None:
     manifest = load_manifest(work)
     jobs = fal_client.FalJobs(work, args.budget)
     key = f"{args.lane}_{args.motion}_t{args.take}"
-    if (args.steps or args.guidance) and not args.lane.startswith("wanimate2"):
-        raise SystemExit("--steps/--guidance are wan-animate-2 knobs only")
+    if (args.steps or args.guidance or args.mitten) and not args.lane.startswith("wanimate2"):
+        raise SystemExit("--steps/--guidance/--mitten are wan-animate-2 knobs only")
     model, payload, est = lane_request(
         args.lane, args.motion, manifest, jobs, work,
-        steps=args.steps, guidance=args.guidance,
+        steps=args.steps, guidance=args.guidance, mitten=args.mitten,
     )
     print(f"[{key}] {model} est ${est:.3f}")
     fresh = key not in jobs.state.get("runs", {})
@@ -1098,6 +1140,10 @@ def lane_desc(lane: str) -> str:
         return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2m-')}・"
                 "fps24・蒸留既定 (steps10/CFG1)・identity 緑地+駆動枠一致 "
                 "(高 43%/上 7%)")
+    if base.startswith("wanimate2p-"):
+        return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2p-')}・"
+                "fps24・identity 緑地+駆動枠一致・駆動 = 掌上向き手首手術版 "
+                "(両手 X:-90)")
     if base == "scail2-pose":
         return "fal-ai/scail-2 512p・pose 駆動・animation"
     if base == "scail2-replace":
@@ -1243,6 +1289,7 @@ def main() -> None:
     run.add_argument("--budget", type=float, default=4.0)
     run.add_argument("--steps", type=int)
     run.add_argument("--guidance", type=float)
+    run.add_argument("--mitten", action="store_true")
     seedvr = sub.add_parser("seedvr")
     seedvr.add_argument("--source", required=True, help="<lane>:<motion>[:tN]")
     seedvr.add_argument("--factor", type=int, default=2)
