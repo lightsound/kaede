@@ -839,6 +839,28 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(above_neck, 0)
 
 
+class MirrorClipTests(unittest.TestCase):
+    """walk_lane.mirror_clip — the canon-facing flip for mirrored-lineage
+    masters (運転知見 38): every frame in the clip directory must come back
+    horizontally mirrored, in place, keeping filenames."""
+
+    def test_mirrors_every_frame_in_place(self) -> None:
+        from factory.walk_lane import mirror_clip
+
+        with tempfile.TemporaryDirectory() as tmp:
+            frames = Path(tmp)
+            for i in range(3):
+                img = Image.new("RGBA", (8, 4), (0, 255, 0, 255))
+                img.putpixel((0, 1), (255, 0, 0, 255))
+                img.save(frames / f"frame_{i:04d}.png")
+            count = mirror_clip(frames)
+            self.assertEqual(count, 3)
+            for i in range(3):
+                out = Image.open(frames / f"frame_{i:04d}.png").convert("RGBA")
+                self.assertEqual(out.getpixel((7, 1)), (255, 0, 0, 255))
+                self.assertEqual(out.getpixel((0, 1)), (0, 255, 0, 255))
+
+
 class BoneSignatureTests(unittest.TestCase):
     """Synthetic joint-space loops for the 3D-master ledger gates. The real
     calibration lives in bone_signature's module doc (measured GLBs); these
