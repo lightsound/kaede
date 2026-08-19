@@ -1170,6 +1170,45 @@ def billing_key(lane: str, motion: str) -> str:
     return f"{lane}_{motion}_t1"
 
 
+def input_names(work: Path, state: dict) -> dict[str, str]:
+    """CDN url -> local input filename, resolved through the upload cache
+    (uploads map sha256 -> url; the local inputs are hashed once)."""
+    import hashlib
+
+    sha_to_name = {}
+    for path in list(work.glob("ref_*.mp4")) + list(work.glob("identity_*.png")):
+        sha_to_name[hashlib.sha256(path.read_bytes()).hexdigest()] = path.name
+    return {
+        url: sha_to_name[sha]
+        for sha, url in state.get("uploads", {}).items()
+        if sha in sha_to_name
+    }
+
+
+def take_recipe(state: dict, names: dict, lane: str, motion: str) -> str | None:
+    """The recipe actually PAID FOR, read back from the submitted payload.
+    Burned-in labels must never trust a lane's defaults (Bugbot, PR #125:
+    a --steps take was labeled steps10/CFG1, and the mold-surgery lanes
+    were labeled with the canonical driving clip instead of their own) —
+    every knob and input on the sheet comes from the run record."""
+    record = state.get("runs", {}).get(billing_key(lane, motion))
+    if not record or record.get("model") != "fal-ai/wan-animate-2":
+        return None
+    payload = record.get("payload", {})
+    knobs = (
+        f"steps{payload.get('num_inference_steps', 10)}"
+        f"/CFG{payload.get('guidance_scale', 1):g}"
+    )
+    if MITTEN_PROMPT.strip() in payload.get("prompt", ""):
+        knobs += "・ミトンプロンプト"
+    return (
+        f"fal-ai/wan-animate-2 {payload.get('resolution')}・"
+        f"fps{payload.get('frames_per_second', 24)}・{knobs}・"
+        f"駆動 = {names.get(payload.get('video_url'), '?')}・"
+        f"identity = {names.get(payload.get('image_url'), '?')}"
+    )
+
+
 REF_DESC = {
     "walk": "台帳 boy walk 緑参照 68f5542a… の 2 周期トリム (50f/24fps)",
     "carry": "台帳 boy walk-carry 頭起こし補正版 155a7af8… の 2 周期トリム "
@@ -1188,6 +1227,9 @@ def cmd_judgment(work: Path) -> None:
     row carries model / resolution / inputs / measured cost burned into the
     image, ground truth (the actual identity) is row 1, and the side-by-side
     loop video puts the adopted master next to every challenger."""
+    state_path = work / "state.json"
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    names = input_names(work, state)
     for motion in ("walk", "carry"):
         challengers = [
             (lane, path) for lane, m, path in bench_outputs(work)
@@ -1235,9 +1277,12 @@ def cmd_judgment(work: Path) -> None:
         loops = [(f"master-{motion}", master_cells)]
         for lane, path in challengers:
             cells = phase_cells(path, motion, work)
-            recipe = (f"{lane_desc(lane)}・駆動 = {REF_DESC[motion]}・identity "
-                      f"= SeedVR2 4x 立ちセル・"
-                      f"{measured_cost(work, billing_key(lane, motion))}")
+            actual = take_recipe(state, names, lane, motion)
+            base = actual or (
+                f"{lane_desc(lane)}・駆動 = {REF_DESC[motion]}・identity "
+                "= SeedVR2 4x 立ちセル"
+            )
+            recipe = f"{base}・{measured_cost(work, billing_key(lane, motion))}"
             rows.append((f"{number}. {lane}", recipe, cells))
             number += 1
             loops.append((lane.replace(":", "-"), cells))
