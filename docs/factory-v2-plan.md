@@ -597,14 +597,18 @@ identityPaletteDrift 0 件・全コマ手元ズーム帯検品で白ゴースト
 
    | シート | 経路 | 状態 |
    | --- | --- | --- |
-   | avatar | walk/boy 1a003e99… extract（$0） | ✅ 済（cells 8/14/20/27・period 25） |
-   | avatar-carry | walk-carry/boy d53b0400… extract（$0）＋ミトン handAnchors 実測し直し＋hand.png 再切り出し（stand 据え置きゆえ byte 不変） | ✅ 済（cells 23/29/35/41・period 24・walk anchors (25,127)/(23,127)/(24,123)/(25,128)） |
+   | avatar | walk/boy 1a003e99… extract（$0・**walkLane.flip = 鏡像系統の正準向き反転** — 運転知見 38） | ✅ 済（cells 8/14/20/27・period 25・オーナー裁定②「新しい方が良い」） |
+   | avatar-carry | walk-carry/boy d53b0400… extract（$0・walkLane.flip）＋ミトン handAnchors 実測し直し＋hand.png 再切り出し（stand 据え置きゆえ byte 不変） | ✅ 済（cells 23/29/35/41・period 24・walk anchors (79,127)/(81,127)/(80,123)/(79,128)） |
    | pants / red / pants-carry / red-carry | 親シートへの avatar-outfit-edit（nano $0.10/着 — walkMasterSha256 を持たない） | ⏸ **親のオーナー目視 OK 後の次チャット**（親が落ちると $0.40 が捨てになる） |
-   | avatar-carry-light（＋ *-carry-light 変種） | walk-carry-light/boy 0df88e42… のまま（4b 未差し替え・対象外） | ⏸ light 3 択のオーナー裁定待ち（①据え置き ②derive_light_carry — ただし新 heavy には cut 幾何が不適用と実測（運転知見 38）③light マスター自体の wan 再鋳造 = 有料・スコープ外） |
-   | avatar-girl | walk/girl 0afe6d1c…（seedance 世代・0.993/0.995）のまま | ⏸ 要否判定材料（新 boy との 96px 並列）を PR に掲示 — マルチプレイで世代差が目立つなら girl も wan 3 周期 ~$0.37 から。黙って生成しない |
+   | avatar-carry-light（＋ *-carry-light 変種） | walk-carry-light/boy 0df88e42… のまま（4b 未差し替え・対象外） | ✅ **裁定①「いったん据え置き」で確定（2026-08-19 オーナー）** — 片手持ちは製品として存続（heavy/light 2 系統は不変）。将来再鋳造するなら②は derive ツール改修が先（運転知見 38 ②）・③は有料でオーナー明示待ち |
+   | avatar-girl | walk/girl 0afe6d1c…（seedance 世代・0.993/0.995）のまま | ⏸ 要否判定材料（新 boy との 96px 並列 15 秒ループ）を PR #128 に掲示 — マルチプレイで世代差が目立つなら girl も wan 3 周期 ~$0.37 から。黙って生成しない |
 
    親 2 枚の再鋳造で発注書 walkMasterSha256 書き戻しが済み、PR #119 以来の
-   sha 乖離は解消。オーナー目視までは出荷セルを完成扱いしない（運転知見 14）。
+   sha 乖離は解消。**鏡像事故が 1 件**: wan 世代マスター 2 本は committed の
+   正準向きと左右反転で鋳造されており（源流は bpy 緑参照 — 運転知見 38）、
+   オーナー指摘「歩く方向と顔の向きが違う」→ 裁定①で extract 側の反転
+   （walk_lane `--flip`・order の walkLane.flip に記録）により正準向きへ
+   正規化した。オーナー目視までは出荷セルを完成扱いしない（運転知見 14）。
 2. **God Mode AI ベンチ**（オーナー承認 2026-08-16 — 別チャットで実施）:
    1 枚絵 → AI パーツ分解 → 自動リグ → テンプレ ~400 本リターゲット →
    Spine 出力の専業 SaaS（DP-4 の市場実証として記録済み・生産ツール
