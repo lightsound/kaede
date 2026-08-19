@@ -178,6 +178,40 @@ def trim_cell(keyed: Image.Image) -> Image.Image:
 # ---------------------------------------------------------------- register
 
 
+def score_forced_period(
+    masks: list[np.ndarray], period: int, loop_mean_min: float,
+) -> tuple[int, int, float, float]:
+    """(start, period, loop-mean, closure) for an owner-forced period.
+
+    The forced period still has to clear the (possibly calibrated) gates —
+    `--period` is not a skip, it is a choice of which period is scored.
+    """
+    start, score = best_loop_start(masks, period)
+    closure = mask_iou(masks[start], masks[start + period])
+    if score < loop_mean_min or closure < CLOSURE_MIN:
+        raise SystemExit(
+            f"forced period {period} scores loop-mean {score:.3f} / "
+            f"closure {closure:.3f} — below the registration gates"
+        )
+    return start, period, score, closure
+
+
+def register_overrides(
+    period: int | None, loop_mean_min: float | None,
+) -> dict:
+    """The ledger `overrides` map for the owner-ruled register knobs.
+
+    Empty when neither knob was passed, so a default-gated registration
+    never grows an unused key.
+    """
+    overrides: dict = {}
+    if period is not None:
+        overrides["period"] = period
+    if loop_mean_min is not None:
+        overrides["loopMeanMin"] = loop_mean_min
+    return overrides
+
+
 def load_ledger() -> dict:
     if not LEDGER_PATH.exists():
         raise SystemExit(
@@ -192,6 +226,17 @@ def cmd_register(args: argparse.Namespace) -> None:
     work.mkdir(parents=True, exist_ok=True)
     if not args.approval.strip():
         raise SystemExit("--approval must record where the owner approved this take")
+    # Owner-ruled overrides (裁定 2026-08-19, PR #127) — measurement changes
+    # are never silent: both land in the ledger entry under "overrides" and
+    # both demand the approval text name the ruling that allows them.
+    # --period: 1:1 frame-synced wan takes carry a bone-verified driving
+    # period, and find_loop's fundamental-period rule (FUNDAMENTAL_MARGIN)
+    # can swallow it for a slightly-lower-scoring smaller period (carry
+    # measured 23 at 0.939 vs the true 24 at 0.943). --loop-mean-min:
+    # wan-generation takes measure systematically lower on the silhouette
+    # metric than the seedance generation even after content cropping
+    # (approved-look walk takes plateau at 0.936 vs the 0.94 default).
+    loop_mean_min = args.loop_mean_min if args.loop_mean_min is not None else LOOP_MEAN_MIN
     ledger = load_ledger()
     source = resolve_input(args.source, work, "source")
     source_sha = sha256_of(source)
@@ -199,7 +244,12 @@ def cmd_register(args: argparse.Namespace) -> None:
     frames = extract_frames(source, work / "frames_source")
     assert_green_background(frames)
     masks = [silhouette_mask(img) for img in keyed_frames(frames)]
-    _, period, score, closure = find_loop(masks)
+    if args.period is not None:
+        _, period, score, closure = score_forced_period(
+            masks, args.period, loop_mean_min
+        )
+    else:
+        _, period, score, closure = find_loop(masks, loop_mean_min=loop_mean_min)
     print(f"source loop: period={period} loop-mean={score:.3f} closure={closure:.3f}")
     needed = 2 * period + TRIM_MIN_MARGIN
     if needed > TRIM_MAX_FRAMES:
@@ -219,7 +269,7 @@ def cmd_register(args: argparse.Namespace) -> None:
         )
     start, score = best_loop_start(masks, period, start_max=start_max)
     closure = mask_iou(masks[start], masks[start + period])
-    if score < LOOP_MEAN_MIN or closure < CLOSURE_MIN:
+    if score < loop_mean_min or closure < CLOSURE_MIN:
         raise SystemExit(
             f"trim-anchored loop at {start} scores loop-mean {score:.3f} / "
             f"closure {closure:.3f} — below the registration gates"
@@ -236,7 +286,7 @@ def cmd_register(args: argparse.Namespace) -> None:
         raise SystemExit(f"trim produced {len(trimmed)} frames, expected {length}")
     tmasks = [silhouette_mask(img) for img in keyed_frames(trimmed)]
     tstart, tscore, tclosure = verify_loop(tmasks, period)
-    if tscore < LOOP_MEAN_MIN or tclosure < CLOSURE_MIN:
+    if tscore < loop_mean_min or tclosure < CLOSURE_MIN:
         raise SystemExit(
             f"trimmed master scores loop-mean {tscore:.3f} / closure "
             f"{tclosure:.3f} — re-encode broke the loop?"
@@ -247,7 +297,7 @@ def cmd_register(args: argparse.Namespace) -> None:
     master_sha = put_object(master.read_bytes())
     print(f"uploaded master to R2: {master_sha}")
 
-    ledger["masters"][f"{args.motion}/{args.family}"] = {
+    entry = {
         "motion": args.motion,
         "family": args.family,
         "masterSha256": master_sha,
@@ -265,6 +315,10 @@ def cmd_register(args: argparse.Namespace) -> None:
         "approval": args.approval,
         "registeredAt": time.strftime("%Y-%m-%d"),
     }
+    overrides = register_overrides(args.period, args.loop_mean_min)
+    if overrides:
+        entry["overrides"] = overrides
+    ledger["masters"][f"{args.motion}/{args.family}"] = entry
     LEDGER_PATH.write_text(json.dumps(ledger, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
         ["pnpm", "exec", "biome", "format", "--write", str(LEDGER_PATH)], check=True
@@ -540,6 +594,14 @@ def main() -> None:
     register.add_argument("--approval", required=True,
                           help="where the owner approved this take (provenance)")
     register.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-fal-lane"))
+    register.add_argument(
+        "--period", type=int,
+        help="force a bone-verified period instead of find_loop's choice "
+             "(owner-ruled; recorded in the ledger entry)")
+    register.add_argument(
+        "--loop-mean-min", type=float,
+        help="owner-ruled loop-mean gate calibration for a model generation "
+             "(recorded in the ledger entry; closure gate unchanged)")
 
     produce = sub.add_parser("produce", help="run one order (発注書) end to end")
     produce.add_argument("order", type=Path)

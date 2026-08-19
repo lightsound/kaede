@@ -27,20 +27,23 @@
     "walk/boy": {
       "motion": "walk",
       "family": "boy",
-      "masterSha256": "ea621ba6fa7b1a3d9cc4b62737352d179628b8c7f64c861ea1f96a3a89488725",
-      "sourceSha256": "6149715fd35785e44f16ac1f9b18753dc10116551b0c8c48cf731dd3711cbac0",
-      "frames": 71,
+      "masterSha256": "1a003e9921b756fcd0cdee458d683bdbbe5e3279fee2f6440992cbd1b32f6e42",
+      "sourceSha256": "6fc3c1cb90e3b39102c306d3e33ab3e0ece377d7a1101b6502b534ca24c89511",
+      "frames": 62,
       "fps": 24.0,
-      "width": 960,
-      "height": 960,
+      "width": 464,
+      "height": 464,
       "loop": {
         "start": 0,
-        "period": 24,
-        "loopMeanIou": 0.988,
-        "closureIou": 0.99
+        "period": 25,
+        "loopMeanIou": 0.936,
+        "closureIou": 0.952
       },
-      "approval": "手順 4a オーナー裁定 2026-08-16「そしたら【4】で良いです」= seedance 2.5 720p × 立ちセル SeedVR2 4x identity テイクを walk マスターに採用(PR #119 判定シート hantei4_walk【4】)",
-      "registeredAt": "2026-08-16"
+      "approval": "台帳差し替え裁定 2026-08-19 (PR #127): 裁定①=②ゲート較正で wan-animate-2 720p steps20 テイク(4b 最終裁定レシピ・3 周期再生成 t2 = R2 1d32b29e…・regprep 白脚間除去+464² クロップ = 6fc3c1cb…)を walk マスターへ差し替え。loop-mean 較正 0.93 の実測根拠 = 承認済みの絵 4f57e140… が同処理で 0.918・再生成 2 本が 0.936 プラトー(seedance 世代 0.977〜0.993 との世代系統差)。裁定③=白残渣は regprep で除去(キー後残渣ゼロ機械確認・監査 5829136b…)。全コマ検品済(手元帯 858348a1…)",
+      "registeredAt": "2026-08-19",
+      "overrides": {
+        "loopMeanMin": 0.93
+      }
     },
     "walk/girl": {
       "motion": "walk",
@@ -81,20 +84,23 @@
     "walk-carry/boy": {
       "motion": "walk-carry",
       "family": "boy",
-      "masterSha256": "6a8bd7bc7e1f54532a3cf92cb22e9f9c77fe6013d03188aabfd563e5e5751e2c",
-      "sourceSha256": "4e6785869f421031aa587ba50116ef6e943541b2bea7cea1608f950e7149dd32",
-      "frames": 68,
+      "masterSha256": "d53b04009eb7407603b17a7ccd6e7feeb2d759c75534c9b5d78410b06492fa3d",
+      "sourceSha256": "58e6da3ba6c55bb311a0149e17008bb0da3cffbb3bb3c9e98723596090e42143",
+      "frames": 72,
       "fps": 24.0,
-      "width": 640,
-      "height": 640,
+      "width": 454,
+      "height": 454,
       "loop": {
         "start": 0,
         "period": 24,
-        "loopMeanIou": 0.977,
-        "closureIou": 0.986
+        "loopMeanIou": 0.943,
+        "closureIou": 0.954
       },
-      "approval": "手順 4a オーナー判定 2026-08-16「carry【2】は合格で OK」= 頭起こし補正モーション(e9c3623e…)の緑参照 × seedance 2.5 480p × 立ちセル SeedVR2 4x identity テイクを walk-carry マスターに採用(PR #119 判定シート hantei5_carry【2】)",
-      "registeredAt": "2026-08-16"
+      "approval": "台帳差し替え裁定 2026-08-19 (PR #127): 裁定②=差し替え承認で ミトン金型 wan-animate-2 720p steps30 テイク(4b 最終裁定レシピ・seed 124940612・3 周期再生成 t1 = R2 e5403fa3…・regprep 白脚間除去+454² クロップ = 58e6da3b…)を walk-carry マスターへ差し替え。--period 24 = 骨検証済み駆動周期(756bdffb…・ミトン金型 GLB 6cdb195e…)を明示指定 — find_loop の基本周期規則は 23(0.939)を選ぶが真周期 24 は 0.943/0.954 で既定ゲート合格。裁定③=白残渣は regprep で除去(キー後残渣ゼロ機械確認・監査 e2f71662…)。全コマ検品済(手元帯 3f89f891…・全コマミトン成立)",
+      "registeredAt": "2026-08-19",
+      "overrides": {
+        "period": 24
+      }
     },
     "walk-carry-light/boy": {
       "motion": "walk-carry-light",
