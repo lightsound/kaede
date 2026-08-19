@@ -588,7 +588,9 @@ def lane_request(
             },
             in_s * 0.20,
         )
-    if lane.startswith(("wanimate2-", "wanimate2g-", "wanimate2m-", "wanimate2p-")):
+    if lane.startswith((
+        "wanimate2-", "wanimate2g-", "wanimate2m-", "wanimate2p-", "wanimate2s-",
+    )):
         # 4b (fal-hosted Wan-Animate-2 — §7 残タスク 3 の 2026-08-18 更新):
         # one endpoint transfers the driving video's motion, camera and
         # framing onto the identity (no v1 move/replace split). The g
@@ -607,27 +609,33 @@ def lane_request(
             # head-raised re-render 155a7af8… behind the adopted carry
             # master), not 4a's pre-correction f090cc… trim.
             ref = jobs.upload(work / manifest["headupRef"]["trim"])
-        if family == "wanimate2p":
-            # Palm-up wrist surgery (owner order 2026-08-19 — the carry pose
-            # carries an item on open hands): the head-up motion GLB with
-            # LeftHand/RightHand X:-90 composed in (bpy_pose_offset), cycle
-            # re-rendered and tiled ×2 by the bench round. The driving is
-            # the ONLY change; identity stays the matched green square.
+        if family in ("wanimate2p", "wanimate2s"):
+            # Mold-surgery drivings (owner orders 2026-08-19), carry only.
+            # p = palm-up wrists (LeftHand/RightHand X:-90 — REJECTED by the
+            # owner: thumb loss + unnatural wrist bend). s = mitten hands
+            # (both hand bones scaled 0.65 — orientation-less stubs, the
+            # owner-chosen route). Both are bpy_pose_offset compositions on
+            # the head-up motion GLB, cycle re-rendered and tiled ×2; the
+            # driving is the ONLY change.
             if motion != "carry":
-                raise SystemExit("wanimate2p is a carry-only lane")
-            palmup = work / "ref_carry_palmup_2cycles.mp4"
-            if not palmup.exists():
+                raise SystemExit(f"{family} is a carry-only lane")
+            name = {
+                "wanimate2p": "ref_carry_palmup_2cycles.mp4",
+                "wanimate2s": "ref_carry_mitten_2cycles.mp4",
+            }[family]
+            surgery = work / name
+            if not surgery.exists():
                 raise SystemExit(
-                    f"{palmup.name} missing — render it first (wrist-surgery "
-                    "round: bpy_pose_offset X:-90 on both hands + "
-                    "bpy_render_loop s14/p24 + tile x2 on green)"
+                    f"{surgery.name} missing — render it first "
+                    "(bpy_pose_offset + bpy_render_loop s14/p24 + tile x2)"
                 )
-            ref = jobs.upload(palmup)
+            ref = jobs.upload(surgery)
         identity_path = {
             "wanimate2": upscaled_identity,
             "wanimate2g": green_identity,
             "wanimate2m": matched_identity,
             "wanimate2p": matched_identity,
+            "wanimate2s": matched_identity,
         }[family](work)
         payload = {
             "prompt": WANIMATE2_PROMPT,
@@ -1144,6 +1152,10 @@ def lane_desc(lane: str) -> str:
         return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2p-')}・"
                 "fps24・identity 緑地+駆動枠一致・駆動 = 掌上向き手首手術版 "
                 "(両手 X:-90)")
+    if base.startswith("wanimate2s-"):
+        return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2s-')}・"
+                "fps24・identity 緑地+駆動枠一致・駆動 = ミトン金型版 "
+                "(両手ボーン 0.65 縮小)")
     if base == "scail2-pose":
         return "fal-ai/scail-2 512p・pose 駆動・animation"
     if base == "scail2-replace":

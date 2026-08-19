@@ -7,10 +7,15 @@ does not stare at a phone, owner order 2026-08-16).
 Every keyframe of the named bones' rotation_quaternion fcurves is
 pre-multiplied by the offset quaternion (a rotation about the bone's
 rest-pose local axis), so the motion's timing, feet and loop closure are
-untouched — only the posture changes by a constant.
+untouched — only the posture changes by a constant. --scale composes a
+constant uniform local scale the same way (second production use: shrinking
+the carry mold's hands into orientation-less mitten stubs — owner order
+2026-08-19; a scale channel absent from the action is created as constant
+keyframes so the GLB export carries it).
 
     blender -b --python-exit-code 1 -P scripts/factory/bpy_pose_offset.py \
-        -- <in.glb> <out.glb> --offset Head=X:-20 [--offset neck=X:-8]
+        -- <in.glb> <out.glb> --offset Head=X:-20 [--offset neck=X:-8] \
+        [--scale LeftHand=0.55]
 """
 
 from __future__ import annotations
@@ -31,10 +36,16 @@ def main() -> None:
     parser.add_argument("glb_in")
     parser.add_argument("glb_out")
     parser.add_argument(
-        "--offset", action="append", required=True,
+        "--offset", action="append", default=[],
         help="Bone=Axis:degrees (Axis in XYZ, bone-local)",
     )
+    parser.add_argument(
+        "--scale", action="append", default=[],
+        help="Bone=factor (constant uniform local scale)",
+    )
     args = parser.parse_args(argv)
+    if not args.offset and not args.scale:
+        raise SystemExit("nothing to do — pass --offset and/or --scale")
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=args.glb_in)
@@ -71,6 +82,26 @@ def main() -> None:
         for c in curves:
             c.update()
         print(f"offset {bone} {axis}{degrees} over {len(curves[0].keyframe_points)} keys")
+
+    for spec in args.scale:
+        bone, _, factor_text = spec.partition("=")
+        factor = float(factor_text)
+        path = f'pose.bones["{bone}"].scale'
+        curves = [c for c in action.fcurves if c.data_path == path]
+        if curves:
+            for c in curves:
+                for point in c.keyframe_points:
+                    point.co.y *= factor
+                c.update()
+            print(f"scale {bone} x{factor} over existing fcurves")
+        else:
+            start, end = action.frame_range
+            for index in range(3):
+                c = action.fcurves.new(path, index=index)
+                for frame in (start, end):
+                    c.keyframe_points.insert(frame, factor)
+                c.update()
+            print(f"scale {bone} x{factor} as new constant fcurves")
 
     bpy.ops.export_scene.gltf(
         filepath=args.glb_out, export_format="GLB", export_animations=True
