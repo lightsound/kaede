@@ -178,6 +178,40 @@ def trim_cell(keyed: Image.Image) -> Image.Image:
 # ---------------------------------------------------------------- register
 
 
+def score_forced_period(
+    masks: list[np.ndarray], period: int, loop_mean_min: float,
+) -> tuple[int, int, float, float]:
+    """(start, period, loop-mean, closure) for an owner-forced period.
+
+    The forced period still has to clear the (possibly calibrated) gates —
+    `--period` is not a skip, it is a choice of which period is scored.
+    """
+    start, score = best_loop_start(masks, period)
+    closure = mask_iou(masks[start], masks[start + period])
+    if score < loop_mean_min or closure < CLOSURE_MIN:
+        raise SystemExit(
+            f"forced period {period} scores loop-mean {score:.3f} / "
+            f"closure {closure:.3f} — below the registration gates"
+        )
+    return start, period, score, closure
+
+
+def register_overrides(
+    period: int | None, loop_mean_min: float | None,
+) -> dict:
+    """The ledger `overrides` map for the owner-ruled register knobs.
+
+    Empty when neither knob was passed, so a default-gated registration
+    never grows an unused key.
+    """
+    overrides: dict = {}
+    if period is not None:
+        overrides["period"] = period
+    if loop_mean_min is not None:
+        overrides["loopMeanMin"] = loop_mean_min
+    return overrides
+
+
 def load_ledger() -> dict:
     if not LEDGER_PATH.exists():
         raise SystemExit(
@@ -211,14 +245,9 @@ def cmd_register(args: argparse.Namespace) -> None:
     assert_green_background(frames)
     masks = [silhouette_mask(img) for img in keyed_frames(frames)]
     if args.period is not None:
-        period = args.period
-        start, score = best_loop_start(masks, period)
-        closure = mask_iou(masks[start], masks[start + period])
-        if score < loop_mean_min or closure < CLOSURE_MIN:
-            raise SystemExit(
-                f"forced period {period} scores loop-mean {score:.3f} / "
-                f"closure {closure:.3f} — below the registration gates"
-            )
+        _, period, score, closure = score_forced_period(
+            masks, args.period, loop_mean_min
+        )
     else:
         _, period, score, closure = find_loop(masks, loop_mean_min=loop_mean_min)
     print(f"source loop: period={period} loop-mean={score:.3f} closure={closure:.3f}")
@@ -286,11 +315,7 @@ def cmd_register(args: argparse.Namespace) -> None:
         "approval": args.approval,
         "registeredAt": time.strftime("%Y-%m-%d"),
     }
-    overrides = {}
-    if args.period is not None:
-        overrides["period"] = args.period
-    if args.loop_mean_min is not None:
-        overrides["loopMeanMin"] = args.loop_mean_min
+    overrides = register_overrides(args.period, args.loop_mean_min)
     if overrides:
         entry["overrides"] = overrides
     ledger["masters"][f"{args.motion}/{args.family}"] = entry

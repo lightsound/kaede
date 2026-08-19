@@ -1581,6 +1581,16 @@ def cmd_judgment(work: Path) -> None:
         )
 
 
+def registration_takes(work: Path, motion: str) -> list[Path]:
+    """Paid wanimate2r regeneration takes only — cropreg/regprep derivatives
+    share the take glob (`{key}_crop.mp4` / `{key}_reg.mp4`) and must not
+    appear as extra judgment rows (Bugbot, PR #127)."""
+    return sorted(
+        path for path in work.glob(f"wanimate2r-*_{motion}_t*.mp4")
+        if not path.stem.endswith(("_crop", "_reg"))
+    )
+
+
 # The 4b owner-approved TWO-cycle takes (最終裁定 2026-08-19 — §7「4b 実施
 # 結果」)。登録用 3 周期再生成の比較基準行: 承認されたのはレシピと 2 周期版
 # の絵なので、台帳書き込み前の並列材料はこの 2 本に対して組む。
@@ -1608,10 +1618,7 @@ def cmd_regjudgment(work: Path) -> None:
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     names = input_names(work, state)
     for motion in ("walk", "carry"):
-        regenerated = sorted(
-            path for path in work.glob(f"wanimate2r-*_{motion}_t*.mp4")
-            if not path.stem.endswith("_crop")
-        )
+        regenerated = registration_takes(work, motion)
         if not regenerated:
             continue
         truth = Image.open(work / "identity_cell.png").convert("RGBA")

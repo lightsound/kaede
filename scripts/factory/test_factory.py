@@ -19,7 +19,9 @@ import numpy as np
 from factory import bone_signature, templates
 from factory.anchors import structure_hand_carry, structure_neck
 from factory.blink import eye_openness_score, phase_candidates, select_cells
-from factory.loop_scan import find_loop, verify_loop
+from factory.loop_scan import LOOP_MEAN_MIN, find_loop, verify_loop
+from factory.replace_lane import register_overrides, score_forced_period
+from factory.spike_r2v_bench import registration_takes, repaint_leg_gap
 from factory.art_lint import (
     check_head_consistency,
     check_leg_phase,
@@ -421,6 +423,93 @@ class LoopScanTests(unittest.TestCase):
         self.assertGreater(loop_mean, 0.94)
         self.assertGreater(closure, 0.93)
         self.assertLessEqual(start + 2 * 20, 90)
+
+    def test_find_loop_honors_calibrated_floor(self) -> None:
+        masks = self._masks(20, 90)
+        start, period, loop_mean, _ = find_loop(
+            masks, min_period=12, max_period=40, loop_mean_min=0.50
+        )
+        self.assertEqual(period, 20)
+        self.assertGreater(loop_mean, 0.94)
+        with self.assertRaises(SystemExit):
+            find_loop(masks, min_period=12, max_period=40, loop_mean_min=1.1)
+
+
+class RegisterOverrideTests(unittest.TestCase):
+    def test_overrides_record_only_passed_knobs(self) -> None:
+        self.assertEqual(register_overrides(None, None), {})
+        self.assertEqual(register_overrides(24, None), {"period": 24})
+        self.assertEqual(register_overrides(None, 0.93), {"loopMeanMin": 0.93})
+        self.assertEqual(
+            register_overrides(24, 0.93),
+            {"period": 24, "loopMeanMin": 0.93},
+        )
+
+    def test_forced_period_clears_and_rejects(self) -> None:
+        masks = LoopScanTests()._masks(20, 90)
+        start, period, score, closure = score_forced_period(
+            masks, 20, LOOP_MEAN_MIN
+        )
+        self.assertEqual(period, 20)
+        self.assertGreater(score, 0.94)
+        self.assertGreater(closure, 0.93)
+        self.assertLessEqual(start + 2 * period, 90)
+        with self.assertRaises(SystemExit):
+            score_forced_period(masks, 13, LOOP_MEAN_MIN)
+
+
+class RegistrationTakeGlobTests(unittest.TestCase):
+    def test_crop_and_reg_derivatives_are_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            (work / "wanimate2r-720p_walk_t1.mp4").write_bytes(b"ok")
+            (work / "wanimate2r-720p_walk_t2.mp4").write_bytes(b"ok")
+            (work / "wanimate2r-720p_walk_t1_crop.mp4").write_bytes(b"no")
+            (work / "wanimate2r-720p_walk_t2_reg.mp4").write_bytes(b"no")
+            (work / "wanimate2r-720p_carry_t1.mp4").write_bytes(b"other")
+            names = [p.name for p in registration_takes(work, "walk")]
+            self.assertEqual(
+                names,
+                ["wanimate2r-720p_walk_t1.mp4", "wanimate2r-720p_walk_t2.mp4"],
+            )
+
+
+class LegGapRepaintTests(unittest.TestCase):
+    def _frame(self, *, gap_white: bool, shirt_white: bool) -> Image.Image:
+        """Chibi on chroma green: navy pants + brown shoes, optional white
+        wedge between the legs (the residue) and a white shirt hem above
+        the grow zone (must stay)."""
+        img = Image.new("RGB", (120, 200), (0, 255, 0))
+        draw = ImageDraw.Draw(img)
+        # Head + torso (subject top ~20) so the 0.80 seed / 0.74 grow
+        # zones land on the legs, not the shirt.
+        draw.ellipse((40, 20, 80, 60), fill=(240, 200, 160))
+        draw.rectangle((45, 58, 75, 95), fill=(250, 250, 250) if shirt_white else (240, 240, 230))
+        draw.rectangle((44, 94, 76, 102), fill=(120, 70, 40))  # belt
+        draw.rectangle((42, 102, 58, 175), fill=(30, 40, 90))  # left pant
+        draw.rectangle((62, 102, 78, 175), fill=(30, 40, 90))  # right pant
+        draw.ellipse((38, 168, 60, 188), fill=(90, 55, 30))
+        draw.ellipse((60, 168, 82, 188), fill=(90, 55, 30))
+        if gap_white:
+            draw.rectangle((58, 150, 62, 174), fill=(255, 255, 255))
+        return img
+
+    def test_repaint_clears_leg_gap_and_spares_the_shirt(self) -> None:
+        before = self._frame(gap_white=True, shirt_white=True)
+        after, count = repaint_leg_gap(before)
+        self.assertGreater(count, 0)
+        a = list(after.getpixel((60, 160)))
+        self.assertEqual(a, [0, 255, 0])
+        # Shirt hem (above the grow zone) stays white, not chroma-eaten.
+        shirt = list(after.getpixel((60, 80)))
+        self.assertGreater(shirt[0], 200)
+        self.assertGreater(shirt[2], 200)
+
+    def test_clean_gap_is_a_no_op(self) -> None:
+        before = self._frame(gap_white=False, shirt_white=True)
+        after, count = repaint_leg_gap(before)
+        self.assertEqual(count, 0)
+        self.assertEqual(list(after.getpixel((60, 80))), list(before.getpixel((60, 80))))
 
 
 class BlinkTests(unittest.TestCase):
