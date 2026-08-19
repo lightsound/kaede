@@ -206,10 +206,13 @@ WANIMATE2_PROMPT = (
     "line, no props."
 )
 # llms.txt pricing is UNSET ("$0 per compute seconds" — 2026-08-18), so the
-# unit price is unknown until measured. These per-take guesses are
-# deliberately conservative (over-counting is the safe direction for the
-# budget/floor stops); the 480p probe's balance delta recalibrates them.
-WANIMATE2_EST = {"480p": 0.75, "580p": 1.20, "720p": 1.80}
+# unit price was unknown until the probe: the 480p walk (50f/2.08s output)
+# posted a $0.052 balance delta (~2 minutes AFTER completion — the charge
+# settles late). These estimates are the measured actual with headroom, and
+# higher tiers assume pixel-proportional compute plus the documented
+# "substantially slower" 720p segments (over-counting is the safe direction
+# for the budget/floor stops).
+WANIMATE2_EST = {"480p": 0.10, "580p": 0.20, "720p": 0.40}
 
 EDIT_PROMPT = (
     "Repaint the untextured gray 3D mannequin as {style}. Keep every "
@@ -337,9 +340,13 @@ def cmd_prepare(work: Path) -> None:
 
 
 def lane_request(
-    lane: str, motion: str, manifest: dict, jobs: fal_client.FalJobs, work: Path
+    lane: str, motion: str, manifest: dict, jobs: fal_client.FalJobs, work: Path,
+    *, steps: int | None = None, guidance: float | None = None,
 ) -> tuple[str, dict, float]:
-    """(model id, payload, estimated USD) for one lane × motion."""
+    """(model id, payload, estimated USD) for one lane × motion. steps and
+    guidance are wan-animate-2 knobs (mannequin-ghost mitigation probes —
+    the distilled default is steps 10 / guidance-free); anything else
+    rejects them so a knobbed take can never masquerade as a default one."""
     meta = manifest["motions"][motion]
     ref = jobs.upload(work / meta["trim"])
     identity = jobs.upload(work / manifest["identity"]["file"])
@@ -564,11 +571,15 @@ def lane_request(
             },
             in_s * 0.20,
         )
-    if lane.startswith("wanimate2-"):
+    if lane.startswith(("wanimate2-", "wanimate2g-", "wanimate2m-")):
         # 4b (fal-hosted Wan-Animate-2 — §7 残タスク 3 の 2026-08-18 更新):
         # one endpoint transfers the driving video's motion, camera and
-        # framing onto the identity (no v1 move/replace split).
-        resolution = lane.removeprefix("wanimate2-")
+        # framing onto the identity (no v1 move/replace split). The g
+        # variant grounds the identity on chroma green: the 480p probe
+        # measured a WHITE output background — the background authority is
+        # the identity image, and the guidance-free distilled checkpoint
+        # ignores the prompt's green statement (guidance_scale 1 = no CFG).
+        family, resolution = lane.split("-", 1)
         if resolution not in WANIMATE2_EST:
             raise SystemExit(
                 f"unknown wanimate2 resolution {resolution!r} — "
@@ -579,18 +590,27 @@ def lane_request(
             # head-raised re-render 155a7af8… behind the adopted carry
             # master), not 4a's pre-correction f090cc… trim.
             ref = jobs.upload(work / manifest["headupRef"]["trim"])
-        return (
-            "fal-ai/wan-animate-2",
-            {
-                "prompt": WANIMATE2_PROMPT,
-                "video_url": ref,
-                "image_url": jobs.upload(upscaled_identity(work)),
-                "resolution": resolution,
-                "aspect_ratio": "1:1",
-                "frames_per_second": REF_FPS,
-            },
-            WANIMATE2_EST[resolution],
-        )
+        identity_path = {
+            "wanimate2": upscaled_identity,
+            "wanimate2g": green_identity,
+            "wanimate2m": matched_identity,
+        }[family](work)
+        payload = {
+            "prompt": WANIMATE2_PROMPT,
+            "video_url": ref,
+            "image_url": jobs.upload(identity_path),
+            "resolution": resolution,
+            "aspect_ratio": "1:1",
+            "frames_per_second": REF_FPS,
+        }
+        est = WANIMATE2_EST[resolution]
+        if steps is not None:
+            payload["num_inference_steps"] = steps
+            est *= steps / 10  # compute-second billing scales with steps
+        if guidance is not None:
+            payload["guidance_scale"] = guidance
+            est *= 2  # CFG re-enables the unconditional pass (2x time)
+        return ("fal-ai/wan-animate-2", payload, est)
     if lane in ("scail2-pose", "scail2-replace"):
         # §7 残タスク 3 のオプション追試: 4a の既定設定 (end_to_end ×
         # animation × 704p) はノイズ崩壊 — pose 駆動と replacement を
@@ -619,6 +639,61 @@ def upscaled_identity(work: Path) -> Path:
             raise SystemExit(
                 f"upscaled identity is {img.height}px tall — not the 4x input"
             )
+    return path
+
+
+def green_identity(work: Path) -> Path:
+    """The upscaled identity re-grounded on chroma green (#00FF00). Border
+    flood fill only, so every character pixel stays byte-identical to the
+    adopted masters' identity input — only the background conditioning
+    changes."""
+    path = work / "identity_upscaled_green.png"
+    if not path.exists():
+        from PIL import ImageDraw
+
+        img = Image.open(upscaled_identity(work)).convert("RGB")
+        corners = (
+            (0, 0), (img.width - 1, 0),
+            (0, img.height - 1), (img.width - 1, img.height - 1),
+        )
+        for seed in corners:
+            ImageDraw.floodfill(img, seed, (0, 255, 0), thresh=40)
+        img.save(path)
+    return path
+
+
+# The driving mannequin's measured frame fractions (ref_walk_2cycles frame 1:
+# subject height 43% of the frame, top margin 7%). The output inherits the
+# IDENTITY's framing (99.5% height measured on the full-bleed square), so the
+# redrawn character never covers the mannequin's region and its erasure can
+# ghost — the framing-matched identity puts the character exactly where the
+# mannequin is.
+MATCHED_HEIGHT_FRAC = 0.43
+MATCHED_TOP_FRAC = 0.07
+
+
+def matched_identity(work: Path) -> Path:
+    """The green identity re-framed to the driving video's mannequin box.
+    The character crop comes from the SeedVR2 4x image (green-backed, so a
+    rectangle paste is seamless on the same #00FF00 canvas) and is scaled
+    DOWN — the 4x detail is kept, never re-upscaled."""
+    path = work / "identity_matched_green.png"
+    if not path.exists():
+        img = Image.open(green_identity(work)).convert("RGB")
+        a = np.asarray(img).astype(int)
+        subject = ~((a[:, :, 1] - np.maximum(a[:, :, 0], a[:, :, 2])) >= 40)
+        ys, xs = np.where(subject)
+        crop = img.crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
+        side = img.width
+        target_h = round(side * MATCHED_HEIGHT_FRAC)
+        scale = target_h / crop.height
+        small = crop.resize((round(crop.width * scale), target_h), Image.LANCZOS)
+        canvas = Image.new("RGB", (side, side), (0, 255, 0))
+        canvas.paste(
+            small,
+            ((side - small.width) // 2, round(side * MATCHED_TOP_FRAC)),
+        )
+        canvas.save(path)
     return path
 
 
@@ -659,7 +734,12 @@ def cmd_run(work: Path, args: argparse.Namespace) -> None:
     manifest = load_manifest(work)
     jobs = fal_client.FalJobs(work, args.budget)
     key = f"{args.lane}_{args.motion}_t{args.take}"
-    model, payload, est = lane_request(args.lane, args.motion, manifest, jobs, work)
+    if (args.steps or args.guidance) and not args.lane.startswith("wanimate2"):
+        raise SystemExit("--steps/--guidance are wan-animate-2 knobs only")
+    model, payload, est = lane_request(
+        args.lane, args.motion, manifest, jobs, work,
+        steps=args.steps, guidance=args.guidance,
+    )
     print(f"[{key}] {model} est ${est:.3f}")
     fresh = key not in jobs.state.get("runs", {})
     before = balance() if fresh else None
@@ -672,6 +752,20 @@ def cmd_run(work: Path, args: argparse.Namespace) -> None:
     print(f"[{key}] done in {time.time() - t0:.0f}s wall — "
           f"spent est ${jobs.state['spent_estimated']:.2f}/{args.budget:.2f}, "
           f"balance ${after:.2f}")
+
+
+def cmd_settle(work: Path, key: str) -> None:
+    """Re-read the balance into one billing entry. wan-animate-2 charges
+    post ~2 minutes AFTER completion (measured on the 480p probe), so the
+    at-completion delta reads 0 — run this once the charge lands, before
+    the next submission (runs are serial, so the whole delta is the key's)."""
+    path = work / "billing.json"
+    billing = json.loads(path.read_text())
+    entry = billing[key]
+    entry["balanceAfter"] = round(balance(), 4)
+    entry["delta"] = round(entry["balanceBefore"] - entry["balanceAfter"], 4)
+    path.write_text(json.dumps(billing, indent=1) + "\n")
+    print(f"[{key}] settled: {json.dumps(entry)}")
 
 
 def cmd_upscale_identity(work: Path, args: argparse.Namespace) -> None:
@@ -734,15 +828,24 @@ def cmd_seedvr(work: Path, args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------- analyze
 
 
-def green_border_fraction(frame_paths: list[Path]) -> float:
-    """Chroma-key aptitude: min green-dominant border share over 3 samples."""
-    fractions = []
+def green_border_fraction(frame_paths: list[Path]) -> tuple[float, float]:
+    """Chroma-key aptitude over 3 samples: (min green-dominant share of the
+    top/left/right borders, max subject share of the bottom row). The bottom
+    row is scored separately because a bottom-aligned identity (the squarify
+    precedent) makes wan-animate-2 frame the character with its feet ON the
+    frame edge — that lowers a whole-border score (0.84-0.89 measured on the
+    4b walk takes) without any chroma failure, the background itself being
+    uniformly green."""
+    fractions, contacts = [], []
     for path in (frame_paths[0], frame_paths[len(frame_paths) // 2], frame_paths[-1]):
         a = np.asarray(Image.open(path).convert("RGB")).astype(int)
-        border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+        border = np.concatenate([a[0], a[:, 0], a[:, -1]])
         green = (border[:, 1] - np.maximum(border[:, 0], border[:, 2])) >= 40
         fractions.append(float(green.mean()))
-    return min(fractions)
+        bottom = a[-1]
+        bottom_green = (bottom[:, 1] - np.maximum(bottom[:, 0], bottom[:, 2])) >= 40
+        contacts.append(1.0 - float(bottom_green.mean()))
+    return min(fractions), max(contacts)
 
 
 def measure_loop(masks: list[np.ndarray], expected: int) -> dict | None:
@@ -773,13 +876,14 @@ def measure_loop(masks: list[np.ndarray], expected: int) -> dict | None:
 def analyze_clip(path: Path, motion: str, work: Path) -> dict:
     info = probe(path)
     frame_paths = extract_frames(path, work / f"frames_{path.stem}")
-    green = green_border_fraction(frame_paths)
+    green, bottom_contact = green_border_fraction(frame_paths)
     entry: dict = {
         "file": path.name,
         "frames": info.frames,
         "fps": round(info.fps, 2),
         "seconds": round(info.duration, 2),
         "greenBorder": round(green, 3),
+        "bottomContact": round(bottom_contact, 3),
     }
     ref_period_s = GREEN_REFS[motion]["period"] / REF_FPS
     entry["refCycleSeconds"] = round(ref_period_s, 3)
@@ -916,7 +1020,7 @@ def phase_cells(path: Path, motion: str, work: Path, n: int = 8) -> list[Image.I
     clip is green, content-cropped either way."""
     info = probe(path)
     frame_paths = extract_frames(path, work / f"frames_{path.stem}")
-    green = green_border_fraction(frame_paths) >= 0.90
+    green = green_border_fraction(frame_paths)[0] >= 0.90
     expected = round(GREEN_REFS[motion]["period"] / REF_FPS * info.fps)
     start, period = 0, min(expected, len(frame_paths) - 1)
     if green:
@@ -986,7 +1090,14 @@ def lane_desc(lane: str) -> str:
     base = lane.split(":")[0]
     if base.startswith("wanimate2-"):
         return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2-')}・"
-                "fps24・蒸留既定 (steps10/CFG1)")
+                "fps24・蒸留既定 (steps10/CFG1)・identity 白地")
+    if base.startswith("wanimate2g-"):
+        return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2g-')}・"
+                "fps24・蒸留既定 (steps10/CFG1)・identity 緑地")
+    if base.startswith("wanimate2m-"):
+        return (f"fal-ai/wan-animate-2 {base.removeprefix('wanimate2m-')}・"
+                "fps24・蒸留既定 (steps10/CFG1)・identity 緑地+駆動枠一致 "
+                "(高 43%/上 7%)")
     if base == "scail2-pose":
         return "fal-ai/scail-2 512p・pose 駆動・animation"
     if base == "scail2-replace":
@@ -1130,6 +1241,8 @@ def main() -> None:
     run.add_argument("--motion", required=True, choices=["walk", "carry"])
     run.add_argument("--take", type=int, default=1)
     run.add_argument("--budget", type=float, default=4.0)
+    run.add_argument("--steps", type=int)
+    run.add_argument("--guidance", type=float)
     seedvr = sub.add_parser("seedvr")
     seedvr.add_argument("--source", required=True, help="<lane>:<motion>[:tN]")
     seedvr.add_argument("--factor", type=int, default=2)
@@ -1137,6 +1250,8 @@ def main() -> None:
     upscale = sub.add_parser("upscale-identity")
     upscale.add_argument("--factor", type=int, default=4)
     upscale.add_argument("--budget", type=float, default=4.0)
+    settle = sub.add_parser("settle")
+    settle.add_argument("--key", required=True)
     sub.add_parser("analyze")
     sub.add_parser("material")
     sub.add_parser("judgment")
@@ -1154,6 +1269,8 @@ def main() -> None:
         cmd_seedvr(args.workdir, args)
     elif args.command == "upscale-identity":
         cmd_upscale_identity(args.workdir, args)
+    elif args.command == "settle":
+        cmd_settle(args.workdir, args.key)
     elif args.command == "analyze":
         cmd_analyze(args.workdir)
     elif args.command == "material":
