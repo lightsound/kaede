@@ -104,12 +104,16 @@ def best_loop_start(
 
 
 def find_loop(
-    masks: list[np.ndarray], *, min_period: int = 12, max_period: int = 60
+    masks: list[np.ndarray], *, min_period: int = 12, max_period: int = 60,
+    loop_mean_min: float = LOOP_MEAN_MIN,
 ) -> tuple[int, int, float, float]:
     """(start, period, loop mean, wrap closure) of the best loop in the clip.
 
     Raises when no (start, period) passes the gates — a take without a
     clean machine-verifiable loop must not be registered as a master.
+    loop_mean_min exists for OWNER-RULED generation calibrations only
+    (never lowered silently): callers pass an explicit floor and record it
+    in the ledger next to the ruling that authorized it.
     """
     max_period = min(max_period, (len(masks) - 1) // 2)
     if max_period < min_period:
@@ -125,11 +129,11 @@ def find_loop(
     )
     score, start = by_period[period]
     closure = mask_iou(masks[start], masks[start + period])
-    if score < LOOP_MEAN_MIN or closure < CLOSURE_MIN:
+    if score < loop_mean_min or closure < CLOSURE_MIN:
         raise SystemExit(
             f"no clean loop: best period {period} at start {start} scores "
             f"loop-mean {score:.3f} / closure {closure:.3f} "
-            f"(need ≥ {LOOP_MEAN_MIN} / {CLOSURE_MIN}) — this take cannot be a master"
+            f"(need ≥ {loop_mean_min} / {CLOSURE_MIN}) — this take cannot be a master"
         )
     return start, period, score, closure
 
