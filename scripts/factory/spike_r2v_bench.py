@@ -789,52 +789,191 @@ def subject_mask(frame: Image.Image) -> np.ndarray:
     return ~((a[:, :, 1] - np.maximum(a[:, :, 0], a[:, :, 2])) >= 40)
 
 
-def cmd_cropreg(work: Path, args: argparse.Namespace) -> None:
-    """Fixed-frame content-centered square crop of one take (blocker 2 —
-    the gangnam/girl 496² precedent): loop_scan's silhouette_mask shrinks
-    the WHOLE frame to 160px before IoU, so a subject at ~43% of the frame
-    (the matched-identity framing) measures systematically low. One box —
-    the union of every frame's subject bbox + margin, squared — crops every
-    frame identically, so the loop geometry is untouched and only the
-    measurement resolution changes."""
-    src = work / f"{args.key}.mp4"
-    if not src.exists():
-        raise SystemExit(f"{src} missing — run that lane first")
-    frame_paths = extract_frames(src, work / f"frames_{src.stem}")
+def union_crop_box(
+    frames: list[Image.Image], margin: int
+) -> tuple[int, int, int]:
+    """(x0, y0, side): one square box holding EVERY frame's subject + margin,
+    centered, clamped and snapped to even h264 dims — the same box crops
+    every frame so the loop geometry is untouched."""
     lo_x = lo_y = 10**9
     hi_x = hi_y = -(10**9)
-    for path in frame_paths:
-        with Image.open(path) as frame:
-            ys, xs = np.where(subject_mask(frame))
+    for frame in frames:
+        ys, xs = np.where(subject_mask(frame))
         lo_x, lo_y = min(lo_x, int(xs.min())), min(lo_y, int(ys.min()))
         hi_x, hi_y = max(hi_x, int(xs.max())), max(hi_y, int(ys.max()))
-    with Image.open(frame_paths[0]) as first:
-        width, height = first.size
-    lo_x, lo_y = max(0, lo_x - args.margin), max(0, lo_y - args.margin)
-    hi_x, hi_y = min(width, hi_x + 1 + args.margin), min(height, hi_y + 1 + args.margin)
-    # Square the box around its center (clamped), then snap to even h264 dims.
+    width, height = frames[0].size
+    lo_x, lo_y = max(0, lo_x - margin), max(0, lo_y - margin)
+    hi_x, hi_y = min(width, hi_x + 1 + margin), min(height, hi_y + 1 + margin)
     side = max(hi_x - lo_x, hi_y - lo_y)
     side = min(side + side % 2, width, height)
     cx, cy = (lo_x + hi_x) // 2, (lo_y + hi_y) // 2
     x0 = min(max(0, cx - side // 2), width - side)
     y0 = min(max(0, cy - side // 2), height - side)
-    crop_dir = work / f"crop_{src.stem}"
-    crop_dir.mkdir(exist_ok=True)
-    for index, path in enumerate(frame_paths):
-        with Image.open(path) as frame:
-            frame.convert("RGB").crop((x0, y0, x0 + side, y0 + side)).save(
-                crop_dir / f"crop_{index:03d}.png"
-            )
-    out = work / f"{args.key}_crop.mp4"
-    fps = probe(src).fps
+    return x0, y0, side
+
+
+def encode_crops(
+    frames: list[Image.Image], box: tuple[int, int, int], fps: float,
+    scratch: Path, out: Path,
+) -> None:
+    x0, y0, side = box
+    scratch.mkdir(exist_ok=True)
+    for index, frame in enumerate(frames):
+        frame.convert("RGB").crop((x0, y0, x0 + side, y0 + side)).save(
+            scratch / f"crop_{index:03d}.png"
+        )
     run_quiet([
         "ffmpeg", "-y", "-loglevel", "error", "-framerate", f"{fps:g}",
-        "-i", str(crop_dir / "crop_%03d.png"),
+        "-i", str(scratch / "crop_%03d.png"),
         "-an", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p",
         str(out),
     ])
-    print(f"wrote {out.name}: box ({x0},{y0}) {side}² of {width}x{height}, "
-          f"{len(frame_paths)} frames @ {fps:g}fps")
+
+
+def cmd_cropreg(work: Path, args: argparse.Namespace) -> None:
+    """Fixed-frame content-centered square crop of one take (blocker 2 —
+    the gangnam/girl 496² precedent): loop_scan's silhouette_mask shrinks
+    the WHOLE frame to 160px before IoU, so a subject at ~43% of the frame
+    (the matched-identity framing) measures systematically low. One box
+    crops every frame identically, so the loop geometry is untouched and
+    only the measurement resolution changes."""
+    src = work / f"{args.key}.mp4"
+    if not src.exists():
+        raise SystemExit(f"{src} missing — run that lane first")
+    frame_paths = extract_frames(src, work / f"frames_{src.stem}")
+    frames = [Image.open(p).convert("RGB") for p in frame_paths]
+    box = union_crop_box(frames, args.margin)
+    out = work / f"{args.key}_crop.mp4"
+    encode_crops(frames, box, probe(src).fps, work / f"crop_{src.stem}", out)
+    print(f"wrote {out.name}: box ({box[0]},{box[1]}) {box[2]}² of "
+          f"{frames[0].size[0]}x{frames[0].size[1]}, {len(frames)} frames")
+
+
+# Leg-gap residue removal (オーナー裁定 3 2026-08-19「白い塗り残しは許容
+# できません」): the adopted wan recipe sometimes paints the ENCLOSED
+# background between the legs white instead of green (the approved takes
+# included), and white survives the chroma key into shipped cells. The rule
+# is deterministic color+zone, NOT reference-guided: the chibi's white
+# shirt hem overlaps the slimmer driving mannequin's background (reference
+# guidance would eat the shirt), while the mannequin's own legs sit inside
+# the chibi's leg gap (it would also under-cover the residue). Below
+# GAP_ZONE of the subject there is no legitimate white — navy pants and
+# brown shoes only (shoe highlights are warm: channel span past
+# GAP_WHITE_SPAN) — so low-saturation bright pixels there ARE residue.
+# The halo pass catches the anti-aliased white-to-pants blend ring.
+# Zone calibration for THIS chibi anatomy: the big head pushes the shirt
+# hem + belt down to ~0.74-0.77 of the subject (a 0.68 zone measurably ate
+# the shirt hem on walk t2 f61), while the leg-gap residue lives below
+# ~0.85 with its apex reaching just above 0.80. Seeds start below
+# GAP_SEED_ZONE (safely legs-only), then grow by CONNECTIVITY through
+# residue-colored pixels up to GAP_GROW_ZONE — the wedge apex connects to
+# its own wedge, while the shirt tail is separated from it by pants
+# pixels, so propagation reaches one and never the other. Residue color =
+# bright, not WARM-tinted (R leads G by < GAP_WARM_TINT — skin and shoe
+# highlights lead by ~30, while the fills run from bluish white through
+# pure white to a pale-green wash) yet NOT green-dominant enough for the
+# chroma key (< the key's 40 floor, mean G-dominance 6-14 measured).
+GAP_SEED_ZONE = 0.80
+GAP_GROW_ZONE = 0.74
+GAP_BRIGHT_MIN = 140
+GAP_WARM_TINT = 15
+GAP_HALO_MIN = 100
+GAP_HALO_SPAN = 60
+KEY_GREEN_DOMINANCE = 40
+CHROMA_GREEN = (0, 255, 0)
+
+
+def repaint_leg_gap(frame: Image.Image) -> tuple[Image.Image, int]:
+    """(repainted frame, edited pixel count): enclosed white / pale-green
+    residue in the leg gap repainted to chroma green so the key removes it."""
+    from scipy import ndimage
+
+    a = np.asarray(frame.convert("RGB")).astype(int)
+    subject = subject_mask(frame)
+    ys, _ = np.where(subject)
+    top, bottom = int(ys.min()), int(ys.max())
+    height = bottom - top
+    dominance = a[:, :, 1] - np.maximum(a[:, :, 0], a[:, :, 2])
+    eligible = (
+        (a.min(axis=2) > GAP_BRIGHT_MIN)
+        & (a[:, :, 0] - a[:, :, 1] < GAP_WARM_TINT)
+        & (dominance < KEY_GREEN_DOMINANCE)
+    )
+    seed_zone = np.zeros(a.shape[:2], bool)
+    seed_zone[top + round(height * GAP_SEED_ZONE):, :] = True
+    grow_zone = np.zeros(a.shape[:2], bool)
+    grow_zone[top + round(height * GAP_GROW_ZONE):, :] = True
+    residue = ndimage.binary_propagation(
+        eligible & seed_zone, mask=eligible & grow_zone
+    )
+    span = a.max(axis=2) - a.min(axis=2)
+    halo = (
+        ndimage.binary_dilation(residue, iterations=2)
+        & grow_zone & subject
+        & (a.min(axis=2) > GAP_HALO_MIN) & (span < GAP_HALO_SPAN)
+    )
+    paint = residue | halo
+    count = int(paint.sum())
+    if not count:
+        return frame.convert("RGB"), 0
+    out = np.asarray(frame.convert("RGB")).copy()
+    out[paint] = CHROMA_GREEN
+    return Image.fromarray(out), count
+
+
+def cmd_regprep(work: Path, args: argparse.Namespace) -> None:
+    """Registration-source prep: leg-gap residue repaint + fixed-frame crop
+    in ONE encode (each ffmpeg pass is a lossy generation). Emits a
+    before/after audit montage of every repainted region so the edit is
+    visually verifiable frame by frame."""
+    from PIL import ImageDraw, ImageFont
+
+    src = work / f"{args.key}.mp4"
+    if not src.exists():
+        raise SystemExit(f"{src} missing — run that lane first")
+    frame_paths = extract_frames(src, work / f"frames_{src.stem}")
+    originals = [Image.open(p).convert("RGB") for p in frame_paths]
+    painted, counts = [], []
+    for frame in originals:
+        fixed, count = repaint_leg_gap(frame)
+        painted.append(fixed)
+        counts.append(count)
+    box = union_crop_box(painted, args.margin)
+    out = work / f"{args.key}_reg.mp4"
+    encode_crops(painted, box, probe(src).fps, work / f"regprep_{src.stem}", out)
+    edited = [(count, index) for index, count in enumerate(counts) if count]
+    print(f"wrote {out.name}: box ({box[0]},{box[1]}) {box[2]}², "
+          f"{len(originals)} frames, repainted {len(edited)} frames "
+          f"({sum(counts)} px)")
+    (work / f"gapfix_{args.key}.json").write_text(
+        json.dumps({"editedPx": counts}, indent=1) + "\n"
+    )
+    if not edited:
+        return
+    font = ImageFont.truetype(JUDGMENT_FONT, 20)
+    rows = []
+    for count, index in sorted(edited, reverse=True)[:12]:
+        before, after = originals[index], painted[index]
+        diff = np.any(
+            np.asarray(before).astype(int) != np.asarray(after).astype(int),
+            axis=2,
+        )
+        ys, xs = np.where(diff)
+        x0, y0 = max(0, int(xs.min()) - 30), max(0, int(ys.min()) - 30)
+        x1, y1 = min(before.width, int(xs.max()) + 30), min(before.height, int(ys.max()) + 30)
+        pair = []
+        for tag, img in (("before", before), ("after", after)):
+            cell = img.crop((x0, y0, x1, y1))
+            cell = cell.resize((cell.width * 2, cell.height * 2), Image.NEAREST)
+            banded = Image.new("RGB", (cell.width, cell.height + 26), (250, 250, 252))
+            banded.paste(cell, (0, 26))
+            ImageDraw.Draw(banded).text(
+                (4, 2), f"f{index:02d} {tag} ({count}px)", font=font, fill=(0, 0, 0)
+            )
+            pair.append(banded.convert("RGBA"))
+        rows.append(pair)
+    montage_rows(rows, work / f"gapfix_{args.key}.png")
+    print(f"wrote gapfix_{args.key}.png ({min(len(edited), 12)} worst frames)")
 
 
 # All-frame hand-zoom band (運転知見 35 ⑤ — retake inspection must read
@@ -1581,6 +1720,9 @@ def main() -> None:
     cropreg = sub.add_parser("cropreg")
     cropreg.add_argument("--key", required=True, help="take key, e.g. wanimate2r-720p_walk_t1")
     cropreg.add_argument("--margin", type=int, default=16)
+    regprep = sub.add_parser("regprep")
+    regprep.add_argument("--key", required=True)
+    regprep.add_argument("--margin", type=int, default=16)
     handstrip = sub.add_parser("handstrip")
     handstrip.add_argument("--key", required=True)
     sub.add_parser("regjudgment")
@@ -1607,6 +1749,8 @@ def main() -> None:
         cmd_judgment(args.workdir)
     elif args.command == "cropreg":
         cmd_cropreg(args.workdir, args)
+    elif args.command == "regprep":
+        cmd_regprep(args.workdir, args)
     elif args.command == "handstrip":
         cmd_handstrip(args.workdir, args)
     elif args.command == "regjudgment":
