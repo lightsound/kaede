@@ -75,6 +75,15 @@ WORK_HEIGHT = 400
 DEFAULT_RESOLUTION = "720p"
 
 
+def effective_flip(order: dict, cli_flip: bool) -> bool:
+    """The produce run's flip decision: the CLI flag OR the order's recorded
+    `walkLane.flip`. The record exists so a REPLAY of `produce` (no flag)
+    reproduces the committed sheet instead of silently rebuilding the
+    face-versus-body chimera and dropping the record (Bugbot, PR #128).
+    Un-flipping a sheet on purpose means editing the order first."""
+    return cli_flip or bool((order.get("walkLane") or {}).get("flip"))
+
+
 def mirror_clip(frames_dir: Path) -> int:
     """Mirror every extracted frame in place; returns the frame count.
 
@@ -193,6 +202,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
     t0 = time.time()
     order_path = validate_order_path(args.order, ASSET_ROOT)
     order = json.loads(order_path.read_text())
+    flip = effective_flip(order, args.flip)
     work = args.workdir / order["id"]
     work.mkdir(parents=True, exist_ok=True)
 
@@ -221,7 +231,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
             order, master, master_meta, stand_raw, work, args.budget
         )
 
-    if args.flip:
+    if flip:
         print(f"mirrored {mirror_clip(frames_dir)} frames (canon facing — 運転知見 38)")
 
     # Carry sheets stride gently with same-sign contacts by spec (the
@@ -256,7 +266,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
     order["walkMaster"] = args.master
     order["walkMasterSha256"] = master_meta["masterSha256"]
     lane: dict = {"mode": args.mode, "cells": chosen}
-    if args.flip:
+    if flip:
         lane["flip"] = True
     order["walkLane"] = lane
     order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")

@@ -853,6 +853,21 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(above_neck, 0)
 
 
+class EffectiveFlipTests(unittest.TestCase):
+    """walk_lane.effective_flip — a produce REPLAY without --flip must
+    reproduce a flip-recorded order instead of rebuilding the chimera and
+    dropping the record (Bugbot, PR #128)."""
+
+    def test_replay_reads_the_order_record(self) -> None:
+        from factory.walk_lane import effective_flip
+
+        recorded = {"walkLane": {"mode": "extract", "flip": True}}
+        self.assertTrue(effective_flip(recorded, False))
+        self.assertTrue(effective_flip({}, True))
+        self.assertFalse(effective_flip({"walkLane": {"mode": "extract"}}, False))
+        self.assertFalse(effective_flip({}, False))
+
+
 class MirrorClipTests(unittest.TestCase):
     """walk_lane.mirror_clip — the canon-facing flip for mirrored-lineage
     masters (運転知見 38): every frame in the clip directory must come back
