@@ -45,7 +45,7 @@ import sys
 import time
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -73,6 +73,35 @@ ASSET_ROOT = ROOT / "packages/client/src/game.package"
 # the committed lane's regime (every cell at one working scale).
 WORK_HEIGHT = 400
 DEFAULT_RESOLUTION = "720p"
+
+
+def effective_flip(order: dict, cli_flip: bool) -> bool:
+    """The produce run's flip decision: the CLI flag OR the order's recorded
+    `walkLane.flip`. The record exists so a REPLAY of `produce` (no flag)
+    reproduces the committed sheet instead of silently rebuilding the
+    face-versus-body chimera and dropping the record (Bugbot, PR #128).
+    Un-flipping a sheet on purpose means editing the order first."""
+    return cli_flip or bool((order.get("walkLane") or {}).get("flip"))
+
+
+def mirror_clip(frames_dir: Path) -> int:
+    """Mirror every extracted frame in place; returns the frame count.
+
+    The wan-animate-2 master lineage (walk/boy 1a003e99…・walk-carry/boy
+    d53b0400…) is cast from bpy green references that face the OPPOSITE of
+    the committed 2D canon (運転知見 38 — machine-verified by head mirror
+    correlation: stand head vs master head 0.46 unflipped / 0.73 flipped).
+    Extracting those masters verbatim pastes the canon-facing stand head
+    onto a mirrored body — the owner-reported "face looks away from the
+    walking direction" chimera. Mirroring the whole clip BEFORE the cycle
+    scan restores the canon direction deterministically ($0), and every
+    downstream gate (foot phase, head consistency, junction) measures the
+    geometry that actually ships.
+    """
+    paths = sorted(frames_dir.glob("*.png"))
+    for path in paths:
+        ImageOps.mirror(Image.open(path)).save(path)
+    return len(paths)
 
 
 def stand_cell_of_sheet(order: dict, order_path: Path, dest: Path) -> Path:
@@ -173,6 +202,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
     t0 = time.time()
     order_path = validate_order_path(args.order, ASSET_ROOT)
     order = json.loads(order_path.read_text())
+    flip = effective_flip(order, args.flip)
     work = args.workdir / order["id"]
     work.mkdir(parents=True, exist_ok=True)
 
@@ -201,9 +231,19 @@ def cmd_produce(args: argparse.Namespace) -> None:
             order, master, master_meta, stand_raw, work, args.budget
         )
 
+    if flip:
+        print(f"mirrored {mirror_clip(frames_dir)} frames (canon facing — 運転知見 38)")
+
     # Carry sheets stride gently with same-sign contacts by spec (the
     # run_lint rule) — the leg-phase opposition gate only applies to swing
     # walks. Every other gate (junction included) applies to both.
+    scan_kwargs: dict = {}
+    drift_max = (order.get("lint") or {}).get("driftMax")
+    if drift_max is not None:
+        # Entry-scoped, owner-ruled drift calibration (運転知見 37/39 —
+        # check_palette_drift's distance_max doc). Lives in the committed
+        # order so a re-run reproduces the ruling.
+        scan_kwargs["drift_distance_max"] = float(drift_max)
     selected = scan_clip(
         stand_raw,
         frames_dir,
@@ -212,6 +252,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
         loop_start=loop_start,
         skip_head_seconds=0,
         expect_leg_phase=not order.get("handLayer"),
+        **scan_kwargs,
     )
     chosen = {pose: int(paths[0].stem.split("_")[1]) for pose, paths in selected.items()}
     print(f"cells: {chosen}")
@@ -224,7 +265,10 @@ def cmd_produce(args: argparse.Namespace) -> None:
     # recorded so a silently different master cannot re-anchor the cells).
     order["walkMaster"] = args.master
     order["walkMasterSha256"] = master_meta["masterSha256"]
-    order["walkLane"] = {"mode": args.mode, "cells": chosen}
+    lane: dict = {"mode": args.mode, "cells": chosen}
+    if flip:
+        lane["flip"] = True
+    order["walkLane"] = lane
     order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
         ["pnpm", "exec", "biome", "format", "--write", str(order_path)], check=True
@@ -279,6 +323,12 @@ def main() -> None:
         type=int,
         default=None,
         help="pin the cycle scan to one contact frame index (visual-gate override)",
+    )
+    produce.add_argument(
+        "--flip",
+        action="store_true",
+        help="mirror the master clip before scanning (mirrored-lineage masters "
+        "— 運転知見 38; recorded into the order's walkLane for reproducibility)",
     )
     produce.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-walk-lane"))
     produce.add_argument("--budget", type=float, default=0.5,

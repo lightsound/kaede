@@ -590,14 +590,25 @@ identityPaletteDrift 0 件・全コマ手元ズーム帯検品で白ゴースト
 
 **残タスク（次ステップ以降）**:
 
-1. **新マスターからのシート再鋳造**（walk レーン extract — モデル呼び出し
-   ゼロ・無課金。§7 記載の全 10 シートの walk/carry セルを新マスター
-   1a003e99…/d53b0400… から再抽出し、発注書 walkMasterSha256 書き戻しで
-   PR #119 以来の sha 乖離を解消。walk マスターは 464²/62f/period 25・
-   carry は 454²/72f/period 24 に変わったため cycle_scan の再計測が正。
-   carry 系はミトン手の handAnchors 実測し直し+handLayer 切り出し+
-   derive_light_carry 動作確認。girl 系は girl マスターの同方式再鋳造の
-   要否をまず判定 — 黙って新規生成しない）。
+1. **新マスターからのシート再鋳造** — 状態: **親 2 シートの extract 済み・
+   変種と light/girl は目視待ち（2026-08-19 後半チャット）**。初版の
+   「全 10 シートを 1a003e99…/d53b0400… から再抽出」は誤り（新マスターを
+   直接消費する発注書は親 2 枚だけで、変種はレーンが違う）。正しい経路:
+
+   | シート | 経路 | 状態 |
+   | --- | --- | --- |
+   | avatar | walk/boy 1a003e99… extract（$0・**walkLane.flip = 鏡像系統の正準向き反転** — 運転知見 38） | ✅ 済（cells 8/14/20/27・period 25・オーナー裁定②「新しい方が良い」） |
+   | avatar-carry | walk-carry/boy d53b0400… extract（$0・walkLane.flip）＋ミトン handAnchors 実測し直し＋hand.png 再切り出し（stand 据え置きゆえ byte 不変） | ✅ 済（cells 23/29/35/41・period 24・walk anchors (79,127)/(81,127)/(80,123)/(79,128)） |
+   | pants / red / pants-carry / red-carry | 親シートへの avatar-outfit-edit（nano $0.10/着 — walkMasterSha256 を持たない） | ⏸ **親のオーナー目視 OK 後の次チャット**（親が落ちると $0.40 が捨てになる） |
+   | avatar-carry-light（＋ *-carry-light 変種） | walk-carry-light/boy 0df88e42… のまま（4b 未差し替え・対象外） | ✅ **裁定①「いったん据え置き」で確定（2026-08-19 オーナー）** — 片手持ちは製品として存続（heavy/light 2 系統は不変）。将来再鋳造するなら②は derive ツール改修が先（運転知見 38 ②）・③は有料でオーナー明示待ち |
+   | avatar-girl | **walk/girl f2849caa… extract+flip へ差し替え済み**（旧 seedance 0afe6d1c… は R2 残存 = ロールバック可） | ✅ 済（2026-08-20 オーナー裁定「新候補の方が明らかに良くなりました」+「マージまで任せます」。boy 採用レシピの girl 適用 = wan-animate-2 720p steps20・駆動 girl 3D 緑参照 28430243…・枠一致 identity e6f66fe8…・2 テイク $0.75・採用 t2。cells 21/27/33/40・ART LINT PASS。キャミ色クラスタ 75 ドリフトは裁定「色は現行でも問題ない」→ order `lint.driftMax` 85 のエントリ較正（運転知見 39）・白残渣は裁定③の girl 適用で除去・ループ登録は --period 25 / --loop-mean-min 0.92） |
+
+   親 2 枚の再鋳造で発注書 walkMasterSha256 書き戻しが済み、PR #119 以来の
+   sha 乖離は解消。**鏡像事故が 1 件**: wan 世代マスター 2 本は committed の
+   正準向きと左右反転で鋳造されており（源流は bpy 緑参照 — 運転知見 38）、
+   オーナー指摘「歩く方向と顔の向きが違う」→ 裁定①で extract 側の反転
+   （walk_lane `--flip`・order の walkLane.flip に記録）により正準向きへ
+   正規化した。オーナー目視までは出荷セルを完成扱いしない（運転知見 14）。
 2. **God Mode AI ベンチ**（オーナー承認 2026-08-16 — 別チャットで実施）:
    1 枚絵 → AI パーツ分解 → 自動リグ → テンプレ ~400 本リターゲット →
    Spine 出力の専業 SaaS（DP-4 の市場実証として記録済み・生産ツール

@@ -214,6 +214,20 @@ class ArtLintTests(unittest.TestCase):
         self.assertEqual(check_palette_drift(stand, stand), [])
         self.assertNotEqual(check_palette_drift(stand, drifted), [])
 
+    def test_palette_drift_honors_entry_scoped_distance_ruling(self) -> None:
+        # 運転知見 37/39: an owner-ruled, order-recorded `lint.driftMax`
+        # threads into the gate as `distance_max` (the girl walk ruling
+        # 2026-08-20 — wan-animate-2 shades the camisole past the default 45
+        # vs the seedance-era stand). The default stays authoritative for
+        # every order without an explicit ruling.
+        stand = _chibi(neck_y=50)
+        drifted = _chibi(neck_y=50)
+        ImageDraw.Draw(drifted).rectangle((20, 56, 44, 78), fill=(255, 0, 200, 255))
+        self.assertNotEqual(check_palette_drift(stand, drifted), [])
+        self.assertEqual(
+            check_palette_drift(stand, drifted, distance_max=999), []
+        )
+
     def test_neck_junction_passes_solid_bridge(self) -> None:
         # The chibi's neck pinch is a fully opaque 9px bridge — healthy.
         self.assertEqual(check_neck_junction(_chibi(neck_y=50), [32, 50]), [])
@@ -837,6 +851,43 @@ class ComposeTests(unittest.TestCase):
             if out.getpixel((x, y))[3] >= 128 and out.getpixel((x, y))[2] > 180
         )
         self.assertEqual(above_neck, 0)
+
+
+class EffectiveFlipTests(unittest.TestCase):
+    """walk_lane.effective_flip — a produce REPLAY without --flip must
+    reproduce a flip-recorded order instead of rebuilding the chimera and
+    dropping the record (Bugbot, PR #128)."""
+
+    def test_replay_reads_the_order_record(self) -> None:
+        from factory.walk_lane import effective_flip
+
+        recorded = {"walkLane": {"mode": "extract", "flip": True}}
+        self.assertTrue(effective_flip(recorded, False))
+        self.assertTrue(effective_flip({}, True))
+        self.assertFalse(effective_flip({"walkLane": {"mode": "extract"}}, False))
+        self.assertFalse(effective_flip({}, False))
+
+
+class MirrorClipTests(unittest.TestCase):
+    """walk_lane.mirror_clip — the canon-facing flip for mirrored-lineage
+    masters (運転知見 38): every frame in the clip directory must come back
+    horizontally mirrored, in place, keeping filenames."""
+
+    def test_mirrors_every_frame_in_place(self) -> None:
+        from factory.walk_lane import mirror_clip
+
+        with tempfile.TemporaryDirectory() as tmp:
+            frames = Path(tmp)
+            for i in range(3):
+                img = Image.new("RGBA", (8, 4), (0, 255, 0, 255))
+                img.putpixel((0, 1), (255, 0, 0, 255))
+                img.save(frames / f"frame_{i:04d}.png")
+            count = mirror_clip(frames)
+            self.assertEqual(count, 3)
+            for i in range(3):
+                out = Image.open(frames / f"frame_{i:04d}.png").convert("RGBA")
+                self.assertEqual(out.getpixel((7, 1)), (255, 0, 0, 255))
+                self.assertEqual(out.getpixel((0, 1)), (0, 255, 0, 255))
 
 
 class BoneSignatureTests(unittest.TestCase):

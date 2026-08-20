@@ -24,7 +24,7 @@
     "outfit": "turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes"
   },
   "originals": {
-    "../avatar/sheet-original.png": "6cceff101abf66034f89ad98facf725300417347f623aad0bf084f89bd123f12",
+    "../avatar/sheet-original.png": "1d60c38bd8792a5db15eb35b93cdc2d9e5c7cb33bb41f0e5c99bd4299de9462f",
     "sheet-original.png": "cd7a64579539d247f8fbb37b199fd2b3ebd5e4294f8bc3616334480b41804f0e"
   },
   "prompt": "Factory template `avatar-outfit-edit` over ../avatar/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background."

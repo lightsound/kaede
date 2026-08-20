@@ -48,20 +48,24 @@
     "walk/girl": {
       "motion": "walk",
       "family": "girl",
-      "masterSha256": "0afe6d1cc2afe39dae23297f005b94668de8b8583cfe2ebb287479be105bd0dd",
-      "sourceSha256": "58067618c73a0a3ecd95733d84a2bca34c9177a74ac22b8cf795877f651c35d3",
-      "frames": 85,
+      "masterSha256": "f2849caa9ac804dc812f109fbac31b9830ccc77c30f7cce88cd388ee623e19c4",
+      "sourceSha256": "80baab5dd922ea299a742181571b8b3567ffe54a5284335100646e2189fcf410",
+      "frames": 74,
       "fps": 24.0,
-      "width": 640,
-      "height": 640,
+      "width": 476,
+      "height": 476,
       "loop": {
-        "start": 31,
-        "period": 24,
-        "loopMeanIou": 0.993,
-        "closureIou": 0.995
+        "start": 0,
+        "period": 25,
+        "loopMeanIou": 0.927,
+        "closureIou": 0.958
       },
-      "approval": "crosschar girl walk テイク(factory-yield 2026-08-11)— girl 枠 self-replace の元動画。オーナー実見「品質は今までの中で最も良い」(PR #101 追試②)",
-      "registeredAt": "2026-08-11"
+      "approval": "girl walk 再鋳造裁定 2026-08-20 (PR #128 チャット): オーナー「新候補の方が明らかに良くなりました」+ committed 化まで委任(「マージまで任せます」)。boy 採用レシピの girl 適用 = wan-animate-2 720p steps20・駆動 girl 3D 緑参照 28430243…(75f 無トリム・骨検証 period 25)・枠一致 identity e6f66fe8…(R2 原本 stand セル 4x)。テイク t2(raw 93224789…・seed 424242)。--period 25 = 1:1 コマ同期の骨検証済み駆動周期(知見 37)。--loop-mean-min 0.92 = wan 世代較正の girl 実測(raw 0.929・クロップ 0.927・prep 0.926 — boy 承認テイク帯 0.918〜0.936 の内側・知見 36①)。白残渣は裁定③ 2026-08-19 の girl 適用で除去(中立白 span≤12・成分≤300px・被写体下半分帯 — 眼球白の頭部は保護・除去後ゼロ機械確認)。キャミ色クラスタの 75 ドリフトは order lint.driftMax 85 のエントリ裁定(オーナー 2026-08-20「色については現行でも問題ない」・知見 39)",
+      "registeredAt": "2026-08-20",
+      "overrides": {
+        "period": 25,
+        "loopMeanMin": 0.92
+      }
     },
     "gangnam/girl": {
       "motion": "gangnam",
