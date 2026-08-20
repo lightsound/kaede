@@ -4,10 +4,10 @@
   "name": "男の子（赤パーカー）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#934e22", "#fdddac", "#492811", "#693619", "#944f22"],
+  "palette": ["#f9dcaf", "#f9d2a6", "#a75f2b", "#f9dbaf", "#f9d2a5"],
   "source": {
     "prompt": "PER-CELL nano edit over ../avatar/sheet-original.png at the A-3 dense density (2026-08-20 — 12 walk cells per stride, owner ruling A-3 in the PR #129 thread; the recipe is 運転知見 41, adopted after the whole-sheet edit collapsed on host-side nano-banana-2 drift, 知見 40). The source sheet's 13 cells (380x414, grid thirteenths) were edited one cell at a time with google/nano-banana-2 (resolution 1K, $0.085/cell): the STAND cell is the morning 4-cell round's approved edit reused byte-identically (its prompt: 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」); each of the 12 walk cells was edited with image_input = [the parent walk cell, that edited stand] — the stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background. The second image shows THE SAME character wearing his new outfit: a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket) and BEIGE chino pants with his brown shoes. Edit ONLY the clothes of the first image: dress him in EXACTLY the same red hoodie and beige chino pants as the second image — same colors, same shading style, same hood and front pocket; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」. The 13 edited cells were reassembled into one 13-column green #00FF00 sheet (cell box 760x828, bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: all 12 walk cells one-shot; ART LINT PASS on the first assembly (IoU 0.90-0.97). neckAnchors transferred from the re-extracted avatar manifest (13 poses — lint.neckFrom validates).",
-    "referenceHashes": ["04b9571fdd58ebdaa0dfb318cc48aca1f0252c2acd096bcd1c1bc7ca876a055c"]
+    "referenceHashes": ["181fb3b6b0043aff69b246a4cf02bc484d3ae2af11013df6a16da84af67c0b3b"]
   },
   "poses": {
     "stand": {
@@ -20,98 +20,194 @@
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [105, 189],
+      "size": [94, 190],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 124]
+        "neck": [51, 97],
+        "hand": [47, 125]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [105, 191],
+      "size": [94, 190],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 126]
+        "neck": [51, 97],
+        "hand": [47, 125]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [105, 193],
+      "size": [94, 190],
       "anchors": {
-        "neck": [52, 98],
-        "hand": [52, 127]
+        "neck": [51, 97],
+        "hand": [47, 125]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [105, 195],
+      "size": [94, 191],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 128]
+        "neck": [52, 97],
+        "hand": [47, 126]
       }
     },
     "walk-e": {
       "file": "walk-e.png",
-      "size": [105, 193],
+      "size": [94, 192],
       "anchors": {
-        "neck": [52, 98],
-        "hand": [52, 127]
+        "neck": [50, 97],
+        "hand": [47, 126]
       }
     },
     "walk-f": {
       "file": "walk-f.png",
-      "size": [105, 191],
+      "size": [94, 193],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 126]
+        "neck": [50, 98],
+        "hand": [47, 127]
       }
     },
     "walk-g": {
       "file": "walk-g.png",
-      "size": [105, 189],
+      "size": [94, 193],
       "anchors": {
-        "neck": [53, 99],
-        "hand": [52, 124]
+        "neck": [50, 98],
+        "hand": [47, 127]
       }
     },
     "walk-h": {
       "file": "walk-h.png",
-      "size": [105, 191],
+      "size": [94, 193],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 126]
+        "neck": [51, 98],
+        "hand": [47, 127]
       }
     },
     "walk-i": {
       "file": "walk-i.png",
-      "size": [105, 193],
+      "size": [95, 192],
       "anchors": {
-        "neck": [52, 98],
-        "hand": [52, 127]
+        "neck": [53, 97],
+        "hand": [47, 126]
       }
     },
     "walk-j": {
       "file": "walk-j.png",
-      "size": [105, 194],
+      "size": [97, 190],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 128]
+        "neck": [54, 98],
+        "hand": [48, 125]
       }
     },
     "walk-k": {
       "file": "walk-k.png",
-      "size": [105, 193],
+      "size": [102, 188],
       "anchors": {
-        "neck": [53, 98],
-        "hand": [52, 127]
+        "neck": [56, 96],
+        "hand": [51, 124]
       }
     },
     "walk-l": {
       "file": "walk-l.png",
-      "size": [105, 191],
+      "size": [104, 187],
       "anchors": {
-        "neck": [51, 99],
-        "hand": [52, 126]
+        "neck": [57, 95],
+        "hand": [52, 123]
+      }
+    },
+    "walk-m": {
+      "file": "walk-m.png",
+      "size": [104, 187],
+      "anchors": {
+        "neck": [59, 95],
+        "hand": [52, 123]
+      }
+    },
+    "walk-n": {
+      "file": "walk-n.png",
+      "size": [103, 186],
+      "anchors": {
+        "neck": [59, 94],
+        "hand": [51, 122]
+      }
+    },
+    "walk-o": {
+      "file": "walk-o.png",
+      "size": [100, 186],
+      "anchors": {
+        "neck": [59, 94],
+        "hand": [50, 122]
+      }
+    },
+    "walk-p": {
+      "file": "walk-p.png",
+      "size": [95, 188],
+      "anchors": {
+        "neck": [60, 93],
+        "hand": [47, 124]
+      }
+    },
+    "walk-q": {
+      "file": "walk-q.png",
+      "size": [95, 189],
+      "anchors": {
+        "neck": [58, 94],
+        "hand": [47, 124]
+      }
+    },
+    "walk-r": {
+      "file": "walk-r.png",
+      "size": [95, 191],
+      "anchors": {
+        "neck": [57, 95],
+        "hand": [47, 126]
+      }
+    },
+    "walk-s": {
+      "file": "walk-s.png",
+      "size": [95, 192],
+      "anchors": {
+        "neck": [55, 96],
+        "hand": [47, 126]
+      }
+    },
+    "walk-t": {
+      "file": "walk-t.png",
+      "size": [95, 193],
+      "anchors": {
+        "neck": [53, 96],
+        "hand": [47, 127]
+      }
+    },
+    "walk-u": {
+      "file": "walk-u.png",
+      "size": [95, 193],
+      "anchors": {
+        "neck": [52, 98],
+        "hand": [47, 127]
+      }
+    },
+    "walk-v": {
+      "file": "walk-v.png",
+      "size": [95, 193],
+      "anchors": {
+        "neck": [51, 98],
+        "hand": [47, 127]
+      }
+    },
+    "walk-w": {
+      "file": "walk-w.png",
+      "size": [95, 192],
+      "anchors": {
+        "neck": [51, 97],
+        "hand": [47, 126]
+      }
+    },
+    "walk-x": {
+      "file": "walk-x.png",
+      "size": [95, 192],
+      "anchors": {
+        "neck": [52, 97],
+        "hand": [47, 126]
       }
     }
   }

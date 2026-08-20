@@ -5,7 +5,7 @@
   "sheet": "sheet-original.png",
   "outDir": ".",
   "grid": {
-    "cols": 13,
+    "cols": 25,
     "rows": 1
   },
   "poses": [
@@ -21,7 +21,19 @@
     "walk-i",
     "walk-j",
     "walk-k",
-    "walk-l"
+    "walk-l",
+    "walk-m",
+    "walk-n",
+    "walk-o",
+    "walk-p",
+    "walk-q",
+    "walk-r",
+    "walk-s",
+    "walk-t",
+    "walk-u",
+    "walk-v",
+    "walk-w",
+    "walk-x"
   ],
   "standHeightPx": 192,
   "handAnchors": {
@@ -30,8 +42,8 @@
   "references": ["../avatar/sheet-original.png"],
   "prompt": "PER-CELL nano edit over ../avatar/sheet-original.png at the A-3 dense density (2026-08-20 — 12 walk cells per stride, owner ruling A-3 in the PR #129 thread; the recipe is 運転知見 41, adopted after the whole-sheet edit collapsed on host-side nano-banana-2 drift, 知見 40). The source sheet's 13 cells (380x414, grid thirteenths) were edited one cell at a time with google/nano-banana-2 (resolution 1K, $0.085/cell): the STAND cell is the morning 4-cell round's approved edit reused byte-identically (its prompt: 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」); each of the 12 walk cells was edited with image_input = [the parent walk cell, that edited stand] — the stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background. The second image shows THE SAME character wearing his new outfit: a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket) and BEIGE chino pants with his brown shoes. Edit ONLY the clothes of the first image: dress him in EXACTLY the same red hoodie and beige chino pants as the second image — same colors, same shading style, same hood and front pocket; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」. The 13 edited cells were reassembled into one 13-column green #00FF00 sheet (cell box 760x828, bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: all 12 walk cells one-shot; ART LINT PASS on the first assembly (IoU 0.90-0.97). neckAnchors transferred from the re-extracted avatar manifest (13 poses — lint.neckFrom validates).",
   "originals": {
-    "../avatar/sheet-original.png": "04b9571fdd58ebdaa0dfb318cc48aca1f0252c2acd096bcd1c1bc7ca876a055c",
-    "sheet-original.png": "9b05377ceb4f7aedb8ea93b62c15658825cb01009f37910ca0b5cac32f476420"
+    "../avatar/sheet-original.png": "181fb3b6b0043aff69b246a4cf02bc484d3ae2af11013df6a16da84af67c0b3b",
+    "sheet-original.png": "a938a5e23e6271e6e5dfda3307e3a526ad7b96f80287a9ab1a9499eb56405c9b"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar/sheet-original.png",
@@ -40,20 +52,66 @@
   },
   "neckAnchors": {
     "stand": [52, 99],
-    "walk-a": [52, 99],
-    "walk-b": [52, 99],
-    "walk-c": [52, 98],
-    "walk-d": [52, 99],
-    "walk-e": [52, 98],
-    "walk-f": [52, 99],
-    "walk-g": [53, 99],
-    "walk-h": [52, 99],
-    "walk-i": [52, 98],
-    "walk-j": [52, 99],
-    "walk-k": [53, 98],
-    "walk-l": [51, 99]
+    "walk-a": [51, 97],
+    "walk-b": [51, 97],
+    "walk-c": [51, 97],
+    "walk-d": [52, 97],
+    "walk-e": [50, 97],
+    "walk-f": [50, 98],
+    "walk-g": [50, 98],
+    "walk-h": [51, 98],
+    "walk-i": [53, 97],
+    "walk-j": [54, 98],
+    "walk-k": [56, 96],
+    "walk-l": [57, 95],
+    "walk-m": [59, 95],
+    "walk-n": [59, 94],
+    "walk-o": [59, 94],
+    "walk-p": [60, 93],
+    "walk-q": [58, 94],
+    "walk-r": [57, 95],
+    "walk-s": [55, 96],
+    "walk-t": [53, 96],
+    "walk-u": [52, 98],
+    "walk-v": [51, 98],
+    "walk-w": [51, 97],
+    "walk-x": [52, 97]
   },
   "lint": {
     "neckFrom": "avatar/manifest.json"
+  },
+  "walkMaster": "walk/boy",
+  "walkMasterSha256": "2b64ee34a911526bef893ebb423dff7f544216cdbd1bb0a1a272cdca3a94bf19",
+  "walkLane": {
+    "mode": "replace",
+    "cells": {
+      "walk-a": 45,
+      "walk-b": 46,
+      "walk-c": 47,
+      "walk-d": 48,
+      "walk-e": 49,
+      "walk-f": 50,
+      "walk-g": 51,
+      "walk-h": 52,
+      "walk-i": 53,
+      "walk-j": 54,
+      "walk-k": 55,
+      "walk-l": 56,
+      "walk-m": 33,
+      "walk-n": 58,
+      "walk-o": 59,
+      "walk-p": 60,
+      "walk-q": 61,
+      "walk-r": 38,
+      "walk-s": 63,
+      "walk-t": 64,
+      "walk-u": 65,
+      "walk-v": 66,
+      "walk-w": 67,
+      "walk-x": 68
+    },
+    "flip": true,
+    "head": "native",
+    "takeSha256": "5be86237fe6e6df35d3089a97aa466b38aca9ac8256c15bdb3b5e7b8096e9a6b"
   }
 }
