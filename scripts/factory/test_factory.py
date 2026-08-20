@@ -674,6 +674,109 @@ class StrideQuadTests(unittest.TestCase):
             stride_quad([10.0] * 30, 0, 20, 12)
 
 
+class DenseWalkCellsTests(unittest.TestCase):
+    """The A-3 densification (2026-08-20): 12 walk cells per stride."""
+
+    def test_walk_pose_names_extends_the_legacy_alphabet(self) -> None:
+        from factory.foot_phase import walk_pose_names
+
+        self.assertEqual(
+            walk_pose_names(4), ("walk-a", "walk-b", "walk-c", "walk-d")
+        )
+        names = walk_pose_names(12)
+        self.assertEqual(len(names), 12)
+        self.assertEqual(names[0], "walk-a")
+        self.assertEqual(names[-1], "walk-l")
+        # Lexical sort IS stride order — the client and studio rely on it.
+        self.assertEqual(sorted(names), list(names))
+        with self.assertRaises(SystemExit):
+            walk_pose_names(13)
+
+    def test_stride_cells_twelve_even_split_on_period_24(self) -> None:
+        from factory.foot_phase import stride_cells
+
+        spreads = [10.0] * 100
+        spreads[0] = 50.0
+        cells = stride_cells(spreads, 0, 100, 24, cells=12)
+        offsets = [cells[p] - cells["walk-a"] for p in sorted(cells)]
+        self.assertEqual(offsets, [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22])
+
+    def test_bob_offset_matches_legacy_prescription_at_four(self) -> None:
+        from factory.compose_sheet import BOB_AMPLITUDE_FRAC, bob_offset_frac
+
+        # cells=4: exactly the pre-A-3 two-level prescription (−A,+A,−A,+A).
+        for index, sign in enumerate((-1, 1, -1, 1)):
+            self.assertAlmostEqual(
+                bob_offset_frac(index, 4), sign * BOB_AMPLITUDE_FRAC, places=9
+            )
+
+    def test_bob_offset_twelve_is_a_smooth_two_bump_cosine(self) -> None:
+        from factory.compose_sheet import BOB_AMPLITUDE_FRAC, bob_offset_frac
+
+        values = [bob_offset_frac(i, 12) for i in range(12)]
+        self.assertAlmostEqual(values[0], -BOB_AMPLITUDE_FRAC, places=9)
+        self.assertAlmostEqual(values[3], BOB_AMPLITUDE_FRAC, places=9)
+        self.assertAlmostEqual(values[6], -BOB_AMPLITUDE_FRAC, places=9)
+        self.assertAlmostEqual(values[9], BOB_AMPLITUDE_FRAC, places=9)
+        # Intermediate cells stay strictly inside the extremes.
+        for i in (1, 2, 4, 5, 7, 8, 10, 11):
+            self.assertLess(abs(values[i]), BOB_AMPLITUDE_FRAC)
+
+    def test_quarter_walk_poses_samples_the_legacy_phases(self) -> None:
+        from factory.art_lint import quarter_walk_poses
+        from factory.foot_phase import walk_pose_names
+
+        self.assertEqual(
+            quarter_walk_poses(list(walk_pose_names(4))),
+            ["walk-a", "walk-b", "walk-c", "walk-d"],
+        )
+        self.assertEqual(
+            quarter_walk_poses(list(walk_pose_names(12))),
+            ["walk-a", "walk-d", "walk-g", "walk-j"],
+        )
+
+    def test_dense_bob_phase_judges_quarter_cells(self) -> None:
+        from factory.art_lint import check_bob_phase
+        from factory.foot_phase import walk_pose_names
+
+        # A healthy dense sheet: contacts low (44), passings high (48),
+        # intermediates in between — quarter sampling must pass it.
+        healthy: dict[str, int] = {"stand": 46}
+        for i, pose in enumerate(walk_pose_names(12)):
+            healthy[pose] = round(46 - 2 * math.cos(4 * math.pi * i / 12))
+        self.assertEqual(check_bob_phase(healthy), [])
+        # A flat dense sheet (frozen face) must fail on amplitude.
+        flat = {pose: 46 for pose in walk_pose_names(12)}
+        self.assertTrue(
+            any("amplitude" in f for f in check_bob_phase(flat))
+        )
+
+    def test_dense_leg_phase_flags_quarter_clones_only(self) -> None:
+        from factory.art_lint import check_leg_phase
+        from factory.foot_phase import walk_pose_names
+
+        def bar(x: int) -> Image.Image:
+            img = Image.new("RGBA", (80, 60), (0, 0, 0, 0))
+            for xx in range(x, x + 18):
+                for yy in range(10, 50):
+                    img.putpixel((xx, yy), (200, 150, 120, 255))
+            return img
+
+        # Adjacent dense cells may be near-identical (by construction) as
+        # long as the quarter phases differ...
+        frames = {
+            pose: bar(4 * (i % 6) + (0 if i < 6 else 24))
+            for i, pose in enumerate(walk_pose_names(12))
+        }
+        self.assertEqual(check_leg_phase(frames), [])
+        # ...but a quarter-phase collapse (walk-a ≈ walk-g) must fail.
+        collapsed = dict(frames)
+        collapsed["walk-g"] = bar(0)
+        self.assertTrue(
+            any("walk-a and walk-g" in f for f in check_leg_phase(collapsed))
+        )
+
+
 class BobPhaseTests(unittest.TestCase):
     def _lint(self, nfg: dict[str, int]) -> list[str]:
         from factory.art_lint import check_bob_phase

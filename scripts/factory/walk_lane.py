@@ -52,7 +52,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from factory import fal_client  # noqa: E402
 from factory.compose_sheet import chroma_key, compose_walk_sheet, content_bbox  # noqa: E402
-from factory.cycle_scan import POSES, scan_clip  # noqa: E402
+from factory.cycle_scan import scan_clip  # noqa: E402
 from factory.loop_scan import silhouette_mask, verify_loop  # noqa: E402
 from factory.replace_lane import (  # noqa: E402
     OUTPUT_CLOSURE_MIN,
@@ -179,13 +179,13 @@ def replace_frames(
     return work / "frames", start
 
 
-def sheet_cells_shipping(sheet_path: Path) -> list[Image.Image]:
-    """The composed sheet's five cells keyed, trimmed and import-scaled
+def sheet_cells_shipping(sheet_path: Path, columns: int) -> list[Image.Image]:
+    """The composed sheet's cells keyed, trimmed and import-scaled
     (192px = the 4x shipping scale of the factory-v2 step-1 ruling)."""
     sheet = Image.open(sheet_path).convert("RGBA")
-    cell_w = sheet.width // 5
+    cell_w = sheet.width // columns
     cells = []
-    for i in range(5):
+    for i in range(columns):
         cell = chroma_key(sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height)))
         cells.append(cell.crop(content_bbox(cell)))
     scale = 192 / cells[0].height
@@ -252,6 +252,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
         loop_start=loop_start,
         skip_head_seconds=0,
         expect_leg_phase=not order.get("handLayer"),
+        cells=args.cells,
         **scan_kwargs,
     )
     chosen = {pose: int(paths[0].stem.split("_")[1]) for pose, paths in selected.items()}
@@ -275,9 +276,9 @@ def cmd_produce(args: argparse.Namespace) -> None:
     )
 
     # Verdict material: master cells vs composed cells + the 96px loop.
-    cells = sheet_cells_shipping(sheet_path)
+    cells = sheet_cells_shipping(sheet_path, len(selected) + 1)
     master_cells = []
-    for pose in POSES:
+    for pose in sorted(selected):
         keyed = chroma_key(Image.open(selected[pose][0]))
         master_cells.append(keyed.crop(content_bbox(keyed)))
     montage_rows(
@@ -329,6 +330,14 @@ def main() -> None:
         action="store_true",
         help="mirror the master clip before scanning (mirrored-lineage masters "
         "— 運転知見 38; recorded into the order's walkLane for reproducibility)",
+    )
+    produce.add_argument(
+        "--cells",
+        type=int,
+        default=4,
+        help="walk cells per stride (A-3 dense sheets ship 12; legacy 4). "
+        "The master's loop period should divide by this evenly — an uneven "
+        "split reads as a one-beat stutter (the 25→12 measurement, 2026-08-20)",
     )
     produce.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-walk-lane"))
     produce.add_argument("--budget", type=float, default=0.5,

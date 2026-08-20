@@ -9,6 +9,7 @@ Mirrors the post-composition of the ①b(c) adopted line:
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -56,8 +57,17 @@ NECK_SCALE_BAND = (0.80, 1.20)
 # while feet drifted 13px. Only the VERTICAL bob survives the pipeline
 # (it changes the trimmed frame height over the fixed ground line).
 BOB_AMPLITUDE_FRAC = 0.015  # of the stand height: ±6px at 400 ≈ ±1.4px at 96
-CONTACT_POSES = frozenset({"walk-a", "walk-c"})
 HEAD_SWAY_CAP_FRAC = 0.045
+
+
+def bob_offset_frac(index: int, cells: int) -> float:
+    """The prescribed neck offset (fraction of stand height) for walk cell
+    `index` of `cells`: a two-bump-per-stride cosine — LOWEST on the
+    contacts (index 0 and cells/2), HIGHEST on the passings (cells/4 and
+    3·cells/4). At cells=4 this is exactly the pre-A-3 two-level
+    prescription (−A, +A, −A, +A); denser sheets get the same curve
+    sampled smoothly (the A-3 densification, 2026-08-20)."""
+    return -BOB_AMPLITUDE_FRAC * math.cos(4 * math.pi * index / cells)
 
 
 def key_pixel(r: int, g: int, b: int, a: int) -> tuple[int, int, int, int]:
@@ -395,7 +405,9 @@ def compose_walk_sheet(
         stand_neck = structure_neck(stand)
         head, stand_neck_y = cut_head(stand, stand_neck)
 
-    ordered = ["stand", "walk-a", "walk-b", "walk-c", "walk-d"]
+    # The walk vocabulary comes from the caller's selection (4 legacy /
+    # 12 dense — A-3); lexical sort of walk-a..walk-l IS stride order.
+    ordered = ["stand", *sorted(walk_paths)]
     frames: list[Image.Image] = [stand]
     necks: dict[str, tuple[int, int]] = {"stand": stand_neck}
     stand_neck_from_ground = stand.height - stand_neck[1]
@@ -449,7 +461,10 @@ def compose_walk_sheet(
         stand_neck_from_ground / max(1, body.height - neck[1])
         for _, body, neck in selected
     )
-    cycle_scale = (ratios[1] + ratios[2]) / 2
+    mid = len(ratios) // 2
+    cycle_scale = (
+        ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2
+    )
     resized: list[tuple[str, Image.Image, tuple[int, int]]] = []
     for pose, body, _ in selected:
         body = body.resize(
@@ -470,10 +485,10 @@ def compose_walk_sheet(
     # See BOB_AMPLITUDE_FRAC. The neck-junction gate still fails loudly if
     # a shifted head ever breaks the bridge, and art_lint's bob-phase gate
     # re-verifies the pattern on the imported frames.
-    bob = stand.height * BOB_AMPLITUDE_FRAC
-    for pose, body, neck in resized:
+    cells = len(resized)
+    for index, (pose, body, neck) in enumerate(resized):
         nfg = body.height - neck[1]
-        target_nfg = stand_neck_from_ground + (-bob if pose in CONTACT_POSES else bob)
+        target_nfg = stand_neck_from_ground + stand.height * bob_offset_frac(index, cells)
         cap = body.height * HEAD_SWAY_CAP_FRAC
         extra_y = max(-cap, min(cap, target_nfg - nfg))
         composited = paste_head(
@@ -486,7 +501,7 @@ def compose_walk_sheet(
 
     cell_w = max(cell_size, max(f.width for f in frames) + 8)
     cell_h = max(cell_size, max(f.height for f in frames) + 8)
-    sheet = Image.new("RGBA", (cell_w * 5, cell_h), GREEN)
+    sheet = Image.new("RGBA", (cell_w * len(frames), cell_h), GREEN)
     for i, frame in enumerate(frames):
         sheet.paste(cell_on_green(frame, cell_w, cell_h), (i * cell_w, 0))
     out_path.parent.mkdir(parents=True, exist_ok=True)

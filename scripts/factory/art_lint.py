@@ -224,25 +224,42 @@ def silhouette_iou(a: Image.Image, b: Image.Image) -> float:
     return intersection / union
 
 
+def quarter_walk_poses(walk_names: list[str]) -> list[str]:
+    """The four quarter-phase cells of a walk vocabulary in stride order:
+    contact, passing, mirrored contact, mirrored passing. For the legacy
+    4-cell sheets this is the whole vocabulary; for the dense sheets (A-3,
+    12 cells) it samples indices 0 / n/4 / n/2 / 3n/4 — the same phases
+    the 4-cell era shipped, so the 4-cell calibrations carry over."""
+    n = len(walk_names)
+    if n < 4:
+        return walk_names
+    return [walk_names[(k * n) // 4] for k in range(4)]
+
+
 def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
-    """Swing-walk cycle sanity: every walk frame must be a distinct pose.
+    """Swing-walk cycle sanity: the stride's quarter-phase poses must be
+    distinct.
 
     The owner-facing failure shapes this encodes (both shipped past every
     other gate before being caught by eye): contacts whose legs never trade
-    (one-foot shuffle) and a walk-d so close to walk-a that the second half
-    of the stride has no midpoint — both read as near-clone frame pairs.
+    (one-foot shuffle) and a final passing so close to the first contact
+    that the second half of the stride has no midpoint — both read as
+    near-clone frame pairs. On dense sheets (A-3) only the QUARTER cells
+    are compared: adjacent frames of a 12-cell cycle are similar by
+    construction, and the collapse this gate exists to catch shows up as
+    quarter-phase clones exactly as it did at 4 cells.
     """
-    required = {"walk-a", "walk-b", "walk-c", "walk-d"}
-    if not required <= frames.keys():
+    walk_names = sorted(n for n in frames if n.startswith("walk-"))
+    if len(walk_names) < 4:
         return []
     failures: list[str] = []
-    # No pair of walk frames may be near-clones. Calibrated: the approved
+    # No pair of quarter cells may be near-clones. Calibrated: the approved
     # swing sheets peak at IoU(b,d) 0.87; a same-leg contact pair measured
     # 0.97 and a scrambled substitution's (b,c) measured 0.95 — both read
     # as skipped/missing midpoints at play speed.
-    walk_names = [n for n in ("walk-a", "walk-b", "walk-c", "walk-d") if n in frames]
-    for i, first in enumerate(walk_names):
-        for second in walk_names[i + 1 :]:
+    quarters = quarter_walk_poses(walk_names)
+    for i, first in enumerate(quarters):
+        for second in quarters[i + 1 :]:
             iou = silhouette_iou(frames[first], frames[second])
             if iou > WALK_A_D_IOU_MAX:
                 failures.append(
@@ -329,24 +346,32 @@ def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
 # re-running the walk lane, not exempting the sheet.
 BOB_PP_RANGE = (4, 10)
 BOB_CONTRAST_MIN = 2.0
-BOB_CONTACTS = ("walk-a", "walk-c")
-BOB_PASSINGS = ("walk-b", "walk-d")
 
 
 def check_bob_phase(nfg: dict[str, int]) -> list[str]:
-    """The head bob must follow the legs — see BOB_PP_RANGE above."""
-    required = BOB_CONTACTS + BOB_PASSINGS
-    if any(pose not in nfg for pose in required):
+    """The head bob must follow the legs — see BOB_PP_RANGE above.
+
+    Judged on the stride's QUARTER cells (contacts at phase 0 and 1/2,
+    passings at 1/4 and 3/4 — quarter_walk_poses): identical to the 4-cell
+    calibration on legacy sheets, and on dense sheets (A-3) the same four
+    phases sampled out of the smooth prescribed cosine (bob_offset_frac),
+    whose intermediate cells lie between the extremes by construction.
+    """
+    walk_names = sorted(n for n in nfg if n.startswith("walk-"))
+    if len(walk_names) < 4:
         return []
-    contacts = max(nfg[p] for p in BOB_CONTACTS)
-    passings = min(nfg[p] for p in BOB_PASSINGS)
-    values = [nfg[p] for p in required]
+    quarters = quarter_walk_poses(walk_names)
+    bob_contacts = (quarters[0], quarters[2])
+    bob_passings = (quarters[1], quarters[3])
+    contacts = max(nfg[p] for p in bob_contacts)
+    passings = min(nfg[p] for p in bob_passings)
+    values = [nfg[p] for p in quarters]
     failures: list[str] = []
     if contacts > passings - BOB_CONTRAST_MIN:
         failures.append(
             f"bob phase broken: contact neck heights "
-            f"{[nfg[p] for p in BOB_CONTACTS]} must sit ≥{BOB_CONTRAST_MIN}px "
-            f"below passing heights {[nfg[p] for p in BOB_PASSINGS]} — "
+            f"{[nfg[p] for p in bob_contacts]} must sit ≥{BOB_CONTRAST_MIN}px "
+            f"below passing heights {[nfg[p] for p in bob_passings]} — "
             f"re-run the walk lane (prescribed bob), do not hand-edit anchors"
         )
     pp = max(values) - min(values)

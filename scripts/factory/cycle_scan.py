@@ -43,10 +43,13 @@ from factory.foot_phase import (  # noqa: E402
     _find_period,
     load_signals,
     load_spreads,
-    stride_quad,
+    stride_cells,
+    walk_pose_names,
 )
 
-POSES = ("walk-a", "walk-b", "walk-c", "walk-d")
+# The legacy 4-cell vocabulary (pre-A-3 sheets; the dense sheets pass
+# `cells=12` to scan_clip and get walk-a..walk-l).
+POSES = walk_pose_names(4)
 SKIP_HEAD_SECONDS = 1.5
 FPS = 30.0
 # Phase-equivalent strides to try per failing slot, then ±1 jitter. Only
@@ -74,9 +77,10 @@ def _evaluate(
         except SystemExit as exc:
             return [f"compose: {exc}"]
         sheet = Image.open(sheet_path).convert("RGBA")
-        cell_w = sheet.width // 5
+        columns = len(idx) + 1
+        cell_w = sheet.width // columns
         cells = []
-        for i in range(5):
+        for i in range(columns):
             cell = chroma_key(sheet.crop((i * cell_w, 0, (i + 1) * cell_w, sheet.height)))
             cells.append(cell.crop(content_bbox(cell)))
         # 192px = the 4x shipping scale (factory-v2 step-1 ruling); the art
@@ -93,7 +97,8 @@ def _evaluate(
         stand = cells[0]
         stand_neck = structure_neck(stand)
         failures: list[str] = []
-        for pose, cell in zip(POSES, cells[1:]):
+        pose_names = sorted(idx)
+        for pose, cell in zip(pose_names, cells[1:]):
             try:
                 neck = structure_neck(cell)
             except SystemExit as exc:
@@ -120,10 +125,14 @@ def _evaluate(
         # Carry cycles stride gently with near-clone-adjacent poses by spec,
         # so the caller excludes them (the run_lint rule).
         if expect_leg_phase:
-            for failure in check_leg_phase(dict(zip(POSES, cells[1:]))):
+            for failure in check_leg_phase(dict(zip(pose_names, cells[1:]))):
                 slot = next(
-                    (p for p in reversed(POSES) if f"{p} " in failure or failure.startswith(p)),
-                    "walk-d",
+                    (
+                        p
+                        for p in reversed(pose_names)
+                        if f"{p} " in failure or failure.startswith(p)
+                    ),
+                    pose_names[-1],
                 )
                 failures.append(f"{slot}: {failure}")
         return failures
@@ -155,29 +164,35 @@ def _candidate_quads(
     period: int | None,
     loop_start: int,
     skip_head_seconds: float,
+    cells: int = 4,
 ) -> tuple[list[dict[str, int]], int]:
-    """(candidate walk-a..d index quads, period) for scan_clip.
+    """(candidate walk-cell index sets, period) for scan_clip.
 
     Master-lane clips (period machine-known from the ledger) anchor on the
-    leg-spread maximum INSIDE the loop window (stride_quad): the girl
+    leg-spread maximum INSIDE the loop window (stride_cells): the girl
     sheet's inverted bob traced back to this function scanning from frame
     0 while her master's loop starts at 31 — the pre-loop ease-in gait
     passed every pixel gate but held no contact/passing structure. Later
-    candidates step whole periods so every quad stays phase-aligned.
+    candidates step whole periods so every set stays phase-aligned.
 
     Unknown-period clips (the retired wan lane, still used by run_avatar's
-    legacy path) keep the foot-signal contact scan.
+    legacy path) keep the foot-signal contact scan (4 cells only).
     """
+    names = walk_pose_names(cells)
+    last = names[-1]
     if period is not None:
         spreads = load_spreads(frames)
         base = (
-            {pose: pinned_contact + round(n * period / 4) for n, pose in enumerate(POSES)}
+            {
+                pose: pinned_contact + round(n * period / cells)
+                for n, pose in enumerate(names)
+            }
             if pinned_contact is not None
-            else stride_quad(spreads, loop_start, len(frames), period)
+            else stride_cells(spreads, loop_start, len(frames), period, cells)
         )
         quads = []
         offset = 0
-        while base["walk-d"] + offset < len(frames):
+        while base[last] + offset < len(frames):
             quads.append({pose: i + offset for pose, i in base.items()})
             offset += period
         return quads, period
@@ -185,7 +200,6 @@ def _candidate_quads(
     signals = load_signals(frames)
     start = min(len(signals) - 16, int(skip_head_seconds * FPS))
     period = _find_period(signals[start:], min_period=12, max_period=28)
-    quarter = period // 4
     contacts: list[int] = []
     i = start
     while i + period <= len(frames):
@@ -194,10 +208,10 @@ def _candidate_quads(
     if pinned_contact is not None:
         contacts = [pinned_contact]
     quads = [
-        {pose: contact + n * quarter for n, pose in enumerate(POSES)}
+        {pose: contact + (n * period) // cells for n, pose in enumerate(names)}
         for contact in contacts
     ]
-    return [q for q in quads if q["walk-d"] < len(frames)], period
+    return [q for q in quads if q[last] < len(frames)], period
 
 
 def scan_clip(
@@ -210,6 +224,7 @@ def scan_clip(
     skip_head_seconds: float = SKIP_HEAD_SECONDS,
     expect_leg_phase: bool = True,
     drift_distance_max: float = DRIFT_DISTANCE_MAX,
+    cells: int = 4,
 ) -> dict[str, list[Path]]:
     """The first stride cycle (optionally pinned) that passes the checks.
 
@@ -230,6 +245,7 @@ def scan_clip(
         period=period,
         loop_start=loop_start,
         skip_head_seconds=skip_head_seconds,
+        cells=cells,
     )
     print(f"cycle scan: period={period} quads={[q['walk-a'] for q in quads]}")
 
