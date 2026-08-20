@@ -5,23 +5,33 @@
   "sheet": "sheet-original.png",
   "outDir": ".",
   "grid": {
-    "cols": 5,
+    "cols": 13,
     "rows": 1
   },
-  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "poses": [
+    "stand",
+    "walk-a",
+    "walk-b",
+    "walk-c",
+    "walk-d",
+    "walk-e",
+    "walk-f",
+    "walk-g",
+    "walk-h",
+    "walk-i",
+    "walk-j",
+    "walk-k",
+    "walk-l"
+  ],
   "standHeightPx": 192,
   "handAnchors": {
-    "stand": [30, 134],
-    "walk-a": [78, 112],
-    "walk-b": [74, 120],
-    "walk-c": [84, 116],
-    "walk-d": [74, 118]
+    "stand": [30, 134]
   },
   "references": ["../avatar/sheet-original.png"],
-  "prompt": "PER-CELL nano edit over ../avatar/sheet-original.png (2026-08-20 — the whole-sheet keep-everything edit collapsed on a host-side nano-banana-2 behavior change, 運転知見 40; the per-cell recipe is 知見 41 / PR #129・#130 の裁定「3」の帰結). Each of the source sheet's 5 cells (380x414, cut on the grid fifths) was edited SEPARATELY with google/nano-banana-2 (resolution 1K, $0.10/cell): first the stand cell alone with the prompt 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」; then each walk cell with image_input = [the walk cell, the EDITED STAND] — the edited stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background. The second image shows THE SAME character wearing his new outfit: a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket) and BEIGE chino pants with his brown shoes. Edit ONLY the clothes of the first image: dress him in EXACTLY the same red hoodie and beige chino pants as the second image — same colors, same shading style, same hood and front pocket; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」. The 5 edited cells were reassembled into one 5-column green #00FF00 sheet (cell box 760x828, each cell scaled to fit and bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: stand/walk-a/walk-c one-shot; walk-b x2 + walk-d x3 rerolled to clear the all-pairs duplicate cap — the source's own (walk-b, walk-d) IoU is 0.896, a hair under the 0.90 cap, so any edit smoothing tips it over (the adopted combination measures 0.90x below the cap; 7 cells total $0.70). ART LINT PASS.",
+  "prompt": "PER-CELL nano edit over ../avatar/sheet-original.png at the A-3 dense density (2026-08-20 — 12 walk cells per stride, owner ruling A-3 in the PR #129 thread; the recipe is 運転知見 41, adopted after the whole-sheet edit collapsed on host-side nano-banana-2 drift, 知見 40). The source sheet's 13 cells (380x414, grid thirteenths) were edited one cell at a time with google/nano-banana-2 (resolution 1K, $0.085/cell): the STAND cell is the morning 4-cell round's approved edit reused byte-identically (its prompt: 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」); each of the 12 walk cells was edited with image_input = [the parent walk cell, that edited stand] — the stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background. The second image shows THE SAME character wearing his new outfit: a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket) and BEIGE chino pants with his brown shoes. Edit ONLY the clothes of the first image: dress him in EXACTLY the same red hoodie and beige chino pants as the second image — same colors, same shading style, same hood and front pocket; the long sleeves must follow the existing arm poses exactly, hands stay bare skin. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」. The 13 edited cells were reassembled into one 13-column green #00FF00 sheet (cell box 760x828, bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: all 12 walk cells one-shot; ART LINT PASS on the first assembly (IoU 0.90-0.97). neckAnchors transferred from the re-extracted avatar manifest (13 poses — lint.neckFrom validates).",
   "originals": {
-    "../avatar/sheet-original.png": "1d60c38bd8792a5db15eb35b93cdc2d9e5c7cb33bb41f0e5c99bd4299de9462f",
-    "sheet-original.png": "5b7fead7dfa33b72c27685e083913993045e4771aa2e0d182978b4b206df73f2"
+    "../avatar/sheet-original.png": "04b9571fdd58ebdaa0dfb318cc48aca1f0252c2acd096bcd1c1bc7ca876a055c",
+    "sheet-original.png": "9b05377ceb4f7aedb8ea93b62c15658825cb01009f37910ca0b5cac32f476420"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar/sheet-original.png",
@@ -30,10 +40,18 @@
   },
   "neckAnchors": {
     "stand": [52, 99],
-    "walk-a": [53, 99],
+    "walk-a": [52, 99],
     "walk-b": [52, 99],
-    "walk-c": [53, 99],
-    "walk-d": [52, 99]
+    "walk-c": [52, 98],
+    "walk-d": [52, 99],
+    "walk-e": [52, 98],
+    "walk-f": [52, 99],
+    "walk-g": [53, 99],
+    "walk-h": [52, 99],
+    "walk-i": [52, 98],
+    "walk-j": [52, 99],
+    "walk-k": [53, 98],
+    "walk-l": [51, 99]
   },
   "lint": {
     "neckFrom": "avatar/manifest.json"

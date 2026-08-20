@@ -5,17 +5,27 @@
   "sheet": "sheet-original.png",
   "outDir": ".",
   "grid": {
-    "cols": 5,
+    "cols": 13,
     "rows": 1
   },
-  "poses": ["stand", "walk-a", "walk-b", "walk-c", "walk-d"],
+  "poses": [
+    "stand",
+    "walk-a",
+    "walk-b",
+    "walk-c",
+    "walk-d",
+    "walk-e",
+    "walk-f",
+    "walk-g",
+    "walk-h",
+    "walk-i",
+    "walk-j",
+    "walk-k",
+    "walk-l"
+  ],
   "standHeightPx": 192,
   "handAnchors": {
-    "stand": [30, 134],
-    "walk-a": [78, 114],
-    "walk-b": [74, 120],
-    "walk-c": [84, 116],
-    "walk-d": [74, 118]
+    "stand": [30, 134]
   },
   "references": ["../canonical/style-reference.png", "../avatar/sheet-original.png"],
   "template": "avatar-outfit-edit",
@@ -24,8 +34,8 @@
     "outfit": "turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes"
   },
   "originals": {
-    "../avatar/sheet-original.png": "1d60c38bd8792a5db15eb35b93cdc2d9e5c7cb33bb41f0e5c99bd4299de9462f",
-    "sheet-original.png": "e398e4c08d59c12a5ce7cfa6110ec56490fefa3bb82efe95e17e56bedac75d2c"
+    "../avatar/sheet-original.png": "04b9571fdd58ebdaa0dfb318cc48aca1f0252c2acd096bcd1c1bc7ca876a055c",
+    "sheet-original.png": "cf27e82280c0334ce92a3a8ea73983193b6e9da0d3ea6f44d263fc80e856feff"
   },
-  "prompt": "PER-CELL nano edit over ../avatar/sheet-original.png (2026-08-20 — the whole-sheet keep-everything edit collapsed on a host-side nano-banana-2 behavior change, 運転知見 40; the per-cell recipe is 知見 41 / PR #129・#130 の裁定「3」の帰結). Each of the source sheet's 5 cells (380x414, cut on the grid fifths) was edited SEPARATELY with google/nano-banana-2 (resolution 1K, $0.10/cell): first the stand cell alone with the prompt 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. The newly exposed torso, arms and legs use the SAME flat skin tone as his face — no green, yellow or olive color cast, no reflected light from the background.」; then each walk cell with image_input = [the walk cell, the EDITED STAND] — the edited stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background. The second image shows THE SAME character in his dress-up BASE BODY form: no shirt (plain cartoon skin on the torso, like a swimmer), simple plain white underwear shorts, and his brown shoes. Edit ONLY the clothes of the first image: undress him to EXACTLY the same base body as the second image — bare torso and arms with the SAME flat skin tone as the second image and his face, the same plain white underwear shorts, keeping his brown shoes. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. No green, yellow or olive color cast on the skin, no reflected light from the background.」. The 5 edited cells were reassembled into one 5-column green #00FF00 sheet (cell box 760x828, each cell scaled to fit and bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: every cell one-shot (5 cells, $0.50); ART LINT PASS first assembly (IoU 0.84-0.97). The whole-sheet edits of the same day are the rejected takes recorded in factory-yield.md 2026-08-20 (8 takes, ghost/smear/duplication + a green color cast on the only pose-pass)."
+  "prompt": "PER-CELL nano edit over ../avatar/sheet-original.png at the A-3 dense density (2026-08-20 — 12 walk cells per stride, owner ruling A-3 in the PR #129 thread; the recipe is 運転知見 41, adopted after the whole-sheet edit collapsed on host-side nano-banana-2 drift, 知見 40). The source sheet's 13 cells (380x414, grid thirteenths) were edited one cell at a time with google/nano-banana-2 (resolution 1K, $0.085/cell): the STAND cell is the morning 4-cell round's approved edit reused byte-identically (its prompt: 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. The newly exposed torso, arms and legs use the SAME flat skin tone as his face — no green, yellow or olive color cast, no reflected light from the background.」); each of the 12 walk cells was edited with image_input = [the parent walk cell, that edited stand] — the stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background. The second image shows THE SAME character in his dress-up BASE BODY form: no shirt (plain cartoon skin on the torso, like a swimmer), simple plain white underwear shorts, and his brown shoes. Edit ONLY the clothes of the first image: undress him to EXACTLY the same base body as the second image — bare torso and arms with the SAME flat skin tone as the second image and his face, the same plain white underwear shorts, keeping his brown shoes. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. No green, yellow or olive color cast on the skin, no reflected light from the background.」. The 13 edited cells were reassembled into one 13-column green #00FF00 sheet (cell box 760x828, bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: all 12 walk cells one-shot; ART LINT PASS on the first assembly (IoU 0.89-0.97)."
 }

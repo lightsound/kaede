@@ -15,12 +15,13 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await page.goto('/assets');
   await expect(page.getByTestId('asset-studio')).toBeVisible({ timeout: 15_000 });
 
-  // The full roster: 10 avatar-body sheets × 5 poses each, 5 held items
-  // (basic / red / pants / girl, plus the heavy carry and light carry
-  // variants of the three boy outfits — carry pose per item weight,
-  // owner direction 2026-08-12).
+  // The full roster: 10 avatar-body sheets — 7 dense (A-3 densification
+  // 2026-08-20: stand + 12 walk cells) and the 3 legacy carry-light
+  // variants left at stand + 4 (裁定④ 据え置き) — plus 5 held items
+  // (carry pose per item weight, owner direction 2026-08-12):
+  // 7 × 13 + 3 × 5 = 106 pose frames.
   await expect(page.getByTestId('avatar-card')).toHaveCount(10);
-  await expect(page.getByTestId('pose-frame')).toHaveCount(50);
+  await expect(page.getByTestId('pose-frame')).toHaveCount(106);
   await expect(page.getByTestId('item-card')).toHaveCount(5);
   // Every carry variant ships a hand overlay (the hand-over-item layer).
   await expect(page.getByTestId('hand-layer')).toHaveCount(6);
