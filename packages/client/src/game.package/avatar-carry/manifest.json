@@ -4,7 +4,7 @@
   "name": "男の子（基本・持ち歩き）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#fcd4a9", "#9c5324", "#984e21", "#000000", "#9a5928"],
+  "palette": ["#9c5429", "#fcd5a9", "#fbd4a7", "#985628", "#fdd9a9"],
   "source": {
     "prompt": "Carry-walk pose variant of avatar.boy-basic, v5 — the near-arm mitten spec (owner directions 2026-08-09, final round: ①the carrying arm must be the NEAR arm, its shoulder/upper arm/elbow drawn visibly in front of the torso — earlier takes bent an arm that emerged from behind the torso and read as the far arm ②the hand is a complete round MITTEN with no fingers ③the mitten renders IN FRONT of the held item — the handLayer cut below; earlier: the elbow must be bent standing and walking, items rest on the hand as bare sprites). Stage 0 (bent-mitten STAND): nano-banana-2 single-frame edits of the base stand — three takes to land the pose (take 1 put the mitten at chest height so tall items covered the face; take 2 lowered it to the waist but bent both arms forward; take 3 edited take 2's far arm back down to hang behind the torso). Final wording: 'his NEAR arm — shoulder, upper arm and elbow FULLY VISIBLE drawn in front of his torso — bent at the elbow, forearm forward and slightly downward, the hand a SIMPLE ROUND MITTEN with NO fingers in front of his WAIST; his far arm hangs straight down behind his torso; everything else identical.' Cleaned through the standard post-composition (chroma flatten, key, scale to the base stand height, base stand's head composited at the neck pinch — pose edits drift face/hair, the head composite makes them pixel-identical again). Stage 1: the clean bent-mitten stand on a 720x720 pure #00FF00 canvas (feet y=640). Stage 2: alibaba/wan-2.7-i2v ($0.50, first try obeyed): walk-in-place with BIG strides, 'his near arm stays PERFECTLY STILL exactly as in the image — bent at the elbow with the round mitten hand held in front of his waist... His far arm also stays still, hanging at his side behind his body. Only his legs move.' Committed cells: the bent-mitten stand plus video frames n60 (contact) / n68 (passing) / n75 (opposite contact) / n82 (opposite passing), each center-cropped 760px, downscaled 2x, shadowed-green flattened, base head composited at each frame's own neck anchor. handAnchors = the mitten's top-center per frame (the item rest point; the still arm keeps it within ±1px across the stride — re-measured at the MITTEN BALL's top-center (26,64) white / (23,64) red after an owner review round: the first measurement anchored mid-forearm, so items sat halfway between elbow and mitten). handLayer: true cuts the mitten+visible skin around the stand hand anchor as hand.png, rendered ON TOP of the held item (body → item → hand, the MapleStory hand-over-item layering).",
     "referenceHashes": ["181fb3b6b0043aff69b246a4cf02bc484d3ae2af11013df6a16da84af67c0b3b"]
@@ -20,194 +20,194 @@
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [100, 190],
+      "size": [64, 160],
       "anchors": {
-        "neck": [57, 98],
-        "hand": [79, 127]
+        "neck": [33, 65],
+        "hand": [48, 88]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [101, 191],
+      "size": [64, 160],
       "anchors": {
-        "neck": [57, 99],
-        "hand": [80, 127]
+        "neck": [31, 65],
+        "hand": [48, 87]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [101, 190],
+      "size": [64, 158],
       "anchors": {
-        "neck": [57, 98],
-        "hand": [80, 127]
+        "neck": [30, 66],
+        "hand": [48, 88]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [102, 191],
+      "size": [63, 158],
       "anchors": {
-        "neck": [57, 99],
-        "hand": [80, 127]
+        "neck": [30, 66],
+        "hand": [47, 88]
       }
     },
     "walk-e": {
       "file": "walk-e.png",
-      "size": [102, 192],
+      "size": [64, 159],
       "anchors": {
-        "neck": [58, 99],
-        "hand": [80, 127]
+        "neck": [30, 66],
+        "hand": [48, 88]
       }
     },
     "walk-f": {
       "file": "walk-f.png",
-      "size": [102, 193],
+      "size": [64, 160],
       "anchors": {
-        "neck": [58, 98],
-        "hand": [80, 127]
+        "neck": [31, 66],
+        "hand": [47, 89]
       }
     },
     "walk-g": {
       "file": "walk-g.png",
-      "size": [101, 194],
+      "size": [64, 157],
       "anchors": {
-        "neck": [59, 98],
-        "hand": [81, 127]
+        "neck": [30, 65],
+        "hand": [47, 88]
       }
     },
     "walk-h": {
       "file": "walk-h.png",
-      "size": [102, 194],
+      "size": [64, 158],
       "anchors": {
-        "neck": [60, 98],
-        "hand": [81, 126]
+        "neck": [30, 65],
+        "hand": [46, 88]
       }
     },
     "walk-i": {
       "file": "walk-i.png",
-      "size": [100, 193],
+      "size": [64, 158],
       "anchors": {
-        "neck": [59, 98],
-        "hand": [81, 125]
+        "neck": [30, 65],
+        "hand": [43, 88]
       }
     },
     "walk-j": {
       "file": "walk-j.png",
-      "size": [100, 191],
+      "size": [65, 159],
       "anchors": {
-        "neck": [59, 97],
-        "hand": [80, 124]
+        "neck": [30, 65],
+        "hand": [43, 88]
       }
     },
     "walk-k": {
       "file": "walk-k.png",
-      "size": [99, 190],
+      "size": [66, 157],
       "anchors": {
-        "neck": [58, 97],
-        "hand": [80, 124]
+        "neck": [31, 65],
+        "hand": [44, 87]
       }
     },
     "walk-l": {
       "file": "walk-l.png",
-      "size": [100, 190],
+      "size": [66, 157],
       "anchors": {
-        "neck": [60, 97],
-        "hand": [80, 123]
+        "neck": [29, 66],
+        "hand": [44, 89]
       }
     },
     "walk-m": {
       "file": "walk-m.png",
-      "size": [99, 190],
+      "size": [66, 160],
       "anchors": {
-        "neck": [59, 97],
-        "hand": [80, 123]
+        "neck": [29, 67],
+        "hand": [48, 91]
       }
     },
     "walk-n": {
       "file": "walk-n.png",
-      "size": [100, 189],
+      "size": [65, 160],
       "anchors": {
-        "neck": [60, 96],
-        "hand": [80, 123]
+        "neck": [29, 66],
+        "hand": [46, 90]
       }
     },
     "walk-o": {
       "file": "walk-o.png",
-      "size": [100, 189],
+      "size": [66, 159],
       "anchors": {
-        "neck": [60, 97],
-        "hand": [80, 124]
+        "neck": [30, 67],
+        "hand": [46, 89]
       }
     },
     "walk-p": {
       "file": "walk-p.png",
-      "size": [100, 189],
+      "size": [66, 160],
       "anchors": {
-        "neck": [60, 97],
-        "hand": [81, 125]
+        "neck": [29, 67],
+        "hand": [46, 89]
       }
     },
     "walk-q": {
       "file": "walk-q.png",
-      "size": [100, 192],
+      "size": [66, 161],
       "anchors": {
-        "neck": [60, 98],
-        "hand": [80, 125]
+        "neck": [30, 67],
+        "hand": [47, 89]
       }
     },
     "walk-r": {
       "file": "walk-r.png",
-      "size": [101, 193],
+      "size": [65, 161],
       "anchors": {
-        "neck": [60, 98],
-        "hand": [80, 125]
+        "neck": [28, 66],
+        "hand": [46, 88]
       }
     },
     "walk-s": {
       "file": "walk-s.png",
-      "size": [101, 192],
+      "size": [65, 160],
       "anchors": {
-        "neck": [61, 97],
-        "hand": [77, 128]
+        "neck": [29, 67],
+        "hand": [47, 89]
       }
     },
     "walk-t": {
       "file": "walk-t.png",
-      "size": [102, 193],
+      "size": [65, 159],
       "anchors": {
-        "neck": [61, 98],
-        "hand": [77, 128]
+        "neck": [30, 67],
+        "hand": [48, 89]
       }
     },
     "walk-u": {
       "file": "walk-u.png",
-      "size": [102, 193],
+      "size": [64, 158],
       "anchors": {
-        "neck": [60, 98],
-        "hand": [78, 128]
+        "neck": [29, 66],
+        "hand": [47, 88]
       }
     },
     "walk-v": {
       "file": "walk-v.png",
-      "size": [101, 193],
+      "size": [64, 158],
       "anchors": {
-        "neck": [59, 98],
-        "hand": [80, 127]
+        "neck": [31, 64],
+        "hand": [44, 87]
       }
     },
     "walk-w": {
       "file": "walk-w.png",
-      "size": [102, 193],
+      "size": [64, 158],
       "anchors": {
-        "neck": [59, 98],
-        "hand": [79, 127]
+        "neck": [31, 64],
+        "hand": [44, 86]
       }
     },
     "walk-x": {
       "file": "walk-x.png",
-      "size": [101, 193],
+      "size": [64, 159],
       "anchors": {
-        "neck": [58, 99],
-        "hand": [79, 127]
+        "neck": [33, 65],
+        "hand": [43, 88]
       }
     }
   },

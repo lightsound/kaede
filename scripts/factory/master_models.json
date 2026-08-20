@@ -42,8 +42,8 @@
           "registeredAt": "2026-08-20"
         },
         "walk-carry": {
-          "preset": "Texting_Walk_inplace + Head X-20° 頭起こし補正 + 両手ボーン 0.65 縮小ミトン化(bpy_pose_offset --offset Head=X:-20 --scale LeftHand=0.65 RightHand=0.65 — 元 GLB a45de985…・頭起こし版 e9c3623e… に合成・--scale は PR #126 新設)",
-          "glbSha256": "6cdb195e41eeadf13434ea04f213538550f0aac5092d68e6b030b333c82a27f5",
+          "preset": "Texting_Walk_inplace + Head X-20° 頭起こし + Head Y-20° 歩行方向ヨー補正 + 両手ボーン 0.65 ミトン化(bpy_pose_offset — ミトン金型 6cdb195e… に Y:-20 を追合成。オーナー指摘 2026-08-20『ずっとこっちを向いている』— Texting_Walk 固有のカメラ側ヨーを歩行方向へ再センター・walk 参照の 3/4 帯と実測一致)",
+          "glbSha256": "a0f73316cba736bee1e2a5942029235069b069c0fcef734fe8853b41be4f0d75",
           "boneLoop": {
             "action": "Armature|Texting_Walk_inplace|baselayer",
             "startFrame": 14.0,
@@ -59,7 +59,7 @@
             }
           },
           "reference": {
-            "sha256": "756bdffbbd6d4173b6ebeb14de54e88364915e8543f3498dc920e89448fdc28c",
+            "sha256": "c87b603477b263fa0bb31287b4c340417722e36c32eb64ee93e3fa4f2b2f0a08",
             "frames": 72,
             "fps": 24,
             "tiles": 3,
@@ -70,8 +70,8 @@
               "closureIou": 1.0
             }
           },
-          "approval": "4b オーナー最終裁定 2026-08-19「いい感じ、それで OK です」(factory-v2-plan §7 4b 実施結果・PR #125)— carry 採用テイク 6b4838a9…(ミトン金型 720p steps30)の駆動金型。台帳登録は本 PR のオーナーマージ = 承認",
-          "registeredAt": "2026-08-19"
+          "approval": "オーナー指摘 2026-08-20 (PR #129 スレッド)『歩く方向を向いて欲しい』— Y 軸 4 方向レンダー実測で Y:-20 を較正",
+          "registeredAt": "2026-08-20"
         }
       },
       "family": "boy",

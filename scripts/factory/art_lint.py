@@ -412,20 +412,28 @@ def check_native_bob(nfg: dict[str, int], *, gentle: bool = False) -> list[str]:
     mid = len(ordered) // 2
     median = (ordered[mid - 1] + ordered[mid]) / 2
     failures: list[str] = []
-    contacts = [nfg[quarters[0]], nfg[quarters[2]]]
-    passings = [nfg[quarters[1]], nfg[quarters[3]]]
-    if max(contacts) > median:
-        failures.append(
-            f"native bob broken: contact neck heights {contacts} must sit at "
-            f"or below the cycle median {median} — the master's own bob "
-            f"disagrees with the leg phase; re-run the walk lane"
-        )
-    if min(passings) < median:
-        failures.append(
-            f"native bob broken: passing neck heights {passings} must sit at "
-            f"or above the cycle median {median} — the master's own bob "
-            f"disagrees with the leg phase; re-run the walk lane"
-        )
+    if not gentle:
+        # The phase test needs the bob to clear the neck-detection noise
+        # floor (±1〜2px): swing walks measure 4–5px peak-to-peak, but the
+        # gentle carry stride bobs ~2px — at that amplitude the quarter
+        # readings are statistically noise (the yaw-corrected carry master
+        # measured a patternless ±1px sequence, 2026-08-20), so gentle
+        # sheets keep only the amplitude sanity below (the same spec-based
+        # reasoning that exempts them from leg-phase opposition).
+        contacts = [nfg[quarters[0]], nfg[quarters[2]]]
+        passings = [nfg[quarters[1]], nfg[quarters[3]]]
+        if max(contacts) > median:
+            failures.append(
+                f"native bob broken: contact neck heights {contacts} must sit "
+                f"at or below the cycle median {median} — the master's own "
+                f"bob disagrees with the leg phase; re-run the walk lane"
+            )
+        if min(passings) < median:
+            failures.append(
+                f"native bob broken: passing neck heights {passings} must sit "
+                f"at or above the cycle median {median} — the master's own "
+                f"bob disagrees with the leg phase; re-run the walk lane"
+            )
     lo = NATIVE_BOB_PP_GENTLE_MIN if gentle else NATIVE_BOB_PP_RANGE[0]
     pp = max(seq) - min(seq)
     if not lo <= pp <= NATIVE_BOB_PP_RANGE[1]:

@@ -241,7 +241,7 @@ def seedvr_4x_stand(stand_raw: Path, work: Path, jobs: "fal_client.FalJobs") -> 
 
 def replace_frames(
     order: dict, master: Path, master_meta: dict, stand_raw: Path, work: Path, budget: float,
-    *, matched: bool = False, identity_4x: bool = False,
+    *, matched: bool = False, identity_4x: bool = False, steps: int | None = None,
 ) -> tuple[Path, int]:
     """fal wan-replace transfer of the master onto the sheet's stand identity;
     returns (gated frames directory, verified loop start) — the
@@ -269,6 +269,13 @@ def replace_frames(
         "image_url": jobs.upload(identity),
         "resolution": resolution,
     }
+    if steps is not None:
+        # The steps knob the master lane already uses (the registered carry
+        # master is a steps30 cast): higher inference quality holds cloth
+        # texture through the leg-crossing phases — the beige-chino red-carry
+        # transfers smeared the swinging back leg at default steps (2/2
+        # takes, 2026-08-20).
+        payload["num_inference_steps"] = steps
     print(f"replace — {master_meta['frames']} frames, est ${est:.3f}")
     result = jobs.run(order["id"], fal_client.WAN_ANIMATE_REPLACE, payload, est)
     replace_mp4 = jobs.download(
@@ -377,6 +384,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
             order, master, master_meta, stand_raw, work, args.budget,
             matched=driving == "reference",
             identity_4x=args.identity_4x,
+            steps=args.steps,
         )
         take_sha = hashlib.sha256(
             (work / "replace-output.mp4").read_bytes()
@@ -423,6 +431,8 @@ def cmd_produce(args: argparse.Namespace) -> None:
         lane["takeSha256"] = take_sha
     if driving != "take":
         lane["driving"] = driving
+    if args.mode == "replace" and args.steps is not None:
+        lane["steps"] = args.steps
     if flip:
         lane["flip"] = True
     if native:
@@ -496,6 +506,13 @@ def main() -> None:
         help="walk cells per stride (dense sheets ship 24; legacy 4). "
         "The master's loop period should divide by this evenly — an uneven "
         "split reads as a one-beat stutter (the 25→12 measurement, 2026-08-20)",
+    )
+    produce.add_argument(
+        "--steps",
+        type=int,
+        default=None,
+        help="wan num_inference_steps for replace mode (default = model "
+        "default; ~1.7x cost at 30 — recorded into walkLane)",
     )
     produce.add_argument(
         "--retake",
