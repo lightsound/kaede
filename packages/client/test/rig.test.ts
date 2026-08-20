@@ -82,12 +82,27 @@ describe('selectPose', () => {
     expect(selectPose(run(walking, 30, 0))).toBe('stand');
   });
 
-  it('gives each walk frame an equal quarter of the stride, in cycle order', () => {
-    const quarter = Math.PI / 2;
+  it('gives each walk frame an equal slice of the stride, in cycle order', () => {
+    // The epsilon keeps the slice-boundary samples off the float rounding
+    // edge: 7 * (2π/12) * 12 / 2π computes to 6.999… without it.
+    const slice = (2 * Math.PI) / WALK_POSES.length;
     for (const [index, pose] of WALK_POSES.entries()) {
-      expect(selectPose({ phase: index * quarter, intensity: 1 })).toBe(pose);
-      expect(selectPose({ phase: (index + 1) * quarter - 1e-9, intensity: 1 })).toBe(pose);
+      expect(selectPose({ phase: index * slice + 1e-9, intensity: 1 })).toBe(pose);
+      expect(selectPose({ phase: (index + 1) * slice - 1e-9, intensity: 1 })).toBe(pose);
     }
+  });
+
+  it('slices by the sheet-provided walk list (legacy 4-frame carry-light sheets)', () => {
+    const legacy = ['walk-a', 'walk-b', 'walk-c', 'walk-d'];
+    const quarter = Math.PI / 2;
+    for (const [index, pose] of legacy.entries()) {
+      expect(selectPose({ phase: index * quarter, intensity: 1 }, legacy)).toBe(pose);
+      expect(selectPose({ phase: (index + 1) * quarter - 1e-9, intensity: 1 }, legacy)).toBe(pose);
+    }
+  });
+
+  it('stands when a sheet declares no walk frames', () => {
+    expect(selectPose({ phase: 1, intensity: 1 }, [])).toBe('stand');
   });
 
   it('advances through the cycle with continued travel', () => {

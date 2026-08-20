@@ -26,6 +26,14 @@ import walkAUrl from './avatar/walk-a.png';
 import walkBUrl from './avatar/walk-b.png';
 import walkCUrl from './avatar/walk-c.png';
 import walkDUrl from './avatar/walk-d.png';
+import walkEUrl from './avatar/walk-e.png';
+import walkFUrl from './avatar/walk-f.png';
+import walkGUrl from './avatar/walk-g.png';
+import walkHUrl from './avatar/walk-h.png';
+import walkIUrl from './avatar/walk-i.png';
+import walkJUrl from './avatar/walk-j.png';
+import walkKUrl from './avatar/walk-k.png';
+import walkLUrl from './avatar/walk-l.png';
 import danceAUrl from './avatar-gestures/dance-a.png';
 import danceBUrl from './avatar-gestures/dance-b.png';
 import danceCUrl from './avatar-gestures/dance-c.png';
@@ -65,6 +73,7 @@ import { createInput } from './input';
 import headphonesUrl from './items/headphones/headphones.png';
 import headphonesManifest from './items/headphones/manifest.json';
 import { mergeInputs } from './mergeInputs';
+import { WALK_POSES } from './rig';
 import { createTouchControls } from './touchControls';
 import { renderZoneLayer, type ZoneRender } from './zoneLayer';
 
@@ -521,12 +530,21 @@ async function loadGestureKit(): Promise<GestureKit> {
   return { sheet, headgear };
 }
 
-/** Builds one pose sheet from its five loaded frame modules, in pose order. */
+/**
+ * Builds one pose sheet from its loaded frame modules: the stand first,
+ * then the walk frames in stride order (4 on the legacy carry-light
+ * sheets, 12 on the dense ones — the A-3 densification). Pose names come
+ * from the canonical WALK_POSES prefix.
+ */
 async function sheetFromModules(mods: { default: string }[]): Promise<AvatarSheetTextures> {
-  const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
-    mods.map((m) => Assets.load(m.default)),
-  );
-  return { stand, 'walk-a': walkA, 'walk-b': walkB, 'walk-c': walkC, 'walk-d': walkD };
+  const [stand, ...walkTextures] = await Promise.all(mods.map((m) => Assets.load(m.default)));
+  return {
+    stand,
+    walk: walkTextures.map((texture, index) => ({
+      pose: WALK_POSES[index] ?? `walk-${index}`,
+      texture,
+    })),
+  };
 }
 
 /** The red-hoodie outfit sheet (avatar.boy-basic-red), loaded on demand. */
@@ -538,6 +556,14 @@ async function loadRedSheet(): Promise<AvatarSheetTextures> {
       import('./avatar-red/walk-b.png'),
       import('./avatar-red/walk-c.png'),
       import('./avatar-red/walk-d.png'),
+      import('./avatar-red/walk-e.png'),
+      import('./avatar-red/walk-f.png'),
+      import('./avatar-red/walk-g.png'),
+      import('./avatar-red/walk-h.png'),
+      import('./avatar-red/walk-i.png'),
+      import('./avatar-red/walk-j.png'),
+      import('./avatar-red/walk-k.png'),
+      import('./avatar-red/walk-l.png'),
     ]),
   );
 }
@@ -565,6 +591,14 @@ const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> 
       import('./avatar-carry/walk-b.png'),
       import('./avatar-carry/walk-c.png'),
       import('./avatar-carry/walk-d.png'),
+      import('./avatar-carry/walk-e.png'),
+      import('./avatar-carry/walk-f.png'),
+      import('./avatar-carry/walk-g.png'),
+      import('./avatar-carry/walk-h.png'),
+      import('./avatar-carry/walk-i.png'),
+      import('./avatar-carry/walk-j.png'),
+      import('./avatar-carry/walk-k.png'),
+      import('./avatar-carry/walk-l.png'),
     ]),
   'heavy-red': () =>
     Promise.all([
@@ -573,6 +607,14 @@ const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> 
       import('./avatar-red-carry/walk-b.png'),
       import('./avatar-red-carry/walk-c.png'),
       import('./avatar-red-carry/walk-d.png'),
+      import('./avatar-red-carry/walk-e.png'),
+      import('./avatar-red-carry/walk-f.png'),
+      import('./avatar-red-carry/walk-g.png'),
+      import('./avatar-red-carry/walk-h.png'),
+      import('./avatar-red-carry/walk-i.png'),
+      import('./avatar-red-carry/walk-j.png'),
+      import('./avatar-red-carry/walk-k.png'),
+      import('./avatar-red-carry/walk-l.png'),
     ]),
   'light-base': () =>
     Promise.all([
@@ -667,17 +709,16 @@ async function loadHeldItem(
     Assets.load(itemUrl.default),
     Assets.load(handUrl.default),
   ]);
-  const poses = bodyManifest.default.poses;
+  // Per-pose hand anchors straight from the carry manifest — pose-name
+  // keyed so 4-frame and 12-frame carry sheets both resolve.
+  const hands: Record<string, readonly number[]> = {};
+  for (const [pose, meta] of Object.entries(bodyManifest.default.poses)) {
+    hands[pose] = (meta as { anchors: { hand: readonly number[] } }).anchors.hand;
+  }
   return {
     texture,
     grip: itemManifest.default.frame.anchors.grip,
-    hands: {
-      stand: poses.stand.anchors.hand,
-      'walk-a': poses['walk-a'].anchors.hand,
-      'walk-b': poses['walk-b'].anchors.hand,
-      'walk-c': poses['walk-c'].anchors.hand,
-      'walk-d': poses['walk-d'].anchors.hand,
-    },
+    hands,
     hand: { texture: handTexture, grip: bodyManifest.default.handLayer.anchors.grip },
   };
 }
@@ -752,15 +793,29 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   // The one pose-frame sheet every player view shares (bundled by Vite, so
   // the hashed URLs bust caches with the assets). Loaded before any view
   // exists — createGameApp is already the async init path.
-  const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
-    [standUrl, walkAUrl, walkBUrl, walkCUrl, walkDUrl].map((url) => Assets.load(url)),
+  const [stand, ...walkTextures] = await Promise.all(
+    [
+      standUrl,
+      walkAUrl,
+      walkBUrl,
+      walkCUrl,
+      walkDUrl,
+      walkEUrl,
+      walkFUrl,
+      walkGUrl,
+      walkHUrl,
+      walkIUrl,
+      walkJUrl,
+      walkKUrl,
+      walkLUrl,
+    ].map((url) => Assets.load(url)),
   );
   const baseSheet: AvatarSheetTextures = {
     stand,
-    'walk-a': walkA,
-    'walk-b': walkB,
-    'walk-c': walkC,
-    'walk-d': walkD,
+    walk: walkTextures.map((texture, index) => ({
+      pose: WALK_POSES[index] ?? `walk-${index}`,
+      texture,
+    })),
   };
   // Dev-only dress-up preview (the ①b(a) spike): swapped sheet / held item
   // for EVERY view in this tab — selection is per-player only from 増分①e.

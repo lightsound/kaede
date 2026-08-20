@@ -12,7 +12,26 @@
  * hand layer — the ①b(a)⑵ spec, same as the in-game avatarView.
  */
 
+import { selectPose } from '../game.package';
 import type { AssetCatalog, AssetFrame, AvatarAsset, ItemAsset } from './catalog';
+
+/**
+ * The pose a sheet shows for the shared walk clock's state: selectPose
+ * sliced by THIS sheet's own walk vocabulary (manifest order = stride
+ * order), so 12-frame dense sheets and legacy 4-frame carry-light sheets
+ * animate side by side at the same phase (the A-3 densification). The walk
+ * state is typed structurally (rig.ts's WalkState shape) so this public
+ * signature adds no cross-file type edge (the fallow coupling budget).
+ */
+export function walkPoseOf(
+  avatar: AvatarAsset,
+  walk: { phase: number; intensity: number },
+): string {
+  const walkPoses = avatar.poses
+    .filter(({ pose }) => pose.startsWith('walk-'))
+    .map(({ pose }) => pose);
+  return selectPose(walk, walkPoses);
+}
 
 /**
  * The carry variant naming rule: `<outfit id>-carry` for the two-arm heavy
