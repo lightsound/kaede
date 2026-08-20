@@ -65,6 +65,12 @@ HEAD_PIXEL_RATIO_RANGE = (0.90, 1.05)
 # stride gently with near-static legs by spec and are excluded from this
 # gate (the run_lint rule).
 WALK_A_D_IOU_MAX = 0.90
+# Dense-sheet (A-3, >4 walk cells) calibrations — see check_leg_phase:
+# passing×passing quarter pairs are mirror poses (silhouette-blind, 知見 20)
+# and cap at the 4-cell scramble level; adjacent cells must not be frozen
+# repeats. The 4-cell gates keep their exact original thresholds.
+PASSING_CLONE_IOU_MAX = 0.95
+ADJACENT_CLONE_IOU_MAX = 0.97
 # body every frame; a walk frame must not grow a significant INTERIOR color
 # far from everything in the stand (interior_only — see
 # _significant_colors). Calibrated 2026-08-09: every committed sheet's
@@ -253,18 +259,48 @@ def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
     if len(walk_names) < 4:
         return []
     failures: list[str] = []
+    dense = len(walk_names) > 4
     # No pair of quarter cells may be near-clones. Calibrated: the approved
     # swing sheets peak at IoU(b,d) 0.87; a same-leg contact pair measured
     # 0.97 and a scrambled substitution's (b,c) measured 0.95 — both read
     # as skipped/missing midpoints at play speed.
+    #
+    # Dense-sheet calibration (A-3, 12 cells): the PASSING×PASSING pair is
+    # capped at the scramble level (0.95) instead of 0.90 — the two passing
+    # phases of a bone-verified two-step gait (antiphase 1.0) are mirror
+    # poses that a 3/4 silhouette cannot tell apart (知見 20), and the wan
+    # generation's gentle arm swing measures them at 0.92-0.93 (the A-3
+    # boy re-cast) while the frames are genuinely distinct in RGB. The
+    # 4-cell failure this guarded — the one-beat stutter of near-clone
+    # passings — is structurally gone at 12 cells (the 24→12 carry
+    # preview measurement); contacts and mixed pairs keep the 0.90 cap.
     quarters = quarter_walk_poses(walk_names)
+    passing_pair = {quarters[1], quarters[3]}
     for i, first in enumerate(quarters):
         for second in quarters[i + 1 :]:
+            cap = (
+                PASSING_CLONE_IOU_MAX
+                if dense and {first, second} == passing_pair
+                else WALK_A_D_IOU_MAX
+            )
             iou = silhouette_iou(frames[first], frames[second])
-            if iou > WALK_A_D_IOU_MAX:
+            if iou > cap:
                 failures.append(
                     f"{first} and {second} are near-clones (IoU {iou:.2f} > "
-                    f"{WALK_A_D_IOU_MAX}) — a stride midpoint is missing"
+                    f"{cap}) — a stride midpoint is missing"
+                )
+    if dense:
+        # Frozen-frame detector: adjacent dense cells are similar by
+        # construction but never IDENTICAL — a stuck extraction repeats a
+        # frame (IoU ~1.0), which plays as a hitch.
+        ordered = [*walk_names, walk_names[0]]
+        for first, second in zip(ordered, ordered[1:]):
+            iou = silhouette_iou(frames[first], frames[second])
+            if iou > ADJACENT_CLONE_IOU_MAX:
+                failures.append(
+                    f"{first} and {second} (adjacent) are identical (IoU "
+                    f"{iou:.2f} > {ADJACENT_CLONE_IOU_MAX}) — a frozen/"
+                    f"repeated frame"
                 )
     return failures
 

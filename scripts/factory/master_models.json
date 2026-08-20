@@ -13,7 +13,7 @@
           "preset": "walking(rig 無料付属・biped)",
           "glbSha256": "e3526d81d67511ff820138c6026a30bd344b7c2cb8de02fb8304a063c315bc4f",
           "boneLoop": {
-            "action": "Armature|walking_man|baselayer_Armature",
+            "action": "Armature|walking_man|baselayer",
             "startFrame": 0.75,
             "cycleFrames": 25.0,
             "relClosure": 0.0,
@@ -27,19 +27,19 @@
             }
           },
           "reference": {
-            "sha256": "68f5542a18be188ff3080d4102b80b2bfdf990e5bf193c63defcec726d04d9a7",
-            "frames": 75,
+            "sha256": "95ef5d34a5bb17a8d4da81f3ea72a75830367454c9fd958b665f6a07fc2b473f",
+            "frames": 72,
             "fps": 24,
             "tiles": 3,
             "loop": {
-              "start": 2,
-              "period": 25,
-              "loopMeanIou": 0.998,
+              "start": 0,
+              "period": 24,
+              "loopMeanIou": 0.999,
               "closureIou": 1.0
             }
           },
-          "approval": "walk/boy 2D マスター(master_takes・PR #103 マージ)の 3D モーション源 — ハイブリッド実動作検証(videoReview「massive upgrade」・factory-yield 2026-08-10)の参照そのもの。台帳登録は本 PR のオーナーマージ = 承認",
-          "registeredAt": "2026-08-14"
+          "approval": "A-3 裁定（オーナー 2026-08-20・PR #129 スレッド）: 出荷 12 コマの均等割りのため緑参照を周期 24 で再標本化（GLB 不変・walking の実周期 25f@24fps をサブフレーム標本化 — 25→12 間引きの 1 拍ムラ実測が根拠）",
+          "registeredAt": "2026-08-20"
         },
         "walk-carry": {
           "preset": "Texting_Walk_inplace + Head X-20° 頭起こし補正 + 両手ボーン 0.65 縮小ミトン化(bpy_pose_offset --offset Head=X:-20 --scale LeftHand=0.65 RightHand=0.65 — 元 GLB a45de985…・頭起こし版 e9c3623e… に合成・--scale は PR #126 新設)",
@@ -87,7 +87,7 @@
           "preset": "walking(rig 無料付属・biped)",
           "glbSha256": "e5bfd805506843b2bd314f3d8ceb879faeef6d98ce5db86b1eeb99883c0c5f92",
           "boneLoop": {
-            "action": "Armature|walking_man|baselayer_Armature",
+            "action": "Armature|walking_man|baselayer",
             "startFrame": 0.75,
             "cycleFrames": 25.0,
             "relClosure": 0.0,
@@ -101,19 +101,19 @@
             }
           },
           "reference": {
-            "sha256": "28430243865658220f627e6cee0116ea9857c965f651e7211220d44f05bc01e7",
-            "frames": 75,
+            "sha256": "cf2f584f6439f1218c6542d215fc83f6370c9f1a3595bdd688e72e76fc4aa573",
+            "frames": 72,
             "fps": 24,
             "tiles": 3,
             "loop": {
-              "start": 0,
-              "period": 25,
+              "start": 1,
+              "period": 24,
               "loopMeanIou": 0.999,
               "closureIou": 1.0
             }
           },
-          "approval": "girl リグ再利用可否の骨署名ゲート評価(factory v2 手順 2 — 閉包 0.000・2 歩確認合格で再利用成立、新規作成 43cr 不要)。台帳登録は本 PR のオーナーマージ = 承認",
-          "registeredAt": "2026-08-14"
+          "approval": "A-3 裁定（オーナー 2026-08-20・PR #129 スレッド）: 出荷 12 コマの均等割りのため緑参照を周期 24 で再標本化（GLB 不変 — boy と同処置）",
+          "registeredAt": "2026-08-20"
         },
         "walk-carry": {
           "preset": "Texting_Walk_inplace(R2 remesh の model_url 再リグ 5cr + リターゲット 3cr — Meshy タスク削除後の恒久経路・タスク 019fffe1…)",
