@@ -12,17 +12,17 @@
   "standHeightPx": 192,
   "handAnchors": {
     "stand": [52, 128],
-    "walk-a": [92, 102],
-    "walk-b": [92, 116],
-    "walk-c": [94, 106],
-    "walk-d": [94, 116]
+    "walk-a": [84, 125],
+    "walk-b": [86, 120],
+    "walk-c": [84, 121],
+    "walk-d": [85, 128]
   },
   "references": ["../avatar-carry/sheet-original.png"],
-  "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the arms held out in front on the walking frames — hands stay bare skin. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+  "prompt": "PER-CELL nano edit over ../avatar-carry/sheet-original.png (2026-08-20 — the whole-sheet keep-everything edit collapsed on a host-side nano-banana-2 behavior change, 運転知見 40; the per-cell recipe is 知見 41 / PR #129・#130 の裁定「3」の帰結). Each of the source sheet's 5 cells (380x414, cut on the grid fifths) was edited SEPARATELY with google/nano-banana-2 (resolution 1K, $0.10/cell): first the stand cell alone with the prompt 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background, holding his bent NEAR arm with a round mitten hand in front of his waist. Edit ONLY the clothes: replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the bent near arm with the mitten hand in front of the waist — hands stay bare skin. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」; then each walk cell with image_input = [the walk cell, the EDITED STAND] — the edited stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background, holding his arms out in front of his waist with round mitten hands. The second image shows THE SAME character wearing his new outfit: a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket) and BEIGE chino pants with his brown shoes. Edit ONLY the clothes of the first image: dress him in EXACTLY the same red hoodie and beige chino pants as the second image — same colors, same shading style, same hood and front pocket; the long sleeves must follow the existing arm poses exactly — including the arms held out in front of the waist — the mitten hands stay bare skin. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background.」. The 5 edited cells were reassembled into one 5-column green #00FF00 sheet (cell box 760x828, each cell scaled to fit and bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: every cell one-shot (5 cells, $0.50); ART LINT PASS after re-measuring the walk handAnchors — the long sleeves cover the parent's anchor columns (walk-a had no skin on x=79 in the waist band), so the mitten blob's top-center column was located first (x=84/86/84/85) and the anchor row is the first opaque skin row on that column (運転知見 38③/41). neckAnchors transferred from the recast avatar-carry manifest (lint.neckFrom validates).",
   "handLayer": true,
   "originals": {
     "../avatar-carry/sheet-original.png": "48f25d942175327d5328144448f8a8bbab5f8e8bfee521eea37983250e898aa3",
-    "sheet-original.png": "cf8e8024095783923185f8e983944a9b3f6f859623297d608df83a1d8f341a33"
+    "sheet-original.png": "048fd602df6388f2e7538cd6230e6c332a99cbe4a3594d6240429cc60a6e1217"
   },
   "template": "avatar-outfit-edit",
   "editSource": "../avatar-carry/sheet-original.png",
@@ -34,10 +34,10 @@
     "neckFrom": "avatar-carry/manifest.json"
   },
   "neckAnchors": {
-    "stand": [52, 98],
-    "walk-a": [58, 94],
-    "walk-b": [52, 98],
-    "walk-c": [54, 96],
-    "walk-d": [52, 98]
+    "stand": [52, 99],
+    "walk-a": [52, 99],
+    "walk-b": [52, 99],
+    "walk-c": [51, 98],
+    "walk-d": [52, 99]
   }
 }

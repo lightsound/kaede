@@ -4,9 +4,9 @@
   "name": "男の子（パンツ）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#fad4a2", "#fbd3a5", "#fad6a2", "#fad2a5", "#552c14"],
+  "palette": ["#fbd7a3", "#fbd5a5", "#fddaa7", "#fdd5a2", "#fcd4a3"],
   "source": {
-    "prompt": "Factory template `avatar-outfit-edit` over ../avatar/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+    "prompt": "PER-CELL nano edit over ../avatar/sheet-original.png (2026-08-20 — the whole-sheet keep-everything edit collapsed on a host-side nano-banana-2 behavior change, 運転知見 40; the per-cell recipe is 知見 41 / PR #129・#130 の裁定「3」の帰結). Each of the source sheet's 5 cells (380x414, cut on the grid fifths) was edited SEPARATELY with google/nano-banana-2 (resolution 1K, $0.10/cell): first the stand cell alone with the prompt 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. The newly exposed torso, arms and legs use the SAME flat skin tone as his face — no green, yellow or olive color cast, no reflected light from the background.」; then each walk cell with image_input = [the walk cell, the EDITED STAND] — the edited stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background. The second image shows THE SAME character in his dress-up BASE BODY form: no shirt (plain cartoon skin on the torso, like a swimmer), simple plain white underwear shorts, and his brown shoes. Edit ONLY the clothes of the first image: undress him to EXACTLY the same base body as the second image — bare torso and arms with the SAME flat skin tone as the second image and his face, the same plain white underwear shorts, keeping his brown shoes. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. No green, yellow or olive color cast on the skin, no reflected light from the background.」. The 5 edited cells were reassembled into one 5-column green #00FF00 sheet (cell box 760x828, each cell scaled to fit and bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: every cell one-shot (5 cells, $0.50); ART LINT PASS first assembly (IoU 0.84-0.97). The whole-sheet edits of the same day are the rejected takes recorded in factory-yield.md 2026-08-20 (8 takes, ghost/smear/duplication + a green color cast on the only pose-pass).",
     "referenceHashes": [
       "0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e",
       "1d60c38bd8792a5db15eb35b93cdc2d9e5c7cb33bb41f0e5c99bd4299de9462f"
@@ -17,7 +17,7 @@
       "file": "stand.png",
       "size": [105, 192],
       "anchors": {
-        "neck": [54, 99],
+        "neck": [53, 98],
         "hand": [30, 134]
       }
     },
@@ -25,31 +25,31 @@
       "file": "walk-a.png",
       "size": [105, 189],
       "anchors": {
-        "neck": [51, 98],
+        "neck": [53, 98],
         "hand": [78, 114]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [106, 197],
+      "size": [105, 195],
       "anchors": {
-        "neck": [54, 99],
+        "neck": [52, 99],
         "hand": [74, 120]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [106, 193],
+      "size": [105, 189],
       "anchors": {
-        "neck": [54, 99],
+        "neck": [53, 98],
         "hand": [84, 116]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [105, 191],
+      "size": [105, 195],
       "anchors": {
-        "neck": [53, 98],
+        "neck": [53, 99],
         "hand": [74, 118]
       }
     }

@@ -4,9 +4,9 @@
   "name": "男の子（パンツ・持ち歩き）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#fbd4a6", "#fbd3a4", "#fbd1a2", "#fbcf9f", "#553016"],
+  "palette": ["#9e5a2a", "#fad3a3", "#f9d9af", "#fbd5a2", "#f8d09e"],
   "source": {
-    "prompt": "Factory template `avatar-outfit-edit` over ../avatar-carry/sheet-original.png (2026-08-12): This image is a sprite sheet of 5 frames of the same chibi game character on a flat pure green #00FF00 chroma-key background: standing, then 4 walk-cycle frames. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the arms held out in front on the walking frames), just bare skin instead of sleeves. Keep everything else EXACTLY pixel-identical in every frame: the same face, eyes, hair, skin, shoes, body poses, arm and leg positions, frame layout, and green background.",
+    "prompt": "PER-CELL nano edit over ../avatar-carry/sheet-original.png (2026-08-20 — the whole-sheet keep-everything edit collapsed on a host-side nano-banana-2 behavior change, 運転知見 40; the per-cell recipe is 知見 41 / PR #129・#130 の裁定「3」の帰結). Each of the source sheet's 5 cells (380x414, cut on the grid fifths) was edited SEPARATELY with google/nano-banana-2 (resolution 1K, $0.10/cell): first the stand cell alone with the prompt 「This image is a single frame of a chibi game character standing on a flat pure green #00FF00 chroma-key background, holding his bent NEAR arm with a round mitten hand in front of his waist. Edit ONLY the clothes: turn this into the dress-up BASE BODY sprite of the same character: no shirt (plain cartoon skin on the torso, like a swimmer), and swap the navy pants for simple plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the bent near arm with the mitten hand in front of the waist, the far arm hanging behind), just bare skin instead of sleeves. Keep everything else EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. The newly exposed torso, arms and legs use the SAME flat skin tone as his face — no green, yellow or olive color cast, no reflected light from the background.」; then each walk cell with image_input = [the walk cell, the EDITED STAND] — the edited stand anchors the outfit interpretation across cells — with the prompt 「The first image is a single frame of a chibi game character mid-walk on a flat pure green #00FF00 chroma-key background, holding his arms out in front of his waist with round mitten hands. The second image shows THE SAME character in his dress-up BASE BODY form: no shirt (plain cartoon skin on the torso, like a swimmer), simple plain white underwear shorts, and his brown shoes. Edit ONLY the clothes of the first image: undress him to EXACTLY the same base body as the second image — bare torso and arms with the SAME flat skin tone as the second image and his face, the same plain white underwear shorts, keeping his brown shoes — keep every arm exactly as drawn (the arms held out in front with the mitten hands), just bare skin instead of sleeves. Keep everything else of the first image EXACTLY pixel-identical: the same face, eyes, hair, skin, shoes, body pose, arm and leg positions, framing, and green background. No green, yellow or olive color cast on the skin, no reflected light from the background.」. The 5 edited cells were reassembled into one 5-column green #00FF00 sheet (cell box 760x828, each cell scaled to fit and bottom-center aligned) = sheet-original.png, then imported by the standard lane (--from-stage import: chroma key, trim, stand-height scale, art lint + per-pose silhouette IoU vs the edit source's committed frames). Takes: every cell one-shot (5 cells, $0.50); ART LINT PASS after re-measuring the walk handAnchors on the new mittens (運転知見 38③ — first opaque skin row on the anchor column, searched inside the waist band 0.50h-0.85h because the bare torso puts skin on the whole column above; the parent's new anchor columns x=79/81/80/79 transferred).",
     "referenceHashes": [
       "0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e",
       "48f25d942175327d5328144448f8a8bbab5f8e8bfee521eea37983250e898aa3"
@@ -15,50 +15,50 @@
   "poses": {
     "stand": {
       "file": "stand.png",
-      "size": [105, 192],
+      "size": [103, 192],
       "anchors": {
-        "neck": [53, 98],
+        "neck": [52, 98],
         "hand": [52, 128]
       }
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [104, 184],
+      "size": [103, 189],
       "anchors": {
-        "neck": [60, 96],
-        "hand": [92, 102]
+        "neck": [51, 98],
+        "hand": [79, 122]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [105, 200],
+      "size": [103, 195],
       "anchors": {
-        "neck": [53, 98],
-        "hand": [92, 116]
+        "neck": [51, 99],
+        "hand": [81, 125]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [107, 184],
+      "size": [103, 189],
       "anchors": {
-        "neck": [57, 97],
-        "hand": [94, 106]
+        "neck": [51, 98],
+        "hand": [80, 120]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [106, 200],
+      "size": [103, 195],
       "anchors": {
-        "neck": [53, 98],
-        "hand": [94, 116]
+        "neck": [51, 99],
+        "hand": [79, 125]
       }
     }
   },
   "handLayer": {
     "file": "hand.png",
-    "size": [31, 28],
+    "size": [29, 27],
     "anchors": {
-      "grip": [15, 13]
+      "grip": [14, 13]
     }
   }
 }
