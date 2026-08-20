@@ -76,8 +76,7 @@
     "outfit": "replace the white short-sleeved shirt with a RED hooded sweatshirt (hoodie, long sleeves, a small hood resting on his back, a front pocket), and replace the navy pants with BEIGE chino pants, keeping his brown shoes; the long sleeves must follow the existing arm poses exactly — including the arms held out in front on the walking frames — hands stay bare skin"
   },
   "lint": {
-    "matchStand": "avatar-red/manifest.json",
-    "neckFrom": "avatar-carry/manifest.json"
+    "matchStand": "avatar-red/manifest.json"
   },
   "neckAnchors": {
     "stand": [52, 99],
