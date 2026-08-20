@@ -66,7 +66,7 @@ export const IDLE_WALK_STATE: WalkState = { phase: 0, intensity: 0 };
  * One full stride (one pass through a sheet's walk frames) per this many
  * logical pixels of horizontal travel. At MOVE_SPEED (240 px/s) this paces
  * the cycle at 240/192 = 1.25 strides/s = 2.5 steps/s — a natural walk
- * cadence (~67ms per frame on the dense 12-frame sheets, 200ms on the
+ * cadence (~33ms per frame on the dense 24-frame sheets, 200ms on the
  * legacy 4-frame ones). The spike's 64 played 3.75 cycles/s (7.5 steps/s),
  * which read as frantic shuffling once the frames became real poses
  * (2026-08-08 review).
@@ -115,7 +115,7 @@ export function advanceWalk(state: WalkState, dxPx: number, dtMs: number): WalkS
  * otherwise the walk cycle frame the phase has reached — each frame owns an
  * equal slice of the stride, so the cadence follows rendered travel
  * (STRIDE_PX / walkPoses.length pixels per frame). `walkPoses` is the
- * SHEET's own walk list in stride order (12 on the dense sheets, 4 on the
+ * SHEET's own walk list in stride order (24 on the dense sheets, 4 on the
  * legacy carry-light sheets); the default is the canonical dense list.
  */
 export function selectPose(state: WalkState, walkPoses: readonly string[] = WALK_POSES): string {
