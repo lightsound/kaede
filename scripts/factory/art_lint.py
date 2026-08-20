@@ -383,6 +383,59 @@ def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
 BOB_PP_RANGE = (4, 10)
 BOB_CONTRAST_MIN = 2.0
 
+# Video-native sheets (2026-08-20「24 で進めて」) carry the master's REAL
+# bob, not the prescribed cosine, and physics does not put its extremes
+# exactly on the geometric quarters: measured across the three re-extracted
+# parents, peak-to-peak came out 4–5px but the quarter contrast was only
+# 1–2px (boy walk-g 94 vs walk-m 93). What natural motion does guarantee is
+# that contacts sit in the low half of the cycle and passings in the high
+# half, and that a real bob exists at all — so the native gate checks the
+# full-cycle amplitude band plus contacts ≤ cycle median ≤ passings instead
+# of the composite's quarter-contrast rule.
+NATIVE_BOB_PP_RANGE = (3, 10)
+# Carry sheets stride gently by spec (the same reasoning that exempts them
+# from the leg-phase opposition gate): the Texting_Walk master's vertical
+# oscillation is small and the forward mitten arms damp it further, so a
+# native carry take can land at 2px peak-to-peak at the 192px shipping
+# scale (pants-carry t5 measured 2 / parent carry 4 — quantization eats
+# the margin). 1px stays "frozen".
+NATIVE_BOB_PP_GENTLE_MIN = 2
+
+
+def check_native_bob(nfg: dict[str, int], *, gentle: bool = False) -> list[str]:
+    walk_names = sorted(n for n in nfg if n.startswith("walk-"))
+    if len(walk_names) < 4:
+        return []
+    seq = [nfg[p] for p in walk_names]
+    quarters = quarter_walk_poses(walk_names)
+    ordered = sorted(seq)
+    mid = len(ordered) // 2
+    median = (ordered[mid - 1] + ordered[mid]) / 2
+    failures: list[str] = []
+    contacts = [nfg[quarters[0]], nfg[quarters[2]]]
+    passings = [nfg[quarters[1]], nfg[quarters[3]]]
+    if max(contacts) > median:
+        failures.append(
+            f"native bob broken: contact neck heights {contacts} must sit at "
+            f"or below the cycle median {median} — the master's own bob "
+            f"disagrees with the leg phase; re-run the walk lane"
+        )
+    if min(passings) < median:
+        failures.append(
+            f"native bob broken: passing neck heights {passings} must sit at "
+            f"or above the cycle median {median} — the master's own bob "
+            f"disagrees with the leg phase; re-run the walk lane"
+        )
+    lo = NATIVE_BOB_PP_GENTLE_MIN if gentle else NATIVE_BOB_PP_RANGE[0]
+    pp = max(seq) - min(seq)
+    if not lo <= pp <= NATIVE_BOB_PP_RANGE[1]:
+        failures.append(
+            f"native bob amplitude {pp}px peak-to-peak outside "
+            f"({lo}, {NATIVE_BOB_PP_RANGE[1]}) — a frozen head "
+            f"(<{lo}) or a seasick bounce (>{NATIVE_BOB_PP_RANGE[1]})"
+        )
+    return failures
+
 
 def check_bob_phase(nfg: dict[str, int]) -> list[str]:
     """The head bob must follow the legs — see BOB_PP_RANGE above.
@@ -543,6 +596,7 @@ def lint_avatar(
     expect_leg_phase: bool = False,
     neck_reference: dict[str, list[int]] | None = None,
     drift_distance_max: float = DRIFT_DISTANCE_MAX,
+    native_head: bool = False,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -581,7 +635,13 @@ def lint_avatar(
 
         if name != "stand" and stand_frame is not None:
             recorded = pose.get("anchors", {}).get("neck")
-            if stand_neck and recorded:
+            # Video-native sheets (2026-08-20「24 で進めて」) ship the
+            # master's own heads: the stand-vs-walk head equality this
+            # check enforces exists to catch COMPOSITE failures (double
+            # heads, residual hair), and a native head legitimately
+            # differs from the nano stand head by a few percent. The
+            # per-frame drift/junction gates below still apply.
+            if stand_neck and recorded and not native_head:
                 failures += [
                     f"{name}: {f}"
                     for f in check_head_consistency(
@@ -661,7 +721,11 @@ def lint_avatar(
         for name, pose in poses.items()
         if pose.get("size") and pose.get("anchors", {}).get("neck")
     }
-    failures += check_bob_phase(nfg)
+    failures += (
+        check_native_bob(nfg, gentle=expect_carry_hand)
+        if native_head
+        else check_bob_phase(nfg)
+    )
 
     if base_palette:
         sheet_palette = [_parse_hex(c) for c in manifest.get("palette", [])]

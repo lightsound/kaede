@@ -381,6 +381,74 @@ def cell_on_green(frame: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
     return cell
 
 
+def compose_native_sheet(
+    stand_path: Path,
+    walk_paths: dict[str, Path],
+    out_path: Path,
+    *,
+    cell_size: int = 380,
+) -> dict[str, tuple[int, int]]:
+    """Video-native sheet: the master's frames AS-IS — no head composite,
+    no prescribed bob (the 2026-08-20 owner rejection of the dense
+    composite: the pixel-identical pasted head over a smoothly-moving body
+    read as a chest-level split; the natural frames carry their own head
+    motion and bob). What remains of the composite pipeline is the
+    normalization: one cycle-wide scale (median of the per-frame
+    neck-from-ground ratios vs the sheet's committed stand) so the sheet's
+    stand and the video cells agree on character size, and the green-cell
+    grid layout the importer expects. Returns per-pose structure necks."""
+    stand = trim_grounded(Image.open(stand_path))
+    stand_neck = structure_neck(stand)
+    target_h = 400
+    if stand.height > target_h:
+        scale = target_h / stand.height
+        stand = stand.resize(
+            (max(1, round(stand.width * scale)), target_h), Image.LANCZOS
+        )
+        stand_neck = structure_neck(stand)
+    stand_neck_from_ground = stand.height - stand_neck[1]
+
+    ordered = ["stand", *sorted(walk_paths)]
+    frames: list[Image.Image] = [stand]
+    necks: dict[str, tuple[int, int]] = {"stand": stand_neck}
+
+    selected: list[tuple[str, Image.Image, tuple[int, int]]] = []
+    for pose in ordered[1:]:
+        candidates = walk_paths[pose]
+        if isinstance(candidates, Path):
+            candidates = [candidates]
+        body = trim_grounded(Image.open(candidates[0]))
+        selected.append((pose, body, structure_neck(body)))
+
+    ratios = sorted(
+        stand_neck_from_ground / max(1, body.height - neck[1])
+        for _, body, neck in selected
+    )
+    mid = len(ratios) // 2
+    cycle_scale = (
+        ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2
+    )
+    for pose, body, _ in selected:
+        body = body.resize(
+            (
+                max(1, round(body.width * cycle_scale)),
+                max(1, round(body.height * cycle_scale)),
+            ),
+            Image.LANCZOS,
+        )
+        frames.append(body)
+        necks[pose] = structure_neck(body)
+
+    cell_w = max(cell_size, max(f.width for f in frames) + 8)
+    cell_h = max(cell_size, max(f.height for f in frames) + 8)
+    sheet = Image.new("RGBA", (cell_w * len(frames), cell_h), GREEN)
+    for i, frame in enumerate(frames):
+        sheet.paste(cell_on_green(frame, cell_w, cell_h), (i * cell_w, 0))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.convert("RGB").save(out_path)
+    return necks
+
+
 def compose_walk_sheet(
     stand_path: Path,
     walk_paths: dict[str, Path],

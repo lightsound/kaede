@@ -21,11 +21,12 @@ export interface WalkState {
 
 /**
  * The canonical walk-cycle pose names in stride order (avatar/manifest.json
- * poses). Twelve frames per stride since the A-3 densification (owner
- * ruling 2026-08-20): the masters carry a 24-frame cycle and shipping 12
- * of them is what makes the loop smooth — the contacts land on walk-a and
- * walk-g, the passings on walk-d and walk-j. Legacy sheets that were left
- * at 4 frames (the carry-light family — 裁定④ 据え置き 2026-08-19) use the
+ * poses). Twenty-four frames per stride since the video-native
+ * densification (owner rulings 2026-08-20: A-3, then「24 で進めて」— the
+ * masters carry a 24-frame cycle and the dense sheets ship EVERY frame of
+ * it as-is, no head composite): the contacts land on walk-a and walk-m,
+ * the passings on walk-g and walk-s. Legacy sheets that were left at 4
+ * frames (the carry-light family — 裁定④ 据え置き 2026-08-19) use the
  * first four names; selectPose takes the sheet's own pose list, so both
  * densities animate correctly side by side.
  */
@@ -42,6 +43,18 @@ export const WALK_POSES = [
   'walk-j',
   'walk-k',
   'walk-l',
+  'walk-m',
+  'walk-n',
+  'walk-o',
+  'walk-p',
+  'walk-q',
+  'walk-r',
+  'walk-s',
+  'walk-t',
+  'walk-u',
+  'walk-v',
+  'walk-w',
+  'walk-x',
 ] as const;
 
 /** One pose frame of the avatar sheet (docs/avatar-rig.md §3). */

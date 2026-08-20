@@ -34,6 +34,18 @@ import walkIUrl from './avatar/walk-i.png';
 import walkJUrl from './avatar/walk-j.png';
 import walkKUrl from './avatar/walk-k.png';
 import walkLUrl from './avatar/walk-l.png';
+import walkMUrl from './avatar/walk-m.png';
+import walkNUrl from './avatar/walk-n.png';
+import walkOUrl from './avatar/walk-o.png';
+import walkPUrl from './avatar/walk-p.png';
+import walkQUrl from './avatar/walk-q.png';
+import walkRUrl from './avatar/walk-r.png';
+import walkSUrl from './avatar/walk-s.png';
+import walkTUrl from './avatar/walk-t.png';
+import walkUUrl from './avatar/walk-u.png';
+import walkVUrl from './avatar/walk-v.png';
+import walkWUrl from './avatar/walk-w.png';
+import walkXUrl from './avatar/walk-x.png';
 import danceAUrl from './avatar-gestures/dance-a.png';
 import danceBUrl from './avatar-gestures/dance-b.png';
 import danceCUrl from './avatar-gestures/dance-c.png';
@@ -564,6 +576,18 @@ async function loadRedSheet(): Promise<AvatarSheetTextures> {
       import('./avatar-red/walk-j.png'),
       import('./avatar-red/walk-k.png'),
       import('./avatar-red/walk-l.png'),
+      import('./avatar-red/walk-m.png'),
+      import('./avatar-red/walk-n.png'),
+      import('./avatar-red/walk-o.png'),
+      import('./avatar-red/walk-p.png'),
+      import('./avatar-red/walk-q.png'),
+      import('./avatar-red/walk-r.png'),
+      import('./avatar-red/walk-s.png'),
+      import('./avatar-red/walk-t.png'),
+      import('./avatar-red/walk-u.png'),
+      import('./avatar-red/walk-v.png'),
+      import('./avatar-red/walk-w.png'),
+      import('./avatar-red/walk-x.png'),
     ]),
   );
 }
@@ -599,6 +623,18 @@ const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> 
       import('./avatar-carry/walk-j.png'),
       import('./avatar-carry/walk-k.png'),
       import('./avatar-carry/walk-l.png'),
+      import('./avatar-carry/walk-m.png'),
+      import('./avatar-carry/walk-n.png'),
+      import('./avatar-carry/walk-o.png'),
+      import('./avatar-carry/walk-p.png'),
+      import('./avatar-carry/walk-q.png'),
+      import('./avatar-carry/walk-r.png'),
+      import('./avatar-carry/walk-s.png'),
+      import('./avatar-carry/walk-t.png'),
+      import('./avatar-carry/walk-u.png'),
+      import('./avatar-carry/walk-v.png'),
+      import('./avatar-carry/walk-w.png'),
+      import('./avatar-carry/walk-x.png'),
     ]),
   'heavy-red': () =>
     Promise.all([
@@ -615,6 +651,18 @@ const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> 
       import('./avatar-red-carry/walk-j.png'),
       import('./avatar-red-carry/walk-k.png'),
       import('./avatar-red-carry/walk-l.png'),
+      import('./avatar-red-carry/walk-m.png'),
+      import('./avatar-red-carry/walk-n.png'),
+      import('./avatar-red-carry/walk-o.png'),
+      import('./avatar-red-carry/walk-p.png'),
+      import('./avatar-red-carry/walk-q.png'),
+      import('./avatar-red-carry/walk-r.png'),
+      import('./avatar-red-carry/walk-s.png'),
+      import('./avatar-red-carry/walk-t.png'),
+      import('./avatar-red-carry/walk-u.png'),
+      import('./avatar-red-carry/walk-v.png'),
+      import('./avatar-red-carry/walk-w.png'),
+      import('./avatar-red-carry/walk-x.png'),
     ]),
   'light-base': () =>
     Promise.all([
@@ -808,6 +856,18 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       walkJUrl,
       walkKUrl,
       walkLUrl,
+      walkMUrl,
+      walkNUrl,
+      walkOUrl,
+      walkPUrl,
+      walkQUrl,
+      walkRUrl,
+      walkSUrl,
+      walkTUrl,
+      walkUUrl,
+      walkVUrl,
+      walkWUrl,
+      walkXUrl,
     ].map((url) => Assets.load(url)),
   );
   const baseSheet: AvatarSheetTextures = {

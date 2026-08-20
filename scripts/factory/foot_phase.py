@@ -128,9 +128,11 @@ def load_spreads(frame_paths: list[Path]) -> list[float]:
 
 # The canonical walk pose alphabet in stride order (the client rig's
 # WALK_POSES mirror). 4 cells was the pre-A-3 shipping density; the dense
-# sheets ship 12 (A-3 owner ruling 2026-08-20 — the 4-frame subsampling of
-# the gentle wan-generation choreography read as near-clone stutter).
-WALK_LETTERS = "abcdefghijkl"
+# sheets ship 24 — every frame of the masters' 24-frame cycle, video
+# native (owner rulings 2026-08-20: the 4-frame subsampling of the gentle
+# wan-generation choreography read as near-clone stutter, and the head
+# composite read as a chest-level split once the body moved smoothly).
+WALK_LETTERS = "abcdefghijklmnopqrstuvwx"
 
 
 def walk_pose_names(cells: int) -> tuple[str, ...]:

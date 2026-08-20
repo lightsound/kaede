@@ -683,14 +683,14 @@ class DenseWalkCellsTests(unittest.TestCase):
         self.assertEqual(
             walk_pose_names(4), ("walk-a", "walk-b", "walk-c", "walk-d")
         )
-        names = walk_pose_names(12)
-        self.assertEqual(len(names), 12)
+        names = walk_pose_names(24)
+        self.assertEqual(len(names), 24)
         self.assertEqual(names[0], "walk-a")
-        self.assertEqual(names[-1], "walk-l")
+        self.assertEqual(names[-1], "walk-x")
         # Lexical sort IS stride order — the client and studio rely on it.
         self.assertEqual(sorted(names), list(names))
         with self.assertRaises(SystemExit):
-            walk_pose_names(13)
+            walk_pose_names(25)
 
     def test_stride_cells_twelve_even_split_on_period_24(self) -> None:
         from factory.foot_phase import stride_cells

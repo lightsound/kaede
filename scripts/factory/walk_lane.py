@@ -39,6 +39,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -51,7 +52,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from factory import fal_client  # noqa: E402
-from factory.compose_sheet import chroma_key, compose_walk_sheet, content_bbox  # noqa: E402
+from factory.compose_sheet import (  # noqa: E402
+    chroma_key,
+    compose_native_sheet,
+    compose_walk_sheet,
+    content_bbox,
+)
 from factory.cycle_scan import scan_clip  # noqa: E402
 from factory.loop_scan import silhouette_mask, verify_loop  # noqa: E402
 from factory.replace_lane import (  # noqa: E402
@@ -73,6 +79,7 @@ ASSET_ROOT = ROOT / "packages/client/src/game.package"
 # the committed lane's regime (every cell at one working scale).
 WORK_HEIGHT = 400
 DEFAULT_RESOLUTION = "720p"
+SEEDVR_UPSCALE_IMAGE = "fal-ai/seedvr/upscale/image"
 
 
 def effective_flip(order: dict, cli_flip: bool) -> bool:
@@ -134,8 +141,107 @@ def stand_cell_of_sheet(order: dict, order_path: Path, dest: Path) -> Path:
     return dest
 
 
+def reference_meta_of(master_key: str) -> dict:
+    """master_models.json motion green reference, reshaped to the take-meta
+    fields cmd_produce consumes (masterSha256/frames/fps/loop)."""
+    motion, family = master_key.split("/")
+    ledger = json.loads(
+        (Path(__file__).resolve().parent / "master_models.json").read_text()
+    )
+    try:
+        ref = ledger["models"][family]["motions"][motion]["reference"]
+    except KeyError:
+        raise SystemExit(
+            f"no green reference registered for {master_key} — run "
+            "model_ledger.py register-motion first"
+        )
+    return {
+        "masterSha256": ref["sha256"],
+        "frames": ref["frames"],
+        "fps": ref["fps"],
+        "loop": ref["loop"],
+    }
+
+
+# The bpy mannequin's measured frame fractions (subject height 43% of the
+# frame, top margin 7% — the spike_r2v_bench calibration, 運転知見 35): the
+# wan replace output inherits the IDENTITY's framing, so a full-bleed
+# identity leaves the erased mannequin's region to ghost. Framing-matching
+# the identity puts the character exactly where the mannequin is.
+MATCHED_HEIGHT_FRAC = 0.43
+MATCHED_TOP_FRAC = 0.07
+
+
+def matched_identity_of_stand(
+    stand_raw: Path, dest: Path, jobs: "fal_client.FalJobs"
+) -> Path:
+    """The sheet's stand cell, SeedVR2-4x'd and re-framed to the mannequin
+    box on green. The 4x pass is the STANDARD identity preprocessing
+    (運転知見 33 — identity authority comes from the artwork's information
+    content: the un-upscaled 400px pants-carry stand let wan drift the
+    proportions off-chibi, t3 2026-08-20). ~$0.01 per cast."""
+    cell = Image.open(stand_raw).convert("RGBA")
+    green_src = dest.with_name("identity_green_src.png")
+    canvas = Image.new("RGB", cell.size, (0, 255, 0))
+    canvas.paste(cell, (0, 0), cell)
+    canvas.save(green_src)
+    est = max(cell.width * cell.height * 16 / 1e6 * 0.001, 0.01)
+    result = jobs.run(
+        "identity-seedvr-4x",
+        SEEDVR_UPSCALE_IMAGE,
+        {
+            "image_url": jobs.upload(green_src),
+            "upscale_mode": "factor",
+            "upscale_factor": 4,
+        },
+        est,
+    )
+    big_path = jobs.download(
+        "identity-seedvr-4x", result["image"]["url"], dest=dest.with_name("identity_4x.png")
+    )
+    big = Image.open(big_path).convert("RGB")
+    keyed = chroma_key(big)
+    crop = keyed.crop(content_bbox(keyed))
+    side = max(720, round(crop.height / MATCHED_HEIGHT_FRAC))
+    target_h = round(side * MATCHED_HEIGHT_FRAC)
+    scale = target_h / crop.height
+    small = crop.resize(
+        (max(1, round(crop.width * scale)), target_h), Image.LANCZOS
+    )
+    out = Image.new("RGB", (side, side), (0, 255, 0))
+    out.paste(small, ((side - small.width) // 2, round(side * MATCHED_TOP_FRAC)), small)
+    out.save(dest)
+    return dest
+
+
+def seedvr_4x_stand(stand_raw: Path, work: Path, jobs: "fal_client.FalJobs") -> Path:
+    """SeedVR2 image-4x of the stand cell on white (運転知見 33 standard
+    identity preprocessing — the artwork's information content is what
+    holds wan to the identity). Returns a stand-cell-shaped RGBA png."""
+    cell = Image.open(stand_raw).convert("RGBA")
+    src = work / "identity_white_src.png"
+    canvas = Image.new("RGB", cell.size, (255, 255, 255))
+    canvas.paste(cell, (0, 0), cell)
+    canvas.save(src)
+    est = max(cell.width * cell.height * 16 / 1e6 * 0.001, 0.01)
+    result = jobs.run(
+        "identity-seedvr-4x",
+        SEEDVR_UPSCALE_IMAGE,
+        {
+            "image_url": jobs.upload(src),
+            "upscale_mode": "factor",
+            "upscale_factor": 4,
+        },
+        est,
+    )
+    return jobs.download(
+        "identity-seedvr-4x", result["image"]["url"], dest=work / "identity_4x_white.png"
+    )
+
+
 def replace_frames(
-    order: dict, master: Path, master_meta: dict, stand_raw: Path, work: Path, budget: float
+    order: dict, master: Path, master_meta: dict, stand_raw: Path, work: Path, budget: float,
+    *, matched: bool = False, identity_4x: bool = False,
 ) -> tuple[Path, int]:
     """fal wan-replace transfer of the master onto the sheet's stand identity;
     returns (gated frames directory, verified loop start) — the
@@ -147,8 +253,17 @@ def replace_frames(
         master_meta["frames"],
         master_meta["frames"] / master_meta["fps"],
     )
-    identity = squarify_identity(stand_raw, work / "identity_square.png")
     jobs = fal_client.FalJobs(work, budget)
+    if matched:
+        identity = matched_identity_of_stand(
+            stand_raw, work / "identity_matched_green.png", jobs
+        )
+    elif identity_4x:
+        identity = squarify_identity(
+            seedvr_4x_stand(stand_raw, work, jobs), work / "identity_square.png"
+        )
+    else:
+        identity = squarify_identity(stand_raw, work / "identity_square.png")
     payload = {
         "video_url": jobs.upload(master),
         "image_url": jobs.upload(identity),
@@ -203,20 +318,35 @@ def cmd_produce(args: argparse.Namespace) -> None:
     order_path = validate_order_path(args.order, ASSET_ROOT)
     order = json.loads(order_path.read_text())
     flip = effective_flip(order, args.flip)
+    # Video-native cells (owner ruling 2026-08-20「24 で進めて」): ship the
+    # master frames as-is — no head composite, no prescribed bob. Recorded
+    # into walkLane.head so a replay reproduces the committed sheet.
+    native = args.native or (order.get("walkLane") or {}).get("head") == "native"
     work = args.workdir / order["id"]
     work.mkdir(parents=True, exist_ok=True)
 
-    ledger = load_ledger()
-    master_meta = ledger["masters"].get(args.master)
-    if master_meta is None:
-        raise SystemExit(
-            f"no master registered for {args.master} — run replace_lane.py "
-            f"register first (available: {sorted(ledger['masters'])})"
-        )
+    driving = getattr(args, "driving", "take")
+    if driving == "reference":
+        # Mannequin driving (the master-CASTING recipe): the bpy green
+        # reference has no clothing to map away, so outfits far from the
+        # master's (the pants variant's bare torso — wan hallucinated a
+        # carried object t1 / a glass pillar t2 when driven by the dressed
+        # master take, 2026-08-20) transfer without invention. Identity
+        # must be framing-matched to the mannequin box (運転知見 35).
+        master_meta = reference_meta_of(args.master)
+    else:
+        ledger = load_ledger()
+        master_meta = ledger["masters"].get(args.master)
+        if master_meta is None:
+            raise SystemExit(
+                f"no master registered for {args.master} — run replace_lane.py "
+                f"register first (available: {sorted(ledger['masters'])})"
+            )
     period = master_meta["loop"]["period"]
     master = fetch_r2(master_meta["masterSha256"], work / "master.mp4")
     stand_raw = stand_cell_of_sheet(order, order_path, work / "stand_raw.png")
 
+    take_sha: str | None = None
     if args.mode == "extract":
         frames_dir = work / "frames"
         frame_paths = extract_frames(master, frames_dir)
@@ -226,10 +356,31 @@ def cmd_produce(args: argparse.Namespace) -> None:
         # region passed every pixel gate while holding no contact/passing
         # structure (the inverted-bob差し戻し, 2026-08-13).
         loop_start = master_meta["loop"]["start"]
+    elif (take_sha := (order.get("walkLane") or {}).get("takeSha256")) and not args.retake:
+        # A committed replace take is content-addressed in R2: a REPLAY
+        # rebuilds the sheet from the exact take that shipped, $0, instead
+        # of re-rolling the transfer. --retake forces a fresh paid roll.
+        take = fetch_r2(take_sha, work / "take.mp4")
+        frame_paths = extract_frames(take, work / "frames")
+        assert_green_background(frame_paths)
+        masks = [silhouette_mask(img) for img in keyed_frames(frame_paths)]
+        loop_start, loop_mean, closure = verify_loop(
+            masks, master_meta["loop"]["period"]
+        )
+        print(
+            f"replay from recorded take {take_sha[:12]}… "
+            f"loop-mean={loop_mean:.3f} closure={closure:.3f}"
+        )
+        frames_dir = work / "frames"
     else:
         frames_dir, loop_start = replace_frames(
-            order, master, master_meta, stand_raw, work, args.budget
+            order, master, master_meta, stand_raw, work, args.budget,
+            matched=driving == "reference",
+            identity_4x=args.identity_4x,
         )
+        take_sha = hashlib.sha256(
+            (work / "replace-output.mp4").read_bytes()
+        ).hexdigest()
 
     if flip:
         print(f"mirrored {mirror_clip(frames_dir)} frames (canon facing — 運転知見 38)")
@@ -253,13 +404,14 @@ def cmd_produce(args: argparse.Namespace) -> None:
         skip_head_seconds=0,
         expect_leg_phase=not order.get("handLayer"),
         cells=args.cells,
+        native=native,
         **scan_kwargs,
     )
     chosen = {pose: int(paths[0].stem.split("_")[1]) for pose, paths in selected.items()}
     print(f"cells: {chosen}")
 
     sheet_path = resolve_asset_path(order_path.parent, order["sheet"], ASSET_ROOT)
-    compose_walk_sheet(stand_raw, selected, sheet_path)
+    (compose_native_sheet if native else compose_walk_sheet)(stand_raw, selected, sheet_path)
     print(f"wrote {sheet_path}")
 
     # Provenance into the order (the danceMaster rule: the ledger sha is
@@ -267,8 +419,14 @@ def cmd_produce(args: argparse.Namespace) -> None:
     order["walkMaster"] = args.master
     order["walkMasterSha256"] = master_meta["masterSha256"]
     lane: dict = {"mode": args.mode, "cells": chosen}
+    if take_sha:
+        lane["takeSha256"] = take_sha
+    if driving != "take":
+        lane["driving"] = driving
     if flip:
         lane["flip"] = True
+    if native:
+        lane["head"] = "native"
     order["walkLane"] = lane
     order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
@@ -335,9 +493,38 @@ def main() -> None:
         "--cells",
         type=int,
         default=4,
-        help="walk cells per stride (A-3 dense sheets ship 12; legacy 4). "
+        help="walk cells per stride (dense sheets ship 24; legacy 4). "
         "The master's loop period should divide by this evenly — an uneven "
         "split reads as a one-beat stutter (the 25→12 measurement, 2026-08-20)",
+    )
+    produce.add_argument(
+        "--retake",
+        action="store_true",
+        help="force a fresh paid replace roll even when the order records a "
+        "committed takeSha256 (replays reuse the R2 take by default, $0)",
+    )
+    produce.add_argument(
+        "--identity-4x",
+        action="store_true",
+        help="SeedVR2-4x the stand cell before squarifying (運転知見 33 "
+        "standard — take-driven replaces of low-information identities "
+        "hallucinate around ambiguous regions, e.g. the bare-torso pants "
+        "variants; ~$0.01)",
+    )
+    produce.add_argument(
+        "--driving",
+        choices=["take", "reference"],
+        default="take",
+        help="replace-mode driving video: take = the registered master take; "
+        "reference = the motion's bpy green mannequin (the master-casting "
+        "recipe — for outfits too far from the master's to map cleanly, "
+        "e.g. the bare-torso pants variants; identity is framing-matched)",
+    )
+    produce.add_argument(
+        "--native",
+        action="store_true",
+        help="ship the master frames as-is (no head composite / prescribed "
+        "bob — the 2026-08-20 video-native ruling); recorded as walkLane.head",
     )
     produce.add_argument("--workdir", type=Path, default=Path("/tmp/kaede-walk-lane"))
     produce.add_argument("--budget", type=float, default=0.5,

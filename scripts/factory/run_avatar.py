@@ -235,6 +235,10 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
         # show opposite-leg contacts and a real second passing.
         expect_leg_phase=not order.get("handLayer"),
         neck_reference=neck_reference,
+        # Video-native sheets ship the master's own heads (walkLane.head —
+        # the 2026-08-20 ruling); the stand-head equality gate is
+        # composite-specific and skipped for them (art_lint's rule).
+        native_head=(order.get("walkLane") or {}).get("head") == "native",
         **lint_kwargs,
     )
     # Variant sheets (carry) must keep their paired outfit's colors: the

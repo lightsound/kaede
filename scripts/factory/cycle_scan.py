@@ -36,6 +36,7 @@ from factory.art_lint import (  # noqa: E402
 )
 from factory.compose_sheet import (  # noqa: E402
     chroma_key,
+    compose_native_sheet,
     compose_walk_sheet,
     content_bbox,
 )
@@ -67,13 +68,15 @@ def _evaluate(
     *,
     expect_leg_phase: bool = True,
     drift_distance_max: float = DRIFT_DISTANCE_MAX,
+    native: bool = False,
 ) -> list[str]:
     """Compose the candidate cycle and run import-approximate checks."""
     candidates = {pose: [frames[i]] for pose, i in idx.items()}
+    compose = compose_native_sheet if native else compose_walk_sheet
     with tempfile.TemporaryDirectory() as scratch:
         sheet_path = Path(scratch) / "sheet.png"
         try:
-            compose_walk_sheet(stand_raw, candidates, sheet_path)
+            compose(stand_raw, candidates, sheet_path)
         except SystemExit as exc:
             return [f"compose: {exc}"]
         sheet = Image.open(sheet_path).convert("RGBA")
@@ -104,10 +107,15 @@ def _evaluate(
             except SystemExit as exc:
                 failures.append(f"{pose}: neck — {exc}")
                 continue
-            failures += [
-                f"{pose}: {f}"
-                for f in check_head_consistency(stand, stand_neck[1], cell, neck[1])
-            ]
+            if not native:
+                # Native cells ship the video's own head — the stand-head
+                # equality gate is composite-specific (lint_avatar's rule).
+                failures += [
+                    f"{pose}: {f}"
+                    for f in check_head_consistency(
+                        stand, stand_neck[1], cell, neck[1]
+                    )
+                ]
             failures += [
                 f"{pose}: {f}"
                 for f in check_palette_drift(
@@ -225,6 +233,7 @@ def scan_clip(
     expect_leg_phase: bool = True,
     drift_distance_max: float = DRIFT_DISTANCE_MAX,
     cells: int = 4,
+    native: bool = False,
 ) -> dict[str, list[Path]]:
     """The first stride cycle (optionally pinned) that passes the checks.
 
@@ -257,6 +266,7 @@ def scan_clip(
             idx,
             expect_leg_phase=expect_leg_phase,
             drift_distance_max=drift_distance_max,
+            native=native,
         )
         attempts = 1
         while failures and attempts < MAX_CYCLE_ATTEMPTS:
@@ -275,6 +285,7 @@ def scan_clip(
                     trial,
                     expect_leg_phase=expect_leg_phase,
                     drift_distance_max=drift_distance_max,
+                    native=native,
                 )
                 attempts += 1
                 if not any(f.startswith(slot) for f in trial_failures):
