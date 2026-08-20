@@ -227,6 +227,13 @@ def cmd_produce(args: argparse.Namespace) -> None:
     # Carry sheets stride gently with same-sign contacts by spec (the
     # run_lint rule) — the leg-phase opposition gate only applies to swing
     # walks. Every other gate (junction included) applies to both.
+    scan_kwargs: dict = {}
+    drift_max = (order.get("lint") or {}).get("driftMax")
+    if drift_max is not None:
+        # Entry-scoped, owner-ruled drift calibration (運転知見 37/39 —
+        # check_palette_drift's distance_max doc). Lives in the committed
+        # order so a re-run reproduces the ruling.
+        scan_kwargs["drift_distance_max"] = float(drift_max)
     selected = scan_clip(
         stand_raw,
         frames_dir,
@@ -235,6 +242,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
         loop_start=loop_start,
         skip_head_seconds=0,
         expect_leg_phase=not order.get("handLayer"),
+        **scan_kwargs,
     )
     chosen = {pose: int(paths[0].stem.split("_")[1]) for pose, paths in selected.items()}
     print(f"cells: {chosen}")

@@ -221,6 +221,12 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
             name: pose["anchors"]["neck"]
             for name, pose in paired_manifest["poses"].items()
         }
+    lint_kwargs: dict = {}
+    drift_max = lint_options.get("driftMax")
+    if drift_max is not None:
+        # Entry-scoped, owner-ruled drift calibration (運転知見 37/39 — see
+        # check_palette_drift's distance_max doc). Recorded in the order.
+        lint_kwargs["drift_distance_max"] = float(drift_max)
     failures = lint_avatar(
         manifest_path_of(order_path, order),
         base_palette=palette,
@@ -229,6 +235,7 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
         # show opposite-leg contacts and a real second passing.
         expect_leg_phase=not order.get("handLayer"),
         neck_reference=neck_reference,
+        **lint_kwargs,
     )
     # Variant sheets (carry) must keep their paired outfit's colors: the
     # try-on stage swaps outfit ⇄ carry when an item is picked up, so a

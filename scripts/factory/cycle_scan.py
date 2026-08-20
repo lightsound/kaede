@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from factory.anchors import structure_neck  # noqa: E402
 from factory.art_lint import (  # noqa: E402
+    DRIFT_DISTANCE_MAX,
     check_head_consistency,
     check_leg_phase,
     check_neck_junction,
@@ -62,6 +63,7 @@ def _evaluate(
     idx: dict[str, int],
     *,
     expect_leg_phase: bool = True,
+    drift_distance_max: float = DRIFT_DISTANCE_MAX,
 ) -> list[str]:
     """Compose the candidate cycle and run import-approximate checks."""
     candidates = {pose: [frames[i]] for pose, i in idx.items()}
@@ -101,7 +103,12 @@ def _evaluate(
                 f"{pose}: {f}"
                 for f in check_head_consistency(stand, stand_neck[1], cell, neck[1])
             ]
-            failures += [f"{pose}: {f}" for f in check_palette_drift(stand, cell)]
+            failures += [
+                f"{pose}: {f}"
+                for f in check_palette_drift(
+                    stand, cell, distance_max=drift_distance_max
+                )
+            ]
             # Junction gate (①d 論点 6): a semi-transparent neck bridge reads
             # as a break at play speed — catch it per slot so the substitution
             # loop can swap the frame instead of failing the whole take.
@@ -202,6 +209,7 @@ def scan_clip(
     loop_start: int = 0,
     skip_head_seconds: float = SKIP_HEAD_SECONDS,
     expect_leg_phase: bool = True,
+    drift_distance_max: float = DRIFT_DISTANCE_MAX,
 ) -> dict[str, list[Path]]:
     """The first stride cycle (optionally pinned) that passes the checks.
 
@@ -227,7 +235,13 @@ def scan_clip(
 
     rejects: list[str] = []
     for idx in quads:
-        failures = _evaluate(stand_raw, frames, idx, expect_leg_phase=expect_leg_phase)
+        failures = _evaluate(
+            stand_raw,
+            frames,
+            idx,
+            expect_leg_phase=expect_leg_phase,
+            drift_distance_max=drift_distance_max,
+        )
         attempts = 1
         while failures and attempts < MAX_CYCLE_ATTEMPTS:
             slot = failures[0].split(":")[0]
@@ -240,7 +254,11 @@ def scan_clip(
             ):
                 trial = {**idx, slot: substitute}
                 trial_failures = _evaluate(
-                    stand_raw, frames, trial, expect_leg_phase=expect_leg_phase
+                    stand_raw,
+                    frames,
+                    trial,
+                    expect_leg_phase=expect_leg_phase,
+                    drift_distance_max=drift_distance_max,
                 )
                 attempts += 1
                 if not any(f.startswith(slot) for f in trial_failures):

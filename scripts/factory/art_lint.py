@@ -435,7 +435,12 @@ def check_gesture_cell(
     return failures, neck
 
 
-def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
+def check_palette_drift(
+    stand: Image.Image,
+    frame: Image.Image,
+    *,
+    distance_max: float = DRIFT_DISTANCE_MAX,
+) -> list[str]:
     """No significant frame color may sit far from every stand color.
 
     Deliberately has NO suppression hook: an acknowledged-colors exemption
@@ -443,6 +448,16 @@ def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
     under-chin shadow "visually clean" — was owner-rejected (2026-08-10,
     目視では影がおかしい). The calibrated gate outranks the operator's eye;
     a frame that fails must be replaced, not excused.
+
+    `distance_max` is the 運転知見 37 pattern applied to this gate — an
+    ENTRY-scoped, owner-ruled calibration recorded in the order
+    (`lint.driftMax`), never a default rewrite. The wan-animate-2 lane
+    shades a whole garment a few tones deeper than the seedance-era stand
+    it is composed against, so at the 192px gate scale the garment cluster
+    sits beyond the default 45 while the art is owner-approved (girl walk
+    2026-08-20 PR #128「色については現行でも問題ない」— measured 73–75 on
+    both takes, 運転知見 39). The default keeps catching the calibrated
+    defect classes for every sheet without an explicit ruling.
     """
     stand_colors = _significant_colors(stand, DRIFT_STAND_MIN_SHARE)
     if not stand_colors:
@@ -450,10 +465,10 @@ def check_palette_drift(stand: Image.Image, frame: Image.Image) -> list[str]:
     failures = []
     for color in _significant_colors(frame, DRIFT_MIN_SHARE, interior_only=True):
         nearest = min(_dist(color, sc) for sc in stand_colors)
-        if nearest > DRIFT_DISTANCE_MAX:
+        if nearest > distance_max:
             failures.append(
                 f"color #{color[0]:02x}{color[1]:02x}{color[2]:02x} drifted "
-                f"{nearest:.0f} from the stand palette (> {DRIFT_DISTANCE_MAX}) "
+                f"{nearest:.0f} from the stand palette (> {distance_max:g}) "
                 f"— video model repainted limbs/shoes"
             )
     return failures
@@ -466,6 +481,7 @@ def lint_avatar(
     expect_carry_hand: bool = False,
     expect_leg_phase: bool = False,
     neck_reference: dict[str, list[int]] | None = None,
+    drift_distance_max: float = DRIFT_DISTANCE_MAX,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -512,7 +528,10 @@ def lint_avatar(
                     )
                 ]
             failures += [
-                f"{name}: {f}" for f in check_palette_drift(stand_frame, frame)
+                f"{name}: {f}"
+                for f in check_palette_drift(
+                    stand_frame, frame, distance_max=drift_distance_max
+                )
             ]
 
         recorded_neck = pose.get("anchors", {}).get("neck")

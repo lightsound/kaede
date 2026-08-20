@@ -214,6 +214,20 @@ class ArtLintTests(unittest.TestCase):
         self.assertEqual(check_palette_drift(stand, stand), [])
         self.assertNotEqual(check_palette_drift(stand, drifted), [])
 
+    def test_palette_drift_honors_entry_scoped_distance_ruling(self) -> None:
+        # 運転知見 37/39: an owner-ruled, order-recorded `lint.driftMax`
+        # threads into the gate as `distance_max` (the girl walk ruling
+        # 2026-08-20 — wan-animate-2 shades the camisole past the default 45
+        # vs the seedance-era stand). The default stays authoritative for
+        # every order without an explicit ruling.
+        stand = _chibi(neck_y=50)
+        drifted = _chibi(neck_y=50)
+        ImageDraw.Draw(drifted).rectangle((20, 56, 44, 78), fill=(255, 0, 200, 255))
+        self.assertNotEqual(check_palette_drift(stand, drifted), [])
+        self.assertEqual(
+            check_palette_drift(stand, drifted, distance_max=999), []
+        )
+
     def test_neck_junction_passes_solid_bridge(self) -> None:
         # The chibi's neck pinch is a fully opaque 9px bridge — healthy.
         self.assertEqual(check_neck_junction(_chibi(neck_y=50), [32, 50]), [])
