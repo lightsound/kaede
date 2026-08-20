@@ -66,7 +66,10 @@ v1 は「頭・胴・腕・脚を別画像で持ち、PixiJS Container の階層
 
 ## 3. ポーズ規約 v1
 
-- **標準ポーズセット**: `stand` / `walk-a` / `walk-b`（将来 4 コマ化可）/
+- **標準ポーズセット**: `stand` / `walk-a`〜`walk-l`（**歩行は 12 コマ/周期
+  — A-3 裁定 2026-08-20**。マスター動画の周期 24 コマを均等 12 抽出。
+  据え置きの carry-light 系は 4 コマ（walk-a〜d）のままで、ランタイムは
+  シートの walk 語彙数で再生する — rig.ts `selectPose`）/
   `jump` / `sit` / `sleep` / `wave` …。増分①a は stand＋walk のみ、
   ジェスチャー増分で拡張（ポーズの追加＝シートに 1 枚足すだけ）。
 - **コマごとのメタデータ**（manifest — asset-pipeline.md §2）:
