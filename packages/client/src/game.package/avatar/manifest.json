@@ -4,7 +4,7 @@
   "name": "男の子（基本）",
   "author": "kaede",
   "license": "kaede-internal",
-  "palette": ["#fddca6", "#fdd8ab", "#fdd5a7", "#995628", "#9e5829"],
+  "palette": ["#a75827", "#000000", "#995328", "#fcd5aa", "#9f582b"],
   "source": {
     "prompt": "Two-stage generation via Cloudflare AI Gateway (unified billing, gateway kaede-assets — the walk-quality bench of ROADMAP Phase 5 ①b(c), 2026-08-08). Stage 1 input: the character's stand frame on a 720x720 pure #00FF00 canvas (character ~470px tall, feet on y=640; derived from the previous sheet's stand cell, itself generated from reference.png). Stage 2, model alibaba/wan-2.7-i2v (image-to-video), prompt: 'The chibi boy game character from the image walks in place, treadmill-style, without moving across the frame. An exaggerated cartoon game walk cycle like classic 2D side-scrolling games: BIG strides with legs swinging far forward and far back, knees lifting high on each step, and arms swinging WIDELY — the near arm swings clearly in front of his chest, then far behind his back, opposite to the legs. Legs strictly alternate: right leg steps forward, then left leg steps forward. He keeps facing right in 3/4 view. The camera is completely static, no zoom, no pan. The flat pure green #00FF00 chroma-key background stays perfectly unchanged and empty. The character stays centered with his feet returning to the same ground line every step. Constant even lighting, no shadows.' Output: 5s 30fps 1440x1440 video. The committed sheet is video frames n0 (stand = the input image as rendered), n66 (walk-a: contact, near arm swung back), n72 (walk-b: passing), n78 (walk-c: the opposite contact, near arm swung front), n84 (walk-d: the opposite passing), each cropped to the center 760px, downscaled 2x into one row, with shadowed-green background pixels flattened to solid green (the video adds a soft ground shadow despite the prompt). Why a video model: static image models cannot produce the alternating contact poses — text-grid, mirror-instruction and reference-edit attempts all collapse both contacts onto one stride (measured on the previous sheet and re-confirmed on seedream-4.5 / nano-banana-2 in this bench), and a nano-banana-2 restyle pass over the video frames drifted the poses back to one stride too. A video model renders true leg alternation because motion consistency is what it is trained on; the exaggerated-swing prompt is what makes the alternation readable at 96px (arm clearly front vs clearly back). Post-composition: the stand frame's head (everything above its detected neck pinch, +14px chin overlap) is composited onto every walk frame at that frame's own neck anchor, replacing the video-rendered head — the video model repaints the face/hair every frame and the resulting outline wobble read as mud/morphing at game scale (2026-08-08 review); a pixel-identical head with per-frame neck placement keeps the natural head bob while eliminating the wobble. This composite also doubles as the first validation of the ①d head-group separation spec (head as a layer anchored at neck).",
     "referenceHashes": ["0597c6f10e0650f38eb79bf7dd646e825b2cfecd1767375ead6389cc81310a6e"]
@@ -20,98 +20,194 @@
     },
     "walk-a": {
       "file": "walk-a.png",
-      "size": [105, 189],
+      "size": [95, 189],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 124]
+        "neck": [51, 97],
+        "hand": [47, 124]
       }
     },
     "walk-b": {
       "file": "walk-b.png",
-      "size": [105, 191],
+      "size": [95, 188],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 126]
+        "neck": [51, 97],
+        "hand": [47, 124]
       }
     },
     "walk-c": {
       "file": "walk-c.png",
-      "size": [105, 193],
+      "size": [94, 189],
       "anchors": {
-        "neck": [52, 98],
-        "hand": [52, 127]
+        "neck": [51, 97],
+        "hand": [47, 124]
       }
     },
     "walk-d": {
       "file": "walk-d.png",
-      "size": [105, 195],
+      "size": [95, 189],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 128]
+        "neck": [52, 97],
+        "hand": [47, 124]
       }
     },
     "walk-e": {
       "file": "walk-e.png",
-      "size": [105, 193],
+      "size": [95, 189],
       "anchors": {
-        "neck": [52, 98],
-        "hand": [52, 127]
+        "neck": [50, 97],
+        "hand": [47, 124]
       }
     },
     "walk-f": {
       "file": "walk-f.png",
-      "size": [105, 191],
+      "size": [95, 190],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 126]
+        "neck": [50, 98],
+        "hand": [47, 125]
       }
     },
     "walk-g": {
       "file": "walk-g.png",
-      "size": [105, 189],
+      "size": [94, 192],
       "anchors": {
-        "neck": [53, 99],
-        "hand": [52, 124]
+        "neck": [50, 98],
+        "hand": [47, 126]
       }
     },
     "walk-h": {
       "file": "walk-h.png",
-      "size": [105, 191],
+      "size": [95, 192],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 126]
+        "neck": [51, 98],
+        "hand": [47, 126]
       }
     },
     "walk-i": {
       "file": "walk-i.png",
-      "size": [105, 193],
+      "size": [95, 191],
       "anchors": {
-        "neck": [52, 98],
-        "hand": [52, 127]
+        "neck": [53, 97],
+        "hand": [47, 126]
       }
     },
     "walk-j": {
       "file": "walk-j.png",
-      "size": [105, 195],
+      "size": [95, 190],
       "anchors": {
-        "neck": [52, 99],
-        "hand": [52, 128]
+        "neck": [54, 98],
+        "hand": [47, 125]
       }
     },
     "walk-k": {
       "file": "walk-k.png",
-      "size": [105, 193],
+      "size": [100, 189],
       "anchors": {
-        "neck": [53, 98],
-        "hand": [52, 127]
+        "neck": [56, 96],
+        "hand": [50, 124]
       }
     },
     "walk-l": {
       "file": "walk-l.png",
-      "size": [105, 191],
+      "size": [103, 188],
       "anchors": {
-        "neck": [51, 99],
-        "hand": [52, 126]
+        "neck": [57, 95],
+        "hand": [51, 124]
+      }
+    },
+    "walk-m": {
+      "file": "walk-m.png",
+      "size": [105, 188],
+      "anchors": {
+        "neck": [59, 95],
+        "hand": [52, 124]
+      }
+    },
+    "walk-n": {
+      "file": "walk-n.png",
+      "size": [105, 188],
+      "anchors": {
+        "neck": [59, 94],
+        "hand": [52, 124]
+      }
+    },
+    "walk-o": {
+      "file": "walk-o.png",
+      "size": [102, 188],
+      "anchors": {
+        "neck": [59, 94],
+        "hand": [51, 124]
+      }
+    },
+    "walk-p": {
+      "file": "walk-p.png",
+      "size": [98, 188],
+      "anchors": {
+        "neck": [60, 93],
+        "hand": [49, 124]
+      }
+    },
+    "walk-q": {
+      "file": "walk-q.png",
+      "size": [95, 189],
+      "anchors": {
+        "neck": [58, 94],
+        "hand": [47, 124]
+      }
+    },
+    "walk-r": {
+      "file": "walk-r.png",
+      "size": [95, 190],
+      "anchors": {
+        "neck": [57, 95],
+        "hand": [47, 125]
+      }
+    },
+    "walk-s": {
+      "file": "walk-s.png",
+      "size": [95, 192],
+      "anchors": {
+        "neck": [55, 96],
+        "hand": [47, 126]
+      }
+    },
+    "walk-t": {
+      "file": "walk-t.png",
+      "size": [95, 192],
+      "anchors": {
+        "neck": [53, 96],
+        "hand": [47, 126]
+      }
+    },
+    "walk-u": {
+      "file": "walk-u.png",
+      "size": [95, 194],
+      "anchors": {
+        "neck": [52, 98],
+        "hand": [47, 128]
+      }
+    },
+    "walk-v": {
+      "file": "walk-v.png",
+      "size": [94, 194],
+      "anchors": {
+        "neck": [51, 98],
+        "hand": [47, 128]
+      }
+    },
+    "walk-w": {
+      "file": "walk-w.png",
+      "size": [94, 193],
+      "anchors": {
+        "neck": [51, 97],
+        "hand": [47, 127]
+      }
+    },
+    "walk-x": {
+      "file": "walk-x.png",
+      "size": [96, 192],
+      "anchors": {
+        "neck": [52, 97],
+        "hand": [48, 126]
       }
     }
   }
