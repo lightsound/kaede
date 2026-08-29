@@ -2,7 +2,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import type { AssetFrame, AvatarAsset, ItemAsset } from './catalog';
-import { frameFor, maxFrameSize } from './dressup';
+import { frameFor, maxFrameSize, walkPoseOf } from './dressup';
 
 /**
  * Anchor marker colors by anchor name (neck/hand from avatar-body poses,
@@ -145,10 +145,18 @@ export function groundBoxStyle(size: readonly [number, number], scale: number): 
   };
 }
 
-/** The animated figure driven by the shared walk clock (data-pose carries the shown frame). */
-function WalkPreview(props: { avatar: AvatarAsset; pose: string; showAnchors: boolean }) {
-  const { avatar, pose, showAnchors } = props;
-  const resolved = frameFor(avatar, pose);
+/**
+ * The animated figure driven by the shared walk clock (data-pose carries
+ * the shown frame). The clock hands over its state and each sheet derives
+ * its own frame (walkPoseOf) — 12-frame and 4-frame sheets share the phase.
+ */
+function WalkPreview(props: {
+  avatar: AvatarAsset;
+  walk: { phase: number; intensity: number };
+  showAnchors: boolean;
+}) {
+  const { avatar, walk, showAnchors } = props;
+  const resolved = frameFor(avatar, walkPoseOf(avatar, walk));
   if (!resolved) return <span style={missingBoxStyle}>ポーズなし</span>;
   return (
     <span
@@ -177,12 +185,12 @@ function anchorCaption(frame: AssetFrame): string {
 /** One avatar-body: identity, walk playback, every pose cell, the pose-gap badge. */
 export function AvatarCard(props: {
   avatar: AvatarAsset;
-  pose: string;
+  walk: { phase: number; intensity: number };
   showAnchors: boolean;
   compared: boolean;
   onCompare: (on: boolean) => void;
 }) {
-  const { avatar, pose, showAnchors, compared, onCompare } = props;
+  const { avatar, walk, showAnchors, compared, onCompare } = props;
   return (
     <section style={cardStyle} data-testid="avatar-card" data-asset-id={avatar.id}>
       <CardHeader name={avatar.name} id={avatar.id}>
@@ -198,7 +206,7 @@ export function AvatarCard(props: {
       )}
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <figure style={figureStyle}>
-          <WalkPreview avatar={avatar} pose={pose} showAnchors={showAnchors} />
+          <WalkPreview avatar={avatar} walk={walk} showAnchors={showAnchors} />
           <figcaption style={captionStyle}>歩行再生</figcaption>
         </figure>
         {avatar.poses.map(({ pose: name, frame }) => (
@@ -241,16 +249,16 @@ export function AvatarCard(props: {
 /** The side-by-side comparison row: every checked avatar in the same walk phase. */
 export function CompareStrip(props: {
   avatars: readonly AvatarAsset[];
-  pose: string;
+  walk: { phase: number; intensity: number };
   showAnchors: boolean;
 }) {
-  const { avatars, pose, showAnchors } = props;
+  const { avatars, walk, showAnchors } = props;
   return (
     <section style={{ ...cardStyle, borderColor: UI_GOLD }} data-testid="compare-strip">
       <div style={{ display: 'flex', gap: 32, alignItems: 'flex-end' }}>
         {avatars.map((avatar) => (
           <figure key={avatar.dir} style={figureStyle}>
-            <WalkPreview avatar={avatar} pose={pose} showAnchors={showAnchors} />
+            <WalkPreview avatar={avatar} walk={walk} showAnchors={showAnchors} />
             <figcaption style={captionStyle}>{avatar.name}</figcaption>
           </figure>
         ))}

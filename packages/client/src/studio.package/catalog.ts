@@ -10,6 +10,8 @@
  * result.
  */
 
+import { WALK_POSES } from '../game.package';
+
 /** One drawable frame a manifest points at (a pose cell, an item, a hand layer). */
 export interface AssetFrame {
   file: string;
@@ -175,6 +177,13 @@ function parseItem(site: ManifestSite, collect: Collect, into: ItemAsset[]): voi
  * of every avatar's declared poses (first-seen order), and each avatar's
  * gap is the set difference against it. Returns the union and rewrites
  * each avatar with its diff filled in.
+ *
+ * Walk frames are EXCLUDED from the union since the A-3 densification
+ * (2026-08-20): sheets legitimately differ in walk density (12 dense / 4
+ * legacy carry-light — 裁定④ 据え置き), so a shorter cycle is not a gap.
+ * What IS a defect in a walk cycle is a hole in the middle — validated
+ * separately as "the walk poses must be a contiguous prefix of the
+ * canonical stride alphabet" (walkCycleProblems).
  */
 function diffPoses(avatars: readonly AvatarAsset[]): {
   poseUnion: readonly string[];
@@ -183,7 +192,7 @@ function diffPoses(avatars: readonly AvatarAsset[]): {
   const poseUnion: string[] = [];
   for (const avatar of avatars) {
     for (const { pose } of avatar.poses) {
-      if (!poseUnion.includes(pose)) poseUnion.push(pose);
+      if (!pose.startsWith('walk-') && !poseUnion.includes(pose)) poseUnion.push(pose);
     }
   }
   return {
@@ -193,6 +202,28 @@ function diffPoses(avatars: readonly AvatarAsset[]): {
       return { ...avatar, missingPoses: poseUnion.filter((pose) => !own.has(pose)) };
     }),
   };
+}
+
+/**
+ * The walk-cycle integrity rule that replaces the union diff for walk
+ * frames: a sheet's walk poses must read `walk-a`, `walk-b`, … in order
+ * with no hole — a contiguous prefix of the canonical WALK_POSES. A hole
+ * (walk-a, walk-c) means a frame went missing mid-cycle and the played
+ * loop would skip a beat.
+ */
+function walkCycleProblems(avatars: readonly AvatarAsset[]): string[] {
+  const problems: string[] = [];
+  for (const avatar of avatars) {
+    const walkPoses = avatar.poses.map(({ pose }) => pose).filter((p) => p.startsWith('walk-'));
+    if (walkPoses.length === 0) continue; // no cycle to validate (synthetic sheets)
+    const expected = WALK_POSES.slice(0, walkPoses.length);
+    if (walkPoses.join() !== expected.join()) {
+      problems.push(
+        `${avatar.dir}/manifest.json: walk コマが正準の連続列（${expected.join(', ')}）と一致しません（実際: ${walkPoses.join(', ')}）`,
+      );
+    }
+  }
+  return problems;
 }
 
 /**
@@ -234,6 +265,7 @@ export function buildCatalog(
   // glob-path order — the path sort would lead with the carry variants.
   const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
   const { poseUnion, avatars } = diffPoses([...collect.avatars].sort(byId));
+  collect.problems.push(...walkCycleProblems(avatars));
   // Gesture sheets diff within their own type: once several characters
   // carry gesture sheets, a missing dance frame shows up here the way a
   // missing walk frame shows up for the bodies.

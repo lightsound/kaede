@@ -212,10 +212,19 @@ def analyze_motion(glb: Path, work: Path, *, gait: bool) -> dict:
     return report
 
 
-def render_reference(glb: Path, work: Path, bone: dict) -> tuple[Path, dict]:
+def render_reference(
+    glb: Path, work: Path, bone: dict, *, reference_frames: int | None = None
+) -> tuple[Path, dict]:
     """Green yaw45 reference video of the verified window, tiled ×3 and
-    re-verified with the master-grade silhouette loop gates."""
-    frames_n = round(bone["cycleFrames"])
+    re-verified with the master-grade silhouette loop gates.
+
+    `reference_frames` overrides the samples-per-cycle (default: the
+    motion's own cycle length rounded). The A-3 densification (owner
+    ruling 2026-08-20) resamples the walk cycles to 24 so the shipped
+    12-cell extraction divides the period EVENLY — a 25-frame cycle
+    subsampled to 12 holds one +40% beat that reads as a stutter (the
+    25→12 measurement); the sub-frame sampler makes any count exact."""
+    frames_n = reference_frames or round(bone["cycleFrames"])
     render_dir = work / "render"
     render_dir.mkdir(parents=True, exist_ok=True)
     for old in render_dir.glob("*.png"):
@@ -290,7 +299,9 @@ def cmd_register_motion(args: argparse.Namespace) -> None:
     bone = analyze_motion(glb, work, gait=not args.no_gait)
     print(f"bone loop: {json.dumps(bone, ensure_ascii=False)}")
 
-    reference, reference_meta = render_reference(glb, work, bone)
+    reference, reference_meta = render_reference(
+        glb, work, bone, reference_frames=args.reference_frames
+    )
     reference_sha = put_object(reference.read_bytes())
     print(f"uploaded reference to R2: {reference_sha}")
 
@@ -492,6 +503,14 @@ def main() -> None:
     motion.add_argument("--preset", required=True,
                         help="Meshy catalog preset the GLB was minted from")
     motion.add_argument("--approval", required=True)
+    motion.add_argument(
+        "--reference-frames",
+        type=int,
+        default=None,
+        help="samples per cycle for the green reference (default: the cycle "
+        "length rounded). A-3 (2026-08-20) resamples walk to 24 so the "
+        "12-cell shipping density divides evenly",
+    )
     motion.add_argument("--no-gait", action="store_true",
                         help="skip the two-step gait gate (non-gait motions)")
     motion.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)

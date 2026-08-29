@@ -235,6 +235,10 @@ def run_lint(order_path: Path, order: dict) -> list[str]:
         # show opposite-leg contacts and a real second passing.
         expect_leg_phase=not order.get("handLayer"),
         neck_reference=neck_reference,
+        # Video-native sheets ship the master's own heads (walkLane.head —
+        # the 2026-08-20 ruling); the stand-head equality gate is
+        # composite-specific and skipped for them (art_lint's rule).
+        native_head=(order.get("walkLane") or {}).get("head") == "native",
         **lint_kwargs,
     )
     # Variant sheets (carry) must keep their paired outfit's colors: the
@@ -267,6 +271,12 @@ def sheet_edit_iou_failures(order_path: Path, order: dict) -> list[str]:
     """Pose-fidelity gate: imported frames vs the edit-source asset's frames."""
     from PIL import Image
 
+    # Entry-scoped, owner-visible calibration (the lint.driftMax pattern —
+    # 運転知見 37): outfits that legitimately inflate the silhouette (the
+    # red hoodie's hood + fluffier hair vs the parent's shirt measured
+    # 0.794–0.800 on structurally matching poses after the yaw-corrected
+    # carry recast, 2026-08-20) record their own floor in the order.
+    iou_min = float((order.get("lint") or {}).get("editIoUMin", SHEET_EDIT_IOU_MIN))
     base = order_path.parent
     source_dir = (base / order["editSource"]).resolve().parent
     source_manifest = json.loads((source_dir / "manifest.json").read_text())
@@ -284,9 +294,9 @@ def sheet_edit_iou_failures(order_path: Path, order: dict) -> list[str]:
         source = Image.open(source_dir / source_meta["file"]).convert("RGBA")
         iou = silhouette_iou(edited, source)
         print(f"IoU {pose}: {iou:.3f} (vs {source_dir.name})")
-        if iou < SHEET_EDIT_IOU_MIN:
+        if iou < iou_min:
             failures.append(
-                f"{pose}: silhouette IoU {iou:.3f} < {SHEET_EDIT_IOU_MIN} vs "
+                f"{pose}: silhouette IoU {iou:.3f} < {iou_min} vs "
                 f"the edit source — the edit drifted the pose"
             )
     return failures

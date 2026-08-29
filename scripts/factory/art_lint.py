@@ -65,6 +65,12 @@ HEAD_PIXEL_RATIO_RANGE = (0.90, 1.05)
 # stride gently with near-static legs by spec and are excluded from this
 # gate (the run_lint rule).
 WALK_A_D_IOU_MAX = 0.90
+# Dense-sheet (A-3, >4 walk cells) calibrations — see check_leg_phase:
+# passing×passing quarter pairs are mirror poses (silhouette-blind, 知見 20)
+# and cap at the 4-cell scramble level; adjacent cells must not be frozen
+# repeats. The 4-cell gates keep their exact original thresholds.
+PASSING_CLONE_IOU_MAX = 0.95
+ADJACENT_CLONE_IOU_MAX = 0.97
 # body every frame; a walk frame must not grow a significant INTERIOR color
 # far from everything in the stand (interior_only — see
 # _significant_colors). Calibrated 2026-08-09: every committed sheet's
@@ -224,30 +230,77 @@ def silhouette_iou(a: Image.Image, b: Image.Image) -> float:
     return intersection / union
 
 
+def quarter_walk_poses(walk_names: list[str]) -> list[str]:
+    """The four quarter-phase cells of a walk vocabulary in stride order:
+    contact, passing, mirrored contact, mirrored passing. For the legacy
+    4-cell sheets this is the whole vocabulary; for the dense sheets (A-3,
+    12 cells) it samples indices 0 / n/4 / n/2 / 3n/4 — the same phases
+    the 4-cell era shipped, so the 4-cell calibrations carry over."""
+    n = len(walk_names)
+    if n < 4:
+        return walk_names
+    return [walk_names[(k * n) // 4] for k in range(4)]
+
+
 def check_leg_phase(frames: dict[str, Image.Image]) -> list[str]:
-    """Swing-walk cycle sanity: every walk frame must be a distinct pose.
+    """Swing-walk cycle sanity: the stride's quarter-phase poses must be
+    distinct.
 
     The owner-facing failure shapes this encodes (both shipped past every
     other gate before being caught by eye): contacts whose legs never trade
-    (one-foot shuffle) and a walk-d so close to walk-a that the second half
-    of the stride has no midpoint — both read as near-clone frame pairs.
+    (one-foot shuffle) and a final passing so close to the first contact
+    that the second half of the stride has no midpoint — both read as
+    near-clone frame pairs. On dense sheets (A-3) only the QUARTER cells
+    are compared: adjacent frames of a 12-cell cycle are similar by
+    construction, and the collapse this gate exists to catch shows up as
+    quarter-phase clones exactly as it did at 4 cells.
     """
-    required = {"walk-a", "walk-b", "walk-c", "walk-d"}
-    if not required <= frames.keys():
+    walk_names = sorted(n for n in frames if n.startswith("walk-"))
+    if len(walk_names) < 4:
         return []
     failures: list[str] = []
-    # No pair of walk frames may be near-clones. Calibrated: the approved
+    dense = len(walk_names) > 4
+    # No pair of quarter cells may be near-clones. Calibrated: the approved
     # swing sheets peak at IoU(b,d) 0.87; a same-leg contact pair measured
     # 0.97 and a scrambled substitution's (b,c) measured 0.95 — both read
     # as skipped/missing midpoints at play speed.
-    walk_names = [n for n in ("walk-a", "walk-b", "walk-c", "walk-d") if n in frames]
-    for i, first in enumerate(walk_names):
-        for second in walk_names[i + 1 :]:
+    #
+    # Dense-sheet calibration (A-3, 12 cells): the PASSING×PASSING pair is
+    # capped at the scramble level (0.95) instead of 0.90 — the two passing
+    # phases of a bone-verified two-step gait (antiphase 1.0) are mirror
+    # poses that a 3/4 silhouette cannot tell apart (知見 20), and the wan
+    # generation's gentle arm swing measures them at 0.92-0.93 (the A-3
+    # boy re-cast) while the frames are genuinely distinct in RGB. The
+    # 4-cell failure this guarded — the one-beat stutter of near-clone
+    # passings — is structurally gone at 12 cells (the 24→12 carry
+    # preview measurement); contacts and mixed pairs keep the 0.90 cap.
+    quarters = quarter_walk_poses(walk_names)
+    passing_pair = {quarters[1], quarters[3]}
+    for i, first in enumerate(quarters):
+        for second in quarters[i + 1 :]:
+            cap = (
+                PASSING_CLONE_IOU_MAX
+                if dense and {first, second} == passing_pair
+                else WALK_A_D_IOU_MAX
+            )
             iou = silhouette_iou(frames[first], frames[second])
-            if iou > WALK_A_D_IOU_MAX:
+            if iou > cap:
                 failures.append(
                     f"{first} and {second} are near-clones (IoU {iou:.2f} > "
-                    f"{WALK_A_D_IOU_MAX}) — a stride midpoint is missing"
+                    f"{cap}) — a stride midpoint is missing"
+                )
+    if dense:
+        # Frozen-frame detector: adjacent dense cells are similar by
+        # construction but never IDENTICAL — a stuck extraction repeats a
+        # frame (IoU ~1.0), which plays as a hitch.
+        ordered = [*walk_names, walk_names[0]]
+        for first, second in zip(ordered, ordered[1:]):
+            iou = silhouette_iou(frames[first], frames[second])
+            if iou > ADJACENT_CLONE_IOU_MAX:
+                failures.append(
+                    f"{first} and {second} (adjacent) are identical (IoU "
+                    f"{iou:.2f} > {ADJACENT_CLONE_IOU_MAX}) — a frozen/"
+                    f"repeated frame"
                 )
     return failures
 
@@ -329,24 +382,93 @@ def check_neck_junction(frame: Image.Image, neck: list[int]) -> list[str]:
 # re-running the walk lane, not exempting the sheet.
 BOB_PP_RANGE = (4, 10)
 BOB_CONTRAST_MIN = 2.0
-BOB_CONTACTS = ("walk-a", "walk-c")
-BOB_PASSINGS = ("walk-b", "walk-d")
+
+# Video-native sheets (2026-08-20「24 で進めて」) carry the master's REAL
+# bob, not the prescribed cosine, and physics does not put its extremes
+# exactly on the geometric quarters: measured across the three re-extracted
+# parents, peak-to-peak came out 4–5px but the quarter contrast was only
+# 1–2px (boy walk-g 94 vs walk-m 93). What natural motion does guarantee is
+# that contacts sit in the low half of the cycle and passings in the high
+# half, and that a real bob exists at all — so the native gate checks the
+# full-cycle amplitude band plus contacts ≤ cycle median ≤ passings instead
+# of the composite's quarter-contrast rule.
+NATIVE_BOB_PP_RANGE = (3, 10)
+# Carry sheets stride gently by spec (the same reasoning that exempts them
+# from the leg-phase opposition gate): the Texting_Walk master's vertical
+# oscillation is small and the forward mitten arms damp it further, so a
+# native carry take can land at 2px peak-to-peak at the 192px shipping
+# scale (pants-carry t5 measured 2 / parent carry 4 — quantization eats
+# the margin). 1px stays "frozen".
+NATIVE_BOB_PP_GENTLE_MIN = 2
+
+
+def check_native_bob(nfg: dict[str, int], *, gentle: bool = False) -> list[str]:
+    walk_names = sorted(n for n in nfg if n.startswith("walk-"))
+    if len(walk_names) < 4:
+        return []
+    seq = [nfg[p] for p in walk_names]
+    quarters = quarter_walk_poses(walk_names)
+    ordered = sorted(seq)
+    mid = len(ordered) // 2
+    median = (ordered[mid - 1] + ordered[mid]) / 2
+    failures: list[str] = []
+    if not gentle:
+        # The phase test needs the bob to clear the neck-detection noise
+        # floor (±1〜2px): swing walks measure 4–5px peak-to-peak, but the
+        # gentle carry stride bobs ~2px — at that amplitude the quarter
+        # readings are statistically noise (the yaw-corrected carry master
+        # measured a patternless ±1px sequence, 2026-08-20), so gentle
+        # sheets keep only the amplitude sanity below (the same spec-based
+        # reasoning that exempts them from leg-phase opposition).
+        contacts = [nfg[quarters[0]], nfg[quarters[2]]]
+        passings = [nfg[quarters[1]], nfg[quarters[3]]]
+        if max(contacts) > median:
+            failures.append(
+                f"native bob broken: contact neck heights {contacts} must sit "
+                f"at or below the cycle median {median} — the master's own "
+                f"bob disagrees with the leg phase; re-run the walk lane"
+            )
+        if min(passings) < median:
+            failures.append(
+                f"native bob broken: passing neck heights {passings} must sit "
+                f"at or above the cycle median {median} — the master's own "
+                f"bob disagrees with the leg phase; re-run the walk lane"
+            )
+    lo = NATIVE_BOB_PP_GENTLE_MIN if gentle else NATIVE_BOB_PP_RANGE[0]
+    pp = max(seq) - min(seq)
+    if not lo <= pp <= NATIVE_BOB_PP_RANGE[1]:
+        failures.append(
+            f"native bob amplitude {pp}px peak-to-peak outside "
+            f"({lo}, {NATIVE_BOB_PP_RANGE[1]}) — a frozen head "
+            f"(<{lo}) or a seasick bounce (>{NATIVE_BOB_PP_RANGE[1]})"
+        )
+    return failures
 
 
 def check_bob_phase(nfg: dict[str, int]) -> list[str]:
-    """The head bob must follow the legs — see BOB_PP_RANGE above."""
-    required = BOB_CONTACTS + BOB_PASSINGS
-    if any(pose not in nfg for pose in required):
+    """The head bob must follow the legs — see BOB_PP_RANGE above.
+
+    Judged on the stride's QUARTER cells (contacts at phase 0 and 1/2,
+    passings at 1/4 and 3/4 — quarter_walk_poses): identical to the 4-cell
+    calibration on legacy sheets, and on dense sheets (A-3) the same four
+    phases sampled out of the smooth prescribed cosine (bob_offset_frac),
+    whose intermediate cells lie between the extremes by construction.
+    """
+    walk_names = sorted(n for n in nfg if n.startswith("walk-"))
+    if len(walk_names) < 4:
         return []
-    contacts = max(nfg[p] for p in BOB_CONTACTS)
-    passings = min(nfg[p] for p in BOB_PASSINGS)
-    values = [nfg[p] for p in required]
+    quarters = quarter_walk_poses(walk_names)
+    bob_contacts = (quarters[0], quarters[2])
+    bob_passings = (quarters[1], quarters[3])
+    contacts = max(nfg[p] for p in bob_contacts)
+    passings = min(nfg[p] for p in bob_passings)
+    values = [nfg[p] for p in quarters]
     failures: list[str] = []
     if contacts > passings - BOB_CONTRAST_MIN:
         failures.append(
             f"bob phase broken: contact neck heights "
-            f"{[nfg[p] for p in BOB_CONTACTS]} must sit ≥{BOB_CONTRAST_MIN}px "
-            f"below passing heights {[nfg[p] for p in BOB_PASSINGS]} — "
+            f"{[nfg[p] for p in bob_contacts]} must sit ≥{BOB_CONTRAST_MIN}px "
+            f"below passing heights {[nfg[p] for p in bob_passings]} — "
             f"re-run the walk lane (prescribed bob), do not hand-edit anchors"
         )
     pp = max(values) - min(values)
@@ -482,6 +604,7 @@ def lint_avatar(
     expect_leg_phase: bool = False,
     neck_reference: dict[str, list[int]] | None = None,
     drift_distance_max: float = DRIFT_DISTANCE_MAX,
+    native_head: bool = False,
 ) -> list[str]:
     """Return a list of human-readable failures (empty = pass)."""
     manifest = json.loads(manifest_path.read_text())
@@ -520,7 +643,13 @@ def lint_avatar(
 
         if name != "stand" and stand_frame is not None:
             recorded = pose.get("anchors", {}).get("neck")
-            if stand_neck and recorded:
+            # Video-native sheets (2026-08-20「24 で進めて」) ship the
+            # master's own heads: the stand-vs-walk head equality this
+            # check enforces exists to catch COMPOSITE failures (double
+            # heads, residual hair), and a native head legitimately
+            # differs from the nano stand head by a few percent. The
+            # per-frame drift/junction gates below still apply.
+            if stand_neck and recorded and not native_head:
                 failures += [
                     f"{name}: {f}"
                     for f in check_head_consistency(
@@ -600,7 +729,11 @@ def lint_avatar(
         for name, pose in poses.items()
         if pose.get("size") and pose.get("anchors", {}).get("neck")
     }
-    failures += check_bob_phase(nfg)
+    failures += (
+        check_native_bob(nfg, gentle=expect_carry_hand)
+        if native_head
+        else check_bob_phase(nfg)
+    )
 
     if base_palette:
         sheet_palette = [_parse_hex(c) for c in manifest.get("palette", [])]

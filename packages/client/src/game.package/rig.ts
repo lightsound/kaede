@@ -20,10 +20,42 @@ export interface WalkState {
 }
 
 /**
- * The walk-cycle pose frames in stride order (avatar/manifest.json poses):
- * contact, passing, the mirrored contact, the mirrored passing.
+ * The canonical walk-cycle pose names in stride order (avatar/manifest.json
+ * poses). Twenty-four frames per stride since the video-native
+ * densification (owner rulings 2026-08-20: A-3, then「24 で進めて」— the
+ * masters carry a 24-frame cycle and the dense sheets ship EVERY frame of
+ * it as-is, no head composite): the contacts land on walk-a and walk-m,
+ * the passings on walk-g and walk-s. Legacy sheets that were left at 4
+ * frames (the carry-light family — 裁定④ 据え置き 2026-08-19) use the
+ * first four names; selectPose takes the sheet's own pose list, so both
+ * densities animate correctly side by side.
  */
-export const WALK_POSES = ['walk-a', 'walk-b', 'walk-c', 'walk-d'] as const;
+export const WALK_POSES = [
+  'walk-a',
+  'walk-b',
+  'walk-c',
+  'walk-d',
+  'walk-e',
+  'walk-f',
+  'walk-g',
+  'walk-h',
+  'walk-i',
+  'walk-j',
+  'walk-k',
+  'walk-l',
+  'walk-m',
+  'walk-n',
+  'walk-o',
+  'walk-p',
+  'walk-q',
+  'walk-r',
+  'walk-s',
+  'walk-t',
+  'walk-u',
+  'walk-v',
+  'walk-w',
+  'walk-x',
+] as const;
 
 /** One pose frame of the avatar sheet (docs/avatar-rig.md §3). */
 export type AvatarPose = 'stand' | (typeof WALK_POSES)[number];
@@ -31,12 +63,13 @@ export type AvatarPose = 'stand' | (typeof WALK_POSES)[number];
 export const IDLE_WALK_STATE: WalkState = { phase: 0, intensity: 0 };
 
 /**
- * One full stride (all WALK_POSES once) per this many logical pixels of
- * horizontal travel. At MOVE_SPEED (240 px/s) this paces the cycle at
- * 240/192 = 1.25 strides/s = 2.5 steps/s — a natural walk cadence, each
- * frame showing for 200ms. The spike's 64 played 3.75 cycles/s (7.5
- * steps/s), which read as frantic shuffling once the frames became real
- * poses (2026-08-08 review).
+ * One full stride (one pass through a sheet's walk frames) per this many
+ * logical pixels of horizontal travel. At MOVE_SPEED (240 px/s) this paces
+ * the cycle at 240/192 = 1.25 strides/s = 2.5 steps/s — a natural walk
+ * cadence (~33ms per frame on the dense 24-frame sheets, 200ms on the
+ * legacy 4-frame ones). The spike's 64 played 3.75 cycles/s (7.5 steps/s),
+ * which read as frantic shuffling once the frames became real poses
+ * (2026-08-08 review).
  */
 const STRIDE_PX = 192;
 const PHASE_PER_PX = (2 * Math.PI) / STRIDE_PX;
@@ -81,10 +114,12 @@ export function advanceWalk(state: WalkState, dxPx: number, dtMs: number): WalkS
  * The pose frame for a walk state: standing below the intensity threshold,
  * otherwise the walk cycle frame the phase has reached — each frame owns an
  * equal slice of the stride, so the cadence follows rendered travel
- * (STRIDE_PX / WALK_POSES.length pixels per frame).
+ * (STRIDE_PX / walkPoses.length pixels per frame). `walkPoses` is the
+ * SHEET's own walk list in stride order (24 on the dense sheets, 4 on the
+ * legacy carry-light sheets); the default is the canonical dense list.
  */
-export function selectPose(state: WalkState): AvatarPose {
-  if (state.intensity < WALK_POSE_MIN_INTENSITY) return 'stand';
-  const slice = Math.floor((state.phase / (2 * Math.PI)) * WALK_POSES.length);
-  return WALK_POSES[slice % WALK_POSES.length];
+export function selectPose(state: WalkState, walkPoses: readonly string[] = WALK_POSES): string {
+  if (state.intensity < WALK_POSE_MIN_INTENSITY || walkPoses.length === 0) return 'stand';
+  const slice = Math.floor((state.phase / (2 * Math.PI)) * walkPoses.length);
+  return walkPoses[slice % walkPoses.length] ?? 'stand';
 }
