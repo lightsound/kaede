@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Language
+
+This repository is run in Japanese: commit messages, `docs/*.md` (including ADRs), Issues, and pull request titles and bodies are written in Japanese. Code identifiers stay in English. This section is project-specific and takes precedence over the `## Language` rule of the shared `base` pack distributed from `lightsound/agent-rules`.
+
 ## Project direction (read first)
 
 This project has pivoted from a game MVP to **kaede**, a MapleStory-style 2D side-scrolling **work collaboration tool** (a virtual office replacing oVice for a small community, with future SaaS ambitions). Before starting any task, read:
