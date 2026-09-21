@@ -2,7 +2,7 @@
 
 ## Language
 
-This repository is run in Japanese: commit messages, `docs/*.md` (including ADRs), Issues, and pull request titles and bodies are written in Japanese. Code identifiers stay in English. This section is project-specific and takes precedence over the `## Language` rule of the shared `base` pack distributed from `lightsound/agent-rules` (the `agent-rules` managed block in this file).
+This repository is run in Japanese: commit messages, `docs/*.md` (including ADRs), Issues, and pull request titles and bodies are written in Japanese. Code identifiers stay in English. This section is project-specific and takes precedence over the `## Language` rule of the shared `base` pack distributed from `lightsound/agent-rules`.
 
 ## Project direction (read first)
 
