@@ -31,7 +31,13 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'pnpm --filter @kaede/client dev',
+    // `exec` so Vite replaces this shell and stays the process-group leader.
+    // pnpm 11 runs lifecycle scripts in their own group when there is no
+    // controlling terminal (Playwright, CI). Killing pnpm's group then leaves
+    // Vite holding the stdio pipes, and Playwright waits forever on `close`
+    // after the tests themselves have passed.
+    command: 'exec ./node_modules/.bin/vite',
+    cwd: '../client',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
