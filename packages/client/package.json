@@ -13,8 +13,8 @@
   "dependencies": {
     "@clerk/localizations": "^4.17.1",
     "@clerk/react": "^6.16.1",
-    "@cloudflare/realtimekit": "2.0.1",
-    "@cloudflare/realtimekit-react-ui": "2.0.1",
+    "@cloudflare/realtimekit": "2.0.2",
+    "@cloudflare/realtimekit-react-ui": "2.0.2",
     "@kaede/shared": "workspace:*",
     "pixi.js": "^8.21.0",
     "posthog-js": "^1.434.2",
