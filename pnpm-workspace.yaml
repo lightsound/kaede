@@ -40,23 +40,21 @@ minimumReleaseAgeStrict: true
 # どうしてもその版が要るときだけ trustPolicyExclude で明示的に通す。
 trustPolicy: no-downgrade
 
-# effect 4 のベータは beta.104 で Schema の API リネームがあり、alchemy
-# 2.0.0-beta.70 は beta.103 までしか動かない(infra/package.json で effect と
-# @effect/platform-node を beta.103 に固定済み)。ここでの override は、alchemy
-# が範囲指定(>=beta.102)で引き込む残りの @effect/* が beta.105 に解決されて
-# effect@beta.103 と peer 不整合のまま混在するのを防ぐ(pnpm は lockfile 確定後
-# この不整合を警告しない — PR #71 の pullfrog 指摘)。@effect/sql-d1 と
-# @effect/vitest は beta.102 のまま: rc.116 は effect rc を要求し、beta.103
-# ピンと衝突する。@effect/vitest は peer に vitest ^3||^4 を要求するため
-# vitest 5 との不整合が lockfile に残るが、ソースから未 import で実害は
-# ない(認識済み)。alchemy を上げるときは infra 側のピンと一緒にこれらの
-# override も見直すこと。
+# alchemy 2.0.0-beta.79 は peer に effect/@effect/platform-node
+# >=4.0.0-rc.115 を要求するため、infra/package.json で effect と
+# @effect/platform-node を rc.117 に固定済み。ここでの override は、alchemy
+# が範囲指定で引き込む残りの @effect/* が別版に解決されて effect@rc.117 と
+# peer 不整合のまま混在するのを防ぐ(pnpm は lockfile 確定後この不整合を
+# 警告しない — PR #71 の pullfrog 指摘)。@effect/vitest@rc.117 は peer に
+# vitest >=5 <6 を要求するので beta.102 時代の vitest 5 不整合は解消。
+# alchemy を上げるときは infra 側のピンと一緒にこれらの override も
+# 見直すこと。
 overrides:
-  '@effect/platform-bun': 4.0.0-beta.103
-  '@effect/platform-node-shared': 4.0.0-beta.103
-  '@effect/sql-d1': 4.0.0-beta.102
-  '@effect/sql-sqlite-do': 4.0.0-beta.103
-  '@effect/vitest': 4.0.0-beta.102
+  '@effect/platform-bun': 4.0.0-rc.117
+  '@effect/platform-node-shared': 4.0.0-rc.117
+  '@effect/sql-d1': 4.0.0-rc.117
+  '@effect/sql-sqlite-do': 4.0.0-rc.117
+  '@effect/vitest': 4.0.0-rc.117
   # @assetpack/core@1.7.0 が ^4 で 4.0.3 を引く。4.0.2 と 4.0.3 は provenance
   # なしで公開されていて trustPolicy が拒む。4.0.1 は 4 系で最後の provenance
   # 付き版で、4.0.2/4.0.3 の差分は型定義だけ。5 系は ESM 専用なので CJS の

@@ -14,11 +14,11 @@
     "destroy:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy destroy --stage prod"
   },
   "devDependencies": {
-    "@effect/platform-node": "4.0.0-beta.103",
+    "@effect/platform-node": "4.0.0-rc.117",
     "@types/node": "^24.13.6",
-    "alchemy": "2.0.0-beta.70",
+    "alchemy": "2.0.0-beta.79",
     "cross-env": "^10.1.0",
-    "effect": "4.0.0-beta.103",
+    "effect": "4.0.0-rc.117",
     "typescript": "~7.0.2",
     "wrangler": "4.135.0"
   }

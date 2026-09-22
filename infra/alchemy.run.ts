@@ -13,7 +13,7 @@
 // バグ回避: ランチャーは npm_execpath に "bun" が含まれると bun 経由の
 // 起動と判定するが、pnpm run 経由ではこの値が pnpm 本体のパスになり、
 // 例えば /home/ubuntu/... の「ubuntu」が誤マッチして存在しない bun を
-// spawn しようとする(beta.70 の bin/cli.js でも未修正を確認)。環境変数の
+// spawn しようとする(beta.79 の bin/cli.js でも未修正を確認)。環境変数の
 // 設定は Windows の cmd.exe でも動くよう cross-env 経由にしている。
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
@@ -23,16 +23,20 @@ import * as Effect from 'effect/Effect';
 // 違い環境変数で配る必要がないため、ここに固定して deploy コマンドの前提を
 // 減らす。別アカウントに向けたいときは環境変数が優先される。
 //
-// beta.70 での注意: この env 固定が効くのは env 認証パス(CI=true +
-// CLOUDFLARE_API_TOKEN — CI のデプロイはこちら)だけになった。ローカルの
-// 対話実行では auth プロファイルが持つ accountId が優先され、
-// CLOUDFLARE_ACCOUNT_ID は読まれない。プロファイルが別アカウントに
-// リンクされていると、全リソースが「別アカウントにある」扱いになり plan が
-// 偽の replace を出す(R2 は中身ごと消える経路)。このため infra の
-// スクリプトはリポジトリ専用プロファイル `kaede`(ALCHEMY_PROFILE=kaede)に
-// 固定してあり、初回のみ `pnpm --filter @kaede/infra alchemy login` で
-// Kaede アカウント(下の ID)を選んでリンクする。CI は fresh VM で
-// プロファイルが存在しないため従来どおり env 認証に落ちる(影響なし)。
+// 認証解決の優先順位(beta.79 時点): 環境変数セット(CLOUDFLARE_ACCOUNT_ID
+// + CLOUDFLARE_API_TOKEN — API_KEY+EMAIL でも可)が揃っていればプロファイル
+// の有無に関係なく env 認証が常に勝ち、揃っていなければプロファイル経路
+// (プロファイルの accountId が優先され CLOUDFLARE_ACCOUNT_ID は読まれない)。
+// beta.70 までは env が勝つのは CI=true のときだけだった。つまりローカルで
+// CLOUDFLARE_API_TOKEN をエクスポートしていればこの env 固定がそのまま
+// 効くが、プロファイル認証だけの対話実行では依然 profile の accountId が
+// 優先される。プロファイルが別アカウントにリンクされていると、全
+// リソースが「別アカウントにある」扱いになり plan が偽の replace を出す
+// (R2 は中身ごと消える経路)。このため infra のスクリプトはリポジトリ
+// 専用プロファイル `kaede`(ALCHEMY_PROFILE=kaede)に固定してあり、初回の
+// み `pnpm --filter @kaede/infra alchemy login` で Kaede アカウント
+// (下の ID)を選んでリンクする。CI は fresh VM でプロファイルが存在しない
+// ため従来どおり env 認証に落ちる(影響なし)。
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID ?? '751c8a59858c9c04a8e722df7330444d';
 process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT_ID;
 
