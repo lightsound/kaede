@@ -86,8 +86,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.0(react@19.3.0)
       spacetimedb:
-        specifier: 2.8.0
-        version: 2.8.0(react@19.3.0)
+        specifier: 2.10.1
+        version: 2.10.1(react@19.3.0)
     devDependencies:
       '@assetpack/core':
         specifier: 1.7.0
@@ -132,8 +132,8 @@ importers:
         specifier: workspace:*
         version: link:../shared
       spacetimedb:
-        specifier: 2.8.0
-        version: 2.8.0(react@19.3.0)
+        specifier: 2.10.1
+        version: 2.10.1(react@19.3.0)
     devDependencies:
       typescript:
         specifier: ~7.0.2
@@ -4043,8 +4043,8 @@ packages:
     resolution: {integrity: sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==}
     engines: {node: '>=0.10.0'}
 
-  spacetimedb@2.8.0:
-    resolution: {integrity: sha512-6qIqbeGyCp89TweBcLWVs+4UPhkxzQud1+js+fJXza8PBuHJLZlsW7mBANwIbVSV69Ez7edPXBo6eJorRZADQw==}
+  spacetimedb@2.10.1:
+    resolution: {integrity: sha512-X+9qO7r+v8lb9nUOyrlKMvEY6mFPRVYEjvn1eDBDIcmudIi7h2dB3r1QYS6opNSIVPHa6DhUxLH5dATS/Q0TPA==}
     peerDependencies:
       '@angular/core': '>=17.0.0'
       '@tanstack/react-query': ^5.0.0
@@ -8365,7 +8365,7 @@ snapshots:
 
   source-map@0.6.1: {}
 
-  spacetimedb@2.8.0(react@19.3.0):
+  spacetimedb@2.10.1(react@19.3.0):
     dependencies:
       base64-js: 1.5.1
       headers-polyfill: 4.0.3

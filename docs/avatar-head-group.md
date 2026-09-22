@@ -297,5 +297,5 @@ walk/carry シート本体の再鋳造は factory v2 レーンで行う。factor
   import.meta.glob 前例)に閉じ、studio.package は index 経由で共用。
 - 新規ファイルで単体テスト不能なもの(描画配線)は `fallow-ignore-file
   coverage-gaps` ヘッダー+テスト可能ロジックの所在を明記(AGENTS.md)。
-- bindings 再生成時は spacetimedb-cli 2.8.0 を確認(VM に 2.7.0 が
+- bindings 再生成時は spacetimedb-cli 2.10.1 を確認(VM に 2.7.0 が
   preinstall されている実測 — AGENTS.md)。
