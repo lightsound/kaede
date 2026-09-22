@@ -31,7 +31,15 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'pnpm --filter @kaede/client dev',
+    // Vite's JS entry, not `pnpm --filter @kaede/client dev`. pnpm 11 puts a
+    // lifecycle script in its own process group when there is no controlling
+    // terminal (Playwright, CI). Killing pnpm's group then leaves Vite holding
+    // the stdio pipes, and Playwright waits forever on `close` after the tests
+    // have passed. A direct `node` child stays in the shell's group, so the
+    // Linux process-group SIGKILL and Windows `taskkill /T` both stop it.
+    // `exec` is a POSIX builtin and is not a command under cmd.exe.
+    command: 'node ./node_modules/vite/bin/vite.js',
+    cwd: '../client',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

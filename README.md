@@ -34,7 +34,7 @@
   `pnpm exec fallow --format json` の `_meta.check.type_aware` で確認できます。
 - **`boundaries`** — README が説明するアーキテクチャそのものの強制。`shared` は葉であり何も
   import せず、`client` と `server` は `shared` だけを見ます（互いは不可視）。`requireAllFiles`
-  によりどのゾーンにも属さないファイルも検出され、例外は `vitest.config.ts` の1件だけを
+  によりどのゾーンにも属さないファイルも検出され、例外は `vitest.config.mts` の1件だけを
   名指しで許可しています。
 - **`duplicates.mode: "semantic"`** — 変数名を変えただけの複製（Type-2 クローン）も検出します。
 - **`includeEntryExports`** — エントリポイントの export も未使用検査の対象にします。

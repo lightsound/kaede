@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitest/config';
 
 /**
+ * `.mts` so Vite's native config loader (the planned default) treats this
+ * file as ESM. The repo root package.json has no `"type": "module"`, and a
+ * `.ts` config is loaded as CommonJS — Vite 8.3 already warns about that.
+ *
  * One run across every package, so a single Istanbul report covers the whole
  * repo. `fallow health` reads that report (see .fallowrc.jsonc `health.coverage`)
  * to compute real CRAP scores instead of estimating coverage from the module

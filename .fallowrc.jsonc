@@ -65,7 +65,7 @@
       // The only file outside the three packages. Listed by name rather than
       // as a root glob, so a future root-level source file is not exempted
       // silently — it has to be classified or added here deliberately.
-      "allowUnmatched": ["vitest.config.ts"]
+      "allowUnmatched": ["vitest.config.mts"]
     }
   },
 

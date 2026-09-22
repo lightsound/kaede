@@ -33,25 +33,30 @@ minimumReleaseAge: 1440
 # 静かに入る」方が事故のもとで、エラーなら対応(バージョン限定の除外 or 待つ)を
 # 明示的に選べる — PR #75 の pullfrog 指摘を受けて明文化。
 minimumReleaseAgeStrict: true
-# 2026-08-06 公開分のうち、まだ 24h 足切りを通らない行だけ残す。
-# alchemy@2.0.0-beta.70 / postcss@8.5.26 は既に失効したので外した。
-# 残りも 2026-08-07 中（最遅 vite@8.2.1 の 13:46 UTC 頃）に落ちる。
-minimumReleaseAgeExclude:
-  - '@clerk/react@6.13.0'
-  - '@clerk/shared@4.27.0'
-  - '@posthog/core@1.46.9'
-  - '@posthog/types@1.402.2'
-  - 'posthog-js@1.413.3'
-  - 'vite@8.2.1'
+# 公開者の信頼が前の版より落ちたパッケージは入れない。minimumReleaseAge が
+# 「公開直後」を足切りするのに対し、こちらは「かつて provenance か trusted
+# publisher だったパッケージが、その証拠を落とした版」を拒む。比較は公開日の
+# 前後であり semver ではない。失敗したら、まず回避できる版へ override する。
+# どうしてもその版が要るときだけ trustPolicyExclude で明示的に通す。
+trustPolicy: no-downgrade
 
 # effect 4 のベータは beta.104 で Schema の API リネームがあり、alchemy
 # 2.0.0-beta.70 は beta.103 までしか動かない(infra/package.json で effect と
 # @effect/platform-node を beta.103 に固定済み)。ここでの override は、alchemy
 # が範囲指定(>=beta.102)で引き込む残りの @effect/* が beta.105 に解決されて
 # effect@beta.103 と peer 不整合のまま混在するのを防ぐ(pnpm は lockfile 確定後
-# この不整合を警告しない — PR #71 の pullfrog 指摘)。alchemy を上げるときは
-# infra 側のピンと一緒にこの 3 行も見直すこと。
+# この不整合を警告しない — PR #71 の pullfrog 指摘)。@effect/sql-d1 と
+# @effect/vitest は beta.102 のまま: rc.116 は effect rc と vitest 5 を要求し、
+# どちらも今回の範囲外。alchemy を上げるときは infra 側のピンと一緒に
+# これらの override も見直すこと。
 overrides:
   '@effect/platform-bun': 4.0.0-beta.103
   '@effect/platform-node-shared': 4.0.0-beta.103
+  '@effect/sql-d1': 4.0.0-beta.102
   '@effect/sql-sqlite-do': 4.0.0-beta.103
+  '@effect/vitest': 4.0.0-beta.102
+  # @assetpack/core@1.7.0 が ^4 で 4.0.3 を引く。4.0.2 と 4.0.3 は provenance
+  # なしで公開されていて trustPolicy が拒む。4.0.1 は 4 系で最後の provenance
+  # 付き版で、4.0.2/4.0.3 の差分は型定義だけ。5 系は ESM 専用なので CJS の
+  # assetpack には載せない。
+  chokidar: 4.0.1
