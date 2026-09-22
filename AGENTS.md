@@ -40,12 +40,14 @@ Order matters and the backend must be running before publish:
 The client defaults to `ws://localhost:3000` and DB `kaede` in dev, so no env vars are needed locally.
 
 ### SpacetimeDB MCP for coding agents
-`spacetimedb-cli mcp` serves the DB over stdio for MCP-aware agents (schema,
-sql, logs, reducer calls). The repo-root `.mcp.json` wires it for Claude Code;
-it respects `spacetime.json`'s `server` (local by default since CLI 2.10.1),
-and Maincloud exposes the same tools at `/v1/mcp` since 2.10.0. With shell
-access, plain `spacetimedb-cli sql kaede "..."` / `logs kaede` covers the same
-ground — the MCP server is for MCP-only clients.
+`spacetime mcp` serves the DB over stdio for MCP-aware agents (schema,
+sql, logs, reducer calls). The repo-root `.mcp.json` wires it for Claude Code,
+honoring the repo's `SPACETIME_BIN` convention (this VM needs
+`SPACETIME_BIN=spacetimedb-cli` — same as e2e). It respects `spacetime.json`'s
+`server` (local by default since CLI 2.10.1), and Maincloud exposes the same
+tools at `/v1/mcp` since 2.10.0 (currently reporting host version 2.10.1).
+With shell access, plain `spacetimedb-cli sql kaede "..."` / `logs kaede`
+covers the same ground — the MCP server is for MCP-only clients.
 
 `pnpm test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @kaede/e2e exec playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli pnpm test:e2e` (CI sets the same variable in `ci.yml`).
 

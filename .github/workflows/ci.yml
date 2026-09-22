@@ -29,7 +29,10 @@ env:
   # Kept on the same version as the `spacetimedb` npm dependency (2.10.1):
   # the CLI, the host and the SDK move as one pinned set — the module host
   # and the procedure/HTTP APIs the call stack rides are version-coupled
-  # (ROADMAP Phase 4 増分⑥の引き受けたリスク).
+  # (ROADMAP Phase 4 増分⑥の引き受けたリスク). Maincloud's host is managed
+  # by Clockwork and NOT part of this pinned set — check it reports a
+  # compatible version before bumping (e.g. POST /v1/mcp initialize on
+  # https://maincloud.spacetimedb.com echoes serverInfo.version).
   SPACETIME_VERSION: v2.10.1
 
 jobs:
