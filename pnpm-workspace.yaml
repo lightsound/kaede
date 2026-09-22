@@ -46,9 +46,11 @@ trustPolicy: no-downgrade
 # が範囲指定(>=beta.102)で引き込む残りの @effect/* が beta.105 に解決されて
 # effect@beta.103 と peer 不整合のまま混在するのを防ぐ(pnpm は lockfile 確定後
 # この不整合を警告しない — PR #71 の pullfrog 指摘)。@effect/sql-d1 と
-# @effect/vitest は beta.102 のまま: rc.116 は effect rc と vitest 5 を要求し、
-# どちらも今回の範囲外。alchemy を上げるときは infra 側のピンと一緒に
-# これらの override も見直すこと。
+# @effect/vitest は beta.102 のまま: rc.116 は effect rc を要求し、beta.103
+# ピンと衝突する。@effect/vitest は peer に vitest ^3||^4 を要求するため
+# vitest 5 との不整合が lockfile に残るが、ソースから未 import で実害は
+# ない(認識済み)。alchemy を上げるときは infra 側のピンと一緒にこれらの
+# override も見直すこと。
 overrides:
   '@effect/platform-bun': 4.0.0-beta.103
   '@effect/platform-node-shared': 4.0.0-beta.103
