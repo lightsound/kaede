@@ -27,43 +27,44 @@
     "walk/boy": {
       "motion": "walk",
       "family": "boy",
-      "masterSha256": "1a003e9921b756fcd0cdee458d683bdbbe5e3279fee2f6440992cbd1b32f6e42",
-      "sourceSha256": "6fc3c1cb90e3b39102c306d3e33ab3e0ece377d7a1101b6502b534ca24c89511",
-      "frames": 62,
+      "masterSha256": "2b64ee34a911526bef893ebb423dff7f544216cdbd1bb0a1a272cdca3a94bf19",
+      "sourceSha256": "120aa2039194aa2f932793ee45bb5f76d5fbb45afbb38d212d4ef470e1ea5416",
+      "frames": 72,
       "fps": 24.0,
-      "width": 464,
-      "height": 464,
+      "width": 448,
+      "height": 448,
       "loop": {
         "start": 0,
-        "period": 25,
-        "loopMeanIou": 0.936,
+        "period": 24,
+        "loopMeanIou": 0.924,
         "closureIou": 0.952
       },
-      "approval": "台帳差し替え裁定 2026-08-19 (PR #127): 裁定①=②ゲート較正で wan-animate-2 720p steps20 テイク(4b 最終裁定レシピ・3 周期再生成 t2 = R2 1d32b29e…・regprep 白脚間除去+464² クロップ = 6fc3c1cb…)を walk マスターへ差し替え。loop-mean 較正 0.93 の実測根拠 = 承認済みの絵 4f57e140… が同処理で 0.918・再生成 2 本が 0.936 プラトー(seedance 世代 0.977〜0.993 との世代系統差)。裁定③=白残渣は regprep で除去(キー後残渣ゼロ機械確認・監査 5829136b…)。全コマ検品済(手元帯 858348a1…)",
-      "registeredAt": "2026-08-19",
+      "approval": "A-3 裁定（オーナー 2026-08-20・PR #129 スレッド — 12 コマ均等化）: 周期 24 標本化の新緑参照 95ef5d34… × 4b 採用レシピ（720p steps20・枠一致 identity）の再清書 t1。--period 24 = 骨検証済み駆動周期・--loop-mean-min 0.92 = wan 世代較正（実測 0.924 — 承認済みテイク帯 0.918〜0.936 の内側・girl 前例と同フロア、知見 36①/37）。前処理 = 孤立成分除去（駆動マネキンの消し残りゴースト — 本テイクは側方ゴースト柱 34 コマを機械除去）+ 脚間白残渣 regprep（裁定③）",
+      "registeredAt": "2026-08-20",
       "overrides": {
-        "loopMeanMin": 0.93
+        "period": 24,
+        "loopMeanMin": 0.92
       }
     },
     "walk/girl": {
       "motion": "walk",
       "family": "girl",
-      "masterSha256": "f2849caa9ac804dc812f109fbac31b9830ccc77c30f7cce88cd388ee623e19c4",
-      "sourceSha256": "80baab5dd922ea299a742181571b8b3567ffe54a5284335100646e2189fcf410",
-      "frames": 74,
+      "masterSha256": "cd365e435a7e1eb6b29cfcff24a542dbe19233ffa5909e4d5262b9fea49342c5",
+      "sourceSha256": "b090e52f31094bfa1ba9fd62531a616c485ee0a06f84b7cc476124bed6b94dda",
+      "frames": 72,
       "fps": 24.0,
-      "width": 476,
-      "height": 476,
+      "width": 450,
+      "height": 450,
       "loop": {
         "start": 0,
-        "period": 25,
-        "loopMeanIou": 0.927,
-        "closureIou": 0.958
+        "period": 24,
+        "loopMeanIou": 0.932,
+        "closureIou": 0.96
       },
-      "approval": "girl walk 再鋳造裁定 2026-08-20 (PR #128 チャット): オーナー「新候補の方が明らかに良くなりました」+ committed 化まで委任(「マージまで任せます」)。boy 採用レシピの girl 適用 = wan-animate-2 720p steps20・駆動 girl 3D 緑参照 28430243…(75f 無トリム・骨検証 period 25)・枠一致 identity e6f66fe8…(R2 原本 stand セル 4x)。テイク t2(raw 93224789…・seed 424242)。--period 25 = 1:1 コマ同期の骨検証済み駆動周期(知見 37)。--loop-mean-min 0.92 = wan 世代較正の girl 実測(raw 0.929・クロップ 0.927・prep 0.926 — boy 承認テイク帯 0.918〜0.936 の内側・知見 36①)。白残渣は裁定③ 2026-08-19 の girl 適用で除去(中立白 span≤12・成分≤300px・被写体下半分帯 — 眼球白の頭部は保護・除去後ゼロ機械確認)。キャミ色クラスタの 75 ドリフトは order lint.driftMax 85 のエントリ裁定(オーナー 2026-08-20「色については現行でも問題ない」・知見 39)",
+      "approval": "A-3 裁定（オーナー 2026-08-20・PR #129 スレッド — 12 コマ均等化）: 周期 24 標本化の新緑参照 cf2f584f… × girl 採用レシピ（720p steps20・枠一致 identity e6f66fe8…）の再清書 t1。--period 24 = 骨検証済み駆動周期・--loop-mean-min 0.92 = girl 前例の較正フロア（知見 39②）。前処理 = 孤立成分除去のみ（知見 39① の中立白規則は本テイクでは奥手の白ハイライトを侵食するため不適用 — 奥手の白かぶりはテイク固有としてオーナー目視の判定材料に掲示）",
       "registeredAt": "2026-08-20",
       "overrides": {
-        "period": 25,
+        "period": 24,
         "loopMeanMin": 0.92
       }
     },
@@ -88,23 +89,20 @@
     "walk-carry/boy": {
       "motion": "walk-carry",
       "family": "boy",
-      "masterSha256": "d53b04009eb7407603b17a7ccd6e7feeb2d759c75534c9b5d78410b06492fa3d",
-      "sourceSha256": "58e6da3ba6c55bb311a0149e17008bb0da3cffbb3bb3c9e98723596090e42143",
-      "frames": 72,
+      "masterSha256": "098718080987159169fec56fcf3e59531e36dcca53d22b32024cac5dcb1755dc",
+      "sourceSha256": "a50b01f0853ab4a51cefae99c9c92cbf452216aaf78f6bf286e5e382486e9916",
+      "frames": 58,
       "fps": 24.0,
-      "width": 454,
-      "height": 454,
+      "width": 960,
+      "height": 960,
       "loop": {
         "start": 0,
         "period": 24,
-        "loopMeanIou": 0.943,
-        "closureIou": 0.954
+        "loopMeanIou": 0.962,
+        "closureIou": 0.982
       },
-      "approval": "台帳差し替え裁定 2026-08-19 (PR #127): 裁定②=差し替え承認で ミトン金型 wan-animate-2 720p steps30 テイク(4b 最終裁定レシピ・seed 124940612・3 周期再生成 t1 = R2 e5403fa3…・regprep 白脚間除去+454² クロップ = 58e6da3b…)を walk-carry マスターへ差し替え。--period 24 = 骨検証済み駆動周期(756bdffb…・ミトン金型 GLB 6cdb195e…)を明示指定 — find_loop の基本周期規則は 23(0.939)を選ぶが真周期 24 は 0.943/0.954 で既定ゲート合格。裁定③=白残渣は regprep で除去(キー後残渣ゼロ機械確認・監査 e2f71662…)。全コマ検品済(手元帯 3f89f891…・全コマミトン成立)",
-      "registeredAt": "2026-08-19",
-      "overrides": {
-        "period": 24
-      }
+      "approval": "オーナー指摘 2026-08-20 (PR #129)『(carry) ずっとこっちを向いている/口が笑ったり戻ったりが不自然』への修正鋳造 — 金型 Head Y-20° ヨー補正 (a0f73316…)・緑参照 c87b6034…・identity = boy carry stand 4x 枠一致・wan-animate-2 720p steps30 (現行マスターと同レシピ)。顔向き = 歩行方向 3/4 で全周安定・口 = 無表情で安定を確認済み・最終はオーナー目視",
+      "registeredAt": "2026-08-20"
     },
     "walk-carry-light/boy": {
       "motion": "walk-carry-light",

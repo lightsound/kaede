@@ -126,14 +126,32 @@ def load_spreads(frame_paths: list[Path]) -> list[float]:
     return [leg_spread(Image.open(p)) for p in frame_paths]
 
 
-def stride_quad(spreads: list[float], lo: int, hi: int, period: int) -> dict[str, int]:
-    """walk-a..d indices for one stride cycle anchored inside `[lo, hi)`.
+# The canonical walk pose alphabet in stride order (the client rig's
+# WALK_POSES mirror). 4 cells was the pre-A-3 shipping density; the dense
+# sheets ship 24 — every frame of the masters' 24-frame cycle, video
+# native (owner rulings 2026-08-20: the 4-frame subsampling of the gentle
+# wan-generation choreography read as near-clone stutter, and the head
+# composite read as a chest-level split once the body moved smoothly).
+WALK_LETTERS = "abcdefghijklmnopqrstuvwx"
+
+
+def walk_pose_names(cells: int) -> tuple[str, ...]:
+    """The first `cells` canonical walk pose names (walk-a, walk-b, …)."""
+    if not 1 <= cells <= len(WALK_LETTERS):
+        raise SystemExit(f"walk cell count {cells} outside 1..{len(WALK_LETTERS)}")
+    return tuple(f"walk-{WALK_LETTERS[i]}" for i in range(cells))
+
+
+def stride_cells(
+    spreads: list[float], lo: int, hi: int, period: int, cells: int = 4
+) -> dict[str, int]:
+    """Walk-cell indices for one stride cycle anchored inside `[lo, hi)`.
 
     walk-a anchors on the leg-spread maximum of the window's first period
     — the near-leg contact, the one pose the 3/4 view identifies reliably
-    (see leg_spread) — and walk-b/c/d follow at properly ROUNDED quarter
-    phases (the mocap masters' two steps are symmetric in time even when
-    their projections are not). This replaces the foot-signal argmax
+    (see leg_spread) — and the remaining cells follow at properly ROUNDED
+    equal phases (the mocap masters' two steps are symmetric in time even
+    when their projections are not). This replaces the foot-signal argmax
     anchor: on the girl master the scan roamed the pre-loop ease-in and
     the signal max landed mid-swing, so the committed cells never held the
     contact/passing pattern the bob prescription assumes. Floor-division
@@ -141,18 +159,23 @@ def stride_quad(spreads: list[float], lo: int, hi: int, period: int) -> dict[str
 
     `lo` must be the master's verified loop start: outside the loop window
     the gait is easing in and no anchor is trustworthy. Two loop instances
-    must follow it (the ledger trim guarantee), so the quad always fits.
+    must follow it (the ledger trim guarantee), so the cycle always fits.
     """
     if hi - lo < 2 * period:
         raise SystemExit(
-            f"stride quad needs two loop instances ({2 * period} frames) "
+            f"stride cells need two loop instances ({2 * period} frames) "
             f"in the window [{lo}, {hi}) — the ledger trim guarantee"
         )
     a = max(range(lo, lo + period), key=lambda i: spreads[i])
     return {
-        pose: a + round(n * period / 4)
-        for n, pose in enumerate(("walk-a", "walk-b", "walk-c", "walk-d"))
+        pose: a + round(n * period / cells)
+        for n, pose in enumerate(walk_pose_names(cells))
     }
+
+
+def stride_quad(spreads: list[float], lo: int, hi: int, period: int) -> dict[str, int]:
+    """The pre-A-3 4-cell stride (kept for the legacy callers/tests)."""
+    return stride_cells(spreads, lo, hi, period, cells=4)
 
 
 def select_walk_indices(

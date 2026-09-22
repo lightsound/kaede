@@ -3,7 +3,14 @@ import type { CSSProperties } from 'react';
 import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import { groundBoxStyle } from './cards';
 import type { AssetCatalog, AvatarAsset, ItemAsset } from './catalog';
-import { frameFor, maxFrameSize, outfitOptions, type StageLook, stageOverlays } from './dressup';
+import {
+  frameFor,
+  maxFrameSize,
+  outfitOptions,
+  type StageLook,
+  stageOverlays,
+  walkPoseOf,
+} from './dressup';
 
 // Halved from 3 when sources moved 2x → 4x (factory-v2 step 1): the stage
 // figure keeps its on-screen size while the source pixels doubled.
@@ -57,9 +64,9 @@ function thumbStyle(height: number): CSSProperties {
  * the avatarView order). All placement math lives in dressup.ts; here it
  * is only multiplied by the stage scale.
  */
-function StageFigure(props: { look: StageLook; pose: string }) {
-  const { look, pose } = props;
-  const resolved = frameFor(look.body, pose);
+function StageFigure(props: { look: StageLook; walk: { phase: number; intensity: number } }) {
+  const { look, walk } = props;
+  const resolved = frameFor(look.body, walkPoseOf(look.body, walk));
   if (!resolved || resolved.frame.url === undefined) {
     return <span style={{ color: '#e8a2a2' }}>表示できるコマがありません</span>;
   }
@@ -144,15 +151,15 @@ function ItemOption(props: { item: ItemAsset; held: boolean; onToggle: () => voi
 export function DressUpStage(props: {
   catalog: AssetCatalog;
   look: StageLook;
-  pose: string;
+  walk: { phase: number; intensity: number };
   onSelectOutfit: (id: string) => void;
   onToggleItem: (id: string) => void;
 }) {
-  const { catalog, look, pose, onSelectOutfit, onToggleItem } = props;
+  const { catalog, look, walk, onSelectOutfit, onToggleItem } = props;
   return (
     <section style={stageSectionStyle} data-testid="dressup-stage">
       <figure style={{ margin: 0, textAlign: 'center' }}>
-        <StageFigure look={look} pose={pose} />
+        <StageFigure look={look} walk={walk} />
         <figcaption style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>
           {look.body.name}
           {look.item ? ` ＋ ${look.item.name}` : ''}

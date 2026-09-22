@@ -3,20 +3,24 @@ import { DANCE_FRAME_MS, PLAYER_HALF_H, WAVE_GESTURE_DURATION_MS } from '@kaede/
 import { type Container, Sprite, type Texture } from 'pixi.js';
 import { advanceWalk, IDLE_WALK_STATE, selectPose, type WalkState } from './rig';
 
+/** One walk frame: its pose name (walk-a, walk-b, …) and its texture. */
+export interface WalkFrameTexture {
+  pose: string;
+  texture: Texture;
+}
+
 /**
  * The pose-frame textures of one character (avatar/manifest.json poses —
- * the frames the import line cut from the green-screen sheet). The keys are
- * spelled out rather than derived from rig.ts's AvatarPose so this public
- * signature references no type from another file (the fallow type-coupling
- * budget); the compiler still enforces the correspondence at the indexing
- * site below.
+ * the frames the import line cut from the green-screen sheet). Walk frames
+ * arrive as an ORDERED LIST rather than fixed keys since the A-3
+ * densification (2026-08-20): the dense sheets carry 12 frames per stride
+ * and the legacy carry-light sheets keep 4 (裁定④ 据え置き), and the walk
+ * cadence follows whichever list the sheet declares.
  */
 export interface AvatarSheetTextures {
   stand: Texture;
-  'walk-a': Texture;
-  'walk-b': Texture;
-  'walk-c': Texture;
-  'walk-d': Texture;
+  /** Walk frames in stride order — 12 on dense sheets, 4 on legacy ones. */
+  walk: readonly WalkFrameTexture[];
 }
 
 /**
@@ -46,7 +50,8 @@ export interface AvatarSheetTextures {
 export interface HeldItemDisplay {
   texture: Texture;
   grip: readonly number[];
-  hands: { readonly [P in keyof AvatarSheetTextures]: readonly number[] };
+  /** Per-pose hand anchors, keyed by pose name (from the carry manifest). */
+  hands: Readonly<Record<string, readonly number[] | undefined>>;
   /** The carry sheet's hand overlay (manifest handLayer), drawn over the item. */
   hand: { texture: Texture; grip: readonly number[] };
 }
@@ -235,6 +240,14 @@ export function createAvatarView(
   sprite.scale.set(ASSET_SCALE);
   body.addChild(sprite);
 
+  // The sheet's own walk vocabulary: the pose list drives the cadence
+  // (selectPose slices the stride by its length) and the texture lookup.
+  const walkPoses = sheet.walk.map((frame) => frame.pose);
+  const textures = new Map<string, Texture>([
+    ['stand', sheet.stand],
+    ...sheet.walk.map((frame): [string, Texture] => [frame.pose, frame.texture]),
+  ]);
+
   const carried = held ? createCarriedSprites(held) : undefined;
   if (carried) body.addChild(carried.item, carried.hand);
 
@@ -259,14 +272,14 @@ export function createAvatarView(
 
   /** The texture for `pose`, from whichever sheet declares it. */
   function textureOf(pose: string): Texture {
-    const base = sheet[pose as keyof AvatarSheetTextures];
+    const base = textures.get(pose);
     return base ?? kit?.sheet[pose as keyof GestureSheetTextures] ?? sheet.stand;
   }
 
   /** The held item follows poses with measured hand anchors, hides elsewhere. */
   function updateCarried(pose: string, frame: Texture): void {
     if (!carried || !held) return;
-    const hands = held.hands[pose as keyof AvatarSheetTextures];
+    const hands = held.hands[pose];
     carried.item.visible = carried.hand.visible = hands !== undefined;
     if (hands) placeCarried(carried, frame, hands);
   }
@@ -295,7 +308,7 @@ export function createAvatarView(
       lastX = xPx;
       clockMs += Math.max(0, dtMs);
       walk = advanceWalk(walk, dx, dtMs);
-      const walkPose = selectPose(walk);
+      const walkPose = selectPose(walk, walkPoses);
       shownPose = walkPose === 'stand' && kit ? idlePose() : walkPose;
       const frame = textureOf(shownPose);
       sprite.texture = frame;

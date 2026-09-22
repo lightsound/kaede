@@ -9,6 +9,7 @@ Mirrors the post-composition of the ①b(c) adopted line:
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -56,8 +57,17 @@ NECK_SCALE_BAND = (0.80, 1.20)
 # while feet drifted 13px. Only the VERTICAL bob survives the pipeline
 # (it changes the trimmed frame height over the fixed ground line).
 BOB_AMPLITUDE_FRAC = 0.015  # of the stand height: ±6px at 400 ≈ ±1.4px at 96
-CONTACT_POSES = frozenset({"walk-a", "walk-c"})
 HEAD_SWAY_CAP_FRAC = 0.045
+
+
+def bob_offset_frac(index: int, cells: int) -> float:
+    """The prescribed neck offset (fraction of stand height) for walk cell
+    `index` of `cells`: a two-bump-per-stride cosine — LOWEST on the
+    contacts (index 0 and cells/2), HIGHEST on the passings (cells/4 and
+    3·cells/4). At cells=4 this is exactly the pre-A-3 two-level
+    prescription (−A, +A, −A, +A); denser sheets get the same curve
+    sampled smoothly (the A-3 densification, 2026-08-20)."""
+    return -BOB_AMPLITUDE_FRAC * math.cos(4 * math.pi * index / cells)
 
 
 def key_pixel(r: int, g: int, b: int, a: int) -> tuple[int, int, int, int]:
@@ -371,6 +381,74 @@ def cell_on_green(frame: Image.Image, cell_w: int, cell_h: int) -> Image.Image:
     return cell
 
 
+def compose_native_sheet(
+    stand_path: Path,
+    walk_paths: dict[str, Path],
+    out_path: Path,
+    *,
+    cell_size: int = 380,
+) -> dict[str, tuple[int, int]]:
+    """Video-native sheet: the master's frames AS-IS — no head composite,
+    no prescribed bob (the 2026-08-20 owner rejection of the dense
+    composite: the pixel-identical pasted head over a smoothly-moving body
+    read as a chest-level split; the natural frames carry their own head
+    motion and bob). What remains of the composite pipeline is the
+    normalization: one cycle-wide scale (median of the per-frame
+    neck-from-ground ratios vs the sheet's committed stand) so the sheet's
+    stand and the video cells agree on character size, and the green-cell
+    grid layout the importer expects. Returns per-pose structure necks."""
+    stand = trim_grounded(Image.open(stand_path))
+    stand_neck = structure_neck(stand)
+    target_h = 400
+    if stand.height > target_h:
+        scale = target_h / stand.height
+        stand = stand.resize(
+            (max(1, round(stand.width * scale)), target_h), Image.LANCZOS
+        )
+        stand_neck = structure_neck(stand)
+    stand_neck_from_ground = stand.height - stand_neck[1]
+
+    ordered = ["stand", *sorted(walk_paths)]
+    frames: list[Image.Image] = [stand]
+    necks: dict[str, tuple[int, int]] = {"stand": stand_neck}
+
+    selected: list[tuple[str, Image.Image, tuple[int, int]]] = []
+    for pose in ordered[1:]:
+        candidates = walk_paths[pose]
+        if isinstance(candidates, Path):
+            candidates = [candidates]
+        body = trim_grounded(Image.open(candidates[0]))
+        selected.append((pose, body, structure_neck(body)))
+
+    ratios = sorted(
+        stand_neck_from_ground / max(1, body.height - neck[1])
+        for _, body, neck in selected
+    )
+    mid = len(ratios) // 2
+    cycle_scale = (
+        ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2
+    )
+    for pose, body, _ in selected:
+        body = body.resize(
+            (
+                max(1, round(body.width * cycle_scale)),
+                max(1, round(body.height * cycle_scale)),
+            ),
+            Image.LANCZOS,
+        )
+        frames.append(body)
+        necks[pose] = structure_neck(body)
+
+    cell_w = max(cell_size, max(f.width for f in frames) + 8)
+    cell_h = max(cell_size, max(f.height for f in frames) + 8)
+    sheet = Image.new("RGBA", (cell_w * len(frames), cell_h), GREEN)
+    for i, frame in enumerate(frames):
+        sheet.paste(cell_on_green(frame, cell_w, cell_h), (i * cell_w, 0))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.convert("RGB").save(out_path)
+    return necks
+
+
 def compose_walk_sheet(
     stand_path: Path,
     walk_paths: dict[str, Path],
@@ -395,7 +473,9 @@ def compose_walk_sheet(
         stand_neck = structure_neck(stand)
         head, stand_neck_y = cut_head(stand, stand_neck)
 
-    ordered = ["stand", "walk-a", "walk-b", "walk-c", "walk-d"]
+    # The walk vocabulary comes from the caller's selection (4 legacy /
+    # 12 dense — A-3); lexical sort of walk-a..walk-l IS stride order.
+    ordered = ["stand", *sorted(walk_paths)]
     frames: list[Image.Image] = [stand]
     necks: dict[str, tuple[int, int]] = {"stand": stand_neck}
     stand_neck_from_ground = stand.height - stand_neck[1]
@@ -449,7 +529,10 @@ def compose_walk_sheet(
         stand_neck_from_ground / max(1, body.height - neck[1])
         for _, body, neck in selected
     )
-    cycle_scale = (ratios[1] + ratios[2]) / 2
+    mid = len(ratios) // 2
+    cycle_scale = (
+        ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2
+    )
     resized: list[tuple[str, Image.Image, tuple[int, int]]] = []
     for pose, body, _ in selected:
         body = body.resize(
@@ -470,10 +553,10 @@ def compose_walk_sheet(
     # See BOB_AMPLITUDE_FRAC. The neck-junction gate still fails loudly if
     # a shifted head ever breaks the bridge, and art_lint's bob-phase gate
     # re-verifies the pattern on the imported frames.
-    bob = stand.height * BOB_AMPLITUDE_FRAC
-    for pose, body, neck in resized:
+    cells = len(resized)
+    for index, (pose, body, neck) in enumerate(resized):
         nfg = body.height - neck[1]
-        target_nfg = stand_neck_from_ground + (-bob if pose in CONTACT_POSES else bob)
+        target_nfg = stand_neck_from_ground + stand.height * bob_offset_frac(index, cells)
         cap = body.height * HEAD_SWAY_CAP_FRAC
         extra_y = max(-cap, min(cap, target_nfg - nfg))
         composited = paste_head(
@@ -486,7 +569,7 @@ def compose_walk_sheet(
 
     cell_w = max(cell_size, max(f.width for f in frames) + 8)
     cell_h = max(cell_size, max(f.height for f in frames) + 8)
-    sheet = Image.new("RGBA", (cell_w * 5, cell_h), GREEN)
+    sheet = Image.new("RGBA", (cell_w * len(frames), cell_h), GREEN)
     for i, frame in enumerate(frames):
         sheet.paste(cell_on_green(frame, cell_w, cell_h), (i * cell_w, 0))
     out_path.parent.mkdir(parents=True, exist_ok=True)

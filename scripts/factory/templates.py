@@ -124,11 +124,15 @@ TEMPLATES: dict[str, str] = {
         "move. Keep facing right in 3/4 view. Static camera, flat pure "
         "green #00FF00 background unchanged and empty, no shadows."
     ),
-    # Outfit-only sheet edit (nano-banana keep-everything).
+    # Outfit-only sheet edit (nano-banana keep-everything). Frame-count
+    # agnostic since the A-3 densification (sheets carry 4 or 12 walk
+    # cells) — and NOTE: the whole-sheet edit collapsed on a host-side
+    # nano-banana-2 behavior change (運転知見 40); production outfits use
+    # the per-cell recipe (知見 41), which records its own prompts.
     "avatar-outfit-edit": (
-        "This image is a sprite sheet of 5 frames of the same chibi game "
+        "This image is a sprite sheet of frames of the same chibi game "
         "character on a flat pure green #00FF00 chroma-key background: "
-        "standing, then 4 walk-cycle frames. Edit ONLY the clothes: {outfit}. "
+        "standing, then a walk cycle. Edit ONLY the clothes: {outfit}. "
         "Keep everything else EXACTLY pixel-identical in every frame: the "
         "same face, eyes, hair, skin, shoes, body poses, arm and leg "
         "positions, frame layout, and green background."

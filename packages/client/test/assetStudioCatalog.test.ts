@@ -74,10 +74,27 @@ describe('buildCatalog', () => {
         './b/sit.png': 'u',
       },
     );
-    // First-seen order: avatar.a's poses, then avatar.b's novel ones.
-    expect(catalog.poseUnion).toEqual(['stand', 'walk-a', 'walk-b', 'sit']);
-    expect(catalog.avatars.map((a) => a.missingPoses)).toEqual([['sit'], ['walk-b']]);
+    // First-seen order, WITHOUT walk frames (A-3: sheets legitimately
+    // differ in walk density, so a shorter cycle is not a roster gap).
+    expect(catalog.poseUnion).toEqual(['stand', 'sit']);
+    expect(catalog.avatars.map((a) => a.missingPoses)).toEqual([['sit'], []]);
     expect(catalog.problems).toEqual([]);
+  });
+
+  it('flags a hole in a walk cycle (non-prefix walk vocabulary)', () => {
+    const catalog = buildCatalog(
+      {
+        './a/manifest.json': avatarManifest('avatar.a', {
+          stand: pose('stand.png'),
+          'walk-a': pose('walk-a.png'),
+          'walk-c': pose('walk-c.png'),
+        }),
+      },
+      { './a/stand.png': 'u', './a/walk-a.png': 'u', './a/walk-c.png': 'u' },
+    );
+    expect(catalog.problems).toEqual([
+      './a/manifest.json: walk コマが正準の連続列（walk-a, walk-b）と一致しません（実際: walk-a, walk-c）',
+    ]);
   });
 
   it('collects gesture sheets and headgear apart, outside the avatar pose diff', () => {

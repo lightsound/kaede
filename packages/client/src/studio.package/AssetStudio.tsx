@@ -1,7 +1,7 @@
 // fallow-ignore-file coverage-gaps -- DOM shell of the dev-only asset studio; manifest parsing and the pose diff live in catalog.ts and the walk cadence in game.package/rig.ts, both unit-tested
 import { MOVE_SPEED } from '@kaede/shared';
 import { type CSSProperties, useEffect, useState } from 'react';
-import { advanceWalk, IDLE_WALK_STATE, loadAssetModules, selectPose } from '../game.package';
+import { advanceWalk, IDLE_WALK_STATE, loadAssetModules } from '../game.package';
 import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
 import { AvatarCard, CompareStrip, GestureCard, ItemCard, SectionHeading } from './cards';
 import { type AssetCatalog, buildCatalog } from './catalog';
@@ -43,28 +43,30 @@ const itemGridStyle: CSSProperties = {
 
 /**
  * The shared walk clock: a virtual avatar walking at MOVE_SPEED drives the
- * SAME rig rules the game renders with (advanceWalk/selectPose via the
- * game.package index), so the preview cadence — 200ms per frame at 240
- * px/s, intensity ease included — is the in-game cadence by construction,
- * and every card animates in the same phase (what makes the comparison
- * strip a comparison). Paused shows stand, the rig's idle pose.
+ * SAME rig rules the game renders with (advanceWalk via the game.package
+ * index), so the preview cadence and intensity ease are the in-game
+ * cadence by construction. It yields the WALK STATE rather than one pose
+ * name: sheets differ in frame density since the A-3 densification (12
+ * dense / 4 legacy carry-light), so each card derives its own frame from
+ * the shared phase (walkPoseOf) — same phase, per-sheet frame, which is
+ * what keeps the comparison strip a comparison. Paused yields idle.
  */
-function useWalkPose(playing: boolean): string {
-  const [pose, setPose] = useState('stand');
+function useWalkClock(playing: boolean): { phase: number; intensity: number } {
+  const [walk, setWalk] = useState<{ phase: number; intensity: number }>(IDLE_WALK_STATE);
   useEffect(() => {
     if (!playing) {
-      setPose('stand');
+      setWalk(IDLE_WALK_STATE);
       return;
     }
-    let walk = IDLE_WALK_STATE;
+    let state: { phase: number; intensity: number } = IDLE_WALK_STATE;
     let last: number | undefined;
     let cancelled = false;
     let raf = requestAnimationFrame(function tick(now: number) {
       if (cancelled) return;
       const dt = last === undefined ? 0 : Math.min(now - last, 100);
       last = now;
-      walk = advanceWalk(walk, (MOVE_SPEED * dt) / 1000, dt);
-      setPose(selectPose(walk));
+      state = advanceWalk(state, (MOVE_SPEED * dt) / 1000, dt);
+      setWalk(state);
       raf = requestAnimationFrame(tick);
     });
     return () => {
@@ -72,7 +74,7 @@ function useWalkPose(playing: boolean): string {
       cancelAnimationFrame(raf);
     };
   }, [playing]);
-  return pose;
+  return walk;
 }
 
 /** The roster-wide inspection summary: counts, pose vocabulary, gaps, integrity findings. */
@@ -158,7 +160,7 @@ export function AssetStudio() {
   // stays read-only.
   const [outfitId, setOutfitId] = useState<string>();
   const [heldItemId, setHeldItemId] = useState<string>();
-  const pose = useWalkPose(playing);
+  const walk = useWalkClock(playing);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,7 +199,7 @@ export function AssetStudio() {
           <DressUpStage
             catalog={catalog}
             look={look}
-            pose={pose}
+            walk={walk}
             onSelectOutfit={setOutfitId}
             onToggleItem={toggleItem}
           />
@@ -206,7 +208,7 @@ export function AssetStudio() {
       {compared.length > 0 && (
         <>
           <SectionHeading>比較（同位相で再生中）</SectionHeading>
-          <CompareStrip avatars={compared} pose={pose} showAnchors={showAnchors} />
+          <CompareStrip avatars={compared} walk={walk} showAnchors={showAnchors} />
         </>
       )}
       <SectionHeading>キャラクター（avatar-body）</SectionHeading>
@@ -215,7 +217,7 @@ export function AssetStudio() {
           <AvatarCard
             key={avatar.dir}
             avatar={avatar}
-            pose={pose}
+            walk={walk}
             showAnchors={showAnchors}
             compared={compareIds.includes(avatar.id)}
             onCompare={(on) => toggleCompare(avatar.id, on)}
