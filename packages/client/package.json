@@ -20,7 +20,7 @@
     "posthog-js": "^1.434.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "spacetimedb": "2.8.0"
+    "spacetimedb": "2.10.1"
   },
   "devDependencies": {
     "@assetpack/core": "1.7.0",
