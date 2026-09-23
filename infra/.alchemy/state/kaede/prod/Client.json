@@ -11,7 +11,7 @@
     "outdir": "packages/client/dist",
     "assets": {
       "directory": "../packages/client/dist",
-      "hash": "7fac34b621834c228e72bba75e90a7fa1a41f171d67b0e0daa2b43f0587d3296",
+      "hash": "199f895409d6d75b1613296912efe200c8bb301b7cb9f6fb40fd1c6dc39ed5e2",
       "notFoundHandling": "single-page-application"
     },
     "compatibility": {
@@ -21,7 +21,7 @@
     "isExternal": true
   },
   "attr": {
-    "workerId": "kaede",
+    "workerId": "f2ecd05ebd0b4cfca7bf99dd174659e9",
     "workerName": "kaede",
     "logpush": false,
     "url": "https://kaede.town",
@@ -45,7 +45,7 @@
     "crons": [],
     "tailConsumers": [],
     "hash": {
-      "assets": "7fac34b621834c228e72bba75e90a7fa1a41f171d67b0e0daa2b43f0587d3296",
+      "assets": "199f895409d6d75b1613296912efe200c8bb301b7cb9f6fb40fd1c6dc39ed5e2",
       "metadata": "7e366b51863d67e0c6465be4a322448ce18d53779c463b52085065c6c2ac49c3"
     }
   },

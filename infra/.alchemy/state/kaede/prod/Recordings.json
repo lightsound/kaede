@@ -42,9 +42,7 @@
   },
   "bindings": [],
   "providerVersion": 0,
-  "downstream": [
-    "CallApi"
-  ],
-  "removalPolicy": "destroy",
+  "downstream": [],
+  "removalPolicy": "retain",
   "providerMode": "live"
 }
