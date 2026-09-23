@@ -40,3 +40,16 @@ SPACETIME_BIN=spacetimedb-cli pnpm test:e2e                              # host+
 ## Two-window manual sync test recipe
 
 `google-chrome --new-window http://localhost:5173/?perf=1` twice → `wmctrl -lG` for ids → tile side-by-side (this box: real display 1600x1200, screenshots scale to 1024x768 — `wmctrl -i -r <id> -e 0,x,y,800,1145`). Activate a window without pointer events via `wmctrl -i -a <id>`; send keys with `hold_key`/`key`. Verify positions via SQL rather than pixel-guessing.
+
+## Chat rate-limit / server-refusal testing
+
+Chat sends sit behind a token-bucket (`sendAllowance.ts`: cost 1s/send, burst 5; marker = "paid until T", send ok iff marker ≤ now, accepted → marker += 1s, floored at now-4s). Two mirrors of it exist and produce DIFFERENT notices:
+
+- **Client mirror** = per-tab `allowanceRef` in ChatPanel → block shows 「送信が速すぎます。少し待ってから送ってください」 and the draft STAYS in the input (never dispatched).
+- **Server bucket** = `chat_guard` row per identity → refusal shows 「送信できませんでした。少し待ってからもう一度お試しください」; the refused text never reaches `chat_message` and the draft clears (dispatch happened).
+
+To trigger a real server refusal you need ANOTHER connection spending the same identity's bucket — a single tab can never outrun it (client mirror and server bucket advance in lockstep; single-tab floods only ever produce the client-side 速すぎます). Technique: **right-click the world tab → Duplicate** (Chrome clones sessionStorage → same anonymous token → same identity → shared `chat_guard`). The duplicate lands at tab position+1, so `ctrl+2`/`ctrl+1` switch between the pair. Confirm sharing via `SELECT identity,name FROM player_name` — no new row appears (stale rows from dead sessions linger ~10min, ignore them).
+
+Timing recipe that worked: pre-stage drafts in BOTH tabs (type but don't send), then in ONE tool batch — Enter (tab A send lands, marker pinned ≈ now+1) → ctrl+N → Enter (tab B send inside the <1s window → refused) → rapid-fire ~8 more sends. Expect an alternating land/refuse pattern; corroborate which sends landed with `spacetimedb-cli sql kaede "SELECT * FROM chat_message" --server local` (`sent_at` timestamps let you reconstruct the marker math exactly — a send that lands <1s after a refusal proves the refusal refunded the client mirror; without the refund it would have been mirror-blocked instead).
+
+Caveats: tool actions run ~0.5–0.7s each, so the critical gap must be ≤2 actions — pre-stage everything. `type` cannot produce Japanese text — use ASCII chat messages. The chat input keeps focus across tab switches and after Enter, so staged drafts + bare Enter work.
