@@ -52,10 +52,7 @@ const itemGridStyle: CSSProperties = {
 function useWalkPose(playing: boolean): string {
   const [pose, setPose] = useState('stand');
   useEffect(() => {
-    if (!playing) {
-      setPose('stand');
-      return;
-    }
+    if (!playing) return;
     let walk = IDLE_WALK_STATE;
     let last: number | undefined;
     let cancelled = false;
@@ -72,7 +69,9 @@ function useWalkPose(playing: boolean): string {
       cancelAnimationFrame(raf);
     };
   }, [playing]);
-  return pose;
+  // Paused reads 'stand' by derivation, not by resetting state — the effect
+  // only owns the raf loop.
+  return playing ? pose : 'stand';
 }
 
 /** The roster-wide inspection summary: counts, pose vocabulary, gaps, integrity findings. */
