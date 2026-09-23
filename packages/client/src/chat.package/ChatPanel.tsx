@@ -14,7 +14,7 @@ import {
   REACTION_EMOJIS,
   type ReactionEmoji,
 } from '@kaede/shared';
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
 import { type ChatEntryView, type ChatLog, type ChatScopeView, chatEntryKey } from '../net.package';
 import { NotificationControl } from '../notify.package';
 import {
@@ -334,6 +334,22 @@ function placeholderFor(scopes: ChatScopeView, scope: ChatScope): string {
 }
 
 /**
+ * Hands the charged marker back to the allowance mirror when a send comes
+ * back refused. Called during render, so consuming the marker is what makes
+ * a replayed render safe: it can never refund twice.
+ */
+function refundChargedAllowance(
+  sendRefused: boolean,
+  allowanceRef: RefObject<bigint>,
+  chargedFromRef: RefObject<bigint | undefined>,
+): void {
+  if (sendRefused && chargedFromRef.current !== undefined) {
+    allowanceRef.current = chargedFromRef.current;
+    chargedFromRef.current = undefined;
+  }
+}
+
+/**
  * The chat panel (ROADMAP Phase 2): the recent log — public messages and
  * this client's DMs merged — over the reaction palette and an input row.
  * An INPUT element on purpose — game.package/input.ts ignores key events
@@ -417,12 +433,10 @@ export function ChatPanel({
     if (el && log.length > 0) el.scrollTop = el.scrollHeight;
   }, [log]);
 
-  // Refund the mirrored token when a send comes back refused.
-  useEffect(() => {
-    if (!sendRefused || chargedFromRef.current === undefined) return;
-    allowanceRef.current = chargedFromRef.current;
-    chargedFromRef.current = undefined;
-  }, [sendRefused]);
+  // Refund the mirrored token when a send comes back refused — during render
+  // (the when-a-prop-changes pattern), so the rollback lands in the same
+  // commit that paints the refusal notice.
+  refundChargedAllowance(sendRefused, allowanceRef, chargedFromRef);
 
   // The one gate for both send controls: the reaction row and the message
   // form need the same player row to speak from.
