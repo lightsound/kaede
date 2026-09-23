@@ -40,6 +40,15 @@ minimumReleaseAgeStrict: true
 # どうしてもその版が要るときだけ trustPolicyExclude で明示的に通す。
 trustPolicy: no-downgrade
 
+# pnpm 12 は packageManager ピンを解決して lockfile 先頭に env ドキュメント
+# (packageManagerDependencies)として記録する。単一ドキュメント前提のツールは
+# 先頭だけを読むため、fallow dead-code が「overrides 対象が lockfile に無い」と
+# 誤判定し、GitHub dependency graph も依存 0 件になる(pnpm/pnpm#13805)。
+# ignore でピンの解決・記録ごと止め、lockfile を単一ドキュメントに戻す。
+# 実行 pnpm がピンを自動ダウンロードしなくなるだけで、packageManager フィールド
+# 自体は corepack / pnpm/action-setup が読むので CI の版決定には影響しない。
+pmOnFail: ignore
+
 # alchemy 2.0.0-beta.79 は peer に effect/@effect/platform-node
 # >=4.0.0-rc.115 を要求するため、infra/package.json で effect と
 # @effect/platform-node を rc.117 に固定済み。ここでの override は、alchemy
