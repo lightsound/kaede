@@ -271,7 +271,9 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      その権限を使う）。
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
      `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
-   - **ローカル実行の認証（alchemy 2.0.0-beta.70 以降）**: 対話実行では
+   - **ローカル実行の認証（alchemy 2.0.0-beta.79 時点）**: 環境変数セット
+     （`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`）が揃っていれば
+     プロファイルより env 認証が優先されます。揃っていない対話実行では
      auth プロファイル（`~/.alchemy/profiles.json`）が持つ accountId が
      優先され、`CLOUDFLARE_ACCOUNT_ID` は読まれません。別アカウントに
      リンクしたプロファイルで plan すると**全リソースに偽の replace が出る**
