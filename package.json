@@ -1,7 +1,7 @@
 {
   "name": "kaede",
   "private": true,
-  "packageManager": "pnpm@12.5.1",
+  "packageManager": "pnpm@12.6.0",
   "scripts": {
     "dev": "pnpm --filter @kaede/client dev",
     "typecheck": "pnpm -r typecheck",
@@ -17,8 +17,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@import-lint/cli": "0.1.9",
-    "@vitest/coverage-v8": "^5.0.1",
-    "fallow": "^3.27.0",
-    "vitest": "^5.0.1"
+    "@vitest/coverage-v8": "^5.0.2",
+    "fallow": "^3.28.0",
+    "vitest": "^5.0.2"
   }
 }
