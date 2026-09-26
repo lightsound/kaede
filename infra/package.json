@@ -20,6 +20,6 @@
     "cross-env": "^10.1.0",
     "effect": "4.0.0-rc.117",
     "typescript": "~7.0.2",
-    "wrangler": "4.135.0"
+    "wrangler": "4.140.0"
   }
 }

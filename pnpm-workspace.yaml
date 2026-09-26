@@ -69,3 +69,6 @@ overrides:
   # 付き版で、4.0.2/4.0.3 の差分は型定義だけ。5 系は ESM 専用なので CJS の
   # assetpack には載せない。
   chokidar: 4.0.1
+  # vitest@5.0.2 が ^3.2.1 で 3.2.2 を引く。3.2.2 は provenance を落としており
+  # trustPolicy が拒否するため、範囲を満たす最後の provenance 付き版に固定。
+  why-is-node-running: 3.2.1
