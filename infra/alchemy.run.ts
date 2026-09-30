@@ -97,7 +97,7 @@ export default Alchemy.Stack(
     // Alchemy のドキュメントは Vite プロジェクトに Website.Vite を勧めるが、
     // あちらは Alchemy の Vite プラグインをクライアントのビルドに割り込ませる
     // ため採らない — Alchemy をアプリコードに漏らさない条件(VISION)と、
-    // 「wrangler は素の dist/ を配るだけ」という逃げ道の前提が崩れる。
+    // 「cf deploy は素の dist/ を配るだけ」という逃げ道の前提が崩れる。
     const client = yield* Cloudflare.Website.StaticSite('Client', {
       // Worker 名はステージから導出する。prod は kaede
       // (https://kaede.kaede-751.workers.dev)、それ以外は kaede-<stage>。
@@ -113,8 +113,8 @@ export default Alchemy.Stack(
       assets: {
         notFoundHandling: 'single-page-application',
       },
-      // wrangler.jsonc の compatibility_date と一致させること。指定しないと
-      // Alchemy は自身の既定日を使い、wrangler での手動デプロイと Alchemy の
+      // cloudflare.config.ts の compatibilityDate と一致させること。指定しないと
+      // Alchemy は自身の既定日を使い、cf での手動デプロイと Alchemy の
       // 再収束が互いに互換性日付を書き換え合う(アセットのみの Worker では
       // 実害はないが、「乖離させない」という逃げ道の不変条件が最初から
       // 破れてしまう)。
