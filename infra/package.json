@@ -17,6 +17,7 @@
     "@effect/platform-node": "4.0.0-rc.117",
     "@types/node": "^24.13.6",
     "alchemy": "2.0.0-beta.79",
+    "cf": "1.0.0-beta.5",
     "cross-env": "^10.1.0",
     "effect": "4.0.0-rc.117",
     "typescript": "~7.0.2",

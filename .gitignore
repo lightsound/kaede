@@ -25,6 +25,9 @@ infra/.dev.vars
 # wrangler dev の作業キャッシュ(通話 API Worker のローカル開発で生成される)。
 infra/.wrangler/
 
+# cf deploy のビルド出力(infra/cloudflare.config.ts での手動デプロイ時に生成される)。
+infra/.cloudflare/
+
 # Alchemy のステート: 共有するのは prod ステージだけ(README 参照)。
 # それ以外のステージ(既定の dev_$USER を含む)・ログ・バージョンチェックの
 # キャッシュは個人環境の産物なので共有しない。

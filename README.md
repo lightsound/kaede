@@ -270,7 +270,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      （`scripts/r2_originals.py` — ROADMAP Phase 5 ①b⑶）も同じトークンの
      その権限を使う）。
      アカウント ID はシークレットではないため `infra/alchemy.run.ts` と
-     `infra/wrangler.jsonc` に直接書いてあり、環境変数は不要です。
+     `infra/cloudflare.config.ts` に直接書いてあり、環境変数は不要です。
    - **ローカル実行の認証（alchemy 2.0.0-beta.79 時点）**: 環境変数セット
      （`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`）が揃っていれば
      プロファイルより env 認証が優先されます。揃っていない対話実行では
@@ -317,17 +317,23 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    prod 以外のステージは `kaede-<ステージ名のスラッグ>` という別の Worker に
    デプロイされるため、本番 Worker（`kaede`）には触れません。
 
-3. **手動デプロイの逃げ道（wrangler）**
+3. **手動デプロイの逃げ道（cf CLI）**
 
-   Alchemy が使えないとき（ベータ起因の不具合など）は、同じ Worker に wrangler で直接
-   デプロイできます。設定は `infra/wrangler.jsonc`（`alchemy.run.ts` と同じ構成。乖離させないこと）。
+   Alchemy が使えないとき（ベータ起因の不具合など）は、同じ Worker に `cf` CLI（wrangler の
+   後継）で直接デプロイできます。設定は `infra/cloudflare.config.ts`（`alchemy.run.ts` と
+   同じ構成。乖離させないこと）。
 
    ```sh
    pnpm --filter @kaede/client build
-   cd infra && npx wrangler deploy --config wrangler.jsonc
+   pnpm --filter @kaede/infra exec cf deploy
    ```
 
-   wrangler で上書きした後も、次の Alchemy デプロイがそのまま再収束します（検証済み）。
+   `cf` は現行ベータ（1.0.0-beta.5）ではビルドをインストール済みの wrangler に委譲する
+   （`cf migrate` が選んだ "wrangler" バンドラー経路）ため、移行シム `infra/wrangler.config.ts`
+   と wrangler の devDependency は引き続き必要です。
+
+   cf で上書きした後も、次の Alchemy デプロイがそのまま再収束します（アップロード経路は
+   wrangler 共通のため、wrangler 時代の検証結果がそのまま効きます）。
 
 4. **Alchemy のステート管理**
 
