@@ -4,5 +4,5 @@
     // alchemy.run.ts はアカウント ID の既定値を process.env 経由で与える。
     "types": ["node"]
   },
-  "include": ["alchemy.run.ts"]
+  "include": ["alchemy.run.ts", "cloudflare.config.ts", "wrangler.config.ts"]
 }

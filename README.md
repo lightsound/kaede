@@ -332,8 +332,8 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    （`cf migrate` が選んだ "wrangler" バンドラー経路）ため、移行シム `infra/wrangler.config.ts`
    と wrangler の devDependency は引き続き必要です。
 
-   cf で上書きした後も、次の Alchemy デプロイがそのまま再収束します（アップロード経路は
-   wrangler 共通のため、wrangler 時代の検証結果がそのまま効きます）。
+   cf で上書きした後も、次の Alchemy デプロイで再収束する想定です（アップロード経路は
+   wrangler 共通のため。cf 経路での実測は未実施）。
 
 4. **Alchemy のステート管理**
 
