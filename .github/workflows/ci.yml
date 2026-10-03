@@ -37,7 +37,7 @@ env:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     concurrency:
       group: ci-${{ github.ref }}
       cancel-in-progress: true
@@ -110,7 +110,7 @@ jobs:
   # in `needs` so nothing ships without the smoke test passing
   # (docs/ROADMAP.md Phase 1, deploy flow).
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     concurrency:
       group: e2e-${{ github.ref }}
       cancel-in-progress: true
@@ -217,7 +217,7 @@ jobs:
     # dispatch escape hatch would let any ref reach prod with the deploy
     # secrets, bypassing review on main. PR runs (refs/pull/…) never match.
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # The state-commit step pushes to the ref this run deployed.
     permissions:
       contents: write
