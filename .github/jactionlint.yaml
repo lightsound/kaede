@@ -1,0 +1,39 @@
+# jactionlint configuration (https://jactionlint.jdx.dev — the maintained actionlint
+# fork; the only linter that parses the parallel:/background:/wait:/cancel: step
+# syntax). Runs in the `ci` job as a background step via scripts/install-jactionlint.sh.
+
+# kaede pins third-party actions by semver tag (actions/checkout@v7.0.1) — a
+# deliberate repo-wide convention, so the SHA-pin rule is off. Switching to
+# full-length SHA pinning would be a separate policy decision.
+rules:
+  unpinned-uses: off
+
+# pullfrog.yml is installed and managed by pullfrog itself ("DO NOT EDIT EXCEPT
+# WHERE INDICATED" header): its findings are accepted here rather than fixed in
+# the file.
+paths:
+  .github/workflows/pullfrog.yml:
+    ignore:
+      - missing-timeout
+      - artipacked
+
+# Secrets referenced from the workflows. Declaring them makes `secrets.X`
+# references strict — a typo fails lint instead of silently expanding to "".
+# (pullfrog.yml's commented-out Bedrock/Vertex/OpenAI-compatible lines are YAML
+# comments, not expressions, so they are not checked.)
+config-secrets:
+  - ANTHROPIC_API_KEY
+  - CLAUDE_CODE_OAUTH_TOKEN
+  - CLOUDFLARE_API_TOKEN
+  - DEEPSEEK_API_KEY
+  - GEMINI_API_KEY
+  - GOOGLE_GENERATIVE_AI_API_KEY
+  - MOONSHOT_API_KEY
+  - OPENAI_API_KEY
+  - OPENCODE_API_KEY
+  - OPENROUTER_API_KEY
+  - POSTHOG_ANALYTICS_API_KEY
+  - POSTHOG_API_KEY
+  - SPACETIMEDB_TOKEN
+  - VITE_CLERK_PUBLISHABLE_KEY
+  - XAI_API_KEY
