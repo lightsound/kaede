@@ -49,6 +49,17 @@ jobs:
           # this would degrade the report rather than fail the job).
           fetch-depth: 0
 
+      # Tarball download only — no pnpm needed — so it runs as a background
+      # step overlapping the whole check pipeline; the bindings-drift check
+      # `wait`s on it below. Its $GITHUB_PATH write only applies after that
+      # wait, so nothing may call spacetimedb-cli before it.
+      - name: Install SpacetimeDB CLI (pinned)
+        id: install-stdb
+        uses: ./.github/actions/install-spacetimedb
+        with:
+          version: ${{ env.SPACETIME_VERSION }}
+        background: true
+
       - uses: pnpm/action-setup@v6.1.0
 
       - uses: actions/setup-node@v7.0.0
@@ -59,40 +70,46 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm exec biome check .
+      # Mutually independent post-install checks, run concurrently. The
+      # group's implicit wait also guarantees coverage-final.json exists
+      # before the fallow group starts (`fallow health` reads it for CRAP
+      # scores).
+      - parallel:
+          - name: Lint
+            run: pnpm exec biome check .
 
-      - name: Import boundaries
-        run: pnpm lint:imports --format github
+          - name: Import boundaries
+            run: pnpm lint:imports --format github
 
-      - name: Typecheck
-        run: pnpm typecheck
+          - name: Typecheck
+            run: pnpm typecheck
 
-      # Writes coverage/coverage-final.json, which `fallow health` reads for
-      # real per-function CRAP scores (see .fallowrc.jsonc health.coverage).
-      # Must run before the fallow steps below.
-      - name: Test (with coverage)
-        run: pnpm test:coverage
+          # Writes coverage/coverage-final.json, which `fallow health` reads
+          # for real per-function CRAP scores (see .fallowrc.jsonc
+          # health.coverage).
+          - name: Test (with coverage)
+            run: pnpm test:coverage
 
-      - name: Build client
-        run: pnpm --filter @kaede/client build
+          - name: Build client
+            run: pnpm --filter @kaede/client build
 
-      - name: Dead-code check
-        run: pnpm exec fallow dead-code
+      # All read-only against the source tree and the coverage file written
+      # by the group above.
+      - parallel:
+          - name: Dead-code check
+            run: pnpm exec fallow dead-code
 
-      - name: Duplicate check
-        run: pnpm exec fallow dupes
+          - name: Duplicate check
+            run: pnpm exec fallow dupes
 
-      - name: Health check
-        run: pnpm exec fallow health
+          - name: Health check
+            run: pnpm exec fallow health
 
-      - name: Security candidates
-        run: pnpm exec fallow security
+          - name: Security candidates
+            run: pnpm exec fallow security
 
-      - name: Install SpacetimeDB CLI (pinned)
-        uses: ./.github/actions/install-spacetimedb
-        with:
-          version: ${{ env.SPACETIME_VERSION }}
+      - name: Wait for SpacetimeDB CLI install
+        wait: install-stdb
 
       - name: Check module bindings are up to date
         run: |
@@ -119,6 +136,17 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
+
+      # Same tarball-only install as `ci` — backgrounded so the download
+      # overlaps pnpm install and the Playwright setup below. The `wait`
+      # further down applies its $GITHUB_PATH write before the first
+      # spacetimedb-cli call.
+      - name: Install SpacetimeDB CLI (pinned)
+        id: install-stdb
+        uses: ./.github/actions/install-spacetimedb
+        with:
+          version: ${{ env.SPACETIME_VERSION }}
+        background: true
 
       - uses: pnpm/action-setup@v6.1.0
 
@@ -152,14 +180,23 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter @kaede/e2e exec playwright install-deps chromium
 
-      - name: Install SpacetimeDB CLI (pinned)
-        uses: ./.github/actions/install-spacetimedb
-        with:
-          version: ${{ env.SPACETIME_VERSION }}
+      - name: Wait for SpacetimeDB CLI install
+        wait: install-stdb
 
-      - name: Start SpacetimeDB and publish the module
+      # A real background step now — this used to be shell-`&` backgrounding
+      # inside the run script. stdout/stderr still redirect to
+      # /tmp/spacetimedb.log because the failure-artifact step below ships
+      # that file with the Playwright report, so this step's own log stays
+      # near-empty by design.
+      - name: Start SpacetimeDB host
+        id: stdb
+        run: spacetimedb-cli start &> /tmp/spacetimedb.log
+        background: true
+
+      # `wait` is the wrong tool for readiness — it would block until the
+      # host process exits. Poll the port instead, then publish.
+      - name: Wait for host readiness and publish the module
         run: |
-          spacetimedb-cli start &> /tmp/spacetimedb.log &
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:3000/v1/ping > /dev/null; then
               break
@@ -198,6 +235,13 @@ jobs:
           name: e2e-failure-artifacts
           path: packages/e2e/playwright-report/
           retention-days: 14
+
+      # REQUIRED: without a cancel, the implicit wait-all before post-job
+      # cleanup would block on the never-exiting host until timeout-minutes.
+      # (cancel steps always run — `if` is not supported on them, so the
+      # stop also covers the failure path automatically.)
+      - name: Stop SpacetimeDB host
+        cancel: stdb
 
   # Fully automated production deploy — no human gate (docs/ROADMAP.md
   # Phase 1, deploy flow). Every push to main that passes ci AND e2e deploys
