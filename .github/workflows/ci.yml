@@ -93,20 +93,25 @@ jobs:
           - name: Build client
             run: pnpm --filter @kaede/client build
 
-      # All read-only against the source tree and the coverage file written
-      # by the group above.
+      # Read-only against the source tree and the coverage file written by
+      # the group above — except fallow's own incremental cache: every run
+      # saves .fallow/cache.bin through one fixed temp file, so concurrent
+      # runs collide ("Failed to rename cache tmp into place") and can leave
+      # a mixed payload behind (fixed upstream in fallow 3.34.0, #3484).
+      # --no-cache costs nothing here: CI always starts from a cold cache and
+      # the members no longer run one after another to reuse it.
       - parallel:
           - name: Dead-code check
-            run: pnpm exec fallow dead-code
+            run: pnpm exec fallow dead-code --no-cache
 
           - name: Duplicate check
-            run: pnpm exec fallow dupes
+            run: pnpm exec fallow dupes --no-cache
 
           - name: Health check
-            run: pnpm exec fallow health
+            run: pnpm exec fallow health --no-cache
 
           - name: Security candidates
-            run: pnpm exec fallow security
+            run: pnpm exec fallow security --no-cache
 
       - name: Wait for SpacetimeDB CLI install
         wait: install-stdb
