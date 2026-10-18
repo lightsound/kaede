@@ -91,7 +91,8 @@
     "gate": "all"
   },
 
-  // Every rule fallow ships, all 53 of them, at `error`. The defaults leave
+  // Every rule fallow ships at `error` (the complexity-* rules already default
+  // to `error`; their thresholds live under `health`). The defaults leave
   // cleanup, styling, and framework-hygiene rules at `warn` and the opinionated
   // ones `off`; we want all of them reported, and gating wherever fallow lets
   // severity drive the exit code (see `feature-flags` below for the one rule
@@ -101,6 +102,7 @@
     "unused-exports": "error",
     "unused-types": "error",
     "private-type-leaks": "error",
+    "deprecated-exports-in-use": "error",
     "unused-dependencies": "error",
     "unused-dev-dependencies": "error",
     "unused-optional-dependencies": "error",
@@ -110,12 +112,16 @@
     "unprovided-injects": "error",
     "unrendered-components": "error",
     "unused-component-props": "error",
+    "absent-component-props": "error",
     "unused-component-emits": "error",
     "unused-component-inputs": "error",
     "unused-component-outputs": "error",
     "unused-svelte-events": "error",
     "unused-server-actions": "error",
     "unused-load-data-keys": "error",
+    "unused-effect-layers": "error",
+    "unused-tagged-errors": "error",
+    "unproduced-catch-tags": "error",
     "prop-drilling": "error",
     "thin-wrapper": "error",
     "duplicate-prop-shape": "error",
@@ -132,6 +138,7 @@
     "dev-dependencies-in-production": "error",
     "circular-dependencies": "error",
     "re-export-cycle": "error",
+    "package-cycle": "error",
     "boundary-violation": "error",
     "coverage-gaps": "error",
     "stale-suppressions": "error",
@@ -149,6 +156,11 @@
     "misplaced-directive": "error",
     "route-collision": "error",
     "dynamic-segment-name-conflict": "error",
+    "weakened-tests": "error",
+    "added-suppression": "error",
+    "test-only-branch": "error",
+    "diverged-clone-sibling": "error",
+    "added-dependency": "error",
 
     // An inventory rule rather than a defect check: it reports that a feature
     // flag exists. Promoted anyway so there is no deviation from the policy —
