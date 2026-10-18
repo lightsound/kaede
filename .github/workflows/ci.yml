@@ -76,6 +76,7 @@ jobs:
         run: |
           scripts/install-jactionlint.sh linux-x64 "$RUNNER_TEMP/jactionlint"
           if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -q
             sudo apt-get install -y shellcheck
           fi
           "$RUNNER_TEMP/jactionlint/jactionlint"

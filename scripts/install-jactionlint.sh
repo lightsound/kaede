@@ -50,7 +50,8 @@ if [ "$actual_archive_sha256" != "$archive_sha256" ]; then
   exit 1
 fi
 
-rm -rf "$destination"
+# No rm -rf of the destination: it is a caller-supplied path, and tar
+# overwrites the single extracted file anyway.
 mkdir -p "$destination"
 tar -xzf "$archive" -C "$destination" jactionlint
 
