@@ -8,10 +8,8 @@ type ReactionRow = RowOf<'reaction'>;
 
 /**
  * What acting on reaction rows needs from the session that wires the feed.
- * Exported — unlike chatFeed's module-private ChatFeedHooks — because it
- * appears in wireReactions' exported signature, which fallow's
- * private-type-leaks rule refuses for a private type (ChatFeedHooks only
- * ever appears inside a returned object literal's inferred type).
+ * Exported because it appears in wireReactions' exported signature, which
+ * fallow's private-type-leaks rule refuses for a private type.
  */
 export interface ReactionFeedHooks {
   /** True once this session's events must be ignored (see wireSession). */

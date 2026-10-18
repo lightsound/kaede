@@ -116,24 +116,21 @@ jobs:
             run: pnpm --filter @kaede/client build
 
       # Read-only against the source tree and the coverage file written by
-      # the group above — except fallow's own incremental cache: every run
-      # saves .fallow/cache.bin through one fixed temp file, so concurrent
-      # runs collide ("Failed to rename cache tmp into place") and can leave
-      # a mixed payload behind (fixed upstream in fallow 3.34.0, #3484).
-      # --no-cache costs nothing here: CI always starts from a cold cache and
-      # the members no longer run one after another to reuse it.
+      # the group above. The members share fallow's incremental cache
+      # (.fallow/), which is safe from fallow 3.34.0 on: each save writes its
+      # own temp file and renames it into place (fallow-rs/fallow#3484).
       - parallel:
           - name: Dead-code check
-            run: pnpm exec fallow dead-code --no-cache
+            run: pnpm exec fallow dead-code
 
           - name: Duplicate check
-            run: pnpm exec fallow dupes --no-cache
+            run: pnpm exec fallow dupes
 
           - name: Health check
-            run: pnpm exec fallow health --no-cache
+            run: pnpm exec fallow health
 
           - name: Security candidates
-            run: pnpm exec fallow security --no-cache
+            run: pnpm exec fallow security
 
       - name: Wait for workflow lint
         wait: lint-workflows

@@ -18,7 +18,7 @@
     "@biomejs/biome": "^2.5.14",
     "@import-lint/cli": "0.1.9",
     "@vitest/coverage-v8": "^5.0.2",
-    "fallow": "^3.28.0",
+    "fallow": "^3.34.1",
     "vitest": "^5.0.2"
   }
 }

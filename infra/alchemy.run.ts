@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file -- alchemy CLI が直接実行する IaC エントリポイント。アプリのモジュールグラフからは到達しない
 // kaede の Cloudflare リソース定義(Alchemy v2)。
 //
 // このディレクトリの外に Alchemy / Effect を漏らさないこと(docs/VISION.md の
@@ -76,6 +75,9 @@ const workerNameSlug = (stage: string): string => {
 const stagedName = (stage: string, prodName: string): string =>
   stage === 'prod' ? prodName : `${prodName}-${workerNameSlug(stage)}`;
 
+// fallow の alchemy プラグイン(3.34+)はこのファイルをエントリにするが、alchemy CLI が
+// 読む default export(Stack)は消費者として数えない。includeEntryExports で拾われるため抑止する。
+// fallow-ignore-next-line unused-export -- alchemy CLI がこの default export を読み込んで実行する
 export default Alchemy.Stack(
   'kaede',
   {
