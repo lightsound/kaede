@@ -35,8 +35,13 @@ function scopeTagOf(c: DbConnection, row: ChatMessageRow): string | undefined {
 /** The generated dm_message row type. */
 type DmMessageRow = RowOf<'dmMessage'>;
 
-/** What acting on chat and DM rows needs from the session that wires the feed. */
-interface ChatFeedHooks {
+/**
+ * What acting on chat and DM rows needs from the session that wires the feed.
+ * Exported for the ReactionFeedHooks reason: it appears in createChatFeed's
+ * inferred return type, which fallow's private-type-leaks rule refuses for a
+ * private type.
+ */
+export interface ChatFeedHooks {
   /** True once this session's events must be ignored (see wireSession). */
   isStale(): boolean;
   showLocalBubble(text: string): void;

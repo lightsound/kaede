@@ -38,6 +38,21 @@ minimumReleaseAge: 1440
 # 静かに入る」方が事故のもとで、エラーなら対応(バージョン限定の除外 or 待つ)を
 # 明示的に選べる — PR #75 の pullfrog 指摘を受けて明文化。
 minimumReleaseAgeStrict: true
+# バージョン限定の除外(2026-10-18): fallow 3.34.1 は 3.34.0 の並列キャッシュ
+# 書き込み修正(fallow-rs/fallow#3484)に coverage-v8 の負のヒット数対応を足した
+# 版で、ci.yml の並列 fallow 群から --no-cache を外す前提。公開 1 日未満だが
+# オーナー判断で先行採用する。2026-10-19T06:16Z 以降は不要なので削除してよい。
+minimumReleaseAgeExclude:
+  - 'fallow@3.34.1'
+  - 'fallow-type-aware@3.34.1'
+  - '@fallow-cli/darwin-arm64@3.34.1'
+  - '@fallow-cli/darwin-x64@3.34.1'
+  - '@fallow-cli/linux-arm64-gnu@3.34.1'
+  - '@fallow-cli/linux-arm64-musl@3.34.1'
+  - '@fallow-cli/linux-x64-gnu@3.34.1'
+  - '@fallow-cli/linux-x64-musl@3.34.1'
+  - '@fallow-cli/win32-arm64-msvc@3.34.1'
+  - '@fallow-cli/win32-x64-msvc@3.34.1'
 # 公開者の信頼が前の版より落ちたパッケージは入れない。minimumReleaseAge が
 # 「公開直後」を足切りするのに対し、こちらは「かつて provenance か trusted
 # publisher だったパッケージが、その証拠を落とした版」を拒む。比較は公開日の

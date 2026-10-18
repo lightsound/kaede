@@ -49,7 +49,10 @@
       { "name": "shared", "patterns": ["packages/shared/**"] },
       { "name": "client", "patterns": ["packages/client/**"] },
       { "name": "server", "patterns": ["packages/server/**"] },
-      { "name": "e2e", "patterns": ["packages/e2e/**"] }
+      { "name": "e2e", "patterns": ["packages/e2e/**"] },
+      // IaC (Alchemy / cf / wrangler configs). docs/VISION.md keeps Alchemy and
+      // Effect inside this directory, so no other zone may import it.
+      { "name": "infra", "patterns": ["infra/**"] }
     ],
     "rules": [
       { "from": "shared", "allow": [] },
@@ -58,14 +61,19 @@
       // E2E drives the running app from outside through the browser, so it
       // never imports client/server code. shared is allowed for the hook
       // contract (E2EHook) and the physics constants assertions derive from.
-      { "from": "e2e", "allow": ["shared"] }
+      { "from": "e2e", "allow": ["shared"] },
+      // The app never imports infra, and infra reads no app code either.
+      { "from": "infra", "allow": [] }
     ],
     "coverage": {
       "requireAllFiles": true,
-      // The only file outside the three packages. Listed by name rather than
-      // as a root glob, so a future root-level source file is not exempted
-      // silently — it has to be classified or added here deliberately.
-      "allowUnmatched": ["vitest.config.mts"]
+      // The only source files outside the zones. Listed by name rather than
+      // as a glob, so a future root-level source file or script is not
+      // exempted silently — it has to be classified or added here
+      // deliberately. describe-table-names.mjs is a standalone helper that
+      // backup-maincloud.sh runs with node (fallow checks unreached files
+      // against boundaries since 3.31).
+      "allowUnmatched": ["vitest.config.mts", "scripts/describe-table-names.mjs"]
     }
   },
 
