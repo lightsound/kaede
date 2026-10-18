@@ -41,6 +41,7 @@ jobs:
     concurrency:
       group: ci-${{ github.ref }}
       cancel-in-progress: true
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -48,6 +49,10 @@ jobs:
           # default shallow clone empties it (fallow warns and carries on, so
           # this would degrade the report rather than fail the job).
           fetch-depth: 0
+          # No step pushes or fetches from origin after checkout (the bindings
+          # drift check only reads the local tree), so the GITHUB_TOKEN does
+          # not need to stay in the workspace git config.
+          persist-credentials: false
 
       # Tarball download only — no pnpm needed — so it runs as a background
       # step overlapping the whole check pipeline; the bindings-drift check
@@ -58,6 +63,23 @@ jobs:
         uses: ./.github/actions/install-spacetimedb
         with:
           version: ${{ env.SPACETIME_VERSION }}
+        background: true
+
+      # Workflow lint — jactionlint (the only linter that parses the
+      # parallel:/background:/wait:/cancel: syntax above). Needs only the
+      # checkout, so it runs as a background step overlapping all setup; the
+      # wait near the end of the job gates on it. shellcheck rides along
+      # when the runner image ships it (ubuntu images do); the apt fallback
+      # keeps the check from silently degrading on an image that lacks it.
+      - name: Lint GitHub Actions workflows
+        id: lint-workflows
+        run: |
+          scripts/install-jactionlint.sh linux-x64 "$RUNNER_TEMP/jactionlint"
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -q
+            sudo apt-get install -y shellcheck
+          fi
+          "$RUNNER_TEMP/jactionlint/jactionlint"
         background: true
 
       - uses: pnpm/action-setup@v6.1.0
@@ -113,6 +135,9 @@ jobs:
           - name: Security candidates
             run: pnpm exec fallow security --no-cache
 
+      - name: Wait for workflow lint
+        wait: lint-workflows
+
       - name: Wait for SpacetimeDB CLI install
         wait: install-stdb
 
@@ -141,6 +166,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          # Nothing in this job pushes or fetches from origin.
+          persist-credentials: false
 
       # Same tarball-only install as `ci` — backgrounded so the download
       # overlaps pnpm install and the Playwright setup below. The `wait`
@@ -279,6 +307,10 @@ jobs:
     concurrency:
       group: deploy-prod
       cancel-in-progress: false
+    # Baseline is ~1 min, but Maincloud publish / Alchemy convergence can
+    # legitimately spike — bound it anyway rather than trusting the 360-min
+    # platform default.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7.0.1
         with:
