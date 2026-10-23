@@ -8,19 +8,19 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "alchemy": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy",
-    "deploy:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy deploy --stage prod",
-    "plan:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy plan --stage prod",
-    "destroy:prod": "cross-env npm_execpath= ALCHEMY_PROFILE=kaede alchemy destroy --stage prod"
+    "alchemy": "cross-env ALCHEMY_PROFILE=kaede alchemy",
+    "deploy:prod": "cross-env ALCHEMY_PROFILE=kaede alchemy deploy --stage prod",
+    "plan:prod": "cross-env ALCHEMY_PROFILE=kaede alchemy plan --stage prod",
+    "destroy:prod": "cross-env ALCHEMY_PROFILE=kaede alchemy destroy --stage prod"
   },
   "devDependencies": {
-    "@effect/platform-node": "4.0.0-rc.117",
+    "@effect/platform-node": "4.0.5",
     "@types/node": "^24.13.6",
-    "alchemy": "2.0.0-beta.79",
-    "cf": "1.0.0-beta.5",
+    "alchemy": "2.0.0-beta.83",
+    "cf": "1.0.0-beta.20",
     "cross-env": "^10.1.0",
-    "effect": "4.0.0-rc.117",
+    "effect": "4.0.5",
     "typescript": "~7.0.2",
-    "wrangler": "4.140.0"
+    "wrangler": "4.152.0"
   }
 }
