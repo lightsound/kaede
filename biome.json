@@ -13,7 +13,8 @@
       "!pnpm-lock.yaml",
       "!**/skills/sp-*",
       "!**/skills/stripe-projects-cli",
-      "!.github/workflows/pullfrog.yml"
+      "!.github/workflows/pullfrog.yml",
+      "!docs/factory-yield.md"
     ]
   },
   "formatter": {

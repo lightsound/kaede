@@ -1133,52 +1133,52 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   fail-fast）
   ②**module→Worker のケイパビリティ = 短命の署名付き録画パス**:
   `mint_recording_pass` reducer が posting 前文（in-world + admission
-  再検査）+ **approved 検査**（ラベル reducer と共有の requireApprovedMember）
-  - call_guard 課金のうえ、`v1:recording:<clerkSubject>:<exp>:<HMAC>`
-    （寿命 `RECORDING_PASS_TTL_SECONDS` = 120 秒）を公開テーブル
-    `recording_pass`（identity PK の upsert 行）へ書く。**行が配達路**
-    （reducer は値を返せない）で、RLS `identity = :sender` 1 本が
-    「パスは持ち主にしか届かない」を担う（dm_message の前例形。ライブ検証
-    済み — 下の④）。Worker は録画 4 ルートで Clerk bearer **に加えて**
-    `x-recording-pass` ヘッダを共有実装で検証し、無効なら 403
-    `approval-required`。クライアントは提示直前に取得し、余命 15 秒未満なら
-    透過的に再 mint（`acquireRecordingPass` — 単体テスト済み）。
-    **パスは bearer に束縛する**（初回実装への Bugbot HIGH 指摘で追加）:
-    Worker は SpacetimeDB Identity を Clerk subject から導出できない
-    （blake3 ベースの導出の再実装はバージョン結合が強すぎる）ため、逆に
-    **module 側が接続時に対応を記録する** — clientConnected が JWT の `sub` を
-    `account.subject` 列（末尾 optional の additive 追加）へ書き、mint は
-    identity hex ではなく **Clerk subject** をパスに埋め、Worker は検証済み
-    bearer の subject と完全一致しなければ 403。漏えいしたパスは本人の
-    Clerk セッション以外では無価値になる（束縛前は「サインイン済みの誰か」
-    なら TTL 内で流用できた）
-    ③**署名は純 TS の HMAC-SHA-256**（`@kaede/shared` の capability.ts、
-    RFC 4231 ベクタで単体テスト）: module ホストに WebCrypto が無い前提を
-    設計で回避せず正面から満たし、Worker が**同じ共有コード**で検証するので
-    両側の形式が乖離しない。鍵対（署名鍵/検証鍵の非対称）は不採用 — 両者は
-    同一運営者のインフラで、Worker は R2 秘密も既に持つ（Worker 侵害 =
-    どのみち全録画が漏れる）ため、非対称化が守る追加の脅威が無い。
-    **却下した代替案**: (a) #65 の RLS 定数 equijoin 案（space_member に
-    `spaceFlag` 定数列を足し call_recording を承認済みメンバー限定にする）—
-    守れるのは**メタデータ行だけ**で、HIGH 指摘の本体である Worker の R2
-    一覧/DL（ファイルそのもの）に RLS は届かず、目的に対して無効。
-    (b) Worker が SpacetimeDB を読む（owner トークンで HTTP SQL）— Worker が
-    オーナー級資格情報を持つことになり「薄いグルー」の分担（増分①）を壊す
-    ④**RLS はライブ検証済み**（増分④スパイクの規律 — フィルタの誤りは
-    publish では見えない）: 非オーナー 2 接続（承認済みメンバー+ゲスト）で
-    「mint 後、持ち主にだけ行が届き、他接続は seed・行イベントとも 0」を
-    実測（dev フック `recordingPassRowsReceived` — groupCallRowsReceived の
-    前例 — を追加し、手動テストの観測点とした。E2E からはメンバーを作れない
-    ため自動化は既存の制約のまま）。旧スキーマ DB への再 publish も
-    リハーサル済み（テーブル 2 本 + RLS 1 本 + reducer 1 本の追加のみ）
-    ⑤**②Worker→module（Webhook→リデューサー中継）は設計担保まで**（スコープ
-    外 — 課金・Clerk 削除の増分で実装）: 同じアンカー秘密・同じ共有
-    `hmacSha256Hex` で**逆方向**が乗る — 中継 reducer は引数
-    `(payload, exp, hmac)` を受け、module が純 TS HMAC で検証する
-    （scope を `relay` 等に変えるだけで、#65 方式のように**生の秘密を
+  再検査）+ **approved 検査**（ラベル reducer と共有の requireApprovedMember）+ call_guard
+  課金のうえ、`v1:recording:<clerkSubject>:<exp>:<HMAC>`
+  （寿命 `RECORDING_PASS_TTL_SECONDS` = 120 秒）を公開テーブル
+  `recording_pass`（identity PK の upsert 行）へ書く。**行が配達路**
+  （reducer は値を返せない）で、RLS `identity = :sender` 1 本が
+  「パスは持ち主にしか届かない」を担う（dm_message の前例形。ライブ検証
+  済み — 下の④）。Worker は録画 4 ルートで Clerk bearer **に加えて**
+  `x-recording-pass` ヘッダを共有実装で検証し、無効なら 403
+  `approval-required`。クライアントは提示直前に取得し、余命 15 秒未満なら
+  透過的に再 mint（`acquireRecordingPass` — 単体テスト済み）。
+  **パスは bearer に束縛する**（初回実装への Bugbot HIGH 指摘で追加）:
+  Worker は SpacetimeDB Identity を Clerk subject から導出できない
+  （blake3 ベースの導出の再実装はバージョン結合が強すぎる）ため、逆に
+  **module 側が接続時に対応を記録する** — clientConnected が JWT の `sub` を
+  `account.subject` 列（末尾 optional の additive 追加）へ書き、mint は
+  identity hex ではなく **Clerk subject** をパスに埋め、Worker は検証済み
+  bearer の subject と完全一致しなければ 403。漏えいしたパスは本人の
+  Clerk セッション以外では無価値になる（束縛前は「サインイン済みの誰か」
+  なら TTL 内で流用できた）
+  ③**署名は純 TS の HMAC-SHA-256**（`@kaede/shared` の capability.ts、
+  RFC 4231 ベクタで単体テスト）: module ホストに WebCrypto が無い前提を
+  設計で回避せず正面から満たし、Worker が**同じ共有コード**で検証するので
+  両側の形式が乖離しない。鍵対（署名鍵/検証鍵の非対称）は不採用 — 両者は
+  同一運営者のインフラで、Worker は R2 秘密も既に持つ（Worker 侵害 =
+  どのみち全録画が漏れる）ため、非対称化が守る追加の脅威が無い。
+  **却下した代替案**: (a) #65 の RLS 定数 equijoin 案（space_member に
+  `spaceFlag` 定数列を足し call_recording を承認済みメンバー限定にする）—
+  守れるのは**メタデータ行だけ**で、HIGH 指摘の本体である Worker の R2
+  一覧/DL（ファイルそのもの）に RLS は届かず、目的に対して無効。
+  (b) Worker が SpacetimeDB を読む（owner トークンで HTTP SQL）— Worker が
+  オーナー級資格情報を持つことになり「薄いグルー」の分担（増分①）を壊す
+  ④**RLS はライブ検証済み**（増分④スパイクの規律 — フィルタの誤りは
+  publish では見えない）: 非オーナー 2 接続（承認済みメンバー+ゲスト）で
+  「mint 後、持ち主にだけ行が届き、他接続は seed・行イベントとも 0」を
+  実測（dev フック `recordingPassRowsReceived` — groupCallRowsReceived の
+  前例 — を追加し、手動テストの観測点とした。E2E からはメンバーを作れない
+  ため自動化は既存の制約のまま）。旧スキーマ DB への再 publish も
+  リハーサル済み（テーブル 2 本 + RLS 1 本 + reducer 1 本の追加のみ）
+  ⑤**②Worker→module（Webhook→リデューサー中継）は設計担保まで**（スコープ
+  外 — 課金・Clerk 削除の増分で実装）: 同じアンカー秘密・同じ共有
+  `hmacSha256Hex` で**逆方向**が乗る — 中継 reducer は引数
+  `(payload, exp, hmac)` を受け、module が純 TS HMAC で検証する
+  （scope を `relay` 等に変えるだけで、#65 方式のように**生の秘密を
   reducer 引数で毎回運ばない** — 引数はログに残り得る）。アンカーの設営・
-    ローテーション手順はそのまま共用できるため、中継増分に新しい設営は不要
-    → **ただし増分⑥候補（下）が先に実現すれば中継自体が不要になる**
+  ローテーション手順はそのまま共用できるため、中継増分に新しい設営は不要
+  → **ただし増分⑥候補（下）が先に実現すれば中継自体が不要になる**
 - **procedure による信頼アンカー撤去と Worker 廃止（増分⑥ — 2026-08-06
   候補記載、オーナー裁定 D1〜D7 で確定、同増分で実装）**: 増分⑤の実装
   当日、オーナー指摘で **SpacetimeDB に module からの outbound HTTP が
