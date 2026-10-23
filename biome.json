@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/module_bindings", "!infra/.alchemy"]
+    "includes": [
+      "**",
+      "!**/module_bindings",
+      "!infra/.alchemy",
+      "!pnpm-lock.yaml",
+      "!**/skills/sp-*",
+      "!**/skills/stripe-projects-cli",
+      "!.github/workflows/pullfrog.yml"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -26,19 +34,13 @@
     }
   },
   "markdown": {
-    "formatter": {
-      "enabled": false
-    },
-    "linter": {
-      "enabled": false
+    "parser": {
+      "frontmatter": true
     }
   },
   "yaml": {
     "formatter": {
-      "enabled": false
-    },
-    "linter": {
-      "enabled": false
+      "quoteStyle": "single"
     }
   }
 }
