@@ -11,24 +11,24 @@
     "assets:pack": "python3 ../../scripts/factory/prepare_assetpack.py && ./node_modules/.bin/assetpack"
   },
   "dependencies": {
-    "@clerk/localizations": "^4.20.0",
-    "@clerk/react": "^6.17.2",
-    "@cloudflare/realtimekit": "2.0.2",
-    "@cloudflare/realtimekit-react-ui": "2.0.2",
+    "@clerk/localizations": "^4.24.0",
+    "@clerk/react": "^6.18.0",
+    "@cloudflare/realtimekit": "2.0.4",
+    "@cloudflare/realtimekit-react-ui": "2.0.3",
     "@kaede/shared": "workspace:*",
-    "pixi.js": "^8.21.0",
-    "posthog-js": "^1.434.13",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "pixi.js": "^8.22.0",
+    "posthog-js": "^1.438.15",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "spacetimedb": "2.10.1"
   },
   "devDependencies": {
     "@assetpack/core": "1.7.0",
-    "@posthog/rollup-plugin": "^1.6.1",
+    "@posthog/rollup-plugin": "^1.6.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^6.1.2",
     "typescript": "~7.0.2",
-    "vite": "^8.3.1"
+    "vite": "^8.3.5"
   }
 }
