@@ -10,7 +10,7 @@
 // authoritative player row, never from the client (the zones.ts rule), and
 // join proximity is re-ruled server-side against the members' authoritative
 // rows. The walk-away auto-leave is not here: it rides the group-occupancy
-// pass (syncGroupOccupancy in world.ts) like the zone entry/exit judgment.
+// pass (syncGroupOccupancy in occupancy.ts) like the zone entry/exit judgment.
 import {
   evaluateHuddleJoin,
   evaluateSendAllowance,
@@ -23,17 +23,10 @@ import {
   ZONE_MAX,
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
+import { cleanupEmptyHuddle, otherHuddleMemberPositions, syncGroupOccupancy } from './occupancy';
+import { chargeSendAllowance } from './sendAllowance';
 import { spacetimedb } from './tables';
-import {
-  type Ctx,
-  chargeSendAllowance,
-  cleanupEmptyHuddle,
-  findPostingSender,
-  otherHuddleMemberPositions,
-  type SenderIdentity,
-  syncGroupOccupancy,
-  type WorldRows,
-} from './world';
+import { type Ctx, findPostingSender, type SenderIdentity, type WorldRows } from './world';
 
 /**
  * The huddle token bucket (the chat numbers — see huddle_guard in

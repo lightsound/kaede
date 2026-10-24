@@ -50,7 +50,7 @@ async function resetConversations(): Promise<void> {
   // The huddle deletes above bypass cleanupEmptyHuddle, so a huddle that
   // had a call registered would leave its group_call row behind as
   // permanent garbage (it matches no RLS join once the group is gone —
-  // the deleteGroupCall reasoning in world.ts). Wipe those too; every
+  // the deleteGroupCall reasoning in occupancy.ts). Wipe those too; every
   // membership was just dropped, so no live call row can be in use.
   await sql('DELETE FROM group_call');
 }

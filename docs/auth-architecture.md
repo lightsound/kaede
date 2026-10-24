@@ -1,7 +1,7 @@
 # kaede の認証アーキテクチャ（やさしい解説）
 
 人に説明するための文書。正確な決定記録と理由は
-[ADR](./adr-auth-clerk-and-tenant-design.md)、実装は `packages/server/src/reducers.ts`
+[ADR](./adr-auth-clerk-and-tenant-design.md)、実装は `packages/server/src/connection.ts`
 （接続ゲート）と `packages/shared/src/membership.ts`（判定規則）にある。
 最終更新 2026-08-04。
 

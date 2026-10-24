@@ -61,7 +61,7 @@ test('ゲスト入場を不許可にすると入場できず、再許可で自�
 /**
  * The other half of the setting: guests already in the world are expelled
  * the moment guests are disallowed — through the admission re-check every
- * submit_inputs performs (reducers.ts) — their client stops the local
+ * submit_inputs performs (movement.ts) — their client stops the local
  * simulation and shows the refusal, and re-allowing lets them walk right
  * back in without a reload. The real set_guests_allowed reducer sweeps
  * guests in the same transaction as the flip, but this spec flips through
