@@ -2,3 +2,5 @@
 export { AdminSection } from './AdminSection';
 export { AdmissionOverlay } from './AdmissionOverlay';
 export { ApplyBanner } from './ApplyBanner';
+export { promptFor } from './applyPrompt';
+export type { ZoneActions } from './ZonePanel';

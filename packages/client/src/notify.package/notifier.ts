@@ -20,7 +20,7 @@ export interface DmNotifier {
   /**
    * Feeds one dm_message row (seed or event — source-tagged) through the
    * decision rule and, when it says so, raises the OS notification. The
-   * caller (App wiring NetHooks.onDmRow) never decides anything.
+   * caller (useNetStack wiring NetHooks.onDmRow) never decides anything.
    */
   onDmRow(event: DmRowEvent): void;
   uiState(): NotifyUiState;

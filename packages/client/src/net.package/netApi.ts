@@ -27,9 +27,9 @@ import type { DbConnection } from '../module_bindings';
  * The draft plan while no session exists: no candidates, so public drafts
  * still classify and mentions refuse. The ONE home of the
  * "disconnected means nobody to resolve against" rule — planChatSend
- * delegates here, and the App-side fallback for the pre-mount instant
- * (when no Net exists to ask) is this same function through the package
- * index.
+ * delegates here, and the fallback in netActions.ts for the pre-mount
+ * instant (when no Net exists to ask) is this same function through the
+ * package index.
  */
 export function planChatDraftOffline(draft: string): ChatDraftPlan {
   return planChatDraft(draft, []);
