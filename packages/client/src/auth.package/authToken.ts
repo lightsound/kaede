@@ -48,6 +48,6 @@ export interface AuthSession {
   readonly signedIn: boolean;
 }
 
-/** Module constants so an unchanged session never re-triggers App's effect. */
+/** Module constants so an unchanged session never re-triggers useNetStack's effect. */
 export const guestSession: AuthSession = { getToken: guestToken, signedIn: false };
 export const memberSession: AuthSession = { getToken: memberToken, signedIn: true };
