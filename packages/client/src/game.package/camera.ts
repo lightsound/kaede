@@ -25,7 +25,7 @@ function offsetAxis(focus: number, view: number, world: number): number {
 }
 
 function clamp(v: number, lo: number, hi: number): number {
-  return v < lo ? lo : v > hi ? hi : v;
+  return Math.min(Math.max(v, lo), hi);
 }
 
 /**

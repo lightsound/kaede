@@ -8,12 +8,8 @@
 // 組み込みサブコマンドと衝突するため使わない)。手順の全体は README の
 // 「デプロイ(公開手順)」を参照。
 //
-// スクリプトが `npm_execpath=` を空にしているのは alchemy ランチャーの
-// バグ回避: ランチャーは npm_execpath に "bun" が含まれると bun 経由の
-// 起動と判定するが、pnpm run 経由ではこの値が pnpm 本体のパスになり、
-// 例えば /home/ubuntu/... の「ubuntu」が誤マッチして存在しない bun を
-// spawn しようとする(beta.79 の bin/cli.js でも未修正を確認)。環境変数の
-// 設定は Windows の cmd.exe でも動くよう cross-env 経由にしている。
+// スクリプトの環境変数(ALCHEMY_PROFILE)は、Windows の cmd.exe でも動くよう
+// cross-env 経由で設定している。
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
@@ -75,9 +71,6 @@ const workerNameSlug = (stage: string): string => {
 const stagedName = (stage: string, prodName: string): string =>
   stage === 'prod' ? prodName : `${prodName}-${workerNameSlug(stage)}`;
 
-// fallow の alchemy プラグイン(3.34+)はこのファイルをエントリにするが、alchemy CLI が
-// 読む default export(Stack)は消費者として数えない。includeEntryExports で拾われるため抑止する。
-// fallow-ignore-next-line unused-export -- alchemy CLI がこの default export を読み込んで実行する
 export default Alchemy.Stack(
   'kaede',
   {
