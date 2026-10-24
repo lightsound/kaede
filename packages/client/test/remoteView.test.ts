@@ -205,6 +205,7 @@ describe('createRemoteViews', () => {
   function render(views: ReturnType<typeof createRemoteViews>, nowMs: number) {
     const drawn: {
       id: string;
+      name: string;
       status: string | undefined;
       zone: string | undefined;
       gesture: string | undefined;
@@ -215,6 +216,7 @@ describe('createRemoteViews', () => {
     views.renderFrame(nowMs, (id, l, x, y) =>
       drawn.push({
         id,
+        name: l.name,
         status: l.status,
         zone: l.zone,
         gesture: l.gesture,
@@ -261,50 +263,68 @@ describe('createRemoteViews', () => {
     expect(render(jittered, 540)[0].x).toBeCloseTo(render(steady, 540)[0].x, 5);
   });
 
-  it('carries the recorded status into draw() and follows setStatus updates', () => {
+  it('carries the recorded status into draw() and follows status patches', () => {
     const views = createRemoteViews();
     views.record('a', label('A', '🟢 もくもく'), row(0, 0), 40);
     expect(render(views, 240)[0].status).toBe('🟢 もくもく');
-    views.setStatus('a', '🔴 取り込み中', 'busy');
+    views.patchLabel('a', { status: '🔴 取り込み中', availability: 'busy' });
     expect(render(views, 250)[0].status).toBe('🔴 取り込み中');
-    views.setStatus('a', undefined, undefined);
+    views.patchLabel('a', { status: undefined, availability: undefined });
     expect(render(views, 260)[0].status).toBeUndefined();
-    // A view that does not exist is skipped, not created (the setName rule).
-    views.setStatus('ghost', '🟡 離席', 'away');
-    expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
   });
 
-  it('carries the recorded gesture into draw() and follows setGesture updates', () => {
+  it('carries the recorded gesture into draw() and follows gesture patches', () => {
     const views = createRemoteViews();
     views.record('a', { ...label('A'), gesture: 'sit' }, row(0, 0), 40);
     expect(render(views, 240)[0].gesture).toBe('sit');
-    views.setGesture('a', 'dance');
+    views.patchLabel('a', { gesture: 'dance' });
     expect(render(views, 250)[0].gesture).toBe('dance');
     // The server clears the row on movement; the delete must clear the pose.
-    views.setGesture('a', undefined);
+    views.patchLabel('a', { gesture: undefined });
     expect(render(views, 260)[0].gesture).toBeUndefined();
-    // A view that does not exist is skipped, not created (the setName rule).
-    views.setGesture('ghost', 'sleep');
-    expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
   });
 
-  it('carries availability through setStatus for the derived poses', () => {
+  it('carries availability through a status patch for the derived poses', () => {
     const views = createRemoteViews();
     views.record('a', label('A'), row(0, 0), 40);
-    views.setStatus('a', '🟡 離席', 'away');
+    views.patchLabel('a', { status: '🟡 離席', availability: 'away' });
     expect(render(views, 250)[0].availability).toBe('away');
   });
 
-  it('carries the recorded zone tag into draw() and follows setZone updates', () => {
+  it('carries the recorded zone tag into draw() and follows zone patches', () => {
     const views = createRemoteViews();
     views.record('a', label('A', undefined, '📍 会議室A'), row(0, 0), 40);
     expect(render(views, 240)[0].zone).toBe('📍 会議室A');
-    views.setZone('a', '📍 会議室B');
+    views.patchLabel('a', { zone: '📍 会議室B' });
     expect(render(views, 250)[0].zone).toBe('📍 会議室B');
-    views.setZone('a', undefined);
+    views.patchLabel('a', { zone: undefined });
     expect(render(views, 260)[0].zone).toBeUndefined();
-    // A view that does not exist is skipped, not created (the setName rule).
-    views.setZone('ghost', '📍 会議室A');
+  });
+
+  it('renames through a patch and keeps every field the patch leaves out', () => {
+    const views = createRemoteViews();
+    const full = {
+      name: 'A',
+      status: '🟢 もくもく',
+      zone: '📍 会議室A',
+      gesture: 'sit',
+      availability: 'online',
+    };
+    views.record('a', full, row(0, 0), 40);
+    views.patchLabel('a', { name: 'B' });
+    expect(render(views, 250)[0]).toMatchObject({ ...full, name: 'B' });
+    // An explicit undefined clears that field only.
+    views.patchLabel('a', { zone: undefined });
+    expect(render(views, 260)[0]).toMatchObject({ ...full, name: 'B', zone: undefined });
+  });
+
+  it('ignores a patch for a view that does not exist', () => {
+    const views = createRemoteViews();
+    views.record('a', label('A'), row(0, 0), 40);
+    views.patchLabel('ghost', { name: 'G' });
+    views.patchLabel('ghost', { status: '🟡 離席', availability: 'away' });
+    views.patchLabel('ghost', { gesture: 'sleep' });
+    views.patchLabel('ghost', { zone: '📍 会議室A' });
     expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
   });
 

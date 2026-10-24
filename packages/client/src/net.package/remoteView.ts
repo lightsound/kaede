@@ -1,5 +1,5 @@
 import { type Facing, GRAVITY, INTERP_DELAY_MS, MAX_FALL_SPEED, toFacing } from '@kaede/shared';
-import type { PlayerLabel } from '../game.package';
+import type { PlayerLabel, PlayerLabelPatch } from '../game.package';
 import {
   correctionOffset,
   decayOffset,
@@ -22,10 +22,10 @@ export interface Snapshot extends HermitePoint {
 }
 
 /**
- * Per-remote render state: the display attributes (name and composed
- * status line), the snapshot buffer, plus the smoothing carry (the
- * decaying error offset and the previous rendered position used to detect
- * target discontinuities).
+ * Per-remote render state: the display attributes (the PlayerLabel that
+ * record() and patchLabel keep current), the snapshot buffer, plus the
+ * smoothing carry (the decaying error offset and the previous rendered
+ * position used to detect target discontinuities).
  */
 interface RemoteView {
   label: PlayerLabel;
@@ -95,51 +95,19 @@ export function createRemoteViews() {
   }
 
   /**
-   * Renames an existing view (the player_name row changed without the hot
-   * row moving). A view that does not exist yet is skipped, not created: the
-   * next record() call supplies the current name anyway, and a snapshot-less
-   * view would only make renderFrame skip it.
+   * Updates some of an existing view's display attributes when their row
+   * changes without the hot row moving: a rename (player_name), a status
+   * (player_status), a state gesture (normally struck standing still; the
+   * server clears the row on movement), or a zone tag (group_member — e.g.
+   * an admin edited the zone under a standing player). Fields left out of
+   * `patch` keep their value. A view that does
+   * not exist yet is skipped, not created: the next record() call supplies
+   * the current attributes anyway, and a snapshot-less view would only make
+   * renderFrame skip it.
    */
-  function setName(idHex: string, name: string): void {
+  function patchLabel(idHex: string, patch: PlayerLabelPatch): void {
     const view = views.get(idHex);
-    if (view) view.label = { ...view.label, name };
-  }
-
-  /**
-   * Updates an existing view's status line (a player_status row changed
-   * without the hot row moving). Skipped like setName while the view does
-   * not exist: the next record() call supplies the current status anyway.
-   */
-  function setStatus(
-    idHex: string,
-    status: string | undefined,
-    availability: string | undefined,
-  ): void {
-    const view = views.get(idHex);
-    if (view) view.label = { ...view.label, status, availability };
-  }
-
-  /**
-   * Updates an existing view's state-gesture directive (a gesture row
-   * changed without the hot row moving — the normal case: gestures are
-   * struck standing still, and the server clears the row on movement).
-   * Skipped like setName while the view does not exist: the next record()
-   * call supplies the cached gesture anyway.
-   */
-  function setGesture(idHex: string, gesture: string | undefined): void {
-    const view = views.get(idHex);
-    if (view) view.label = { ...view.label, gesture };
-  }
-
-  /**
-   * Updates an existing view's zone occupancy tag (a group_member row
-   * changed without the hot row moving — e.g. an admin edited the zone
-   * under a standing player). Skipped like setName while the view does not
-   * exist: the next record() call supplies the current tag anyway.
-   */
-  function setZone(idHex: string, zone: string | undefined): void {
-    const view = views.get(idHex);
-    if (view) view.label = { ...view.label, zone };
+    if (view) view.label = { ...view.label, ...patch };
   }
 
   function remove(idHex: string): void {
@@ -186,7 +154,7 @@ export function createRemoteViews() {
     }
   }
 
-  return { record, setName, setStatus, setGesture, setZone, remove, clear, renderFrame };
+  return { record, patchLabel, remove, clear, renderFrame };
 }
 
 /** Euclidean distance between two points. */
