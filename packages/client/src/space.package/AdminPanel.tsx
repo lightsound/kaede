@@ -2,24 +2,20 @@
 import type { MemberAction, MemberStatus } from '@kaede/shared';
 import type { CSSProperties } from 'react';
 import type { SpaceMemberView, ZoneAdminView } from '../net.package';
-import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
+import { UI_PANEL_STYLE } from '../theme';
 import { AnnouncePanel } from './AnnouncePanel';
 import { panelButtonStyle, panelHeadingStyle, panelRowStyle } from './panelChrome';
 import { type ZoneActions, ZonePanel } from './ZonePanel';
 
 const panelStyle: CSSProperties = {
+  ...UI_PANEL_STYLE,
+  padding: '10px 12px',
   position: 'absolute',
   top: 56,
   right: 12,
   width: 280,
   maxHeight: '70vh',
   overflowY: 'auto',
-  padding: '10px 12px',
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  color: UI_TEXT_COLOR,
-  font: UI_FONT,
 };
 
 /** A member row pushes its actions to the right edge, unlike a form row. */

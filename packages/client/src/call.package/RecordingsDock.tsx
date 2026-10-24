@@ -4,9 +4,8 @@ import type { RecordingFile, RecordingLabelView } from '../net.package';
 import {
   UI_BUTTON_BG,
   UI_ERROR_COLOR,
-  UI_FONT,
   UI_GOLD_BORDER,
-  UI_PANEL_BG,
+  UI_STACKED_PANEL_STYLE,
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
@@ -15,18 +14,10 @@ import { blurringClick } from '../ui.package';
 // space-level archive, not something you do from where you stand (the
 // bottom-left column is the standing-context controls).
 const dockStyle: CSSProperties = {
+  ...UI_STACKED_PANEL_STYLE,
   position: 'absolute',
   top: 12,
   left: 12,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  padding: '6px 8px',
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  font: UI_FONT,
-  color: UI_TEXT_COLOR,
   maxWidth: 460,
   maxHeight: '60vh',
   overflowY: 'auto',

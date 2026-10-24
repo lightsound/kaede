@@ -81,3 +81,33 @@ test('チャットが相手のログと吹き出しに届き、返信で会話�
   await contextA.close();
   await contextB.close();
 });
+
+/**
+ * The client-side mirror of the chat rate limit (chatAllowance.ts, wired in
+ * ChatPanel): sending faster than the server's bucket refills is held in
+ * the client with the rate-limit notice, and the held draft stays in the
+ * input instead of being cleared. Playwright types far faster than the
+ * 1 msg/s refill, so the burst runs out within a few sends whatever the
+ * runner's speed; the cap only bounds a broken mirror.
+ */
+test('チャットを速く送り続けるとクライアント側で止まり、止めた下書きは入力に残る', async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await enterWorld(page);
+
+  const notice = page.getByText('送信が速すぎます。少し待ってから送ってください');
+  const nonce = Date.now();
+  let held: string | undefined;
+  for (let i = 1; i <= 20 && held === undefined; i++) {
+    const text = `連投 ${nonce} ${i}`;
+    await sendChat(page, text);
+    if (await notice.isVisible()) held = text;
+  }
+
+  expect(held).toBeDefined();
+  await expect(page.getByLabel('チャット入力')).toHaveValue(held ?? '');
+
+  await context.close();
+});

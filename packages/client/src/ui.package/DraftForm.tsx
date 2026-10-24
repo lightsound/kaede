@@ -57,7 +57,7 @@ export function DraftForm({
   buttonLabel: string;
   /** Whether an accepted submit clears the draft. */
   clearOnSubmit: boolean;
-  /** The form row's layout and chrome (position, panel background). */
+  /** The form row's layout, plus the panel chrome when the form is the whole panel (rename). */
   formStyle: CSSProperties;
   /** Validates and dispatches the draft; a returned string shows as the error. */
   submit: (draft: string) => string | undefined;

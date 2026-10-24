@@ -1,11 +1,10 @@
-// fallow-ignore-file coverage-gaps -- a React chat panel; needs a DOM, and no DOM test environment is configured. The validation and rate rules it relies on are normalizeChatText / evaluateChatSend, unit-tested in @kaede/shared
+// fallow-ignore-file coverage-gaps -- a React chat panel; needs a DOM, and no DOM test environment is configured. The validation and rate rules it relies on are normalizeChatText / evaluateChatSend, unit-tested in @kaede/shared; the allowance mirror over them is chatAllowance.ts (unit-tested)
 import {
   CHAT_SCOPE_SPACE,
   CHAT_TEXT_MAX_LENGTH,
   type ChatDraftPlan,
   type ChatDraftRejectReason,
   type ChatScope,
-  evaluateChatSend,
   fallbackChatScope,
   GESTURE_LABELS,
   GESTURES,
@@ -14,7 +13,7 @@ import {
   REACTION_EMOJIS,
   type ReactionEmoji,
 } from '@kaede/shared';
-import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { type ChatEntryView, type ChatLog, type ChatScopeView, chatEntryKey } from '../net.package';
 import { NotificationControl } from '../notify.package';
 import {
@@ -25,10 +24,11 @@ import {
   UI_GOLD,
   UI_GOLD_BORDER,
   UI_GOLD_BORDER_SOFT,
-  UI_PANEL_BG,
+  UI_STACKED_PANEL_STYLE,
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
+import { chargeSend, FRESH_ALLOWANCE, refundRefused } from './chatAllowance';
 
 const REJECT_MESSAGES: Record<ChatDraftRejectReason, string> = {
   empty: 'メッセージを入力してください',
@@ -50,19 +50,12 @@ const SCOPE_LOST_MESSAGE =
   '選択していた送信先が無くなったため送信していません。送信先を確認してください';
 
 const panelStyle: CSSProperties = {
+  ...UI_STACKED_PANEL_STYLE,
+  padding: 8,
   position: 'absolute',
   bottom: 12,
   right: 12,
   width: 300,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  padding: 8,
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  font: UI_FONT,
-  color: UI_TEXT_COLOR,
 };
 
 const logStyle: CSSProperties = {
@@ -81,7 +74,7 @@ const formStyle: CSSProperties = {
   gap: 6,
 };
 
-const reactionRowStyle: CSSProperties = {
+const paletteRowStyle: CSSProperties = {
   display: 'flex',
   gap: 4,
 };
@@ -251,47 +244,32 @@ function ScopeRow({
 }
 
 /**
- * The reaction palette row (ROADMAP Phase 2): one button per palette emoji,
- * sitting between the log and the input row so the input stays where the
- * chat habit expects it (the bottom line). Gated exactly like the chat
- * input — sending needs a player row to react from. Each click blurs its
- * button (blurringClick — see its comment for the keyboard reasons).
- *
- * No client-side bucket mirror and no refusal notice, unlike the message
- * form: a reaction is a fire-and-forget gesture with no draft to lose, so
- * a burst-exceeding click simply not appearing is feedback enough (the
- * server refusal stays loud in the reducer log).
+ * What one palette row offers: its items, and how each item's button
+ * reads. The accessible name is what the specs find the buttons by.
  */
-function ReactionRow({
-  disabled,
-  onSendReaction,
-}: {
-  disabled: boolean;
-  onSendReaction: (emoji: ReactionEmoji) => void;
-}) {
-  return (
-    <div style={reactionRowStyle}>
-      {REACTION_EMOJIS.map((emoji) => (
-        <button
-          key={emoji}
-          type="button"
-          style={reactionButtonStyle}
-          aria-label={`リアクション ${emoji}`}
-          disabled={disabled}
-          onClick={blurringClick(() => onSendReaction(emoji))}
-        >
-          {emoji}
-        </button>
-      ))}
-    </div>
-  );
+interface Palette<T extends string> {
+  items: readonly T[];
+  buttonStyle: CSSProperties;
+  ariaLabel: (item: T) => string;
+  label: (item: T) => string;
 }
 
 /**
- * The gesture palette row (Phase 5 ①c): one button per pose gesture,
- * riding under the reaction row — the same fire-and-forget contract
- * (no mirror, no refusal notice; the pose appearing on the avatar IS the
- * feedback, and moving cancels it server-side). Sitting or sleeping ends
+ * The reaction palette (ROADMAP Phase 2): one button per palette emoji. A
+ * burst-exceeding click simply not appearing is feedback enough (the
+ * server refusal stays loud in the reducer log).
+ */
+const REACTION_PALETTE: Palette<ReactionEmoji> = {
+  items: REACTION_EMOJIS,
+  buttonStyle: reactionButtonStyle,
+  ariaLabel: (emoji) => `リアクション ${emoji}`,
+  label: (emoji) => emoji,
+};
+
+/**
+ * The gesture palette (Phase 5 ①c): one button per pose gesture, riding
+ * under the reaction row. The pose appearing on the avatar IS the
+ * feedback, and moving cancels it server-side. Sitting or sleeping ends
  * by walking; the buttons stay enabled while posed, so re-striking or
  * switching gestures is one click. play_gesture('') — standing up
  * without moving — deliberately has no button here: a tap of any arrow
@@ -299,25 +277,44 @@ function ReactionRow({
  * space on the rare case until real demand shows up (the reducer keeps
  * the clear path so adding one later is UI-only).
  */
-function GestureRow({
+const GESTURE_PALETTE: Palette<GestureKind> = {
+  items: GESTURES,
+  buttonStyle: gestureButtonStyle,
+  ariaLabel: (gesture) => `ジェスチャー ${GESTURE_LABELS[gesture]}`,
+  label: (gesture) => GESTURE_LABELS[gesture],
+};
+
+/**
+ * One palette row (the reactions, and the gestures under them), sitting
+ * between the log and the input row so the input stays where the chat
+ * habit expects it (the bottom line). Gated exactly like the chat input —
+ * sending needs a player row to speak from. Each click blurs its button
+ * (blurringClick — see its comment for the keyboard reasons).
+ *
+ * No client-side bucket mirror and no refusal notice, unlike the message
+ * form: a palette press is fire-and-forget, with no draft to lose.
+ */
+function PaletteRow<T extends string>({
+  palette,
   disabled,
-  onPlayGesture,
+  onPick,
 }: {
+  palette: Palette<T>;
   disabled: boolean;
-  onPlayGesture: (gesture: GestureKind) => void;
+  onPick: (item: T) => void;
 }) {
   return (
-    <div style={reactionRowStyle}>
-      {GESTURES.map((gesture) => (
+    <div style={paletteRowStyle}>
+      {palette.items.map((item) => (
         <button
-          key={gesture}
+          key={item}
           type="button"
-          style={gestureButtonStyle}
-          aria-label={`ジェスチャー ${GESTURE_LABELS[gesture]}`}
+          style={palette.buttonStyle}
+          aria-label={palette.ariaLabel(item)}
           disabled={disabled}
-          onClick={blurringClick(() => onPlayGesture(gesture))}
+          onClick={blurringClick(() => onPick(item))}
         >
-          {GESTURE_LABELS[gesture]}
+          {palette.label(item)}
         </button>
       ))}
     </div>
@@ -334,22 +331,6 @@ function placeholderFor(scopes: ChatScopeView, scope: ChatScope): string {
 }
 
 /**
- * Hands the charged marker back to the allowance mirror when a send comes
- * back refused. Called during render, so consuming the marker is what makes
- * a replayed render safe: it can never refund twice.
- */
-function refundChargedAllowance(
-  sendRefused: boolean,
-  allowanceRef: RefObject<bigint>,
-  chargedFromRef: RefObject<bigint | undefined>,
-): void {
-  if (sendRefused && chargedFromRef.current !== undefined) {
-    allowanceRef.current = chargedFromRef.current;
-    chargedFromRef.current = undefined;
-  }
-}
-
-/**
  * The chat panel (ROADMAP Phase 2): the recent log — public messages and
  * this client's DMs merged — over the reaction palette and an input row.
  * An INPUT element on purpose — game.package/input.ts ignores key events
@@ -361,9 +342,8 @@ function refundChargedAllowance(
  * that resolves to nobody never falls back to the public chat. An accepted
  * plan goes to `onSendPlan` whole — which reducer it means is the network
  * layer's dispatch (Net.sendPlanned), not this panel's. Rate limiting
- * mirrors the server's ONE chat bucket for both kinds (DMs charge
- * chat_guard server-side precisely so this mirror stays honest); the
- * mirror is UX — the server's verdict is the authority. The draft clears
+ * mirrors the server's ONE chat bucket for both kinds (chatAllowance.ts);
+ * the mirror is UX — the server's verdict is the authority. The draft clears
  * on submit — the success signal is the message coming back through the
  * subscription into the log, and the rare send lost to a disconnect racing
  * the submit is cheaper to retype than every sent message is to clear by
@@ -398,20 +378,14 @@ export function ChatPanel({
   planDraft: (draft: string) => ChatDraftPlan;
   /** Dispatches one accepted plan under the picked scope — see Net.sendPlanned. */
   onSendPlan: (plan: PlannedSend, scope: ChatScope) => void;
-  /** Sends one palette-emoji reaction (fire-and-forget; see ReactionRow). */
+  /** Sends one palette-emoji reaction (fire-and-forget; see REACTION_PALETTE). */
   onSendReaction: (emoji: ReactionEmoji) => void;
-  /** Plays one pose gesture (fire-and-forget; see GestureRow — ①c). */
+  /** Plays one pose gesture (fire-and-forget; see GESTURE_PALETTE — ①c). */
   onPlayGesture: (gesture: GestureKind) => void;
 }) {
-  // The client-side mirror of the server's chat_guard token bucket.
-  const allowanceRef = useRef(0n);
-  // The marker as it stood before the most recent charge, so a refusal can
-  // hand that token back — the authority never charged the refused send, and
-  // without the rollback the mirror would rate-limit retries the server
-  // would accept. One level of undo only: refusals cannot say WHICH send
-  // failed, so with several in flight the mirror may still run one token
-  // ahead — it is a UX aid, and the server verdict stays the authority.
-  const chargedFromRef = useRef<bigint>(undefined);
+  // The client-side mirror of the server's chat_guard token bucket, with
+  // its one-level refund on refusal (chatAllowance.ts).
+  const allowanceRef = useRef(FRESH_ALLOWANCE);
   const logRef = useRef<HTMLDivElement>(null);
   // What the next send addresses. Held as a raw pick and reconciled against
   // the offered list on every render (fallbackChatScope): the offered list
@@ -436,7 +410,7 @@ export function ChatPanel({
   // Refund the mirrored token when a send comes back refused — during render
   // (the when-a-prop-changes pattern), so the rollback lands in the same
   // commit that paints the refusal notice.
-  refundChargedAllowance(sendRefused, allowanceRef, chargedFromRef);
+  allowanceRef.current = refundRefused(allowanceRef.current, sendRefused);
 
   // The one gate for both send controls: the reaction row and the message
   // form need the same player row to speak from.
@@ -466,13 +440,9 @@ export function ChatPanel({
     if (plan.kind === 'refused') return REJECT_MESSAGES[plan.reason];
     const staleRefusal = refuseStaleScope(plan);
     if (staleRefusal !== undefined) return staleRefusal;
-    const send = evaluateChatSend({
-      allowanceMicros: allowanceRef.current,
-      nowMicros: BigInt(Date.now()) * 1000n,
-    });
-    if (!send.ok) return RATE_LIMITED_MESSAGE;
-    chargedFromRef.current = allowanceRef.current;
-    allowanceRef.current = send.allowanceMicros;
+    const charged = chargeSend(allowanceRef.current, BigInt(Date.now()) * 1000n);
+    if (charged === undefined) return RATE_LIMITED_MESSAGE;
+    allowanceRef.current = charged;
     onSendPlan(plan, scope);
     return undefined;
   };
@@ -491,8 +461,8 @@ export function ChatPanel({
           ))}
         </div>
       )}
-      <ReactionRow disabled={disabled} onSendReaction={onSendReaction} />
-      <GestureRow disabled={disabled} onPlayGesture={onPlayGesture} />
+      <PaletteRow palette={REACTION_PALETTE} disabled={disabled} onPick={onSendReaction} />
+      <PaletteRow palette={GESTURE_PALETTE} disabled={disabled} onPick={onPlayGesture} />
       <ScopeRow scopes={scopes} selected={scope} disabled={disabled} onSelect={setPicked} />
       <DraftForm
         disabled={disabled}
