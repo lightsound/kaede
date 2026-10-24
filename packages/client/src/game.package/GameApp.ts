@@ -1,15 +1,10 @@
 // fallow-ignore-file coverage-gaps -- drives PixiJS against a live WebGL canvas; the logic worth testing is extracted into camera.ts, input.ts, and smoothing.ts, which are unit-tested
 import {
-  type CollisionMap,
   DEFAULT_MAP_ID,
   DT,
-  type E2EHook,
-  type E2EPlayerSnapshot,
   type Facing,
   mapFor,
-  PLAYER_HALF_H,
   type PlayerState,
-  type Portal,
   packInput,
   type ReactionEmoji,
   SPAWN_X,
@@ -18,53 +13,18 @@ import {
   WORLD_HEIGHT,
   type WorldMap,
 } from '@kaede/shared';
-import { Application, Assets, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Application, Container } from 'pixi.js';
 import { correctionOffset, decayOffset, type Vec2 } from '../smoothing.package';
-import avatarManifest from './avatar/manifest.json';
-import standUrl from './avatar/stand.png';
-import walkAUrl from './avatar/walk-a.png';
-import walkBUrl from './avatar/walk-b.png';
-import walkCUrl from './avatar/walk-c.png';
-import walkDUrl from './avatar/walk-d.png';
-import danceAUrl from './avatar-gestures/dance-a.png';
-import danceBUrl from './avatar-gestures/dance-b.png';
-import danceCUrl from './avatar-gestures/dance-c.png';
-import danceDUrl from './avatar-gestures/dance-d.png';
-import danceEUrl from './avatar-gestures/dance-e.png';
-import danceFUrl from './avatar-gestures/dance-f.png';
-import danceGUrl from './avatar-gestures/dance-g.png';
-import danceHUrl from './avatar-gestures/dance-h.png';
-import gestureManifest from './avatar-gestures/manifest.json';
-import sitUrl from './avatar-gestures/sit.png';
-import sleepUrl from './avatar-gestures/sleep.png';
-import waveUrl from './avatar-gestures/wave.png';
-import {
-  type AvatarSheetTextures,
-  type AvatarView,
-  createAvatarView,
-  type GestureKit,
-  type GestureSheetTextures,
-  type HeadgearDisplay,
-  type HeldItemDisplay,
-} from './avatarView';
-import {
-  type Bubble,
-  createBubble,
-  createReactionBadge,
-  expireOverhead,
-  layoutReaction,
-  type ReactionBadge,
-  showBubble,
-  showReaction,
-  visibleBubbleText,
-  visibleReactionEmoji,
-} from './bubble';
+import { loadBaseSheet, loadGestureKit } from './avatarAssets';
+import { expireOverhead, layoutReaction, showBubble, showReaction } from './bubble';
 import { cameraOffset, parseZoomOverride } from './camera';
+import { resolveAvatarLook } from './dressUpPreview';
+import { createE2EHook, sampleFpsWindow } from './e2eHook';
 import { createHuddleLayer, type HuddleRender } from './huddleLayer';
 import { createInput } from './input';
-import headphonesUrl from './items/headphones/headphones.png';
-import headphonesManifest from './items/headphones/manifest.json';
+import { buildMapLayer } from './mapLayer';
 import { mergeInputs } from './mergeInputs';
+import { createPlayerView, type PlayerView, poseDirective, setUnderline } from './playerView';
 import { createTouchControls } from './touchControls';
 import { renderZoneLayer, type ZoneRender } from './zoneLayer';
 
@@ -79,11 +39,6 @@ const VIEW_H = WORLD_HEIGHT;
 const MAX_FRAME = 0.25;
 
 const BG_COLOR = 0x10131b;
-const SOLID_COLOR = 0x3b4252;
-const PLATFORM_COLOR = 0x5e81ac; // one-way platforms: lighter than solid ground
-const ROPE_COLOR = 0xd8a657;
-const ROPE_WIDTH = 4;
-const NAME_STYLE = new TextStyle({ fill: 0xffffff, fontSize: 13, fontFamily: 'sans-serif' });
 
 /**
  * The per-player display attributes rendered alongside the pose: the name
@@ -113,18 +68,6 @@ export interface PlayerLabel {
    * headphones overlay — no schema of their own (①c 設計).
    */
   availability: string | undefined;
-}
-
-/**
- * The standing-still pose an avatar should hold: the explicit gesture
- * outranks the status-derived sleep (the ①c priority rule; rendered
- * motion outranks both, inside avatarView).
- */
-function poseDirective(
-  gesture: string | undefined,
-  availability: string | undefined,
-): string | undefined {
-  return gesture ?? (availability === 'away' ? 'sleep' : undefined);
 }
 
 export interface GameApp {
@@ -222,225 +165,6 @@ export interface GameApp {
   showRemoteWave(id: string): void;
 }
 
-interface PlayerView {
-  root: Container;
-  /**
-   * The avatar visual, wrapped in a Container kept at unit scale so the
-   * facing flip stays `body.scale.x = facing` — the sprite inside carries
-   * its own scale and ground anchor, and mixing the two on one node would
-   * make the flip erase them.
-   */
-  body: Container;
-  /** The pose-frame avatar inside `body` (Phase 5 増分①a); animated every frame. */
-  avatar: AvatarView;
-  label: Text;
-  /** The status line under the avatar, hidden while the status is default (setUnderline). */
-  status: Text;
-  /** The zone occupancy tag under the status line, hidden while in no zone (setUnderline). */
-  zone: Text;
-  /** The speech bubble, hidden until this player chats (showBubble). */
-  bubble: Bubble;
-  /** The emoji reaction, hidden until this player reacts (showReaction). */
-  reaction: ReactionBadge;
-}
-
-// The status line (ROADMAP Phase 2): dimmer and smaller than the name so
-// the name stays the anchor. It sits UNDER the avatar — the slot above the
-// name belongs to the transient overheads (bubble, reaction stack), and a
-// persistent line there would collide with both.
-const STATUS_STYLE = new TextStyle({ fill: 0xb8c2d9, fontSize: 11, fontFamily: 'sans-serif' });
-
-// The zone occupancy tag (ROADMAP Phase 3 増分②): the status line's twin,
-// one slot further down so the two persistent lines never collide.
-const ZONE_TAG_STYLE = new TextStyle({ fill: 0x9ccfd8, fontSize: 11, fontFamily: 'sans-serif' });
-
-/**
- * One persistent under-avatar line (the status at PLAYER_HALF_H+4, the
- * zone tag at +20), parked at `y` and hidden until a value arrives.
- */
-function createUnderline(style: TextStyle, y: number): Text {
-  const line = new Text({ text: '', style });
-  line.anchor.set(0.5, 0);
-  line.y = y;
-  line.visible = false;
-  return line;
-}
-
-/**
- * A labelled avatar view parented under the world container. The visual is
- * the pose-frame avatar (Phase 5 増分①a — one AI-generated character as a
- * stand + walk pose sheet, frame-swapped by avatarView.ts), grounded on the
- * physics AABB: the AABB stays the authority for collision and every
- * overlay anchor, and the frames are only how that box looks. Local and
- * remote players share the one character — the name label and the camera
- * (which follows the local player) are what tell people apart until the
- * dress-up increments.
- */
-function createPlayerView(
-  world: Container,
-  name: string,
-  sheet: AvatarSheetTextures,
-  held?: HeldItemDisplay,
-  kit?: GestureKit,
-): PlayerView {
-  const root = new Container();
-  const body = new Container();
-  const avatar = createAvatarView(body, sheet, held, kit);
-  const label = new Text({ text: name, style: NAME_STYLE });
-  label.anchor.set(0.5, 1);
-  label.y = -PLAYER_HALF_H - 4;
-  const status = createUnderline(STATUS_STYLE, PLAYER_HALF_H + 4);
-  const zone = createUnderline(ZONE_TAG_STYLE, PLAYER_HALF_H + 20);
-  const bubble = createBubble();
-  const reaction = createReactionBadge();
-  root.addChild(body, label, status, zone, bubble.root, reaction.root);
-  world.addChild(root);
-  return { root, body, avatar, label, status, zone, bubble, reaction };
-}
-
-/**
- * Applies one composed persistent line (statusLabel / zoneTagLabel in
- * @kaede/shared, undefined while default) to its Text. Unlike the
- * transient overheads there is no timer: both lines are state, visible
- * until the next row event replaces them.
- */
-function setUnderline(line: Text, value: string | undefined): void {
-  line.visible = value !== undefined;
-  line.text = value ?? '';
-}
-
-/**
- * One player as the e2e hook reports it: rendered pose plus any live
- * overheads and the status line. The optional fields are guarded
- * assignments (one uniform shape) rather than conditional spreads — three
- * spread ternaries put this uncovered function over the CRAP budget
- * fallow enforces.
- */
-function playerSnapshot(view: PlayerView): E2EPlayerSnapshot {
-  const snap: E2EPlayerSnapshot = {
-    x: view.root.x,
-    y: view.root.y,
-    name: view.label.text,
-    pose: view.avatar.pose(),
-  };
-  const bubble = visibleBubbleText(view.bubble);
-  if (bubble !== undefined) snap.bubble = bubble;
-  const reaction = visibleReactionEmoji(view.reaction);
-  if (reaction !== undefined) snap.reaction = reaction;
-  return withUnderlineSnapshots(view, snap);
-}
-
-/**
- * Folds the persistent under-avatar lines (status, zone tag) into one
- * snapshot. Split from playerSnapshot to keep both uncovered functions
- * under the CRAP budget fallow enforces (the reason playerSnapshot avoids
- * conditional spreads, continued).
- */
-function withUnderlineSnapshots(view: PlayerView, snap: E2EPlayerSnapshot): E2EPlayerSnapshot {
-  if (view.status.visible) snap.status = view.status.text;
-  if (view.zone.visible) snap.zone = view.zone.text;
-  return snap;
-}
-
-/**
- * Test affordance for the Playwright smoke tests — see E2EHook in
- * @kaede/shared for the contract and who consumes it. Constructed only in dev
- * builds, so the build-time DEV constant lets production bundles drop the
- * hook code entirely.
- */
-/** Rolling Pixi FPS over ~500ms. Production builds compile this to `return 0`. */
-function sampleFpsWindow(
-  now: number,
-  state: { frames: number; windowStart: number; fps: number },
-): number {
-  if (!import.meta.env.DEV) return 0;
-  state.frames += 1;
-  if (now - state.windowStart < 500) return state.fps;
-  state.fps = (state.frames * 1000) / (now - state.windowStart);
-  state.frames = 0;
-  state.windowStart = now;
-  return state.fps;
-}
-
-function createE2EHook(
-  local: PlayerView,
-  remotes: Map<string, PlayerView>,
-  currentTick: () => number,
-  currentMapId: () => number,
-  currentZones: () => readonly ZoneRender[],
-  currentHuddles: () => readonly { label: string; closed: boolean; members: number }[],
-  currentFps: () => number,
-): E2EHook | undefined {
-  if (!import.meta.env.DEV) return undefined;
-  return {
-    snapshot: () => ({
-      tick: currentTick(),
-      mapId: currentMapId(),
-      local: playerSnapshot(local),
-      remotePlayers: [...remotes.values()].map(playerSnapshot),
-      zones: currentZones().map((zone) => ({ label: zone.label, closed: zone.closed })),
-      huddles: [...currentHuddles()],
-      fps: currentFps(),
-    }),
-  };
-}
-
-const PORTAL_COLOR = 0x7aa2f7;
-// The portal's destination and the up-key affordance, hovering over the gate.
-const PORTAL_LABEL_STYLE = new TextStyle({
-  fill: 0xbdd3ff,
-  fontSize: 12,
-  fontFamily: 'sans-serif',
-});
-
-/**
- * One portal's visuals: the glowing gate over its trigger area and the
- * destination label (with the up-key affordance) above it.
- */
-function drawPortal(layer: Container, portal: Portal): void {
-  const { rect } = portal;
-  const gate = new Graphics()
-    .ellipse(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w / 2, rect.h / 2)
-    .fill({ color: PORTAL_COLOR, alpha: 0.35 })
-    .ellipse(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w / 3, rect.h / 2.6)
-    .fill({ color: PORTAL_COLOR, alpha: 0.5 });
-  const label = new Text({ text: `↑ ${portal.label}`, style: PORTAL_LABEL_STYLE });
-  label.anchor.set(0.5, 1);
-  label.position.set(rect.x + rect.w / 2, rect.y - 6);
-  layer.addChild(gate, label);
-}
-
-/**
- * The collision geometry as one Graphics: ropes hang behind everything;
- * platforms and the ground slab draw on top of them.
- */
-function drawCollision(collision: CollisionMap): Graphics {
-  const gfx = new Graphics();
-  for (const r of collision.ropes) {
-    // Visual span: rope.top down to rope.bottom + PLAYER_HALF_H (the lower end
-    // rests on a floor, while rope.bottom bounds the climbing player's center).
-    gfx
-      .rect(r.x - ROPE_WIDTH / 2, r.top, ROPE_WIDTH, r.bottom + PLAYER_HALF_H - r.top)
-      .fill(ROPE_COLOR);
-  }
-  for (const s of collision.solids) gfx.rect(s.x, s.y, s.w, s.h).fill(SOLID_COLOR);
-  for (const p of collision.platforms) gfx.rect(p.x, p.y, p.w, p.h).fill(PLATFORM_COLOR);
-  return gfx;
-}
-
-/**
- * The static map visuals as one Container: the collision geometry with the
- * portals glowing on top. Added to the world before any player view, so
- * the whole map renders behind players — and rebuilt whole by setMap, so a
- * map switch cannot leak the previous map's shapes.
- */
-function buildMapLayer(map: WorldMap): Container {
-  const layer = new Container();
-  layer.addChild(drawCollision(map.collision));
-  for (const portal of map.portals) drawPortal(layer, portal);
-  return layer;
-}
-
 /** The rendering resolution: the device pixel ratio, or 1 where unreported. */
 function renderResolution(): number {
   return window.devicePixelRatio || 1;
@@ -454,282 +178,6 @@ function renderResolution(): number {
 function devZoomFactor(): number {
   if (!import.meta.env.DEV) return 1;
   return parseZoomOverride(window.location.search) ?? 1;
-}
-
-/**
- * What the dev-only dress-up preview swaps in (ROADMAP ①b 着手順⑵ — the
- * layer-composition verification spike): an outfit-swapped pose sheet
- * and/or a held item pinned to the hand anchors. 増分①e replaces this with
- * real selection UI + persistence; until then the preview exists so the
- * generated assets can be verified walking in the actual game.
- */
-interface DressUpPreview {
-  sheet?: AvatarSheetTextures;
-  held?: HeldItemDisplay;
-}
-
-/**
- * Loads the ①c gesture assets every player view shares: the gesture pose
- * sheet (avatar.boy-basic-gestures) and the busy headgear with its
- * per-pose neck anchors — the base manifest's for the walk poses, the
- * gesture manifest's for the gesture poses (the base wins the shared
- * `stand`: it is the frame actually rendered). Bundled statically like the
- * base sheet: gestures are a core feature on every avatar, not a preview.
- */
-async function loadGestureKit(): Promise<GestureKit> {
-  const [sit, sleep, wave, a, b, c, d, e, f, g, h, headphones] = await Promise.all(
-    [
-      sitUrl,
-      sleepUrl,
-      waveUrl,
-      danceAUrl,
-      danceBUrl,
-      danceCUrl,
-      danceDUrl,
-      danceEUrl,
-      danceFUrl,
-      danceGUrl,
-      danceHUrl,
-      headphonesUrl,
-    ].map((url) => Assets.load(url)),
-  );
-  const sheet: GestureSheetTextures = {
-    sit,
-    sleep,
-    wave,
-    'dance-a': a,
-    'dance-b': b,
-    'dance-c': c,
-    'dance-d': d,
-    'dance-e': e,
-    'dance-f': f,
-    'dance-g': g,
-    'dance-h': h,
-  };
-  const necks: Record<string, readonly number[]> = {};
-  for (const [pose, meta] of Object.entries(gestureManifest.poses)) {
-    necks[pose] = meta.anchors.neck;
-  }
-  for (const [pose, meta] of Object.entries(avatarManifest.poses)) {
-    necks[pose] = meta.anchors.neck;
-  }
-  const headgear: HeadgearDisplay = {
-    texture: headphones,
-    grip: headphonesManifest.frame.anchors.grip,
-    necks,
-  };
-  return { sheet, headgear };
-}
-
-/** Builds one pose sheet from its five loaded frame modules, in pose order. */
-async function sheetFromModules(mods: { default: string }[]): Promise<AvatarSheetTextures> {
-  const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
-    mods.map((m) => Assets.load(m.default)),
-  );
-  return { stand, 'walk-a': walkA, 'walk-b': walkB, 'walk-c': walkC, 'walk-d': walkD };
-}
-
-/** The red-hoodie outfit sheet (avatar.boy-basic-red), loaded on demand. */
-async function loadRedSheet(): Promise<AvatarSheetTextures> {
-  return sheetFromModules(
-    await Promise.all([
-      import('./avatar-red/stand.png'),
-      import('./avatar-red/walk-a.png'),
-      import('./avatar-red/walk-b.png'),
-      import('./avatar-red/walk-c.png'),
-      import('./avatar-red/walk-d.png'),
-    ]),
-  );
-}
-
-/**
- * How an item is carried (its manifest's carryStyle — owner direction
- * 2026-08-12): light items ride the one-hand carry sheets, heavy/bulky
- * ones the two-arm front carry. Which pose sheet a body wears and whether
- * an item can ride it stay one decision (the ①b(a) verdict); the style
- * only picks WHICH carry family.
- */
-type CarryStyle = 'light' | 'heavy';
-
-/**
- * The carry-pose sheet variants: a stable hand anchor through the whole
- * stride — the ①b(a) verdict that a statically anchored item cannot ride
- * the swing-walk sheets (see HeldItemDisplay). Vite needs literal import()
- * paths, hence the four-thunk table.
- */
-const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> = {
-  'heavy-base': () =>
-    Promise.all([
-      import('./avatar-carry/stand.png'),
-      import('./avatar-carry/walk-a.png'),
-      import('./avatar-carry/walk-b.png'),
-      import('./avatar-carry/walk-c.png'),
-      import('./avatar-carry/walk-d.png'),
-    ]),
-  'heavy-red': () =>
-    Promise.all([
-      import('./avatar-red-carry/stand.png'),
-      import('./avatar-red-carry/walk-a.png'),
-      import('./avatar-red-carry/walk-b.png'),
-      import('./avatar-red-carry/walk-c.png'),
-      import('./avatar-red-carry/walk-d.png'),
-    ]),
-  'light-base': () =>
-    Promise.all([
-      import('./avatar-carry-light/stand.png'),
-      import('./avatar-carry-light/walk-a.png'),
-      import('./avatar-carry-light/walk-b.png'),
-      import('./avatar-carry-light/walk-c.png'),
-      import('./avatar-carry-light/walk-d.png'),
-    ]),
-  'light-red': () =>
-    Promise.all([
-      import('./avatar-red-carry-light/stand.png'),
-      import('./avatar-red-carry-light/walk-a.png'),
-      import('./avatar-red-carry-light/walk-b.png'),
-      import('./avatar-red-carry-light/walk-c.png'),
-      import('./avatar-red-carry-light/walk-d.png'),
-    ]),
-};
-
-/** The carry sheets' manifest + hand cutout, keyed like CARRY_SHEET_LOADERS. */
-const CARRY_KIT_LOADERS = {
-  'heavy-base': () =>
-    Promise.all([import('./avatar-carry/manifest.json'), import('./avatar-carry/hand.png')]),
-  'heavy-red': () =>
-    Promise.all([
-      import('./avatar-red-carry/manifest.json'),
-      import('./avatar-red-carry/hand.png'),
-    ]),
-  'light-base': () =>
-    Promise.all([
-      import('./avatar-carry-light/manifest.json'),
-      import('./avatar-carry-light/hand.png'),
-    ]),
-  'light-red': () =>
-    Promise.all([
-      import('./avatar-red-carry-light/manifest.json'),
-      import('./avatar-red-carry-light/hand.png'),
-    ]),
-};
-
-async function loadCarrySheet(style: CarryStyle, redOutfit: boolean): Promise<AvatarSheetTextures> {
-  return sheetFromModules(await CARRY_SHEET_LOADERS[`${style}-${redOutfit ? 'red' : 'base'}`]());
-}
-
-/**
- * The held-item catalog of the dev preview (the ①b(a) genericity check:
- * one resting rule, five item classes — compact, flat, long-shafted,
- * plush, and a spear taller than the character). Thunks so production
- * DCE drops the chunks with the rest of the preview.
- */
-const HELD_ITEM_LOADERS = {
-  mug: () =>
-    Promise.all([
-      import('./items/coffee-mug/manifest.json'),
-      import('./items/coffee-mug/coffee-mug.png'),
-    ]),
-  notebook: () =>
-    Promise.all([
-      import('./items/notebook/manifest.json'),
-      import('./items/notebook/notebook.png'),
-    ]),
-  umbrella: () =>
-    Promise.all([
-      import('./items/umbrella/manifest.json'),
-      import('./items/umbrella/umbrella.png'),
-    ]),
-  plush: () =>
-    Promise.all([
-      import('./items/plush-bear/manifest.json'),
-      import('./items/plush-bear/plush-bear.png'),
-    ]),
-  spear: () =>
-    Promise.all([import('./items/spear/manifest.json'), import('./items/spear/spear.png')]),
-};
-
-/**
- * One held item, manifest-driven: the item's grip point comes from its own
- * manifest, and the per-pose hand anchors from the manifest of the carry
- * sheet being worn — the anchors are frame coordinates, so they must match
- * the frames actually rendered.
- */
-async function loadHeldItem(
-  loader: (typeof HELD_ITEM_LOADERS)[keyof typeof HELD_ITEM_LOADERS],
-  style: CarryStyle,
-  redOutfit: boolean,
-): Promise<HeldItemDisplay> {
-  const [[itemManifest, itemUrl], [bodyManifest, handUrl]] = await Promise.all([
-    loader(),
-    CARRY_KIT_LOADERS[`${style}-${redOutfit ? 'red' : 'base'}`](),
-  ]);
-  const [texture, handTexture] = await Promise.all([
-    Assets.load(itemUrl.default),
-    Assets.load(handUrl.default),
-  ]);
-  const poses = bodyManifest.default.poses;
-  return {
-    texture,
-    grip: itemManifest.default.frame.anchors.grip,
-    hands: {
-      stand: poses.stand.anchors.hand,
-      'walk-a': poses['walk-a'].anchors.hand,
-      'walk-b': poses['walk-b'].anchors.hand,
-      'walk-c': poses['walk-c'].anchors.hand,
-      'walk-d': poses['walk-d'].anchors.hand,
-    },
-    hand: { texture: handTexture, grip: bodyManifest.default.handLayer.anchors.grip },
-  };
-}
-
-/**
- * Reads the dev-only preview selection from the URL (?outfit=red,
- * ?held=mug|notebook|umbrella|plush|spear). Dev builds only — the callers
- * gate on import.meta.env.DEV, so production bundles drop this code and
- * the preview assets with it. Holding an item swaps the whole body sheet
- * to the carry variant: which pose sheet a body wears and whether an item
- * can ride it are one decision (the ①b(a) verdict), not two independent
- * toggles.
- */
-/**
- * The carrying look for one held item: the item's own manifest names its
- * carry style (light = one-hand, heavy = two-arm front), and the body
- * swaps to that carry family. Split from loadDressUpPreview to keep both
- * under the CRAP complexity budget (the createGameApp precedent).
- */
-async function loadHeldPreview(
-  loader: (typeof HELD_ITEM_LOADERS)[keyof typeof HELD_ITEM_LOADERS],
-  redOutfit: boolean,
-): Promise<DressUpPreview> {
-  const [itemManifest] = await loader();
-  const style: CarryStyle = itemManifest.default.carryStyle === 'light' ? 'light' : 'heavy';
-  return {
-    sheet: await loadCarrySheet(style, redOutfit),
-    held: await loadHeldItem(loader, style, redOutfit),
-  };
-}
-
-async function loadDressUpPreview(): Promise<DressUpPreview> {
-  const params = new URLSearchParams(window.location.search);
-  const redOutfit = params.get('outfit') === 'red';
-  const held = params.get('held');
-  const loader = held ? HELD_ITEM_LOADERS[held as keyof typeof HELD_ITEM_LOADERS] : undefined;
-  if (loader) return loadHeldPreview(loader, redOutfit);
-  if (redOutfit) return { sheet: await loadRedSheet() };
-  return {};
-}
-
-/**
- * The avatar look every player view in this tab renders: the base sheet,
- * unless the dev-only dress-up preview (the ①b(a) spike) swaps in an
- * outfit sheet and/or a held item. A helper rather than inline branches so
- * createGameApp stays under the CRAP complexity budget.
- */
-async function resolveAvatarLook(
-  base: AvatarSheetTextures,
-): Promise<{ sheet: AvatarSheetTextures; held?: HeldItemDisplay }> {
-  const preview: DressUpPreview = import.meta.env.DEV ? await loadDressUpPreview() : {};
-  return { sheet: preview.sheet ?? base, held: preview.held };
 }
 
 export async function createGameApp(host: HTMLElement): Promise<GameApp> {
@@ -749,19 +197,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   });
   host.appendChild(app.canvas);
 
-  // The one pose-frame sheet every player view shares (bundled by Vite, so
-  // the hashed URLs bust caches with the assets). Loaded before any view
-  // exists — createGameApp is already the async init path.
-  const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
-    [standUrl, walkAUrl, walkBUrl, walkCUrl, walkDUrl].map((url) => Assets.load(url)),
-  );
-  const baseSheet: AvatarSheetTextures = {
-    stand,
-    'walk-a': walkA,
-    'walk-b': walkB,
-    'walk-c': walkC,
-    'walk-d': walkD,
-  };
+  // The one pose-frame sheet every player view shares (avatarAssets.ts),
+  // loaded before any view exists — createGameApp is already the async
+  // init path.
+  const baseSheet = await loadBaseSheet();
   // Dev-only dress-up preview (the ①b(a) spike): swapped sheet / held item
   // for EVERY view in this tab — selection is per-player only from 増分①e.
   const { sheet: avatarSheet, held: heldItem } = await resolveAvatarLook(baseSheet);
