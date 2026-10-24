@@ -18,15 +18,15 @@ Do not add gameplay features (combat, mobs, XP); that direction was abandoned (P
 
 ### SpacetimeDB CLI binary name and version
 
-The pinned CLI (`v2.10.1`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`.
+The pinned CLI (`v2.13.0`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`.
 
 **Check `spacetimedb-cli --version` before publishing or generating**: fresh VMs
 have shipped with older versions preinstalled (2.7.0 was observed), and
 generating bindings with them drifts from the committed ones, which fails CI's
-drift check. If the binary is missing or not 2.10.1, reinstall it:
+drift check. If the binary is missing or not 2.13.0, reinstall it:
 
 ```sh
-curl -sSfL -o /tmp/spacetime.tar.gz "https://github.com/clockworklabs/SpacetimeDB/releases/download/v2.10.1/spacetime-x86_64-unknown-linux-gnu.tar.gz"
+curl -sSfL -o /tmp/spacetime.tar.gz "https://github.com/clockworklabs/SpacetimeDB/releases/download/v2.13.0/spacetime-x86_64-unknown-linux-gnu.tar.gz"
 mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/bin"
 ```
 
@@ -47,7 +47,7 @@ sql, logs, reducer calls). The repo-root `.mcp.json` wires it for Claude Code,
 honoring the repo's `SPACETIME_BIN` convention (this VM needs
 `SPACETIME_BIN=spacetimedb-cli` — same as e2e). It respects `spacetime.json`'s
 `server` (local by default since CLI 2.10.1), and Maincloud exposes the same
-tools at `/v1/mcp` since 2.10.0 (currently reporting host version 2.10.1).
+tools at `/v1/mcp` since 2.10.0 (currently reporting host version 2.13.0).
 With shell access, plain `spacetimedb-cli sql kaede "..."` / `logs kaede`
 covers the same ground — the MCP server is for MCP-only clients.
 
