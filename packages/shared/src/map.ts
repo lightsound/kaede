@@ -117,11 +117,12 @@ const PLAZA: WorldMap = {
 };
 
 /**
- * Map 1 「会議フロア」— the second map (ROADMAP Phase 3 複数マップ), where
- * the meeting-room zones of the next increment will live. Deliberately
- * compact (half the plaza's width): a meeting floor is a destination, not a
- * promenade, and the size difference itself is data for the friction
- * experiment. Its return portal is at the arrival point (see PLAZA).
+ * Map 1 「会議フロア」— the second map (ROADMAP Phase 3 複数マップ), meant
+ * for the meeting-room zones (増分②; create_zone places one on whatever
+ * map the admin stands on). Deliberately compact (half the plaza's width):
+ * a meeting floor is a destination, not a promenade, and the size
+ * difference itself is data for the friction experiment. Its return portal
+ * is at the arrival point (see PLAZA).
  */
 const MEETING_FLOOR: WorldMap = {
   id: 1,

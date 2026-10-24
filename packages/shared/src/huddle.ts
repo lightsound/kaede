@@ -174,8 +174,8 @@ export function findJoinableHuddleId(
 /**
  * The huddle's canvas label — zoneLabel's sibling. 💬 marks an open
  * standing conversation; 🤫 is the クローズド「コソコソ話している」
- * rendering (in this increment a visual distinction only, like the zone
- * lock: the chat invisibility it promises is 増分④'s RLS work).
+ * rendering — like the zone lock, it marks a group whose chat reaches its
+ * members only (増分④'s chat_message filters in the server's tables.ts).
  */
 export function huddleLabel(name: string, closed: boolean): string {
   return closed ? `🤫 ${name}` : `💬 ${name}`;

@@ -29,10 +29,11 @@ import type { Rect } from './types';
 
 /**
  * The `kind` value of a placed meeting-room zone. 増分③の立ち話グループ is
- * planned as another kind on the same table ('huddle') — an additive row
- * vocabulary, no schema change. Builds narrow on exact match (the
- * availability / reaction-palette precedent), so rows of a kind this build
- * does not know render as nothing rather than as a broken zone.
+ * the other kind on the same table ('huddle', GROUP_KIND_HUDDLE in
+ * huddle.ts) — an additive row vocabulary, no schema change. Builds narrow
+ * on exact match (the availability / reaction-palette precedent), so rows
+ * of a kind this build does not know render as nothing rather than as a
+ * broken zone.
  */
 export const GROUP_KIND_ZONE = 'zone';
 
@@ -202,8 +203,8 @@ export function evaluateZoneSpec(request: { name: string; w: number; h: number }
 /**
  * The zone's canvas label, composed here so the renderer and the e2e specs
  * use exactly the same string (the statusLabel precedent). The lock marks a
- * closed zone — in this increment a rendering distinction only; the chat
- * invisibility it promises lands with 増分④.
+ * closed zone, whose group chat reaches its members only (増分④'s
+ * chat_message filters in the server's tables.ts).
  */
 export function zoneLabel(name: string, closed: boolean): string {
   return closed ? `🔒 ${name}` : name;
