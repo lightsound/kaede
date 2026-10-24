@@ -3,7 +3,9 @@ import type { Identity } from 'spacetimedb';
 /**
  * A generated table handle's row events, typed by its row. Every table this
  * client subscribes to has a primary key, so every handle has update events
- * too.
+ * too. A table without them (no primary key, or an event table) would need
+ * this widened, never a raw registration on its handle: that would skip the
+ * staleness guard.
  */
 export interface RowEvents<Row> {
   onInsert(handler: (ctx: unknown, row: Row) => void): unknown;
@@ -26,24 +28,26 @@ export interface RowHandlers<Row> {
  * feed registers through it, so two rules live here once instead of in each
  * handler:
  *
- * - Staleness: no handler runs once the session is stale. The socket closes
- *   asynchronously, so a disposed or replaced session's row events can
- *   still be delivered (an idle resume can start a new session while the
- *   old socket is closing), and acting on one would drive a destroyed scene
- *   or write to consumers the replacement session now owns. A feed's
- *   synchronous seeding needs no guard: wireSession runs in one go, and
- *   neither dispose() nor a newer connect can interleave with it.
+ * - Staleness: nothing registered through `on`, `onAny` or `live` runs once
+ *   the session is stale. The socket closes asynchronously, so a disposed or
+ *   replaced session's row events can still be delivered (an idle resume can
+ *   start a new session while the old socket is closing), and acting on one
+ *   would drive a destroyed scene or write to consumers the replacement
+ *   session now owns. A feed's synchronous seeding needs no guard:
+ *   wireSession runs in one go, and neither dispose() nor a newer connect
+ *   can interleave with it.
  * - Ownership: a row is either this client's own (the local avatar and the
  *   own-name / own-status consumers) or a remote player's, keyed by
- *   identity hex like the remote views.
+ *   identity hex like the remote views. `isOwn` and `route` only decide
+ *   that; they are called from inside guarded handlers.
  */
 export interface SessionRows {
   /** Registers `handlers` on `table`'s row events; none runs once stale. */
   on<Row>(table: RowEvents<Row>, handlers: RowHandlers<Row>): void;
   /**
-   * Registers one argument-less handler on every row event of `table` — for
-   * feeds that re-project a whole view from the cache on any change rather
-   * than acting on the individual row.
+   * Registers `handler` on every row event of `table`, called with no
+   * arguments — for feeds that re-project a whole view from the cache on any
+   * change rather than acting on the individual row.
    */
   onAny(table: RowEvents<unknown>, handler: () => void): void;
   /**
@@ -83,7 +87,12 @@ export function sessionRows(myIdHex: string, isStale: () => boolean): SessionRow
   };
   return {
     on,
-    onAny: (table, handler) => on(table, { insert: handler, update: handler, delete: handler }),
+    onAny(table, handler) {
+      // Called bare, so the row never lands in a parameter the handler might
+      // grow later (its type, () => void, would not catch that).
+      const run = (): void => handler();
+      on(table, { insert: run, update: run, delete: run });
+    },
     live: (callback) => () => {
       if (!isStale()) callback();
     },

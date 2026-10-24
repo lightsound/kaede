@@ -318,11 +318,12 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // (handleOwnRow and the player_name insert event both publish the same
   // name) is deduplicated here instead of leaning on React's same-value
   // bailout. `undefined` means "no own row is known".
-  // Caller contract: any caller on an async event path must be
-  // dispose-guarded at its entry point (see the row handlers in
-  // playerFeed.ts, and admission.ts's rerun, which reaches it through
-  // enterWorld) — dispose() itself is the only caller that may run after
-  // the flip, and only with `undefined`.
+  // Caller contract: any caller on an async event path must run behind the
+  // session's staleness guard, i.e. from a callback registered through
+  // SessionRows (on / onAny / live): playerFeed.ts's row handlers, and
+  // admission.ts's onAny(reevaluate), which reaches it through enterWorld.
+  // dispose() itself is the only caller that may run after the flip, and
+  // only with `undefined`.
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
     if (name === lastOwnName) return;

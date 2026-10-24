@@ -99,7 +99,22 @@ describe('SessionRows.onAny', () => {
     table.delete({ id: 1 });
     state.stale = true;
     table.insert({ id: 2 });
+    table.update({ id: 2 }, { id: 2 });
+    table.delete({ id: 2 });
     expect(runs).toBe(3);
+  });
+
+  it('calls the handler with no arguments, whatever the event carries', () => {
+    const { rows } = session();
+    const table = fakeTable();
+    const calls: unknown[][] = [];
+    rows.onAny(table.table, (...args: unknown[]) => {
+      calls.push(args);
+    });
+    table.insert({ id: 1 });
+    table.update({ id: 1 }, { id: 2 });
+    table.delete({ id: 2 });
+    expect(calls).toEqual([[], [], []]);
   });
 });
 
