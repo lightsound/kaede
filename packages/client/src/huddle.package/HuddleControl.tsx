@@ -16,13 +16,8 @@ const NAME_ERRORS: Record<HuddleNameRejectReason, string> = {
   'forbidden-characters': '使えない文字が含まれています',
 };
 
-// Stacked above the status panel in the profile corner (bottom-left): a
-// huddle is something you do from where your avatar stands, like a status
-// is something you claim about yourself — not part of the chat panel.
+// Where the panel sits is App's: the bottom-left column (leftColumn.ts).
 const panelStyle: CSSProperties = {
-  position: 'absolute',
-  bottom: 148,
-  left: 12,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,

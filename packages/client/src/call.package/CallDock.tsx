@@ -31,13 +31,8 @@ function warmInCallPanel(): void {
   void import('./InCallPanel');
 }
 
-// Stacked above the huddle control in the profile corner (bottom-left):
-// a call is something you do from the conversation group you stand in,
-// like the huddle is something you found where you stand.
+// Where the dock sits is App's: the bottom-left column (leftColumn.ts).
 const panelStyle: CSSProperties = {
-  position: 'absolute',
-  bottom: 220,
-  left: 12,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,

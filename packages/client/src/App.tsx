@@ -1,9 +1,10 @@
-// fallow-ignore-file coverage-gaps -- a React component that lays the surfaces out over the canvas and renders connection status; needs a DOM, and no DOM test environment is configured. Its commands to the net stack are netActions.ts, and the gates it renders by sit with their surfaces (call.package's recordingAccess.ts, space.package's applyPrompt.ts); all three are unit-tested
-import { type CSSProperties, useContext } from 'react';
+// fallow-ignore-file coverage-gaps -- a React component that lays the surfaces out over the canvas and renders connection status; needs a DOM, and no DOM test environment is configured. Its commands to the net stack are netActions.ts, the bottom-left column's bands are leftColumn.ts, and the gates it renders by sit with their surfaces (call.package's recordingAccess.ts, space.package's applyPrompt.ts); all four are unit-tested
+import { type CSSProperties, type ReactNode, useContext } from 'react';
 import { AuthSessionContext } from './auth.package';
 import { approvedMember, CallDock, RecordingsDock, recordingsDockVisible } from './call.package';
 import { ChatPanel } from './chat.package';
 import { HuddleControl } from './huddle.package';
+import { bandBottom, COLUMN_INSET, type ColumnControl } from './leftColumn';
 import type { ConnectionStatus } from './net.package';
 import { DevPerfHud } from './perf.package';
 import { RenameControl } from './profile.package';
@@ -32,6 +33,15 @@ const overlayStyle: CSSProperties = {
   whiteSpace: 'nowrap',
   pointerEvents: 'none',
 };
+
+/** Pins one control to its band of the bottom-left column (leftColumn.ts). */
+function ColumnSlot({ control, children }: { control: ColumnControl; children: ReactNode }) {
+  return (
+    <div style={{ position: 'absolute', left: COLUMN_INSET, bottom: bandBottom(control) }}>
+      {children}
+    </div>
+  );
+}
 
 export function App() {
   const session = useContext(AuthSessionContext);
@@ -81,36 +91,44 @@ export function App() {
         prompt={prompt}
         onApply={actions.applyForMembership}
       />
-      <RenameControl
-        connected={connected}
-        ownName={ownName}
-        self={self}
-        onSubmit={actions.setDisplayName}
-      />
-      <StatusControl
-        connected={connected}
-        ownName={ownName}
-        status={ownStatus}
-        onSetAvailability={actions.setAvailability}
-        onSetStatusText={actions.setStatusText}
-      />
-      <CallDock
-        connected={connected}
-        member={approvedMember(session.signedIn, space)}
-        ownGroupId={ownGroupId}
-        net={actions.call}
-      />
+      <ColumnSlot control="name">
+        <RenameControl
+          connected={connected}
+          ownName={ownName}
+          self={self}
+          onSubmit={actions.setDisplayName}
+        />
+      </ColumnSlot>
+      <ColumnSlot control="status">
+        <StatusControl
+          connected={connected}
+          ownName={ownName}
+          status={ownStatus}
+          onSetAvailability={actions.setAvailability}
+          onSetStatusText={actions.setStatusText}
+        />
+      </ColumnSlot>
+      <ColumnSlot control="call">
+        <CallDock
+          connected={connected}
+          member={approvedMember(session.signedIn, space)}
+          ownGroupId={ownGroupId}
+          net={actions.call}
+        />
+      </ColumnSlot>
       <RecordingsDock
         visible={recordingsDockVisible(connected, session.signedIn, space)}
         net={actions.call}
         labels={recordings}
       />
-      <HuddleControl
-        connected={connected}
-        ownName={ownName}
-        view={huddle}
-        actions={actions.huddle}
-      />
+      <ColumnSlot control="huddle">
+        <HuddleControl
+          connected={connected}
+          ownName={ownName}
+          view={huddle}
+          actions={actions.huddle}
+        />
+      </ColumnSlot>
       <AdminSection
         connected={connected}
         space={space}

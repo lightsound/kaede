@@ -14,10 +14,8 @@ const REJECT_MESSAGES: Record<DisplayNameRejectReason, string> = {
   'forbidden-characters': '使用できない文字が含まれています',
 };
 
+// Where the form sits is App's: the bottom-left column (leftColumn.ts).
 const formStyle: CSSProperties = {
-  position: 'absolute',
-  bottom: 12,
-  left: 12,
   display: 'flex',
   alignItems: 'center',
   gap: 6,

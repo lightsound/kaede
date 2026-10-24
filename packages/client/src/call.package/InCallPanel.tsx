@@ -32,11 +32,9 @@ import type { Meeting } from './realtimekit';
 // from CallDock so idle players never download the kit (hls.js,
 // @floating-ui, hark, lodash-es, …).
 
-// Sized for the dock over the 2D world (部品を組む — not fullscreen).
+// Sized for the dock over the 2D world (部品を組む — not fullscreen); where
+// the dock sits is App's: the bottom-left column (leftColumn.ts).
 const inCallStyle: CSSProperties = {
-  position: 'absolute',
-  bottom: 220,
-  left: 12,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,

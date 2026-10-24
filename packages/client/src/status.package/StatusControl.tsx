@@ -25,13 +25,8 @@ const REJECT_MESSAGES: Record<StatusTextRejectReason, string> = {
   'forbidden-characters': '使用できない文字が含まれています',
 };
 
-// Stacked just above the rename form (bottom-left, the profile corner):
-// the status is a statement about yourself, like the name — not part of
-// the conversation panel on the right.
+// Where the panel sits is App's: the bottom-left column (leftColumn.ts).
 const panelStyle: CSSProperties = {
-  position: 'absolute',
-  bottom: 58,
-  left: 12,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
