@@ -76,11 +76,12 @@ export function cachedZoneTag(c: DbConnection, identity: Identity): string | und
 }
 
 /**
- * Wires one session's zone rendering (the conversation_group rows), the
- * occupancy tags (the group_member rows) and the admin panel's zone list.
- * Both tables are display-only state (the statusFeed rule: seed AND row
- * events display), and all writes are server-side — the occupancy pass and
- * the admin reducers — so this feed only ever projects the cache.
+ * Wires one session's zone and huddle rendering (the conversation_group
+ * rows), the occupancy tags (the group_member rows), the huddle control's
+ * view and the admin panel's zone list. Both tables are display-only state
+ * (the statusFeed rule: seed AND row events display), and all writes are
+ * server-side — the occupancy pass, the admin zone reducers and the huddle
+ * reducers — so this feed only ever projects the cache.
  *
  * `refresh()` re-projects everything for the current map; the session
  * calls it at entry and after every map switch (the zone layer and the

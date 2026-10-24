@@ -192,11 +192,12 @@ export const spacetimedb = schema({
   // keeps the VISION guardrail (conversation data stays inside the
   // organization it happened in) — the whole database is one org scope, and
   // per the scaling invariant no tenant/org column may appear here. The
-  // planned extensions are all additive: Phase 3 chat scopes append a
-  // scope discriminator + target column with defaults ('space'-scoped rows
-  // read as today's), and reactions reference `id` from their own table.
-  // DMs needed private delivery, so they landed in a table of their own —
-  // `dm_message` below, additively, exactly as planned here.
+  // planned extensions are all additive: the Phase 3 chat scopes appended a
+  // scope discriminator + target column with defaults (`scope` / `target`
+  // below; 'space'-scoped rows read as before), and message reactions will
+  // reference `id` from their own table. DMs needed private delivery, so
+  // they landed in a table of their own — `dm_message` below, additively,
+  // exactly as planned here.
   //
   // `senderName` snapshots the display name at send time because the
   // history outlives every other name source: player rows are swept ~10
@@ -205,12 +206,12 @@ export const spacetimedb = schema({
   // that a rename does not rewrite history — the IRC reading, accepted.
   // `sender` stays alongside for own-message styling and future moderation.
   //
-  // Visibility (an explicit decision, 2026-08-03 review): READING is gated
-  // only by holding a connection, like every public table (player
-  // positions, the member directory) — admission (guests_allowed, member
-  // status) gates writing, via send_chat_message. So a guest connected
-  // while guests are disabled, or a rejected/banned member, still receives
-  // the retained history and live messages. Accepted for the
+  // Visibility (an explicit decision, 2026-08-03 review): admission does
+  // not gate READING, like every public table (player positions, the
+  // member directory) — admission (guests_allowed, member status) gates
+  // writing, via send_chat_message. So a guest connected while guests are
+  // disabled, or a rejected/banned member, still receives the retained
+  // history and live messages. Accepted for the
   // single-community MVP: the SDK's row-level security
   // (clientVisibilityFilter.sql) cannot express the admission rule — the
   // guest default is "no space_member row AND guests_allowed (missing row
@@ -219,9 +220,10 @@ export const spacetimedb = schema({
   // guests off entirely. What the filter SQL CAN express is a per-row
   // sender/recipient rule, which is exactly how `dm_message` gets its
   // private delivery (verified locally and on Maincloud with non-owner
-  // connections, 2026-08-03). Revisit this table's read gate with the
-  // Phase 3 chat scopes: closed conversation groups need filtered reads
-  // anyway, so the mechanism is now proven and the design lands there.
+  // connections, 2026-08-03). The Phase 3 chat scopes (増分④) then put
+  // that mechanism on this table: a closed conversation group's rows reach
+  // its members only (the chat_message filters at the end of this file);
+  // every other row still reaches any connection.
   chatMessage: table(
     { name: 'chat_message', public: true },
     {
@@ -474,18 +476,18 @@ export const spacetimedb = schema({
   // membership table to filter visibility with.
   //
   // `closed` is the オープン/クローズド setting (VISION): whether the
-  // group's conversation is visible to non-members. In this increment it
-  // only changes the rendering (the zone's 🔒 label; the huddle's 🤫
-  // 「コソコソ話している」 look); the chat invisibility it promises is
-  // 増分④'s RLS work.
+  // group's conversation is visible to non-members. A closed group's chat
+  // reaches its members only (増分④'s chat_message filters below); on the
+  // canvas the group shows the zone's 🔒 label or the huddle's 🤫
+  // 「コソコソ話している」 look.
   //
-  // `mapId` is indexed: the server-side occupancy pass filters zones by the
-  // moving player's map inside movement reducers, and 増分④'s map-scoped
-  // subscriptions may filter on it (the ROADMAP AoI rule — filter columns
-  // carry indexes). Kind is deliberately NOT a fenced enum column: builds
-  // narrow by exact match (GROUP_KIND_ZONE / GROUP_KIND_HUDDLE), so rows of
-  // a newer kind render as nothing rather than breaking (the
-  // availability-vocabulary rule).
+  // `mapId` is indexed per the ROADMAP AoI rule (filter columns carry
+  // indexes), though nothing reads the index today: clients subscribe to
+  // the table whole (connection.ts in the client) and the occupancy pass
+  // scans its ZONE_MAX-bounded rows (zonesOnMap in occupancy.ts). Kind is
+  // deliberately NOT a fenced enum column: builds narrow by exact match
+  // (GROUP_KIND_ZONE / GROUP_KIND_HUDDLE), so rows of a newer kind render
+  // as nothing rather than breaking (the availability-vocabulary rule).
   //
   // No timestamp columns, deliberately: zone rows are admin-edited config
   // with no retention rule (bounded by ZONE_MAX, not by trimming), nothing
@@ -497,7 +499,7 @@ export const spacetimedb = schema({
     { name: 'conversation_group', public: true },
     {
       id: t.u64().primaryKey().autoInc(),
-      kind: t.string(), // GROUP_KIND_ZONE in @kaede/shared ('huddle' arrives with 増分③)
+      kind: t.string(), // GROUP_KIND_ZONE / GROUP_KIND_HUDDLE in @kaede/shared
       name: t.string(),
       closed: t.bool(),
       mapId: t.u32().index(),
@@ -805,9 +807,10 @@ export const dmMessageVisibility = spacetimedb.clientVisibilityFilter.sql(
 // (2026-08-05, packages/e2e chat-scope.spec.ts is its standing version).
 //
 // The closed flag is read LIVE off conversation_group rather than
-// snapshotted onto the message: flipping a zone or huddle to クローズド
-// hides its history immediately, and flipping back reveals it — which is
-// what "the group's setting" means to a member who toggles it mid-meeting.
+// snapshotted onto the message: flipping a zone to クローズド (update_zone;
+// a huddle's setting is fixed at create_huddle) hides its history
+// immediately, and flipping back reveals it — which is what "the group's
+// setting" means to a member who toggles it mid-meeting.
 // The consequence, accepted: a deleted group (delete_zone, or a huddle
 // losing its last member) leaves its closed rows joinable to nothing, so
 // they become invisible to everyone and expire with the global retention
