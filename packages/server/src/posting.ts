@@ -2,10 +2,11 @@
 
 // The posting reducers (ROADMAP Phase 2): what someone in the world says,
 // gestures or claims about themselves — the global-scope chat, the
-// @mention DMs, the emoji reactions and the manual status. Split from
-// reducers.ts (which keeps the world lifecycle, membership and settings)
-// because this section grows with every Phase 2/3 conversation feature
-// while depending on the lifecycle only through findAdmittedWorldRows.
+// @mention DMs, the emoji reactions and the manual status. Its own file
+// (not membership.ts, which keeps world entry, membership and the guest
+// setting) because this section grows with every Phase 2/3 conversation
+// feature while depending on the lifecycle only through
+// findAdmittedWorldRows.
 import {
   type Availability,
   CHAT_HISTORY_MAX,
@@ -30,14 +31,13 @@ import {
   statusViewOf,
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
+import { chargeSendAllowance, type SendGuardTable } from './sendAllowance';
 import { spacetimedb } from './tables';
 import {
   type Ctx,
-  chargeSendAllowance,
   findPostingSender,
   requireAdmin,
   type SenderIdentity,
-  type SendGuardTable,
   trimHistory,
   type WorldRows,
 } from './world';
@@ -45,8 +45,8 @@ import {
 /**
  * The shared preamble of the row-writing sends that need no sender rows
  * (reactions and the status columns): eligibility plus the rate charge
- * (chargeSendAllowance — moved to world.ts when enter_portal joined the
- * guarded reducers). False when the silent reclaim path refused — the
+ * (chargeSendAllowance — moved out of this file when enter_portal joined
+ * the guarded reducers). False when the silent reclaim path refused — the
  * caller must RETURN without writing (WorldRowsVerdict); every loud
  * refusal throws inside. send_chat_message keeps calling the pieces
  * itself: it needs the sender's rows (the name snapshot on the message),

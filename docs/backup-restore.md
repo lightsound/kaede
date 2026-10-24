@@ -65,7 +65,7 @@ Identity に戻る**。復旧が「データの再投入」ではなく「状態
 1. モジュールを publish し直す（CI の main デプロイ、または手動
    `spacetime publish kaede --server maincloud --yes`）。
    **データベースを削除→再作成した場合は identity が変わる**:
-   `packages/server/src/reducers.ts` の `PRODUCTION_DATABASE_IDENTITY`
+   `packages/server/src/connection.ts` の `PRODUCTION_DATABASE_IDENTITY`
    （issuer ゲート①の本番判定ピン）を新しい identity に**同じデプロイで**
    更新すること。古いままだと本番が非本番扱いになり、開発 Clerk issuer が
    member を鋳造できる状態（fail-open）に戻る — 検知は `onConnect` の

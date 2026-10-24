@@ -6,11 +6,15 @@ export default spacetimedb;
 
 // Only reducer files may be re-exported here: the host refuses an
 // entry-module export that is not a spacetime export, which is why the
-// lifecycle helpers both files build on live in world.ts (not re-exported).
+// helpers several reducer files build on live in modules that are never
+// re-exported (world.ts, occupancy.ts, sendAllowance.ts, account.ts,
+// provider.ts).
 export * from './calls';
+export * from './connection';
 export * from './huddles';
+export * from './membership';
+export * from './movement';
 export * from './posting';
-export * from './reducers';
 // The row-level-security filters are spacetime exports too: the host only
 // applies a filter that reaches it through the entry module. The four
 // chat_message filters are an allow-list, not four independent rules — see

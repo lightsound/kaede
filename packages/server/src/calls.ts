@@ -35,14 +35,9 @@ import {
   startCloudRecording,
   stopCloudRecording,
 } from './provider';
+import { chargeSendAllowance } from './sendAllowance';
 import { spacetimedb } from './tables';
-import {
-  type Ctx,
-  chargeSendAllowance,
-  findPostingSender,
-  membershipOf,
-  trimHistory,
-} from './world';
+import { type Ctx, findPostingSender, membershipOf, trimHistory } from './world';
 
 /**
  * Charges one call-flow send against call_guard — shared by every

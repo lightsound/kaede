@@ -20,8 +20,9 @@ import {
   ZONE_MAX,
 } from '@kaede/shared';
 import { SenderError, t } from 'spacetimedb/server';
+import { deleteGroupCall, recomputeZoneOccupancyOnMap } from './occupancy';
 import { spacetimedb } from './tables';
-import { type Ctx, deleteGroupCall, recomputeZoneOccupancyOnMap, requireAdmin } from './world';
+import { type Ctx, requireAdmin } from './world';
 
 /** The zone-kind group row `zoneId` names, or a loud refusal. */
 function requireZone(ctx: Ctx, zoneId: bigint, reducerName: string) {

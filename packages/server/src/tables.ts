@@ -108,7 +108,7 @@ export const spacetimedb = schema({
   //
   // The three player_* tables live and die together: join inserts all three
   // in one transaction and every removal path deletes all three (see
-  // removePlayer in reducers.ts), so a player row always has its name and
+  // removePlayer in world.ts), so a player row always has its name and
   // guard siblings.
   player: table(
     { name: 'player', public: true },
@@ -323,7 +323,7 @@ export const spacetimedb = schema({
   // every authoritative-position write path deletes the sender's row on
   // displacement — the accepted-batch replay and enter_portal, the same
   // places the group-occupancy pass hooks (clearGestureOnMove in
-  // world.ts). The cost is one PK lookup per accepted batch, only while
+  // movement.ts). The cost is one PK lookup per accepted batch, only while
   // a gesture row exists. `sentAt` exists for the reaction reason: a
   // repeat of the SAME gesture still changes the row, so it still fires
   // an update event (how a second wave re-plays); clients never compare
@@ -466,7 +466,7 @@ export const spacetimedb = schema({
   //   invariant for the row's life (teleporting off it is leaving — the
   //   keepsHuddleMembership rule), and its rows live exactly as long as
   //   they have members: every membership-removal path deletes a huddle
-  //   row that hits zero members (cleanupEmptyHuddle in world.ts), so no
+  //   row that hits zero members (cleanupEmptyHuddle in occupancy.ts), so no
   //   retention sweep is needed and one identity can keep at most one
   //   huddle alive.
   // 増分④'s chat scopes then reference `id` as their target regardless of
@@ -513,7 +513,7 @@ export const spacetimedb = schema({
   // precedent). Keyed by identity, so "one conversation group at a time"
   // is structural, not a rule someone must remember to enforce. Zone
   // membership is written ONLY by the server-side occupancy pass
-  // (syncGroupOccupancy in world.ts) — clients never name their zone, so
+  // (syncGroupOccupancy in occupancy.ts) — clients never name their zone, so
   // there is nothing to trust or rate-limit. Huddle membership (増分③) is
   // written by the huddle reducers (an explicit join is the point of a
   // 立ち話 — huddles.ts re-rules the geometry server-side and rate-limits
@@ -649,7 +649,7 @@ export const spacetimedb = schema({
   // call is live": nobody tracks who is inside the meeting yet (that is
   // the recording/presence increment's webhook work), so the row lives as
   // long as its GROUP does — delete_zone and cleanupEmptyHuddle delete it
-  // with the group row (deleteGroupCall in world.ts) — and re-joining an
+  // with the group row (deleteGroupCall in occupancy.ts) — and re-joining an
   // idle meeting is the provider's normal reuse, not a bug.
   //
   // The meeting id is the JOIN CAPABILITY on the read side: which
