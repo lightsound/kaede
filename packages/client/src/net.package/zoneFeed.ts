@@ -12,7 +12,7 @@ import {
 import type { Identity } from 'spacetimedb';
 import type { HuddleRender, ZoneRender } from '../game.package';
 import type { DbConnection } from '../module_bindings';
-import { onAnyRowEvent } from './rowEvents';
+import type { SessionRows } from './rowEvents';
 
 /**
  * One zone as the admin panel edits it (会議室ゾーンの管理 UI — ROADMAP
@@ -46,8 +46,6 @@ export interface HuddleView {
 
 /** What acting on zone and occupancy rows needs from the session that wires the feed. */
 export interface ZoneFeedHooks {
-  /** True once this session's events must be ignored (see wireSession). */
-  isStale(): boolean;
   /** The map whose zones the canvas currently renders. */
   currentMapId(): number;
   /** Replaces the rendered zone layer (already filtered to the current map). */
@@ -90,11 +88,10 @@ export function cachedZoneTag(c: DbConnection, identity: Identity): string | und
  */
 export function wireZones(
   c: DbConnection,
+  rows: SessionRows,
   myIdentity: Identity,
   hooks: ZoneFeedHooks,
 ): { refresh(): void } {
-  const myIdHex = myIdentity.toHexString();
-
   // The zone-kind rows in the shared deterministic order (sortedZoneRows —
   // the same order the server resolves overlap in).
   const zoneRows = () => sortedZoneRows(c.db.conversationGroup.iter());
@@ -128,9 +125,8 @@ export function wireZones(
           let includesLocal = false;
           for (const member of memberships) {
             if (member.groupId !== row.id) continue;
-            const idHex = member.identity.toHexString();
-            if (idHex === myIdHex) includesLocal = true;
-            else memberIds.push(idHex);
+            if (rows.isOwn(member.identity)) includesLocal = true;
+            else memberIds.push(member.identity.toHexString());
           }
           return {
             key: String(row.id),
@@ -212,12 +208,14 @@ export function wireZones(
     );
   };
 
-  const applyTag = (identity: Identity): void => {
-    const idHex = identity.toHexString();
-    const tag = cachedZoneTag(c, identity);
-    if (idHex === myIdHex) hooks.applyOwnZone(tag);
-    else hooks.applyRemoteZone(idHex, tag);
-  };
+  const showTag = (identity: Identity, tag: string | undefined): void =>
+    rows.route(
+      identity,
+      () => hooks.applyOwnZone(tag),
+      (idHex) => hooks.applyRemoteZone(idHex, tag),
+    );
+
+  const applyTag = (identity: Identity): void => showTag(identity, cachedZoneTag(c, identity));
 
   /** Re-derives every occupant's tag (a group rename/delete changes them all). */
   const applyAllTags = (): void => {
@@ -242,34 +240,21 @@ export function wireZones(
   // transaction (delete_zone), and the SDK applies the whole transaction
   // to the cache before firing callbacks — so applyAllTags never resolves
   // a dangling groupId here.
-  onAnyRowEvent(c.db.conversationGroup, () => {
-    if (hooks.isStale()) return;
-    refresh();
-  });
+  rows.onAny(c.db.conversationGroup, refresh);
 
   // Membership rows: one player's tag changes, and the huddle circle's
   // member set with it; DELETE must clear the tag explicitly (the
   // statusFeed onDelete rule — the owner may stay rendered while its row
   // goes).
-  c.db.groupMember.onInsert((_ctx, row) => {
-    if (hooks.isStale()) return;
-    applyTag(row.identity);
+  const applyMembership = (identity: Identity, tag: string | undefined): void => {
+    showTag(identity, tag);
     pushHuddles();
     publishHuddleView();
-  });
-  c.db.groupMember.onUpdate((_ctx, _old, row) => {
-    if (hooks.isStale()) return;
-    applyTag(row.identity);
-    pushHuddles();
-    publishHuddleView();
-  });
-  c.db.groupMember.onDelete((_ctx, row) => {
-    if (hooks.isStale()) return;
-    const idHex = row.identity.toHexString();
-    if (idHex === myIdHex) hooks.applyOwnZone(undefined);
-    else hooks.applyRemoteZone(idHex, undefined);
-    pushHuddles();
-    publishHuddleView();
+  };
+  rows.on(c.db.groupMember, {
+    insert: (row) => applyMembership(row.identity, cachedZoneTag(c, row.identity)),
+    update: (row) => applyMembership(row.identity, cachedZoneTag(c, row.identity)),
+    delete: (row) => applyMembership(row.identity, undefined),
   });
 
   // Player rows: the joinable verdict is a proximity test on the
@@ -277,10 +262,7 @@ export function wireZones(
   // circles themselves do NOT re-project here — the renderer follows the
   // sprites per frame; only the control's answer reads positions from the
   // cache. Deduplication keeps the per-batch cadence out of React.
-  onAnyRowEvent(c.db.player, () => {
-    if (hooks.isStale()) return;
-    publishHuddleView();
-  });
+  rows.onAny(c.db.player, publishHuddleView);
 
   refresh();
   return { refresh };

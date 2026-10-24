@@ -8,7 +8,7 @@ import {
 } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
-import { onAnyRowEvent } from './rowEvents';
+import type { SessionRows } from './rowEvents';
 
 /**
  * One scope the sender may pick right now (ROADMAP Phase 3 増分④): the
@@ -27,8 +27,6 @@ export type ChatScopeView = readonly ChatScopeOption[];
 
 /** What projecting the scope selector needs from the session that wires it. */
 export interface ChatScopeFeedHooks {
-  /** True once this session's events must be ignored (see wireSession). */
-  isStale(): boolean;
   /** Every change of the offered scopes, deduplicated by value. */
   onChatScopes(view: ChatScopeView): void;
 }
@@ -49,6 +47,7 @@ export interface ChatScopeFeedHooks {
  */
 export function wireChatScopes(
   c: DbConnection,
+  rows: SessionRows,
   myIdentity: Identity,
   hooks: ChatScopeFeedHooks,
 ): void {
@@ -93,13 +92,8 @@ export function wireChatScopes(
     hooks.onChatScopes(view);
   };
 
-  const publishUnlessStale = (): void => {
-    if (hooks.isStale()) return;
-    publish();
-  };
-
-  onAnyRowEvent(c.db.player, publishUnlessStale);
-  onAnyRowEvent(c.db.groupMember, publishUnlessStale);
-  onAnyRowEvent(c.db.conversationGroup, publishUnlessStale);
+  rows.onAny(c.db.player, publish);
+  rows.onAny(c.db.groupMember, publish);
+  rows.onAny(c.db.conversationGroup, publish);
   publish();
 }

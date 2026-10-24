@@ -1,5 +1,6 @@
 // fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the recording-label list; needs a running host. It carries no rules of its own — the rows are published verbatim, newest first
 import type { DbConnection } from '../module_bindings';
+import type { SessionRows } from './rowEvents';
 
 /**
  * One call_recording row as the 録画一覧 renders it (ROADMAP Phase 4
@@ -21,8 +22,6 @@ export interface RecordingLabelView {
 
 /** What publishing the label list needs from the session that wires the feed. */
 export interface RecordingFeedHooks {
-  /** True once this session's events must be ignored (see wireSession). */
-  isStale(): boolean;
   /** Every call_recording change, as the whole list (newest first). */
   onRecordings(labels: RecordingLabelView[]): void;
 }
@@ -32,9 +31,12 @@ export interface RecordingFeedHooks {
  * whole on every row event (the onZones shape — the table is small by
  * construction, capped at RECORDING_HISTORY_MAX server-side).
  */
-export function wireRecordings(c: DbConnection, hooks: RecordingFeedHooks): void {
+export function wireRecordings(
+  c: DbConnection,
+  rows: SessionRows,
+  hooks: RecordingFeedHooks,
+): void {
   const publish = (): void => {
-    if (hooks.isStale()) return;
     const labels = [...c.db.callRecording.iter()]
       .map((row) => ({
         key: row.id.toString(),
@@ -46,7 +48,6 @@ export function wireRecordings(c: DbConnection, hooks: RecordingFeedHooks): void
       .sort((a, b) => b.startedAtMs - a.startedAtMs);
     hooks.onRecordings(labels);
   };
-  c.db.callRecording.onInsert(() => publish());
-  c.db.callRecording.onDelete(() => publish());
+  rows.on(c.db.callRecording, { insert: publish, delete: publish });
   publish();
 }

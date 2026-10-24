@@ -9,7 +9,7 @@ import {
 } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
-import { onAnyRowEvent } from './rowEvents';
+import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 
 /** The generated space_member row type (all columns). */
@@ -52,12 +52,6 @@ export interface AdmissionHooks {
   onSpace(view: SpaceView): void;
   /** Admission allows being in the world: resume or join (idempotent). */
   enterWorld(): void;
-  /**
-   * True once this session's events must be ignored — the stack is torn
-   * down, or a newer session has replaced this one (e.g. after an idle
-   * suspension). Row events refuse to run once true.
-   */
-  isStale(): boolean;
 }
 
 /**
@@ -73,6 +67,7 @@ export interface AdmissionHooks {
  */
 export function wireAdmission(
   c: DbConnection,
+  rows: SessionRows,
   myIdentity: Identity,
   hooks: AdmissionHooks,
 ): { reevaluate(): void } {
@@ -110,12 +105,8 @@ export function wireAdmission(
 
   // Membership and settings drive admission and the admin panel; every
   // change re-runs the one admission rule and republishes the view.
-  const rerun = (): void => {
-    if (hooks.isStale()) return;
-    reevaluate();
-  };
-  onAnyRowEvent(c.db.spaceMember, rerun);
-  onAnyRowEvent(c.db.spaceSetting, rerun);
+  rows.onAny(c.db.spaceMember, reevaluate);
+  rows.onAny(c.db.spaceSetting, reevaluate);
 
   return { reevaluate };
 }
