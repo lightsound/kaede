@@ -13,18 +13,18 @@
  * adding a band: the bands above it move up by its height.
  */
 
-/** The controls of the column. */
-export type ColumnControl = 'name' | 'status' | 'huddle' | 'call';
-
 /** The column's distance from the canvas's left and bottom edges. */
 export const COLUMN_INSET = 12;
 
 /**
- * The bands, bottom to top, each with the height it reserves: its panel
- * at rest plus the gap to the next band. The top band reserves nothing
- * until a control lands above it.
+ * The bands, bottom to top, each with the height it reserves. The heights
+ * keep the column's long-standing hand-tuned offsets (band bottoms 12, 58,
+ * 148, 220) rather than following the panels: each band holds its panel's
+ * desktop states (the huddle band exactly fits the two-row join offer),
+ * and a panel that wraps taller on a narrow screen grows over the band
+ * above. The top band reserves nothing until a control lands above it.
  */
-const BANDS: readonly { control: ColumnControl; height: number }[] = [
+const BANDS = [
   // What you claim about yourself: the name, and the status over it.
   { control: 'name', height: 46 },
   { control: 'status', height: 90 },
@@ -32,7 +32,10 @@ const BANDS: readonly { control: ColumnControl; height: number }[] = [
   // call is joined from the conversation group the avatar stands in.
   { control: 'huddle', height: 72 },
   { control: 'call', height: 0 },
-];
+] as const;
+
+/** The controls of the column: one per band, so a control cannot lack one. */
+export type ColumnControl = (typeof BANDS)[number]['control'];
 
 /** How far above the canvas's bottom edge `control`'s band starts. */
 export function bandBottom(control: ColumnControl): number {

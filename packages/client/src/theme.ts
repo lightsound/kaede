@@ -21,8 +21,9 @@ export const UI_BUTTON_BG = 'rgba(216, 166, 87, 0.15)';
 
 /**
  * The chrome every HUD panel shares: the dark panel in the gold frame,
- * set in the HUD type. Where a panel sits, its size and how it lays out
- * its rows stay with the panel.
+ * set in the HUD type. Where a panel sits and how big it is are not part
+ * of the chrome: the panel sets them, or App's ColumnSlot for the
+ * bottom-left column (leftColumn.ts).
  */
 export const UI_PANEL_STYLE: CSSProperties = {
   padding: '6px 8px',
@@ -33,7 +34,7 @@ export const UI_PANEL_STYLE: CSSProperties = {
   color: UI_TEXT_COLOR,
 };
 
-/** UI_PANEL_STYLE for a panel whose rows stack top to bottom. */
+/** UI_PANEL_STYLE plus the layout most panels share: rows stacked top to bottom, 6px apart. */
 export const UI_STACKED_PANEL_STYLE: CSSProperties = {
   ...UI_PANEL_STYLE,
   display: 'flex',
