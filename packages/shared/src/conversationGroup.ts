@@ -1,11 +1,13 @@
 /**
  * The rules of 会話グループ (VISION の統一抽象) that span its kinds: the
- * deterministic order of conversation_group rows per kind, and the
- * occupancy tag that dispatches on a group's kind. Each kind's own rules
- * are zone.ts (会議室ゾーン) and huddle.ts (立ち話グループ); these read both
- * vocabularies, so they sit above the two files rather than in either —
- * huddle.ts already imports zone.ts (the name cap), and zone.ts importing
- * huddle.ts back would close a cycle.
+ * deterministic order of conversation_group rows per kind (one private
+ * core behind sortedZoneRows and sortedHuddleRows), and the occupancy tag
+ * that dispatches on a group's kind. Each kind's own rules live in zone.ts
+ * (会議室ゾーン) and huddle.ts (立ち話グループ). Taken together these need
+ * both kinds' vocabularies, so they sit above the two files rather than in
+ * either: in zone.ts they would close an import cycle (huddle.ts already
+ * imports zone.ts for the name cap), and in huddle.ts the zone-only
+ * sortedZoneRows and the 📍 branch of the tag would sit in the huddle file.
  */
 
 import { GROUP_KIND_HUDDLE, huddleLabel } from './huddle';

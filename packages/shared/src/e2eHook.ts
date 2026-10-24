@@ -57,9 +57,9 @@ export interface E2EZoneSnapshot {
  * text currently shown above the avatar, `reaction` the emoji reaction,
  * `status` the composed status line under the avatar (statusLabel in
  * status.ts), and `zone` the composed occupancy tag below that
- * (zoneTagLabel in zone.ts), each absent while none is — all are
- * canvas-drawn (like positions), so the chat, reaction, status and zone
- * specs can only assert on them through this hook.
+ * (groupTagLabel in conversationGroup.ts), each absent while none is —
+ * all are canvas-drawn (like positions), so the chat, reaction, status and
+ * zone specs can only assert on them through this hook.
  */
 export interface E2EPlayerSnapshot {
   x: number;

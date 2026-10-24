@@ -6,7 +6,9 @@
  * space-wide); this module holds the pure rules — occupancy with
  * hysteresis, placement clamping, spec validation — shared so the server
  * reducers stay thin untestable wrappers (the map.ts portal precedent) and
- * the admin UI can only ever offer what the server accepts.
+ * the admin UI can only ever offer what the server accepts. The rules that
+ * span both kinds (row order, the occupancy tag) live in
+ * conversationGroup.ts.
  *
  * Occupancy is judged SERVER-SIDE, on every write of the authoritative
  * position (accepted input batches, portal landings, joins) and of the zone

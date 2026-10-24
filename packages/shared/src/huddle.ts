@@ -3,7 +3,7 @@
  * founded on the spot by anyone in the world, following its members'
  * avatars instead of a placed rect. Same table as the zones (kind='huddle'
  * rows, the placement columns unused), same membership table; the rules
- * that span both kinds (row order, the occupancy tag) are
+ * that span both kinds (row order, the occupancy tag) live in
  * conversationGroup.ts. Every request/verdict type below is
  * self-contained: no exported type here references another file, so the
  * file adds no type-coupling evidence edges (the fallow cap, see
