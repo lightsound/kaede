@@ -27,7 +27,6 @@
 クリーンアップ系・スタイル系ルールも、既定で `off` のオプトインルール（`private-type-leaks`、
 `prop-drilling`、`thin-wrapper`、`duplicate-prop-shape`、`coverage-gaps`、`security-*`、
 `require-suppression-reason`、`feature-flags`）も含みます。あわせて次を有効化しています。
-
 - **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
   ままなら通しません。バックエンドは fallow が同梱する TypeScript です（`fallow-type-aware`
   が `typescript@7.0.2` を自前に固定しており、各パッケージの TypeScript とは独立です）。
@@ -55,13 +54,13 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 
 ## パッケージ構成
 
-| パッケージ | 説明 |
-| --- | --- |
-| `packages/shared` | 物理シミュレーション・マップ・定数など、クライアントとサーバーで共有するロジック |
-| `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期） |
+| パッケージ        | 説明                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared` | 物理シミュレーション・マップ・定数など、クライアントとサーバーで共有するロジック                                                                                                                                                                                                                                                                               |
+| `packages/client` | PixiJS + React のクライアント（ローカル操作の描画とネットワーク同期）                                                                                                                                                                                                                                                                                          |
 | `packages/server` | SpacetimeDB モジュール（`player`・`player_name`・`player_guard`・`account`・`space_member`・`space_setting` テーブルと `join`・`submit_inputs`・管理系リデューサー。サーバー権威で物理・入場制御を実施。高頻度更新の `player` 行から低頻度の表示名（`player_name`、公開）とガード内部値（`player_guard`、非公開）を分離し、行更新1回あたりの egress を抑える） |
-| `packages/e2e` | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証） |
-| `infra` | Cloudflare リソースの IaC（Alchemy v2）。Alchemy / Effect への依存はこのディレクトリに隔離し、アプリコードには漏らさない（デプロイ手順は後述） |
+| `packages/e2e`    | Playwright の E2E スモークテスト（ゲスト2ブラウザの「入場→移動同期」をフルスタックで検証）                                                                                                                                                                                                                                                                     |
+| `infra`           | Cloudflare リソースの IaC（Alchemy v2）。Alchemy / Effect への依存はこのディレクトリに隔離し、アプリコードには漏らさない（デプロイ手順は後述）                                                                                                                                                                                                                 |
 
 通話/録画の外部 API（RealtimeKit・R2）は `packages/server` の **procedure** が
 直接呼びます（「通話/録画 API」の節を参照）。かつての通話 API Worker
@@ -70,7 +69,6 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 ## 同期方式
 
 サーバー権威（server-authoritative）モデルです。
-
 - **クライアントは入力のみを送信** します。位置や速度は一切送りません。クライアントは
   `submit_inputs` リデューサーへ、`packInput` で u8 のビットフラグにパックした入力バッチを
   送ります（`INPUT_FLUSH_INTERVAL_MS` 間隔、`INPUT_BATCH_MAX_TICKS` ティックごとに分割）。
@@ -83,8 +81,8 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
   - 一致すれば、そのティックまでの履歴を破棄して確定（reconciliation 不要）。
   - 不一致（または予測が残っていない）なら、権威状態から未 ack の入力を `stepPlayer` で
     再生して現在ティックまで巻き戻し→再構築し、`resetLocal` で描画をスナップします。
-  決定論的物理のため、正直なプレイでは予測と権威は毎回ビット単位で一致し、reconciliation は
-  発生しません。
+    決定論的物理のため、正直なプレイでは予測と権威は毎回ビット単位で一致し、reconciliation は
+    発生しません。
 - **ガード**。サーバーは入力バッチの受理判定を `packages/shared` の純関数
   `evaluateInputBatch` で行います（ユニットテスト済み）。検証内容は、バッチサイズが
   `INPUT_BATCH_MAX_TICKS` 以内であること、`startTick === row.tick`（順序どおり・重複で
@@ -158,7 +156,6 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
    [http://localhost:5173](http://localhost:5173) を **ブラウザウィンドウ2つ** で開きます。
 
 7. **操作方法と確認ポイント**
-
    - 操作方法:
      - `←` `→` で移動。
      - `Space` でジャンプ。
@@ -228,7 +225,6 @@ Maincloud の **`kaede`**（ダッシュボード: https://spacetimedb.com/kaede
 
 **`main` に push（マージ）されると CI がそのまま本番デプロイまで行います。人間の
 承認ゲートはありません**（`.github/workflows/ci.yml` の `deploy` ジョブ）。
-
 - `ci`（lint / typecheck / test / fallow / バインディングドリフト検査）と `e2e`
   （Playwright スモーク）の**両方が成功したときだけ**デプロイが走ります。
 - デプロイ順序は **モジュール publish（Maincloud）→ クライアント（Alchemy）**。
@@ -255,9 +251,7 @@ Maincloud の **`kaede`**（ダッシュボード: https://spacetimedb.com/kaede
 ### 手動デプロイ（逃げ道）
 
 CI を経由できない・したくないとき（Actions 障害、緊急ロールバック等）のための手順です。
-
 1. **前提**
-
    - 環境変数 `CLOUDFLARE_API_TOKEN`（必要権限: Account / Workers Scripts:Edit と
      User / User Details:Read・Memberships:Read、および Zone:Read。カスタム
      ドメイン `kaede.town` の紐付けはアカウントレベルの Workers Custom
@@ -380,7 +374,6 @@ URL 発行（R2 の S3 API）** は、SpacetimeDB module の **procedure** が�
 （録画系）・グループ解決はすべて procedure 内のサーバー側検査です。
 かつての通話 API Worker `kaede-call` と増分⑤の信頼アンカー
 （`worker_anchor`・録画パス・`RECORDING_PASS_SECRETS`）は撤去済み。
-
 - **資格情報の設営（環境ごとに 1 度・owner SQL）**: 秘密は module の
   非公開テーブル `call_config`（id 0 の 1 行）に置きます。設定 reducer は
   意図的にありません — SQL 書き込みは owner 限定の能力なので、稼働中 DB

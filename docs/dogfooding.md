@@ -9,18 +9,18 @@
 
 ## 0. 前提の現在地（2026-08-07 更新）
 
-| 項目 | 状態 |
-| --- | --- |
-| issuer ゲート②（未登録 issuer 拒否） | ✅ 完了（2026-08-02、触らない） |
-| エラー監視（PostHog） | ✅ 完了（2026-08-04、再導入しない） |
-| バックアップ・復旧手順 | ✅ PR #42 マージ済み（`docs/backup-restore.md`。削除ロック・日次エクスポート稼働） |
-| kaede.town | ✅ 取得済み（オーナー購入）・Workers に紐付け済み（PR #43。https://kaede.town 200 を実測） |
-| Clerk 本番インスタンス | ✅ 作成済み（production_domain: kaede.town、issuer = `https://clerk.kaede.town`）。JWT テンプレート・許可オリジン設定済み |
-| issuer ゲート① | ✅ PR #44 マージ・デプロイ済み。**本番で実測**: 開発 issuer（accepted-toucan-79）の member トークンは接続拒否（module log に記録）・ゲストは従来どおり入場可 |
-| 本番クライアントのサインイン導線 | ✅ 開通（2026-08-04）— Clerk 証明書発行済み・Google OAuth 本番設定済み（同意画面も In production）・pk_live_ 焼き込みを実測 |
-| 初代管理者 | ✅ 確保（2026-08-04）— オーナーが本番 issuer でサインイン → 申請 → 入場。`space_member` に approved/admin 1 行を実測確認 |
-| Maincloud プラン | **当面 Free で小規模に試す**（オーナー判断 2026-08-04）。無料枠は月 2,500 TeV — 実測（§6）でエネルギー消費を見ながら Pro 化を判断。オートポーズは接続で 1 秒未満の自動再開なので小規模運用では実害なし |
-| Phase 3（空間と会話グループ） | ✅ 完了（2026-08-05）— 複数マップ・会議室ゾーン・立ち話・チャットスコープ |
+| 項目                                       | 状態                                                                                                                                                                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| issuer ゲート②（未登録 issuer 拒否）       | ✅ 完了（2026-08-02、触らない）                                                                                                                                                                                       |
+| エラー監視（PostHog）                      | ✅ 完了（2026-08-04、再導入しない）                                                                                                                                                                                   |
+| バックアップ・復旧手順                     | ✅ PR #42 マージ済み（`docs/backup-restore.md`。削除ロック・日次エクスポート稼働）                                                                                                                                    |
+| kaede.town                                 | ✅ 取得済み（オーナー購入）・Workers に紐付け済み（PR #43。https://kaede.town 200 を実測）                                                                                                                            |
+| Clerk 本番インスタンス                     | ✅ 作成済み（production_domain: kaede.town、issuer = `https://clerk.kaede.town`）。JWT テンプレート・許可オリジン設定済み                                                                                             |
+| issuer ゲート①                             | ✅ PR #44 マージ・デプロイ済み。**本番で実測**: 開発 issuer（accepted-toucan-79）の member トークンは接続拒否（module log に記録）・ゲストは従来どおり入場可                                                          |
+| 本番クライアントのサインイン導線           | ✅ 開通（2026-08-04）— Clerk 証明書発行済み・Google OAuth 本番設定済み（同意画面も In production）・pk_live_ 焼き込みを実測                                                                                           |
+| 初代管理者                                 | ✅ 確保（2026-08-04）— オーナーが本番 issuer でサインイン → 申請 → 入場。`space_member` に approved/admin 1 行を実測確認                                                                                              |
+| Maincloud プラン                           | **当面 Free で小規模に試す**（オーナー判断 2026-08-04）。無料枠は月 2,500 TeV — 実測（§6）でエネルギー消費を見ながら Pro 化を判断。オートポーズは接続で 1 秒未満の自動再開なので小規模運用では実害なし                |
+| Phase 3（空間と会話グループ）              | ✅ 完了（2026-08-05）— 複数マップ・会議室ゾーン・立ち話・チャットスコープ                                                                                                                                             |
 | Phase 4（ビデオ通話 — 移行マイルストーン） | ✅ 完了（2026-08-07）— 通話・画面共有・録画・一覧/DL をオーナーが本番で実測確認。本番は増分⑥の procedure 構成（`call_config` 播種済み・Worker `kaede-call` 削除済み）。SpacetimeDB は CLI/ホスト/SDK とも 2.10.1 ピン |
 
 **残タスク**（⏸️ **保留中 — 2026-08-04 オーナー判断**: 実際に試用した結果、
@@ -60,7 +60,6 @@ Phase 6 の組織作成フローでは作成者を初期管理者として明示
 
 Stripe CLI はこの環境ではブラウザ認証が必要（`stripe login --non-interactive`
 で `browser_url` と `verification_code` が出るので、オーナーが完了させる）。
-
 1. `stripe projects status` で現状の Clerk リソース名を確認する。
 2. 既存 Clerk リソースに production 環境（`production_domain`）が無いことを
    確認し、**作り直す**（プロビジョニング後の設定変更は不可 — ROADMAP）。
@@ -82,12 +81,12 @@ Stripe CLI はこの環境ではブラウザ認証が必要（`stripe login --no
    CI の API トークンは DNS:Edit を持たないためオーナーがダッシュボードで追加
    するか、トークンに Zone / DNS:Edit を足してエージェントに任せる）:
 
-   | Type | Name | Target |
-   | --- | --- | --- |
-   | CNAME | `clerk` | `frontend-api.clerk.services` |
-   | CNAME | `accounts` | `accounts.clerk.services` |
-   | CNAME | `clkmail` | `mail.g0p7xy4ozs5m.clerk.services` |
-   | CNAME | `clk._domainkey` | `dkim1.g0p7xy4ozs5m.clerk.services` |
+   | Type  | Name              | Target                              |
+   | ----- | ----------------- | ----------------------------------- |
+   | CNAME | `clerk`           | `frontend-api.clerk.services`       |
+   | CNAME | `accounts`        | `accounts.clerk.services`           |
+   | CNAME | `clkmail`         | `mail.g0p7xy4ozs5m.clerk.services`  |
+   | CNAME | `clk._domainkey`  | `dkim1.g0p7xy4ozs5m.clerk.services` |
    | CNAME | `clk2._domainkey` | `dkim2.g0p7xy4ozs5m.clerk.services` |
 5. 本番インスタンスに JWT テンプレート `spacetimedb` を Backend API で作成する。
    開発側の既存テンプレートを GET して同じ内容を POST するのが確実
@@ -143,16 +142,16 @@ Clerk でサインインする限り本番側の Identity になる）。あわ�
 
 ## 6. 実測（開始後 数日〜2週間、別セッション可）
 
-| 項目 | 見るもの・やり方 | 判断基準 |
-| --- | --- | --- |
-| Maincloud 利用料金 | Maincloud ダッシュボードのエネルギー消費（日次で記録） | 月換算で 5〜7.5万 TeV ≒ Pro 枠 100,000 TeV 内か（$1≒2,592 TeV、egress 2,000 TeV/GB、ストレージ $1/GB/月）。超えるなら ROADMAP の変化点駆動へのエスカレーションを検討 |
-| 同時移動の体感・サーバー CPU（ローカル） | [docs/load-test-concurrent-movers.md](./load-test-concurrent-movers.md) のプローブ（観測ブラウザ 1 + ヘッドレスゲスト） | ✅ 2026-08-18: 20〜50 人全員移動でも観測 FPS 60、ack 数 ms、50 人全員移動でホスト約 14%コア。Maincloud の TeV は上の行 |
-| エネルギー内訳の CPU 命令数 | 同ダッシュボードの内訳 | CPU が支配項なら「クライアント権威＋サーバー側クランプ」への縮退を再検討（ROADMAP Phase 2） |
-| 通話/録画 procedure のエネルギー消費（Phase 4 増分⑥で追加） | 同ダッシュボードの内訳。procedure の同期 HTTP は**待ち時間がそのままエネルギー消費に乗る**（増分⑥で引き受けた新リスク。実測レイテンシ: meeting 作成〜1s・録画開始 2.5s — ROADMAP 増分⑥スパイク） | 録画系は低頻度で実害僅少の見込み。通話開始（`join_group_call`）の頻度で支配項になるようなら timeout 予算（`provider.ts` の定数）と呼び出し頻度を見直す |
-| RealtimeKit 通話コスト（ROADMAP Phase 4 から付け替え 2026-08-07） | Cloudflare ダッシュボードの RealtimeKit 利用量（参加者分・録画分）。あわせて **GA 課金の開始状況**を確認（2026-08-07 時点はベータ無償） | VISION 試算内か: AV $0.002/参加者分 ≒ 月$20〜30、録画 $0.010/分（月 100 分の無料枠）。ベータ無償のうちは利用量の記録のみでプラン判断は GA 後 |
-| 日本からの RTT | `curl -o /dev/null -s -w 'connect %{time_connect}s ttfb %{time_starttransfer}s\n' https://maincloud.spacetimedb.com/v1/ping` を日本の回線から数回。体感は入力→リモート反映の遅延 | 問題があれば補間・プロトコル側の調整で吸収（セルフホストは 2026-08-04 に選択肢から除外 — VISION 決定ログ） |
-| PostHog の広告ブロッカー欠落率（ADR §9-6） | サーバー側 `connection_event`（member の connected 件数 — `spacetime sql` で日次集計）と PostHog の `spacetimedb_connected` 件数の差分 | 欠落率が高ければリバースプロキシ（`us.i.posthog.com` を自ドメイン経由に）の要否を判断 |
-| エラーグルーピング精度（ADR §9-1） | 最初の 2 週間、PostHog の issue リストで同一バグの分裂／無関係な統合を観察 | 原因究明に時間を取られるようなら ADR §7-4 の見直しトリガー |
+| 項目                                                              | 見るもの・やり方                                                                                                                                                                                 | 判断基準                                                                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Maincloud 利用料金                                                | Maincloud ダッシュボードのエネルギー消費（日次で記録）                                                                                                                                           | 月換算で 5〜7.5万 TeV ≒ Pro 枠 100,000 TeV 内か（$1≒2,592 TeV、egress 2,000 TeV/GB、ストレージ $1/GB/月）。超えるなら ROADMAP の変化点駆動へのエスカレーションを検討 |
+| 同時移動の体感・サーバー CPU（ローカル）                          | [docs/load-test-concurrent-movers.md](./load-test-concurrent-movers.md) のプローブ（観測ブラウザ 1 + ヘッドレスゲスト）                                                                          | ✅ 2026-08-18: 20〜50 人全員移動でも観測 FPS 60、ack 数 ms、50 人全員移動でホスト約 14%コア。Maincloud の TeV は上の行                                               |
+| エネルギー内訳の CPU 命令数                                       | 同ダッシュボードの内訳                                                                                                                                                                           | CPU が支配項なら「クライアント権威＋サーバー側クランプ」への縮退を再検討（ROADMAP Phase 2）                                                                          |
+| 通話/録画 procedure のエネルギー消費（Phase 4 増分⑥で追加）       | 同ダッシュボードの内訳。procedure の同期 HTTP は**待ち時間がそのままエネルギー消費に乗る**（増分⑥で引き受けた新リスク。実測レイテンシ: meeting 作成〜1s・録画開始 2.5s — ROADMAP 増分⑥スパイク） | 録画系は低頻度で実害僅少の見込み。通話開始（`join_group_call`）の頻度で支配項になるようなら timeout 予算（`provider.ts` の定数）と呼び出し頻度を見直す               |
+| RealtimeKit 通話コスト（ROADMAP Phase 4 から付け替え 2026-08-07） | Cloudflare ダッシュボードの RealtimeKit 利用量（参加者分・録画分）。あわせて **GA 課金の開始状況**を確認（2026-08-07 時点はベータ無償）                                                          | VISION 試算内か: AV $0.002/参加者分 ≒ 月$20〜30、録画 $0.010/分（月 100 分の無料枠）。ベータ無償のうちは利用量の記録のみでプラン判断は GA 後                         |
+| 日本からの RTT                                                    | `curl -o /dev/null -s -w 'connect %{time_connect}s ttfb %{time_starttransfer}s\n' https://maincloud.spacetimedb.com/v1/ping` を日本の回線から数回。体感は入力→リモート反映の遅延                 | 問題があれば補間・プロトコル側の調整で吸収（セルフホストは 2026-08-04 に選択肢から除外 — VISION 決定ログ）                                                           |
+| PostHog の広告ブロッカー欠落率（ADR §9-6）                        | サーバー側 `connection_event`（member の connected 件数 — `spacetime sql` で日次集計）と PostHog の `spacetimedb_connected` 件数の差分                                                           | 欠落率が高ければリバースプロキシ（`us.i.posthog.com` を自ドメイン経由に）の要否を判断                                                                                |
+| エラーグルーピング精度（ADR §9-1）                                | 最初の 2 週間、PostHog の issue リストで同一バグの分裂／無関係な統合を観察                                                                                                                       | 原因究明に時間を取られるようなら ADR §7-4 の見直しトリガー                                                                                                           |
 
 `connection_event` の集計例（オーナー実行、RLS 対象外）:
 
@@ -178,7 +177,6 @@ ListObjectsV2・DL の presign の 3 経路が使う）は、当初デプロイ�
 Workers・Alchemy 等の広い権限を持つため、**バケット `kaede-recordings`
 スコープの専用 R2 トークン**へ差し替える。値の UPDATE のみでコード変更は
 不要（README「通話/録画 API」のローテーション手順そのまま）。
-
 1. **トークン発行（オーナー操作）**: Cloudflare ダッシュボード → R2 →
    Manage R2 API Tokens で「Object Read & Write・バケット指定
    `kaede-recordings`」のトークンを作成する（録画直送の PUT と一覧/presign の
@@ -209,7 +207,6 @@ Workers・Alchemy 等の広い権限を持つため、**バケット `kaede-reco
 「パッケージ名の整理」参照）**: npm スコープ・表示名は `@kaede/*` へ、
 Maincloud の DB 名は `maple-like` → `kaede` へ改名済み（旧 `kaede`・
 `kaede-366x1` はオーナー了承のうえ削除）。以下は当時の判断メモとして残す。
-
 - **npm スコープ・表示名の改名（`maple-like` / `@maple/*` → kaede 系）は
   PR #42/#43/#44 がマージされるまで保留**する。リポジトリ全域に触る改名を
   今開くと、切替系 PR と広範に衝突するため。切替完了後の静かなタイミングで

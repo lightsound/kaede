@@ -8,7 +8,6 @@ import { defineConfig, devices } from '@playwright/test';
  * --server local --yes`, exactly the README dev workflow (the e2e job in
  * ci.yml does the same with `spacetimedb-cli`).
  */
-// fallow-ignore-next-line unused-export -- the Playwright runner loads this config's default export; no in-repo importer exists
 export default defineConfig({
   testDir: './test',
   // Generous for a smoke test: CI runners render WebGL in software and pay
