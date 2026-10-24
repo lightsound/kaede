@@ -20,25 +20,25 @@
 
 以下 4 つが崩れた場合、判断は変わりうる（→ §7）。
 
-| # | 前提 | 出所 |
-|---|---|---|
-| P1 | Cloudflare の機能で済むものは Cloudflare に任せる | 方針 |
-| P2 | ソロ開発（ダッシュボードを見るのは 1 人） | 体制 |
-| P3 | サーバーロジックの本体は SpacetimeDB のリデューサー。Workers は薄いグルー（トークン発行・Webhook・R2）に限定 | アーキテクチャ |
-| P4 | クライアントは PixiJS v8 のキャンバス描画が主体 | アーキテクチャ |
+| #   | 前提                                                                                                         | 出所           |
+| --- | ------------------------------------------------------------------------------------------------------------ | -------------- |
+| P1  | Cloudflare の機能で済むものは Cloudflare に任せる                                                            | 方針           |
+| P2  | ソロ開発（ダッシュボードを見るのは 1 人）                                                                    | 体制           |
+| P3  | サーバーロジックの本体は SpacetimeDB のリデューサー。Workers は薄いグルー（トークン発行・Webhook・R2）に限定 | アーキテクチャ |
+| P4  | クライアントは PixiJS v8 のキャンバス描画が主体                                                              | アーキテクチャ |
 
 ---
 
 ## 3. 観測レイヤーの分担
 
-| 層 | 実体 | 担当 |
-|---|---|---|
-| ブラウザ | React 19 + PixiJS v8 | **PostHog** |
-| Cloudflare Workers | トークン発行・Webhook・R2 | Workers Logs / Traces / Analytics Engine |
-| **SpacetimeDB** | **リデューサー = サーバー本体** | **Maincloud ダッシュボード + `spacetime logs`（別窓）** |
-| 経路全体の生存確認 | ログイン〜WS 接続〜テーブル同期 | Cron Worker + `@cloudflare/playwright` |
-| 通話・録画 | RealtimeKit | Cloudflare 側 |
-| Web パフォーマンス | Core Web Vitals | Cloudflare Web Analytics |
+| 層                 | 実体                            | 担当                                                    |
+| ------------------ | ------------------------------- | ------------------------------------------------------- |
+| ブラウザ           | React 19 + PixiJS v8            | **PostHog**                                             |
+| Cloudflare Workers | トークン発行・Webhook・R2       | Workers Logs / Traces / Analytics Engine                |
+| **SpacetimeDB**    | **リデューサー = サーバー本体** | **Maincloud ダッシュボード + `spacetime logs`（別窓）** |
+| 経路全体の生存確認 | ログイン〜WS 接続〜テーブル同期 | Cron Worker + `@cloudflare/playwright`                  |
+| 通話・録画         | RealtimeKit                     | Cloudflare 側                                           |
+| Web パフォーマンス | Core Web Vitals                 | Cloudflare Web Analytics                                |
 
 ### 3.1 SpacetimeDB は原理的に外部ツールを入れられない
 
@@ -48,7 +48,6 @@
 > これは好みではなくアーキテクチャ上の制約である。
 
 観測手段は以下に限られる。
-
 - `console.log` / `warn` / `error` が内部ロギングに routing され、`spacetime logs --level error` で参照
 - プログラマエラー（バグ由来の想定外エラー）は Maincloud のダッシュボードに表示
 - Maincloud は DB ごとにリアルタイムダッシュボードをホスト（性能計測 + リデューサー直接実行の管理パネル）
@@ -69,13 +68,13 @@ Cloudflare Web Analytics / RUM は **性能計測（Core Web Vitals・ページ�
 
 ### 4.1 無料枠の差が実用上の分岐になる
 
-| | Sentry Developer | PostHog Free |
-|---|---|---|
-| エラー / 例外 | 5,000 | **100,000** |
-| セッションリプレイ | **50** | **5,000** |
-| イベント | — | 1,000,000 |
-| フィーチャーフラグ | なし | 1,000,000 リクエスト |
-| ユーザー | 1 | 無制限 |
+|                    | Sentry Developer | PostHog Free         |
+| ------------------ | ---------------- | -------------------- |
+| エラー / 例外      | 5,000            | **100,000**          |
+| セッションリプレイ | **50**           | **5,000**            |
+| イベント           | —                | 1,000,000            |
+| フィーチャーフラグ | なし             | 1,000,000 リクエスト |
+| ユーザー           | 1                | 無制限               |
 
 **リプレイ 50 件/月が決定的。** PixiJS のキャンバスゲームで「何が起きたか」を知る主力手段はリプレイであり、ドッグフーディング 1 週間で枯渇する。
 
@@ -87,17 +86,16 @@ Cloudflare Web Analytics / RUM は **性能計測（Core Web Vitals・ページ�
 
 ### 4.3 生涯ツール数が 1 つ少ない
 
-| 経路 | 系統数 |
-|---|---|
-| Cloudflare + Sentry（今）→ + PostHog（SaaS 期） | **3** |
-| Cloudflare + PostHog（今〜SaaS 期） | **2** |
+| 経路                                            | 系統数 |
+| ----------------------------------------------- | ------ |
+| Cloudflare + Sentry（今）→ + PostHog（SaaS 期） | **3**  |
+| Cloudflare + PostHog（今〜SaaS 期）             | **2**  |
 
 ソロで最も希少なのは時間と注意力。ツールが 1 つ増えるたびに、ダッシュボード・通知チャンネル・SDK 更新・請求メーターが 1 つずつ増える。
 
 ### 4.4 想定される障害モードと相性が良い
 
 心配している「放置タブ・スリープ復帰・再接続失敗」は**例外として投げられないサイレントな劣化**である。
-
 - 捕捉手段は「`reconnect_failed` イベントの発生率が跳ねた」というトレンド検知
 - これは分析ツールの土俵であり、Issue 中心の Sentry のモデルとは噛み合わない
 - PostHog はイベントのトリガー・フィルタ・トレンドに基づくリアルタイムアラートを持ち、Slack / Discord / Teams / Webhook に送出できる
@@ -105,7 +103,6 @@ Cloudflare Web Analytics / RUM は **性能計測（Core Web Vitals・ページ�
 ### 4.5 ソースマップ運用は Sentry とほぼ同等（当初評価を訂正）
 
 Vite は Rollup ベースのため `@posthog/rollup-plugin` をそのまま使用可能。
-
 - `personalApiKey` と `projectId` を渡すだけで生成・アップロードが自動化
 - `deleteAfterUpload` がデフォルト `true` → 公開されない
 - 本番 JS に `//# chunkId=...` を注入して突き合わせる方式
@@ -133,12 +130,12 @@ Vite は Rollup ベースのため `@posthog/rollup-plugin` をそのまま使�
 
 Sentry を推す最大の根拠だった以下は、**P1 と P3 によって前提ごと消滅した**。
 
-| 当初の根拠 | 失効理由 |
-|---|---|
-| ブラウザ⇄Worker の分散トレース接続 | Worker 側を Cloudflare 純正に任せるため不要（P1） |
-| `@sentry/cloudflare` の D1 / Durable Objects / Workflows 計装 | **観測対象が存在しない**（P3） |
-| PostHog のトレースが alpha という減点 | PostHog にトレースをやらせないため無効（P1・P3） |
-| プロファイリング・cron 監視 | サーバー側の機能でありブラウザ限定では対象外 |
+| 当初の根拠                                                    | 失効理由                                          |
+| ------------------------------------------------------------- | ------------------------------------------------- |
+| ブラウザ⇄Worker の分散トレース接続                            | Worker 側を Cloudflare 純正に任せるため不要（P1） |
+| `@sentry/cloudflare` の D1 / Durable Objects / Workflows 計装 | **観測対象が存在しない**（P3）                    |
+| PostHog のトレースが alpha という減点                         | PostHog にトレースをやらせないため無効（P1・P3）  |
+| プロファイリング・cron 監視                                   | サーバー側の機能でありブラウザ限定では対象外      |
 
 グルーピング精度の差については、**kaede ではどのみち手動制御が必要**（→ §8.2）。差の影響は限定的と判断した。
 
@@ -146,24 +143,23 @@ Sentry を推す最大の根拠だった以下は、**P1 と P3 によって前�
 
 ## 6. 検討して外した選択肢
 
-| 候補 | 外した理由 |
-|---|---|
-| **Better Stack** | 最大の武器（オンコール・エスカレーション・電話通知無制限）がソロでは無効化される。ステータスページのみのために採用する価値は薄い |
-| **Honeybadger** | 唯一の対抗馬。ブートストラップ企業で安定、Insights の Cloudflare R2 レプリケーション対応、uptime + status page + cron 監視が同梱。**ただしセッションリプレイが無い** ためキャンバスゲームでは不利 |
-| **Rollbar** | 無料枠にリプレイ 1,000 件を含む点は良い。ただし最大の強み（全有料プランでユーザー無制限）がソロでは無意味。レビューで重複エラーの多さが指摘されている |
-| **Bugsnag / SmartBear Insight Hub** | モバイルクラッシュが主戦場。2026 年半ば時点で価格が非公開（見積もり依頼モデル）。G2 の Product Direction スコアが 7.4（Sentry 9.3） |
-| **GlitchTip** | Sentry SDK 互換で思想は良いが Django ベースで **Cloudflare に載らない**。VPS が別途必要となり P1・P2 と真っ向から衝突。リプレイ無し |
-| **HyperDX** | 唯一の直接競合だったが、ClickHouse 社の姿勢を理由に候補から除外 |
-| **Statsig** | 2025-09 に OpenAI が $1.1B で買収 → 2026-05-05 に Amplitude がブランドと顧客を引き継ぎ、チームは OpenAI に残留。**所有権が不安定で長期依存に適さない** |
-| **自作（`error-stack-parser-es` 等）** | パースは問題の最も簡単な部分。**ソースマップ解決・グルーピング・レート制限**が丸ごと残る。特に PixiJS のゲームループでは 60fps × 同一エラーで自分の Worker を DoS するリスク（→ §8.2） |
-| **Axiom / Grafana Loki / Tinybird / OTLP** | レイヤーが異なる。OTLP は規格であり製品ではない。Tinybird の役割（ユーザー向け統計）は当面 Analytics Engine で代替可能 |
+| 候補                                       | 外した理由                                                                                                                                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Better Stack**                           | 最大の武器（オンコール・エスカレーション・電話通知無制限）がソロでは無効化される。ステータスページのみのために採用する価値は薄い                                                                  |
+| **Honeybadger**                            | 唯一の対抗馬。ブートストラップ企業で安定、Insights の Cloudflare R2 レプリケーション対応、uptime + status page + cron 監視が同梱。**ただしセッションリプレイが無い** ためキャンバスゲームでは不利 |
+| **Rollbar**                                | 無料枠にリプレイ 1,000 件を含む点は良い。ただし最大の強み（全有料プランでユーザー無制限）がソロでは無意味。レビューで重複エラーの多さが指摘されている                                             |
+| **Bugsnag / SmartBear Insight Hub**        | モバイルクラッシュが主戦場。2026 年半ば時点で価格が非公開（見積もり依頼モデル）。G2 の Product Direction スコアが 7.4（Sentry 9.3）                                                               |
+| **GlitchTip**                              | Sentry SDK 互換で思想は良いが Django ベースで **Cloudflare に載らない**。VPS が別途必要となり P1・P2 と真っ向から衝突。リプレイ無し                                                               |
+| **HyperDX**                                | 唯一の直接競合だったが、ClickHouse 社の姿勢を理由に候補から除外                                                                                                                                   |
+| **Statsig**                                | 2025-09 に OpenAI が $1.1B で買収 → 2026-05-05 に Amplitude がブランドと顧客を引き継ぎ、チームは OpenAI に残留。**所有権が不安定で長期依存に適さない**                                            |
+| **自作（`error-stack-parser-es` 等）**     | パースは問題の最も簡単な部分。**ソースマップ解決・グルーピング・レート制限**が丸ごと残る。特に PixiJS のゲームループでは 60fps × 同一エラーで自分の Worker を DoS するリスク（→ §8.2）            |
+| **Axiom / Grafana Loki / Tinybird / OTLP** | レイヤーが異なる。OTLP は規格であり製品ではない。Tinybird の役割（ユーザー向け統計）は当面 Analytics Engine で代替可能                                                                            |
 
 ---
 
 ## 7. 判断が覆る条件（見直しトリガー）
 
 以下のいずれかが真になったら、この ADR を再評価する。
-
 1. **リプレイが不要と結論が出た** → 最大の減点が消え、Sentry または Honeybadger が優位になる
 2. **フィーチャーフラグを別系統で持つことにした** → §4.2 が失効
 3. **SaaS 期の分析を PostHog 以外で行うと決めた** → §4.3 の「生涯 2 系統」が崩れる
@@ -201,8 +197,8 @@ SpacetimeDB の接続ライフサイクルは自前でイベント化する。
 
 ```ts
 conn.onDisconnect(() => {
-  posthog.capture('spacetimedb_disconnected', { readyState, reconnectAttempt })
-})
+  posthog.capture('spacetimedb_disconnected', { readyState, reconnectAttempt });
+});
 ```
 
 再接続の N 回連続失敗は例外として投げられないため、**明示的に送出しないと何も記録されない**。
@@ -219,9 +215,9 @@ posthog.init(KEY, {
     if (event.event === '$exception') {
       // 同一フィンガープリントは N 秒に 1 回まで
     }
-    return event
-  }
-})
+    return event;
+  },
+});
 ```
 
 > **グルーピングは「見やすさ」の機能ではなく、ゲームでは生存に必要な機能。**
@@ -245,7 +241,7 @@ PostHog は横断の合計上限を持たず、プロダクト単位の上限の
 
 ```ts
 // vite.config.ts
-import posthog from '@posthog/rollup-plugin'
+import posthog from '@posthog/rollup-plugin';
 
 export default defineConfig({
   plugins: [
@@ -255,7 +251,7 @@ export default defineConfig({
       sourcemaps: { deleteAfterUpload: true },
     }),
   ],
-})
+});
 ```
 
 `build.sourcemap: 'hidden'` と併用し、公開せずアップロードのみ行う。
@@ -263,7 +259,6 @@ export default defineConfig({
 ### 8.5 外形監視（外部ベンダー追加なし）
 
 Cron Trigger の Worker から `@cloudflare/playwright` で最小シナリオ（Clerk ログイン → WS 接続 → テーブル同期確認）を実行し、失敗時に PostHog / Discord へ送出。
-
 - `nodejs_compat` + compatibility_date 2025-09-15 以降が必要
 - Playwright の storage state を Workers KV に永続化して Clerk セッションを再利用
 - `@cloudflare/playwright` は上流とバージョンがずれるフォークのため、`e2e` パッケージのスクリプトをそのまま流用せず監視用の最小版を別に書く
@@ -278,14 +273,14 @@ Cron Trigger の Worker から `@cloudflare/playwright` で最小シナリオ（
 
 ## 9. 未解決事項
 
-| # | 項目 | 対応 |
-|---|---|---|
-| 1 | グルーピング精度が実運用で許容範囲か | Phase 2 の最初の 2 週間、issue リストを意識して観察。同一バグの分裂／無関係な統合が頻発するなら再評価 |
-| 2 | SpacetimeDB 2.7 に SDK の再接続自動回復が含まれるか | ✅ 確認済み（2026-08-03）: 2.7.1 に visibilitychange/focus/online/pageshow でのバックオフリセット＋ゾンビソケット再構築が入っている。ただし ConnectionManager（フレームワークプロバイダ）専用のため、素の builder 接続を使う kaede は同等の規則を自前の接続状態機械に配線した（PR #35） |
-| 3 | キャンバス録画の性能影響 | 有効化時に fps / quality を絞って実測 |
-| 4 | Sentry との並走比較を行うか | アカウントは既にある。両方の無料枠で 1〜2 週間並走させる案は費用対効果が高い |
-| 5 | Browser Rendering のセッション上限・課金 | 外形監視の実装前に確認 |
-| 6 | 広告ブロッカーによるイベント欠落率 | 導入後に実測してから、リバースプロキシ（`us.i.posthog.com` を自ドメイン経由にする）の要否を判断する |
+| #   | 項目                                                | 対応                                                                                                                                                                                                                                                                                    |
+| --- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | グルーピング精度が実運用で許容範囲か                | Phase 2 の最初の 2 週間、issue リストを意識して観察。同一バグの分裂／無関係な統合が頻発するなら再評価                                                                                                                                                                                   |
+| 2   | SpacetimeDB 2.7 に SDK の再接続自動回復が含まれるか | ✅ 確認済み（2026-08-03）: 2.7.1 に visibilitychange/focus/online/pageshow でのバックオフリセット＋ゾンビソケット再構築が入っている。ただし ConnectionManager（フレームワークプロバイダ）専用のため、素の builder 接続を使う kaede は同等の規則を自前の接続状態機械に配線した（PR #35） |
+| 3   | キャンバス録画の性能影響                            | 有効化時に fps / quality を絞って実測                                                                                                                                                                                                                                                   |
+| 4   | Sentry との並走比較を行うか                         | アカウントは既にある。両方の無料枠で 1〜2 週間並走させる案は費用対効果が高い                                                                                                                                                                                                            |
+| 5   | Browser Rendering のセッション上限・課金            | 外形監視の実装前に確認                                                                                                                                                                                                                                                                  |
+| 6   | 広告ブロッカーによるイベント欠落率                  | 導入後に実測してから、リバースプロキシ（`us.i.posthog.com` を自ドメイン経由にする）の要否を判断する                                                                                                                                                                                     |
 
 ---
 
@@ -293,13 +288,13 @@ Cron Trigger の Worker から `@cloudflare/playwright` で最小シナリオ（
 
 将来の自分のために、判断が変わった経緯を残す。
 
-| 段階 | 推奨 | 変化の要因 |
-|---|---|---|
-| 初期 | **Sentry** | ブラウザ⇄Worker のトレース接続と Cloudflare プリミティブ計装を重視 |
-| 「Cloudflare で済ませたい」判明後 | **PostHog** | Worker 側を純正に任せるため、Sentry の最大の根拠が前提ごと消失 |
-| 「ソロ開発」判明後 | PostHog（確度上昇） | ツール数最小化がコストの本体に。1 ユーザー制限を問題視した当初評価は誤りと判明（実メンバーはゲームのユーザーであってダッシュボード閲覧者ではない）— 撤回済み |
-| スタック詳細判明後 | PostHog（維持） | SpacetimeDB がサーバー本体であり、そもそも Sentry の Cloudflare 統合は「効かない」のではなく**対象が存在しない**ことが判明 |
-| ソースマップ調査後 | PostHog（減点解消） | `@posthog/rollup-plugin` + chunkId 方式が Sentry と同等水準と判明。当初の「Sentry が明確に上」評価を訂正 |
+| 段階                              | 推奨                | 変化の要因                                                                                                                                                   |
+| --------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 初期                              | **Sentry**          | ブラウザ⇄Worker のトレース接続と Cloudflare プリミティブ計装を重視                                                                                           |
+| 「Cloudflare で済ませたい」判明後 | **PostHog**         | Worker 側を純正に任せるため、Sentry の最大の根拠が前提ごと消失                                                                                               |
+| 「ソロ開発」判明後                | PostHog（確度上昇） | ツール数最小化がコストの本体に。1 ユーザー制限を問題視した当初評価は誤りと判明（実メンバーはゲームのユーザーであってダッシュボード閲覧者ではない）— 撤回済み |
+| スタック詳細判明後                | PostHog（維持）     | SpacetimeDB がサーバー本体であり、そもそも Sentry の Cloudflare 統合は「効かない」のではなく**対象が存在しない**ことが判明                                   |
+| ソースマップ調査後                | PostHog（減点解消） | `@posthog/rollup-plugin` + chunkId 方式が Sentry と同等水準と判明。当初の「Sentry が明確に上」評価を訂正                                                     |
 
 **残る唯一の実質的な差はグルーピング精度のみ。** これも kaede では手動制御が前提となる領域であり、影響は限定的と結論した。
 

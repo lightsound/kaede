@@ -9,7 +9,7 @@ The call flow is: in-world huddle/zone membership → CallDock `📞 通話に�
 
 ## Devin Secrets Needed
 
-None for guest-path testing on prod. A Cloudflare **Realtime-Admin** API token is needed only to seed `call_config` on a *local* SpacetimeDB — `HEROUI_AUTH_TOKEN` is NOT a Cloudflare token. A Clerk publishable key + member account is needed to test member-only features (recording controls) — without it the app is guest-only (`ClerkGate` renders children).
+None for guest-path testing on prod. A Cloudflare **Realtime-Admin** API token is needed only to seed `call_config` on a _local_ SpacetimeDB — `HEROUI_AUTH_TOKEN` is NOT a Cloudflare token. A Clerk publishable key + member account is needed to test member-only features (recording controls) — without it the app is guest-only (`ClerkGate` renders children).
 
 ## Running against the production backend (no credentials needed)
 

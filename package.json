@@ -15,10 +15,10 @@
     "analyze:changed": "pnpm test:coverage && fallow audit"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.14",
+    "@biomejs/biome": "^2.6.2",
     "@import-lint/cli": "0.1.10",
     "@vitest/coverage-v8": "^5.0.5",
-    "fallow": "^3.34.1",
+    "fallow": "^3.35.0",
     "vitest": "^5.0.5"
   }
 }

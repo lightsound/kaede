@@ -7,7 +7,6 @@ This repository is run in Japanese: commit messages, `docs/*.md` (including ADRs
 ## Project direction (read first)
 
 This project has pivoted from a game MVP to **kaede**, a MapleStory-style 2D side-scrolling **work collaboration tool** (a virtual office replacing oVice for a small community, with future SaaS ambitions). Before starting any task, read:
-
 - `docs/VISION.md` — product vision, target users, and all settled technical decisions (auth, video calls, art pipeline, scope exclusions)
 - `docs/ROADMAP.md` — phase ordering, per-phase goals and completion criteria, and the oVice-migration milestone
 
@@ -18,6 +17,7 @@ Do not add gameplay features (combat, mobs, XP); that direction was abandoned (P
 `kaede` is a single-product pnpm monorepo (a MapleStory-style 2D virtual office). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `test:e2e`, `lint`, `lint:imports`, `analyze`).
 
 ### SpacetimeDB CLI binary name and version
+
 The pinned CLI (`v2.10.1`) is installed from the GitHub release tarball into `~/.local/bin`, which ships **`spacetimedb-cli`** and `spacetimedb-standalone` — there is **no `spacetime` command**. README examples say `spacetime ...`; read those as `spacetimedb-cli ...`. `~/.local/bin` is on `PATH` via `~/.bashrc`.
 
 **Check `spacetimedb-cli --version` before publishing or generating**: fresh VMs
@@ -31,6 +31,7 @@ mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/b
 ```
 
 ### Running the game end-to-end
+
 Order matters and the backend must be running before publish:
 1. `spacetimedb-cli start` — long-running host on `ws://localhost:3000` (run in its own tmux session, leave it up).
 2. `spacetimedb-cli publish kaede --server local --yes` — run from repo root (`spacetime.json` points at `packages/server`).
@@ -40,6 +41,7 @@ Order matters and the backend must be running before publish:
 The client defaults to `ws://localhost:3000` and DB `kaede` in dev, so no env vars are needed locally.
 
 ### SpacetimeDB MCP for coding agents
+
 `spacetime mcp` serves the DB over stdio for MCP-aware agents (schema,
 sql, logs, reducer calls). The repo-root `.mcp.json` wires it for Claude Code,
 honoring the repo's `SPACETIME_BIN` convention (this VM needs
@@ -52,6 +54,7 @@ covers the same ground — the MCP server is for MCP-only clients.
 `pnpm test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @kaede/e2e exec playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli pnpm test:e2e` (CI sets the same variable in `ci.yml`).
 
 ### Merging checklist
+
 Before merging a PR, check the review feedback the GitHub apps left on the PR
 itself — `gh api repos/<owner>/<repo>/pulls/<n>/comments` (inline findings by
 `cursor[bot]`, i.e. Bugbot) and `.../pulls/<n>/reviews` — and address or
@@ -59,6 +62,7 @@ explicitly assess every finding. These are separate from any review loop run
 locally and are easy to miss because they arrive asynchronously after a push.
 
 ### Static analysis / testing gotcha
+
 `fallow health` (part of `pnpm analyze` and CI) **requires** `coverage/coverage-final.json`; run `pnpm test:coverage` first if invoking `fallow` directly (`pnpm analyze` already does). `packages/server` has no unit tests — it only runs inside the SpacetimeDB host, so all testable pure logic lives in `packages/shared`.
 
 Before pushing, also run `pnpm exec fallow health` **standalone**: CI runs it as
@@ -70,7 +74,6 @@ Playwright specs) needs that header with a reason naming where the testable
 logic lives.
 
 Two more fallow quirks to know about (both bit Phase 3 work):
-
 - The type-coupling check has an evidence cap of **40 edges**; past it the
   proof degrades to "partial" and only the `fallow health` step fails. New
   shared modules whose public signatures reference types from other files add
@@ -84,10 +87,19 @@ Two more fallow quirks to know about (both bit Phase 3 work):
   reaches 5 (CRAP 30), so keep reducer/DOM helpers small and split branches
   out (the `backfillAccountName` precedent).
 
+### Markdown and YAML formatting
+
+Biome also formats and lints `*.md` and `*.yml` (`pnpm lint` checks, `pnpm format` fixes);
+generated and tool-managed files are excluded in `biome.json`. Biome pads every table row to the
+widest cell in each column, so keep table cells short and put long explanations under headings or
+in lists — `docs/VISION.md` uses a short summary table plus one section per item for this reason.
+Biome 2.6.2 can change the nesting of a nested list when it re-indents it, so check the rendered
+result after formatting one.
+
 ### Internal package boundaries
+
 ImportLint enforces directory-level encapsulation inside each workspace; fallow continues to
 enforce the workspace-level `client` / `server` / `shared` dependency graph.
-
 - Every first-level `packages/*/src/*` directory is automatically a boundary; use the
   `*.package` suffix to make boundaries explicit and for nested packages.
 - Package-private exports are the default. Expose the intended API through the package's

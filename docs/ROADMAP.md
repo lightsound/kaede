@@ -25,7 +25,6 @@ Phase 4.5 完了後**に行う。
 
 現リポジトリの状態。ゲーム MVP として作られたが、資産はそのまま次フェーズ以降の
 土台になる。
-
 - サーバー権威＋クライアント予測＋ reconciliation（決定論物理）
 - ワンウェイ足場・すり抜け降下・ロープ
 - 入力ガード（トークンバケット）、再接続レジリエンス、リモート補間
@@ -36,7 +35,6 @@ Phase 4.5 完了後**に行う。
 
 **ゴール**: メンバーが複数デバイスから同じ名前・同じアバターで入れる。
 メンバー以外は入れない。
-
 - **最初のタスク: Clerk ↔ SpacetimeDB 接続スパイク** ✅ **完了（2026-07-30）**:
   実装に無理はなく、フォールバック（Kinde）は不要。検証内容: ①Clerk 開発
   インスタンスに JWT テンプレート `spacetimedb`（`aud: kaede-spacetimedb`、
@@ -253,7 +251,6 @@ Phase 4.5 完了後**に行う。
 
 **ゴール**: 「一緒に作業している感」がテキストベースで成立する
 （oVice の日常ユースの代替）。
-
 - チャット: 全体スコープ ＋ @メンションの DM（マップ/グループスコープは
   Phase 3 で対象が生まれ次第拡張）
   ✅ **全体スコープ実装済み（第一弾）**: 公開テーブル `chat_message` ＋
@@ -551,7 +548,6 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
 クローズド） → ③立ち話グループ（その場発足・アバター追従・コソコソ演出） →
 ④チャットスコープ拡張（マップ/会話グループ、クローズドの RLS 可視性）＋
 管理者の全体アナウンス。**①〜④すべて実装済み（2026-08-05）**。
-
 - 複数マップ ＋ ポータル移動（移動摩擦のバランス設計はここで初検証）
   ✅ **実装済み（2026-08-04、増分①）**: マップはコード定義の `WorldMap`
   （`@kaede/shared` の map.ts — 物理ジオメトリ＋ポータル＋表示名。エディタは
@@ -754,7 +750,6 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
 
 **ゴール**: 会話グループ単位でビデオ通話・画面共有ができ、
 **コミュニティが oVice を解約できる**。
-
 - **最初のタスク: RealtimeKit API スパイク（増分0）** ✅ **完了（2026-08-05）**:
   再現用スクリプト `scripts/spike-realtimekit.sh`（冪等 — アプリは名前で
   再利用。削除せず残す: トークンローテーションや障害調査で「API がこの形で
@@ -1138,8 +1133,8 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   fail-fast）
   ②**module→Worker のケイパビリティ = 短命の署名付き録画パス**:
   `mint_recording_pass` reducer が posting 前文（in-world + admission
-  再検査）+ **approved 検査**（ラベル reducer と共有の requireApprovedMember）
-  + call_guard 課金のうえ、`v1:recording:<clerkSubject>:<exp>:<HMAC>`
+  再検査）+ **approved 検査**（ラベル reducer と共有の requireApprovedMember）+ call_guard
+  課金のうえ、`v1:recording:<clerkSubject>:<exp>:<HMAC>`
   （寿命 `RECORDING_PASS_TTL_SECONDS` = 120 秒）を公開テーブル
   `recording_pass`（identity PK の upsert 行）へ書く。**行が配達路**
   （reducer は値を返せない）で、RLS `identity = :sender` 1 本が
@@ -1231,82 +1226,82 @@ AoI（map_id 列・購読絞り込みの採否） → ②会議室ゾーン（�
   - **D7 — VISION バックエンド行の改訂**: 「薄いステートレスなグルー」
     から「外部境界は module の procedure に集約、Worker は静的配信のみ」
     へ（VISION 決定ログ 2026-08-06）
-  **スパイク実測**（2026-08-06、ローカル 2.7.1 スタンドアロン＋実
-  プロバイダ）: ①`spacetime.procedure` + `ctx.http.fetch`（同期）で外部
-  HTTPS が通る（api.cloudflare.com で 200）②3 秒応答も timeout 指定で
-  完走・timeout は指定どおり切れる ③private/special アドレスへの接続は
-  拒否（SSRF ガード内蔵 — ローカルの localhost API は呼べない）④戻り値
-  （struct 含む）が呼び出し元へ返り、procedure 内の throw はクライアント
-  側で Promise rejection になる ⑤`spacetimedb-cli generate`（2.7.1）は
-  procedure の**クライアントスタブを生成する**（`conn.procedures.<名>` が
-  型付き Promise を返す — 増分⑥実装時に確認）⑥実レイテンシ（この
-  リポジトリの CI 相当環境から実測、各 5 回）: meeting 作成 0.54〜0.92s・
-  参加トークン発行 0.63〜0.90s・録画開始 2.5s・アクティブ照会 0.69s・
-  録画停止 0.6〜0.9s・R2 ListObjectsV2 0.14〜0.17s → timeout 予算は
-  RealtimeKit 一般 5s・録画開始 10s・R2 3s（server/src/provider.ts の
-  定数）。presigned DL は署名計算のみで外部 HTTP なし。
-  **Maincloud 側の前提はオーナー確認済み（2026-08-06）**: procedure の
-  外部 HTTP は許可されており、エネルギー課金も特段の記載なし（無視して
-  よい）。
-  **実装の要点**:
-  ①**撤去したもの**: server `worker_anchor`・`recording_pass`（テーブル
-  ＋RLS）・`mint_recording_pass`・`register_group_call`・
-  `log_group_recording` / shared capability.ts の録画パス関連（SHA-256 /
-  HMAC 実装は SigV4 の基盤として s3.ts へ改組）/ client の pass 取得層
-  （pass.ts・api.ts の fetch 層・flow.ts・netApi の
-  mint/ownRecordingPass・recording_pass 購読・e2e フック counter）/
-  worker パッケージ全体（Clerk JWKS・ホスト公開鍵・callerKindOf・CORS —
-  procedure は認証済み SpacetimeDB 接続越しに呼ばれ、`ctx.sender` が
-  本人性そのもの）/ infra `CallApi`・`wrangler-call.jsonc` / ci.yml の
-  Worker シークレット同期ステップ
-  ②**procedure 群**（calls.ts。外部 HTTP の実装は provider.ts —
-  index.ts の `export *` 対象外）: `join_group_call`（D4 統合。ゲスト
-  含む in-world 全員 — `ctx.sender` で自然に成立）・
-  `start_group_recording`（承認済みメンバー限定。meeting は sender の
-  membership から解決し、ラベル行 call_recording は**結果 tx がサーバー
+    **スパイク実測**（2026-08-06、ローカル 2.7.1 スタンドアロン＋実
+    プロバイダ）: ①`spacetime.procedure` + `ctx.http.fetch`（同期）で外部
+    HTTPS が通る（api.cloudflare.com で 200）②3 秒応答も timeout 指定で
+    完走・timeout は指定どおり切れる ③private/special アドレスへの接続は
+    拒否（SSRF ガード内蔵 — ローカルの localhost API は呼べない）④戻り値
+    （struct 含む）が呼び出し元へ返り、procedure 内の throw はクライアント
+    側で Promise rejection になる ⑤`spacetimedb-cli generate`（2.7.1）は
+    procedure の**クライアントスタブを生成する**（`conn.procedures.<名>` が
+    型付き Promise を返す — 増分⑥実装時に確認）⑥実レイテンシ（この
+    リポジトリの CI 相当環境から実測、各 5 回）: meeting 作成 0.54〜0.92s・
+    参加トークン発行 0.63〜0.90s・録画開始 2.5s・アクティブ照会 0.69s・
+    録画停止 0.6〜0.9s・R2 ListObjectsV2 0.14〜0.17s → timeout 予算は
+    RealtimeKit 一般 5s・録画開始 10s・R2 3s（server/src/provider.ts の
+    定数）。presigned DL は署名計算のみで外部 HTTP なし。
+    **Maincloud 側の前提はオーナー確認済み（2026-08-06）**: procedure の
+    外部 HTTP は許可されており、エネルギー課金も特段の記載なし（無視して
+    よい）。
+    **実装の要点**:
+    ①**撤去したもの**: server `worker_anchor`・`recording_pass`（テーブル
+    ＋RLS）・`mint_recording_pass`・`register_group_call`・
+    `log_group_recording` / shared capability.ts の録画パス関連（SHA-256 /
+    HMAC 実装は SigV4 の基盤として s3.ts へ改組）/ client の pass 取得層
+    （pass.ts・api.ts の fetch 層・flow.ts・netApi の
+    mint/ownRecordingPass・recording_pass 購読・e2e フック counter）/
+    worker パッケージ全体（Clerk JWKS・ホスト公開鍵・callerKindOf・CORS —
+    procedure は認証済み SpacetimeDB 接続越しに呼ばれ、`ctx.sender` が
+    本人性そのもの）/ infra `CallApi`・`wrangler-call.jsonc` / ci.yml の
+    Worker シークレット同期ステップ
+    ②**procedure 群**（calls.ts。外部 HTTP の実装は provider.ts —
+    index.ts の `export *` 対象外）: `join_group_call`（D4 統合。ゲスト
+    含む in-world 全員 — `ctx.sender` で自然に成立）・
+    `start_group_recording`（承認済みメンバー限定。meeting は sender の
+    membership から解決し、ラベル行 call_recording は**結果 tx がサーバー
   側で書く** — 旧 log_group_recording の「クライアントが fileName を
-  名乗る」余地ごと消えた）・`stop_group_recording`（アクティブ照会 →
-  停止。「アクティブなし」は正常応答）・`list_recordings`・
-  `recording_download_url`（承認済みメンバー限定。S3 SigV4 は
-  @kaede/shared の s3.ts に純 TS 実装 — module ホストに WebCrypto が
-  無いため。AWS 公式ドキュメントの presign ベクタと RFC 4231 で単体
-  テスト。**認可はすべて presigned URL 一本**: SDK の Headers クラスが
-  カンマ区切り値をリスト分割して送るため、SigV4 の Authorization
-  ヘッダは複数ヘッダに割れて edge が 400 を返す — ヘッダ署名は
-  procedure から送信不能と実測（2026-08-06）し、一覧も presign した
-  URL を fetch する形に統一した）
-  ③**不変のもの**: RealtimeKit→R2 の録画直送（storage_config）、
-  `group_call` 行のメンバー限定 RLS（meeting id＝参加ケイパビリティ。
-  行の書き手が reducer から join_group_call の結果 tx に変わっただけ）、
-  承認制・録画は承認済みメンバー限定という製品仕様（procedure 内で
-  approved を検査）、ゲストの通話開始/参加/画面共有はメンバー同等
-  ④**デプロイ順序と後始末**: module（procedure 追加）→ client の順で
-  同一デプロイ。Worker `kaede-call` は**即時削除**（Alchemy スタックから
-  外れた時点で削除）— 開きっぱなしの旧タブは旧 Worker と旧 reducer の
-  両方を失うため通話系操作が失敗するが、リロードで回復する（小さな
-  コミュニティで通話は短命、遅延削除は攻撃面と二度目の撤去 PR を残す
-  だけと判断）。**再 publish リハーサルの実測（2026-08-06、main の
+    名乗る」余地ごと消えた）・`stop_group_recording`（アクティブ照会 →
+    停止。「アクティブなし」は正常応答）・`list_recordings`・
+    `recording_download_url`（承認済みメンバー限定。S3 SigV4 は
+    @kaede/shared の s3.ts に純 TS 実装 — module ホストに WebCrypto が
+    無いため。AWS 公式ドキュメントの presign ベクタと RFC 4231 で単体
+    テスト。**認可はすべて presigned URL 一本**: SDK の Headers クラスが
+    カンマ区切り値をリスト分割して送るため、SigV4 の Authorization
+    ヘッダは複数ヘッダに割れて edge が 400 を返す — ヘッダ署名は
+    procedure から送信不能と実測（2026-08-06）し、一覧も presign した
+    URL を fetch する形に統一した）
+    ③**不変のもの**: RealtimeKit→R2 の録画直送（storage_config）、
+    `group_call` 行のメンバー限定 RLS（meeting id＝参加ケイパビリティ。
+    行の書き手が reducer から join_group_call の結果 tx に変わっただけ）、
+    承認制・録画は承認済みメンバー限定という製品仕様（procedure 内で
+    approved を検査）、ゲストの通話開始/参加/画面共有はメンバー同等
+    ④**デプロイ順序と後始末**: module（procedure 追加）→ client の順で
+    同一デプロイ。Worker `kaede-call` は**即時削除**（Alchemy スタックから
+    外れた時点で削除）— 開きっぱなしの旧タブは旧 Worker と旧 reducer の
+    両方を失うため通話系操作が失敗するが、リロードで回復する（小さな
+    コミュニティで通話は短命、遅延削除は攻撃面と二度目の撤去 PR を残す
+    だけと判断）。**再 publish リハーサルの実測（2026-08-06、main の
   モジュール → 行投入 → 本ブランチ publish）**: ホストは**行が残っている
   テーブルの削除を拒否**する（「Cannot remove table `recording_pass`:
-  table contains data」— publish 自体が 400 で止まり、既存データは無傷）。
-  したがって本番の `worker_anchor` 行 DELETE と `recording_pass` の全行
-  DELETE は**マージ前のオーナー操作として必須**（消せば同じ publish が
-  受理され、既存行 — conversation_group・group_call・player 系 — は
-  存続し、旧テーブルだけが消えることを実測）。`call_config` はテーブルが
-  publish で生まれてからしか播種できないため、デプロイ直後にオーナーが
-  README の設営手順で INSERT するまで通話/録画は fail closed（loud 拒否
-  — 実測済み）。その他のオーナー操作: GitHub シークレット
-  `RECORDING_PASS_SECRETS` の削除（`REALTIMEKIT_API_TOKEN` も CI では
-  不要になる）・RealtimeKit 側 Webhook 登録の削除（D1 — 本 PR の作業で
-  API から削除済み）
-  **引き受けた新リスク（オーナー了承 2026-08-06）**: 秘密が DB 内の
-  非公開テーブルへ移る（バックアップ除外は D5 で対応済み）・権威/秘密/
-  外部呼び出しの module への集中（現行は Worker 侵害でも DB が無事という
-  分離があった）・procedure API の成熟度（CLI に UNSTABLE 警告 —
-  バージョン厳密ピンの既存方針で緩和）・同期 HTTP の待ち時間が
-  エネルギー消費になる点（録画系は低頻度・実測レイテンシ 3s 未満で
-  実害僅少）。なお増分⑤アンカーの運用改善案（CI 自動播種）は、本増分が
-  アンカーごと撤去したため消滅
+    table contains data」— publish 自体が 400 で止まり、既存データは無傷）。
+    したがって本番の `worker_anchor` 行 DELETE と `recording_pass` の全行
+    DELETE は**マージ前のオーナー操作として必須**（消せば同じ publish が
+    受理され、既存行 — conversation_group・group_call・player 系 — は
+    存続し、旧テーブルだけが消えることを実測）。`call_config` はテーブルが
+    publish で生まれてからしか播種できないため、デプロイ直後にオーナーが
+    README の設営手順で INSERT するまで通話/録画は fail closed（loud 拒否
+    — 実測済み）。その他のオーナー操作: GitHub シークレット
+    `RECORDING_PASS_SECRETS` の削除（`REALTIMEKIT_API_TOKEN` も CI では
+    不要になる）・RealtimeKit 側 Webhook 登録の削除（D1 — 本 PR の作業で
+    API から削除済み）
+    **引き受けた新リスク（オーナー了承 2026-08-06）**: 秘密が DB 内の
+    非公開テーブルへ移る（バックアップ除外は D5 で対応済み）・権威/秘密/
+    外部呼び出しの module への集中（現行は Worker 侵害でも DB が無事という
+    分離があった）・procedure API の成熟度（CLI に UNSTABLE 警告 —
+    バージョン厳密ピンの既存方針で緩和）・同期 HTTP の待ち時間が
+    エネルギー消費になる点（録画系は低頻度・実測レイテンシ 3s 未満で
+    実害僅少）。なお増分⑤アンカーの運用改善案（CI 自動播種）は、本増分が
+    アンカーごと撤去したため消滅
 - 通話コストの実測とプラン判断（VISION の試算では RealtimeKit
   $0.002/参加者分 ≒ 月$20〜30想定）
   → **ドッグフーディング再開後の実測項目へ付け替え（2026-08-07、Phase 4 の
@@ -1374,7 +1369,6 @@ D&D は概念ごと廃止 — 下の「合意済みの後続増分」参照）�
 
 **起票の経緯と分類（2026-08-07）**: メンバーの実測フィードバックを ROADMAP と
 突き合わせて 3 分類した:
-
 - **Phase 5 の既存項目に該当**: 「アバターの種類をたくさん」「手足も動いて
   ほしい（歩行アニメーション）」→ Phase 5 のパーツ分割リグ＋AI パイプライン＋
   着せ替えがそのまま受け皿。項目は Phase 5 のまま動かさず、**実需シグナル**
@@ -1391,7 +1385,6 @@ D&D は概念ごと廃止 — 下の「合意済みの後続増分」参照）�
 **増分（それぞれ独立 PR。着手順は上から）**。見た目・レイアウトの変更は
 before/after スクリーンショットでオーナー確認を取る（lint/test 通過だけで
 完了にしない）:
-
 - **①Clerk 認証 UI の日本語化** ✅ **実装済み（2026-08-07）**: 公式
   `@clerk/localizations` の `jaJP` を `ClerkProvider` の `localization` に
   渡す。自前翻訳はしない — i18n 単一系統（Paraglide）の対象は自前文字列で、
@@ -1491,7 +1484,6 @@ before/after スクリーンショットでオーナー確認を取る（lint/te
 いずれも**着手直前に設計議論のセッションを置き、設計合意 → 実装増分化**の
 順で進める（Phase 5 先行の理由は下の完了条件の追記を参照 — ⑦③座るはリグに、
 ⑦①装飾はアートパイプラインに依存する）。
-
 - **⑦オブジェクトシステム（決定変更を了承・段階導入 — オーナー
   2026-08-07）**: マップにオブジェクトを配置できるようにする（パソコン
   デスク＝「座る」アクション、ぬいぐるみ＝装飾のみ、のようにオブジェクト
@@ -1603,7 +1595,6 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
 （PNG＋manifest。PixiJS は再生機）。
 
 **増分分割案（実装着手は新方式スパイク→オーナー確認の後）**:
-
 - **①a ポーズフレーム基盤＋歩行**: スパイクをやり直し（stand＋walk コマの
   シート生成→取り込み→コマ切替描画）、`AvatarView` の薄い境界と最小の
   取り込みライン込みで本実装へ。歩行同期は v1 の導出（`advanceWalk`）を
@@ -1674,7 +1665,7 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
   スイング歩行との構造衝突** — 両拳が常に目立って空振りするため、どの
   静的位置に置いても半分のコマで破綻する。nano-banana-2 に「持ち手を
   固定した carry 歩行」への編集を 2 回試みたが腕ポーズ指示は効かず
-  （⑴の教訓の再確認）、一方  **「アイテムを持たせる編集」（弁当箱で実験）は
+  （⑴の教訓の再確認）、一方 **「アイテムを持たせる編集」（弁当箱で実験）は
   腕ごと描くため腕とアイテムの整合が常に正しい**ことを確認 — 焼き込みは
   item×outfit の掛け算になるが、元シートとの差分抽出で「腕込み
   オーバーレイ部品」（本家 MapleStory の weapon+arm 構造）へ発展できる
@@ -2043,7 +2034,6 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
 
 各増分のスキーマ影響（①c①d①e は additive な追加が必要）は
 [docs/avatar-rig.md](./avatar-rig.md) §7 に整理済み — 着手前にオーナー判断。
-
 - パーツ分割アバターリグ（頭・胴・腕・脚・服レイヤー＋骨格アニメ）
   → **方式転換（2026-08-08）**: 骨格アニメではなく**ポーズフレーム＋
   レイヤー合成**で実現する（上記。パーツ回転リグは棄却 — 経緯は
@@ -2071,7 +2061,6 @@ Phase 6 の事業判断）。適用範囲はアバター・装備・オブジェ
 ## Phase 6: SaaS 化（構想段階）
 
 ここは方向性のみ。Phase 4〜5 の運用実績を踏まえて具体化する。
-
 - **スケール戦略: 不変条件2つのみ先行決定し、方式の本決定は本フェーズで行う
   （2026-08-02）**: SpacetimeDB は 1 データベース＝1 ノードの垂直スケールが
   基本で、水平シャーディングはない。方式の候補は「単一 DB＋`tenant_id`」
