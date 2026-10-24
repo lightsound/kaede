@@ -25,7 +25,7 @@ import {
   UI_GOLD,
   UI_GOLD_BORDER,
   UI_GOLD_BORDER_SOFT,
-  UI_PANEL_BG,
+  UI_STACKED_PANEL_STYLE,
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
@@ -50,19 +50,12 @@ const SCOPE_LOST_MESSAGE =
   '選択していた送信先が無くなったため送信していません。送信先を確認してください';
 
 const panelStyle: CSSProperties = {
+  ...UI_STACKED_PANEL_STYLE,
+  padding: 8,
   position: 'absolute',
   bottom: 12,
   right: 12,
   width: 300,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  padding: 8,
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  font: UI_FONT,
-  color: UI_TEXT_COLOR,
 };
 
 const logStyle: CSSProperties = {

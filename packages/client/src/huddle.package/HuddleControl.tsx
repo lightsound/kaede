@@ -7,26 +7,13 @@ import {
 } from '@kaede/shared';
 import { type CSSProperties, useState } from 'react';
 import type { HuddleView } from '../net.package';
-import { UI_BUTTON_BG, UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG, UI_TEXT_COLOR } from '../theme';
+import { UI_BUTTON_BG, UI_GOLD_BORDER, UI_STACKED_PANEL_STYLE, UI_TEXT_COLOR } from '../theme';
 import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
 
 /** The user-facing wording of each huddle-name refusal (normalizeHuddleName). */
 const NAME_ERRORS: Record<HuddleNameRejectReason, string> = {
   'too-long': `名前は${ZONE_NAME_MAX_LENGTH}文字以内にしてください`,
   'forbidden-characters': '使えない文字が含まれています',
-};
-
-// Where the panel sits is App's: the bottom-left column (leftColumn.ts).
-const panelStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  padding: '6px 8px',
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  font: UI_FONT,
-  color: UI_TEXT_COLOR,
 };
 
 const rowStyle: CSSProperties = {
@@ -109,7 +96,8 @@ function FoundHuddleForm({
  * founding one on the spot and — while standing near one — joining it
  * (近づいて参加ボタン). What it offers comes from the feed's HuddleView
  * (the shared join rule over the subscribed cache); the server re-rules
- * every action, so the offers are UX, not authority.
+ * every action, so the offers are UX, not authority. Where the control
+ * sits is App's: the bottom-left column (leftColumn.ts).
  */
 export function HuddleControl({
   connected,
@@ -128,7 +116,7 @@ export function HuddleControl({
 
   if (view.own !== undefined) {
     return (
-      <div style={panelStyle}>
+      <div style={UI_STACKED_PANEL_STYLE}>
         <div style={rowStyle}>
           <span>{view.own}</span>
           <button
@@ -145,7 +133,7 @@ export function HuddleControl({
   }
   const joinable = view.joinable;
   return (
-    <div style={panelStyle}>
+    <div style={UI_STACKED_PANEL_STYLE}>
       {joinable !== undefined && (
         <div style={rowStyle}>
           <button

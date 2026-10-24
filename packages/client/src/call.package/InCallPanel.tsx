@@ -18,9 +18,8 @@ import { type CSSProperties, useEffect, useState } from 'react';
 import {
   UI_BUTTON_BG,
   UI_ERROR_COLOR,
-  UI_FONT,
   UI_GOLD_BORDER,
-  UI_PANEL_BG,
+  UI_STACKED_PANEL_STYLE,
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
@@ -35,15 +34,7 @@ import type { Meeting } from './realtimekit';
 // Sized for the dock over the 2D world (部品を組む — not fullscreen); where
 // the dock sits is App's: the bottom-left column (leftColumn.ts).
 const inCallStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  padding: '6px 8px',
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  font: UI_FONT,
-  color: UI_TEXT_COLOR,
+  ...UI_STACKED_PANEL_STYLE,
   width: 520,
   maxWidth: 520,
 };

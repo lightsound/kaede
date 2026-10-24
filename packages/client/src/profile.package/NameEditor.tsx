@@ -5,7 +5,7 @@ import {
   normalizeDisplayName,
 } from '@kaede/shared';
 import type { CSSProperties } from 'react';
-import { UI_FONT, UI_GOLD_BORDER, UI_PANEL_BG } from '../theme';
+import { UI_PANEL_STYLE } from '../theme';
 import { DraftForm } from '../ui.package';
 
 const REJECT_MESSAGES: Record<DisplayNameRejectReason, string> = {
@@ -16,14 +16,10 @@ const REJECT_MESSAGES: Record<DisplayNameRejectReason, string> = {
 
 // Where the form sits is App's: the bottom-left column (leftColumn.ts).
 const formStyle: CSSProperties = {
+  ...UI_PANEL_STYLE,
   display: 'flex',
   alignItems: 'center',
   gap: 6,
-  padding: '6px 8px',
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  font: UI_FONT,
 };
 
 /**

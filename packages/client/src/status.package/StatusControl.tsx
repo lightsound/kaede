@@ -12,10 +12,9 @@ import {
 import type { CSSProperties } from 'react';
 import {
   UI_BUTTON_BG,
-  UI_FONT,
   UI_GOLD_BORDER,
   UI_GOLD_BORDER_SOFT,
-  UI_PANEL_BG,
+  UI_STACKED_PANEL_STYLE,
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
@@ -23,19 +22,6 @@ import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
 const REJECT_MESSAGES: Record<StatusTextRejectReason, string> = {
   'too-long': `ステータスは${STATUS_TEXT_MAX_LENGTH}文字以内にしてください`,
   'forbidden-characters': '使用できない文字が含まれています',
-};
-
-// Where the panel sits is App's: the bottom-left column (leftColumn.ts).
-const panelStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  padding: '6px 8px',
-  borderRadius: 8,
-  background: UI_PANEL_BG,
-  border: UI_GOLD_BORDER,
-  font: UI_FONT,
-  color: UI_TEXT_COLOR,
 };
 
 const rowStyle: CSSProperties = {
@@ -126,7 +112,8 @@ function AvailabilityRow({
  * the applied text becomes the placeholder: the emptied input showing the
  * authoritative line IS the success signal, and the next draft starts
  * clean. Submitting an empty draft is the clear operation; the クリア
- * button is the discoverable spelling of the same thing.
+ * button is the discoverable spelling of the same thing. Where the panel
+ * sits is App's: the bottom-left column (leftColumn.ts).
  */
 export function StatusControl({
   connected,
@@ -155,7 +142,7 @@ export function StatusControl({
   };
 
   return (
-    <div style={panelStyle}>
+    <div style={UI_STACKED_PANEL_STYLE}>
       <AvailabilityRow
         disabled={disabled}
         current={status.availability}
