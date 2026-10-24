@@ -299,10 +299,9 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    `pnpm --filter @kaede/infra plan:prod` で差分のプレビューだけもできます。
    （スクリプト名が `deploy` ではなく `deploy:prod` なのは、`pnpm deploy` が
    pnpm の組み込みサブコマンドと衝突してスクリプトが実行されないためです。）
-   prod 以外のステージや他の alchemy サブコマンドは、ワークアラウンド
-   （ランチャーの bun 誤検知回避 `npm_execpath=` とプロファイル固定）込みの
-   汎用スクリプト経由で実行します。素の `pnpm exec alchemy` や `npx alchemy`
-   はこれらを迂回してしまうため使いません:
+   prod 以外のステージや他の alchemy サブコマンドは、プロファイル固定
+   （`ALCHEMY_PROFILE=kaede`）込みの汎用スクリプト経由で実行します。素の
+   `pnpm exec alchemy` や `npx alchemy` はこれを迂回してしまうため使いません:
 
    ```sh
    pnpm --filter @kaede/infra alchemy plan --stage dev_yourname
