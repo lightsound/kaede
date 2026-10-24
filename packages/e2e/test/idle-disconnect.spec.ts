@@ -4,7 +4,7 @@ import { enterWorld, snapshot } from './helpers';
 
 const remoteCount = async (page: Page) => (await snapshot(page)).remotePlayers.length;
 
-// 本番の 15 分を待たず休止を起こすための開発ビルド限定の上書き(idle.ts)。
+// 本番の 60 分を待たず休止を起こすための開発ビルド限定の上書き(idle.ts)。
 // 短いほどテストは速いが、この値は「キー押下(=アイドル時計のリセット)から
 // 再入場の検証が終わるまで」の予算でもある。負荷の高い CI で再入場の
 // ラウンドトリップが遅れても A が再休止しないだけの余裕を取る。
