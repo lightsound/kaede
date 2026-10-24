@@ -315,6 +315,18 @@ export function createNetApi(deps: NetApiDeps): NetApi {
     return (arg) => callReducer(name, (c) => call(c, arg));
   }
 
+  /**
+   * The shared shell of every procedure call (増分⑥): reject while
+   * disconnected, otherwise run `call` on the current connection. Unlike
+   * callReducer nothing is logged or swallowed here — a procedure has an
+   * answer, so the caller receives the rejection and surfaces it.
+   */
+  function callProcedure<T>(call: (c: DbConnection) => Promise<T>): Promise<T> {
+    const c = deps.conn();
+    if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
+    return call(c);
+  }
+
   return {
     setDisplayName: forward('set_display_name', (c, name: string) =>
       c.reducers.setDisplayName({ name }),
@@ -396,35 +408,31 @@ export function createNetApi(deps: NetApiDeps): NetApi {
       c.reducers.sendAnnouncement({ text }),
     ),
     joinGroupCall() {
-      const c = deps.conn();
-      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.procedures.joinGroupCall({});
+      return callProcedure((c) => c.procedures.joinGroupCall({}));
     },
     startGroupRecording(groupId) {
-      const c = deps.conn();
-      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.procedures.startGroupRecording({ groupId }).then(() => undefined);
+      return callProcedure((c) =>
+        c.procedures.startGroupRecording({ groupId }).then(() => undefined),
+      );
     },
     stopGroupRecording(groupId) {
-      const c = deps.conn();
-      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.procedures.stopGroupRecording({ groupId }).then(() => undefined);
+      return callProcedure((c) =>
+        c.procedures.stopGroupRecording({ groupId }).then(() => undefined),
+      );
     },
     listRecordings() {
-      const c = deps.conn();
-      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.procedures.listRecordings({}).then((files) =>
-        files.map((file) => ({
-          fileName: file.fileName,
-          size: Number(file.size),
-          uploadedAt: file.uploadedAt,
-        })),
+      return callProcedure((c) =>
+        c.procedures.listRecordings({}).then((files) =>
+          files.map((file) => ({
+            fileName: file.fileName,
+            size: Number(file.size),
+            uploadedAt: file.uploadedAt,
+          })),
+        ),
       );
     },
     recordingDownloadUrl(fileName) {
-      const c = deps.conn();
-      if (!c) return Promise.reject(new Error('SpacetimeDB: not connected'));
-      return c.procedures.recordingDownloadUrl({ fileName });
+      return callProcedure((c) => c.procedures.recordingDownloadUrl({ fileName }));
     },
   };
 }

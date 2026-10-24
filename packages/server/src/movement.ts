@@ -186,14 +186,14 @@ function clearGestureOnMove(
 // `tick` advances by ONE even though a teleport applies no inputs: it is
 // the fence that invalidates in-flight input batches. The client keeps
 // ticking on the ORIGIN map until the teleported row round-trips back
-// (its prediction is torn down only then — sync.ts switchMap), so a flush
-// cadence can land origin-map inputs here after the teleport; with the
-// old tick they replayed from the landing spot on the DESTINATION map
-// (walking the traveler around a map its inputs never saw), while a
-// bumped tick makes every batch minted against the pre-teleport counter
-// refuse as stale-tick — the resend watchdog's silent duplicate path, no
-// log noise. The client's fresh prediction starts from this row's tick,
-// so it is never out of step.
+// (its prediction is torn down only then — playerFeed.ts switchMap), so
+// a flush cadence can land origin-map inputs here after the teleport;
+// with the old tick they replayed from the landing spot on the
+// DESTINATION map (walking the traveler around a map its inputs never
+// saw), while a bumped tick makes every batch minted against the
+// pre-teleport counter refuse as stale-tick — the resend watchdog's
+// silent duplicate path, no log noise. The client's fresh prediction
+// starts from this row's tick, so it is never out of step.
 //
 // Refusals follow the movement rule (silent drop + warn) rather than
 // chat's loud SenderError: a stale double-press racing the first teleport

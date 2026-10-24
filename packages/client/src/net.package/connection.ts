@@ -143,12 +143,12 @@ export async function connect(
         // narrows the DM history subscribed here. Reactions are subscribed for their row
         // EVENTS only; the seed never displays (see reactionFeed.ts).
         // Statuses are the opposite: the seed IS the display (a status is
-        // state, restored on entry — see sync.ts). The conversation groups
-        // and their occupancy (Phase 3 増分②) are whole-table too: both are
-        // low-frequency, small and space-wide (the admin panel lists every
-        // map's zones; a member's 📍 tag shows whatever map you watch from)
-        // — the ROADMAP AoI reasoning for why only the hot player rows are
-        // map-scoped.
+        // state, restored on entry — see playerFeed.ts). The conversation
+        // groups and their occupancy (Phase 3 増分②) are whole-table too:
+        // both are low-frequency, small and space-wide (the admin panel
+        // lists every map's zones; a member's 📍 tag shows whatever map you
+        // watch from) — the ROADMAP AoI reasoning for why only the hot
+        // player rows are map-scoped.
         //
         // The OTHER players' hot rows are deliberately NOT here: they are
         // map-scoped (subscribeMapRows — the Phase 3 AoI 絞り込み), and

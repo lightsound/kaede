@@ -45,7 +45,8 @@ const sameState = (a: PlayerState, b: PlayerState): boolean =>
  *
  * `map` is the geometry replays run on. A prediction never crosses maps:
  * a portal teleport tears this instance down and the map switch builds a
- * fresh one from the authoritative row on the destination map (sync.ts).
+ * fresh one from the authoritative row on the destination map
+ * (playerFeed.ts).
  */
 export function createPrediction(
   deps: PredictionDeps,
