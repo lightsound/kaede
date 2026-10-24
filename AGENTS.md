@@ -87,6 +87,15 @@ Two more fallow quirks to know about (both bit Phase 3 work):
   reaches 5 (CRAP 30), so keep reducer/DOM helpers small and split branches
   out (the `backfillAccountName` precedent).
 
+### Markdown and YAML formatting
+
+Biome also formats and lints `*.md` and `*.yml` (`pnpm lint` checks, `pnpm format` fixes);
+generated and tool-managed files are excluded in `biome.json`. Biome pads every table row to the
+widest cell in each column, so keep table cells short and put long explanations under headings or
+in lists — `docs/VISION.md` uses a short summary table plus one section per item for this reason.
+Biome 2.6.2 can change the nesting of a nested list when it re-indents it, so check the rendered
+result after formatting one.
+
 ### Internal package boundaries
 
 ImportLint enforces directory-level encapsulation inside each workspace; fallow continues to
