@@ -33,8 +33,9 @@ import { type Ctx, findPostingSender, type SenderIdentity, type WorldRows } from
  * tables.ts). A local wrapper rather than a shared one, deliberately: a
  * shared evaluateHuddleSend would name the sendAllowance types in its
  * public signature and push the type-coupling evidence past its cap (the
- * rationale recorded in zone.ts's huddle section); the constants live in
- * shared and the bucket rule is the unit-tested evaluateSendAllowance.
+ * rationale recorded at HUDDLE_SEND_COST_MICROS in shared's huddle.ts); the
+ * constants live in shared and the bucket rule is the unit-tested
+ * evaluateSendAllowance.
  */
 function evaluateHuddleSend(request: SendAllowanceRequest): SendAllowanceVerdict {
   return evaluateSendAllowance(request, HUDDLE_SEND_COST_MICROS, HUDDLE_BURST_SENDS);

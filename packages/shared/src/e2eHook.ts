@@ -26,7 +26,7 @@ export interface E2EWorldSnapshot {
   zones: E2EZoneSnapshot[];
   /**
    * The huddles rendered on the current map this frame (ROADMAP Phase 3
-   * 増分③): the composed canvas label (huddleLabel in zone.ts — the 🤫
+   * 増分③): the composed canvas label (huddleLabel in huddle.ts — the 🤫
    * marker rides it), the closed flag, and how many member sprites
    * anchored the circle — the huddle spec's evidence that the circle
    * follows the avatars actually present. An inline shape rather than a
@@ -57,9 +57,9 @@ export interface E2EZoneSnapshot {
  * text currently shown above the avatar, `reaction` the emoji reaction,
  * `status` the composed status line under the avatar (statusLabel in
  * status.ts), and `zone` the composed occupancy tag below that
- * (zoneTagLabel in zone.ts), each absent while none is — all are
- * canvas-drawn (like positions), so the chat, reaction, status and zone
- * specs can only assert on them through this hook.
+ * (groupTagLabel in conversationGroup.ts), each absent while none is —
+ * all are canvas-drawn (like positions), so the chat, reaction, status and
+ * zone specs can only assert on them through this hook.
  */
 export interface E2EPlayerSnapshot {
   x: number;
