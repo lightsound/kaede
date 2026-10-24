@@ -7,12 +7,20 @@
  * them on the studio's behalf: the ImportLint boundary stays intact and
  * the studio consumes plain records through the package index.
  *
- * Both globs are lazy (thunks, not eager modules) so production builds —
- * where the only caller sits behind main.tsx's import.meta.env.DEV gate —
- * tree-shake the whole enumeration away with the studio itself.
+ * Both globs exist in dev builds only, behind the same import.meta.env.DEV
+ * gate as the studio itself (main.tsx). Lazy thunks alone are not enough
+ * here: they hang off an export the package index re-exports, so a
+ * production build loads every file they name before tree-shaking drops
+ * that export, and Vite emits each loaded PNG as a build asset whether or
+ * not any chunk still references it. The gate folds to `{}` before the
+ * bundler collects the module's imports, so nothing is loaded at all.
  */
-const manifestModules = import.meta.glob('./**/manifest.json', { import: 'default' });
-const imageUrlModules = import.meta.glob('./**/*.png', { query: '?url', import: 'default' });
+const manifestModules = import.meta.env.DEV
+  ? import.meta.glob('./**/manifest.json', { import: 'default' })
+  : {};
+const imageUrlModules = import.meta.env.DEV
+  ? import.meta.glob('./**/*.png', { query: '?url', import: 'default' })
+  : {};
 
 async function loadAll<T>(
   modules: Record<string, () => Promise<unknown>>,
@@ -28,7 +36,9 @@ async function loadAll<T>(
  * relative path such as `./avatar/manifest.json`) and every bundled PNG's
  * served URL (same key space). Deliberately untyped records: what a
  * manifest means — and whether it is well-formed — is the studio
- * catalog's business, not this enumeration's.
+ * catalog's business, not this enumeration's. Dev builds only: in a
+ * production build both records are empty (the gate above), so
+ * production code must not call this.
  */
 export async function loadAssetModules(): Promise<{
   manifests: Record<string, unknown>;
