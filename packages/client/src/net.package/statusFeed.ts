@@ -22,16 +22,16 @@ export interface StatusFeedHooks {
  * (see the player_status table), and statusViewOf narrows the raw row at
  * this boundary (the isReactionEmoji rule): a row this module cannot vouch
  * for reads as the default rather than rendering an unvetted string. The
- * same cache-before-event SDK guarantee as sync.ts's nameOf makes reading
- * it during row handling safe.
+ * same cache-before-event SDK guarantee as playerFeed.ts's nameOf makes
+ * reading it during row handling safe.
  */
 export function cachedStatusView(c: DbConnection, identity: Identity): StatusView {
   return statusViewOf(c.db.playerStatus.identity.find(identity));
 }
 
 /**
- * Wires one session's status row EVENTS (ROADMAP Phase 2) — the applyName
- * wiring of sync.ts, for the line beside the name. Insert and update both
+ * Wires one session's status row EVENTS (ROADMAP Phase 2) — playerFeed.ts's
+ * applyName wiring, for the line beside the name. Insert and update both
  * carry the new view (the first write of an identity-keyed upsert row is an
  * insert, every later one an update); DELETE is wired too, unlike names,
  * because this table loses rows while their owner stays rendered on this

@@ -172,8 +172,8 @@ describe('collectDmCandidates', () => {
     expect(collectDmCandidates([{ online: false, name: '楓', key: 'aa11' }])).toEqual([]);
   });
 
-  // A nameless row is the mid-teardown broken-pair case (sync.ts's nameOf
-  // reads '' then); nothing renders it, so nothing can mention it.
+  // A nameless row is the mid-teardown broken-pair case (playerFeed.ts's
+  // nameOf reads '' then); nothing renders it, so nothing can mention it.
   it('drops players without a resolvable name', () => {
     expect(
       collectDmCandidates([

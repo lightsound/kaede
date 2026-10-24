@@ -10,34 +10,21 @@ import {
   mapFor,
   type PlayerState,
   type StatusView,
-  stateFromRow,
   statusLabel,
   unpackInput,
 } from '@kaede/shared';
-import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import { captureEvent } from '../telemetry.package';
+import { watchActivity } from './activity';
 import { type SpaceView, wireAdmission } from './admission';
 import { wireOwnGroup } from './callFeed';
 import { createChatFeed } from './chatFeed';
 import type { ChatLog } from './chatLog';
 import { type ChatScopeView, wireChatScopes } from './chatScopeFeed';
-import {
-  type AuthTokenGetter,
-  type Connected,
-  connect,
-  subscribeMapRows,
-  target,
-} from './connection';
-import { cachedStateGesture, wireGestures } from './gestureFeed';
+import { type AuthTokenGetter, type Connected, connect, target } from './connection';
+import { wireGestures } from './gestureFeed';
 import { createHeartbeat } from './heartbeat';
-import {
-  createIdleMonitor,
-  IDLE_CHECK_INTERVAL_MS,
-  IDLE_DISCONNECT_MS,
-  parseIdleTimeoutOverride,
-} from './idle';
 import {
   type ConnectionStatus,
   initialLifecycle,
@@ -46,24 +33,14 @@ import {
   transition,
 } from './lifecycle';
 import { createNetApi, type NetApi } from './netApi';
-import { createPrediction } from './prediction';
+import { createPlayerFeed, type OwnSim } from './playerFeed';
 import { wireReactions } from './reactionFeed';
 import { type RecordingLabelView, wireRecordings } from './recordingFeed';
 import { createRemoteViews } from './remoteView';
-import type { RowOf } from './rows';
-import { cachedStatusView, wireStatuses } from './statusFeed';
-import { cachedZoneTag, type HuddleView, wireZones, type ZoneAdminView } from './zoneFeed';
+import { wireStatuses } from './statusFeed';
+import { type HuddleView, wireZones, type ZoneAdminView } from './zoneFeed';
 
 export type { ConnectionStatus } from './lifecycle';
-
-/** The generated own/remote player row type (all columns). */
-type PlayerRow = RowOf<'player'>;
-
-/** The generated player_name row type (the display name split off the hot row). */
-type PlayerNameRow = RowOf<'playerName'>;
-
-/** ユーザーの在席とみなす操作イベント。タイムスタンプを書くだけなので capture+passive で広く拾う。 */
-const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const;
 
 /**
  * One runner per lifecycle effect kind, each receiving its narrowed payload.
@@ -244,18 +221,15 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     if (netStats) netStats[key] += 1;
   };
 
-  // The map the live session is scoped to: which player rows are subscribed
-  // (subscribeMapRows), which geometry the prediction replays on, and
-  // which map GameApp renders. Session state, but held here (like `conn`
-  // and `prediction`) because the tick callback below — registered once,
-  // outside any session — reads it for portal-intent detection. Updated by
-  // wireSession on entry and by its switchMap on every teleport.
-  let currentMapId = DEFAULT_MAP_ID;
-
-  // Set while an enter_portal call is in flight; cleared when the own
-  // row's map flips (switchMap) or PORTAL_PENDING_TIMEOUT_MS passes (the
-  // rule and its rationale live in decidePortalCall, @kaede/shared).
-  let portalPendingAtMs: number | undefined;
+  // The own simulation's state, held across sessions (see OwnSim in
+  // playerFeed.ts): the tick callback and the heartbeat below read it,
+  // wireSession and dropSession set and clear it, and each session's
+  // player feed starts and re-maps the simulation.
+  const sim: OwnSim = {
+    prediction: undefined,
+    currentMapId: DEFAULT_MAP_ID,
+    portalPendingAtMs: undefined,
+  };
 
   // いつ最後に submit_inputs を送ったか(バッチ・ハートビートとも)。
   // 送信ゲートが閉じている間はこれが HEARTBEAT_INTERVAL_MS だけ古くなり、
@@ -269,18 +243,15 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     c.reducers.submitInputs({ startTick: 0, inputs: new Uint8Array(0) }).catch(() => {});
   }
 
-  // 無操作ガード: タイムアウトを超えたら接続(と再試行ループ)を休止し、次の
-  // 操作で再開する。開発ビルドだけ ?idleMs= で短縮できる(E2E・手動確認用)。
-  const idleTimeoutMs =
-    (import.meta.env.DEV ? parseIdleTimeoutOverride(window.location.search) : undefined) ??
-    IDLE_DISCONNECT_MS;
-  const idle = createIdleMonitor(idleTimeoutMs, Date.now());
-
-  // Prediction lives per connection: it is created once the authoritative own
-  // row is known, and torn down (with the remote views) when the connection
-  // drops. The local sim keeps running while offline; reconnecting snaps it
-  // back to the authoritative row.
-  let prediction: ReturnType<typeof createPrediction> | undefined;
+  /** One input batch: the prediction's send path (see handleOwnRow in playerFeed.ts). */
+  function sendBatch(startTick: number, packed: Uint8Array): void {
+    // Batches lost to a dropping connection are expected and already
+    // recovered by the resend watchdog, so a per-batch failure is not
+    // worth reporting; logging one per flush would bury everything else.
+    lastSendMs = Date.now();
+    bumpStat('inputBatchesSent');
+    conn?.reducers.submitInputs({ startTick, inputs: packed }).catch(() => {});
+  }
 
   // The previous tick's packed input, for the portal intent's press edge.
   let prevPackedInput = 0;
@@ -298,25 +269,25 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
    * ordered, so the server replays every tick the client has simulated
    * before the reducer runs, and its no-slack geometry re-check rules on
    * exactly the state this detection saw. The answer arrives as the own
-   * row's mapId flipping (switchMap in wireSession); failures are silent
+   * row's mapId flipping (switchMap in playerFeed.ts); failures are silent
    * like submit_inputs — a refusal's only honest consequence is that the
    * map does not change.
    */
   function maybeEnterPortal(state: PlayerState, packedInput: number, prevPacked: number): void {
     const c = conn;
-    if (!c || !prediction) return;
+    if (!c || !sim.prediction) return;
     const now = performance.now();
     const portalId = decidePortalCall({
       nowMs: now,
-      pendingSinceMs: portalPendingAtMs,
+      pendingSinceMs: sim.portalPendingAtMs,
       input: unpackInput(packedInput),
       prevInput: unpackInput(prevPacked),
       state,
-      map: mapFor(currentMapId),
+      map: mapFor(sim.currentMapId),
     });
     if (portalId === undefined) return;
-    prediction.flushNow(now);
-    portalPendingAtMs = now;
+    sim.prediction.flushNow(now);
+    sim.portalPendingAtMs = now;
     c.reducers.enterPortal({ portalId }).catch(() => {});
   }
 
@@ -325,13 +296,13 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     prevPackedInput = packedInput;
     const wasOnGround = prevOnGround;
     prevOnGround = state.onGround;
-    if (!prediction) return;
-    prediction.onTick(state, tick, packedInput, performance.now());
+    if (!sim.prediction) return;
+    sim.prediction.onTick(state, tick, packedInput, performance.now());
     // 踏切・着地の tick は周期を待たず即フラッシュする(理由と費用は
     // isGroundContactEdge のコメントを参照)。ポータルと同じ flushNow なので
     // 周期時計もリセットされ、直後の定期便と二重にはならない。
     if (wasOnGround !== undefined && isGroundContactEdge(wasOnGround, state.onGround)) {
-      prediction.flushNow(performance.now());
+      sim.prediction.flushNow(performance.now());
     }
     maybeEnterPortal(state, packedInput, prevPacked);
   });
@@ -347,9 +318,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // name) is deduplicated here instead of leaning on React's same-value
   // bailout. `undefined` means "no own row is known".
   // Caller contract: any caller on an async event path must be
-  // dispose-guarded at its entry point (see wireSession's handlers) —
-  // dispose() itself is the only caller that may run after the flip, and
-  // only with `undefined`.
+  // dispose-guarded at its entry point (see the row handlers in
+  // playerFeed.ts, and admission.ts's rerun, which reaches it through
+  // enterWorld) — dispose() itself is the only caller that may run after
+  // the flip, and only with `undefined`.
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
     if (name === lastOwnName) return;
@@ -390,24 +362,15 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   }
 
   function dropSession(): void {
-    prediction = undefined;
+    sim.prediction = undefined;
     conn = undefined;
-    portalPendingAtMs = undefined;
+    sim.portalPendingAtMs = undefined;
     remoteViews.clear();
     gameApp.clearRemotePlayers();
     // Whether our row survives the retention window is unknowable while
     // offline; report it gone so the rename form disables until the row
     // (re)appears after the next join.
     publishOwnName(undefined);
-  }
-
-  /** Ask the server to spawn or resume our row; the answer arrives as a row event. */
-  function joinWorld(c: DbConnection): void {
-    // Admission is checked before calling this, so a refusal here means the
-    // client's view of the rules drifted from the server's — worth a log.
-    c.reducers.join({}).catch((err: unknown) => {
-      console.error('SpacetimeDB: join failed, this client will not spawn', err);
-    });
   }
 
   function wireSession(settled: Connected, generation: number): void {
@@ -417,183 +380,18 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // while this session's socket is still closing).
     const stale = () => life.disposed || generation !== life.generation;
 
-    // The map-scoped half of the player subscription (see connection.ts),
-    // swapped by switchMap on every teleport. The whole-session state
-    // follows: the shared currentMapId (the tick callback reads it), and
-    // the rendered map — set here because a session may resume an identity
-    // that left off on another map, or replace a session that did.
-    let mapSub = settled.mapSub;
-    currentMapId = settled.mapId;
-    portalPendingAtMs = undefined;
-    gameApp.setMap(mapFor(currentMapId));
-
-    // Names live on player_name, split off the hot row so movement updates
-    // do not re-broadcast them (ROADMAP Phase 2 の player 行ダイエット). The
-    // SDK applies a whole transaction to the row cache before firing any
-    // callback, and the server writes the two rows in the same transaction,
-    // so a player row's name is always in the cache by the time its row
-    // event runs; '' can only be read mid-teardown, when nothing renders.
-    const nameOf = (identity: Identity): string =>
-      c.db.playerName.identity.find(identity)?.name ?? '';
-
-    // The display attributes record() carries per row change, read from the
-    // cache like nameOf. The status and zone-tag seeds ride here: a freshly
-    // (re)created view — session seed, or a player coming back from the
-    // offline-hidden state — starts with the cached status and occupancy
-    // (see cachedStatusView / cachedZoneTag).
-    const labelOf = (identity: Identity) => ({
-      name: nameOf(identity),
-      status: statusLabel(cachedStatusView(c, identity)),
-      zone: cachedZoneTag(c, identity),
-      // The ①c pose inputs ride the label like the status seed: a view
-      // (re)created for a sitting or busy player must start posed.
-      gesture: cachedStateGesture(c, identity),
-      availability: cachedStatusView(c, identity).availability,
-    });
-
-    // Our row appears (or already exists, when resuming an identity) via join
-    // below. Start/refresh the simulation from that authoritative state.
-    const handleOwnRow = (row: PlayerRow) => {
-      if (prediction) return;
-      publishOwnName(nameOf(row.identity));
-      // The seed half of the status display (a status is state, so unlike
-      // reactions the subscribed cache restores it on entry/reload); row
-      // events keep it fresh from here (wireStatuses). The own state
-      // gesture seeds the same way (①c — a reload must restore the pose).
-      publishOwnStatus(cachedStatusView(c, row.identity));
-      gameApp.setLocalGesture(cachedStateGesture(c, row.identity));
-      // Announce liveness once per session start, unconditionally. Resuming
-      // a surviving row skips join, so nothing server-side flips its offline
-      // flag back or refreshes its updatedAt — and the send gate means no
-      // input batch will arrive to do either while we stand still
-      // (pre-suppression, the first 100ms flush did both incidentally).
-      // Without this, a resumed player stays hidden from others until the
-      // first input, and a row resumed near the end of its retention window
-      // could be swept out from under a live client. For a fresh spawn the
-      // server ignores the write (the row is younger than
-      // HEARTBEAT_MIN_AGE_MS and online), so the cost is one reducer call
-      // per entry. Sending also seeds lastSendMs = the heartbeat clock.
-      sendHeartbeat(c);
-      prediction = createPrediction(
-        {
-          sendBatch(startTick, packed) {
-            // Batches lost to a dropping connection are expected and already
-            // recovered by the resend watchdog, so a per-batch failure is not
-            // worth reporting; logging one per flush would bury everything else.
-            lastSendMs = Date.now();
-            bumpStat('inputBatchesSent');
-            conn?.reducers.submitInputs({ startTick, inputs: packed }).catch(() => {});
-          },
-          resetLocal(state, tick) {
-            gameApp.resetLocal(state, tick);
-          },
-        },
-        row.tick,
-        stateFromRow(row),
-        // The row's own map, not currentMapId: the two are equal on every
-        // path into here (the map checks below route a mismatch through
-        // switchMap first), but the row is the authority.
-        mapFor(row.mapId).collision,
-      );
-      gameApp.start(stateFromRow(row), row.tick);
-    };
-
-    /**
-     * Moves this client to the map its own row just landed on (the
-     * enter_portal answer — or another device of the same identity
-     * teleporting). Everything map-scoped restarts: the prediction (its
-     * geometry is per-map), the rendered scene, the remote views (the
-     * destination's population arrives with the swapped subscription), and
-     * the map-scoped subscription itself — the destination map is
-     * subscribed BEFORE the origin is dropped, so there is no window with
-     * neither (the own row, covered by the identity query throughout,
-     * never flickers either way — subscription overlap is refcounted).
-     * Since 増分④ that subscription also carries the map-scoped chat
-     * (subscribeMapRows), so the origin map's lines leave the log with its
-     * players — the accepted consequence of scoping the history.
-     */
-    const switchMap = (row: PlayerRow): void => {
-      currentMapId = row.mapId;
-      portalPendingAtMs = undefined;
-      prediction = undefined;
-      remoteViews.clear();
-      gameApp.clearRemotePlayers();
-      gameApp.setMap(mapFor(row.mapId));
-      // The zone layer is a per-map projection like the map geometry; the
-      // occupancy tags re-derive with it. Safe before zoneFeed's const
-      // initializer only because nothing calls switchMap until the session
-      // is fully wired (enterWorld and the row handlers all run later).
-      zoneFeed.refresh();
-      handleOwnRow(row);
-      const outgoing = mapSub;
-      mapSub = subscribeMapRows(c, row.mapId, () => {
-        // The destination's rows just landed as insert events (recordRemote
-        // picked them up). A stale session's socket is gone or superseded,
-        // and its handles die with the connection — only a live session
-        // needs to drop the origin's rows.
-        if (!stale()) outgoing.unsubscribe();
-      });
-    };
-
-    /**
-     * One own-row update. The map flip (the enter_portal answer — or
-     * another device of this identity teleporting) routes through
-     * switchMap before anything acks. A live own row flipped to offline is
-     * a half-open TCP session's client_disconnected landing AFTER this
-     * connection took over (the race the reducer comment on `online: true`
-     * describes): other clients hide offline rows immediately, and while
-     * the send gate is closed nothing else would correct the flag until
-     * the next input or scheduled heartbeat (minutes) — so liveness is
-     * re-announced now (pre-suppression, the 100ms input stream fixed this
-     * incidentally). Everything else IS the acknowledgement (row.tick =
-     * applied count).
-     */
-    const applyOwnUpdate = (row: PlayerRow): void => {
-      if (row.mapId !== currentMapId) {
-        switchMap(row);
-        return;
-      }
-      if (!row.online) sendHeartbeat(c);
-      prediction?.onAck(stateFromRow(row), row.tick, performance.now());
-    };
-
-    // Offline rows linger server-side for the retention window (so their owner
-    // can resume) but should not be visible in the world. Rows from another
-    // map are dropped the same way: the subscription swap makes them rare
-    // (the origin map's rows delete when its query unsubscribes), but during
-    // the overlap window both maps' rows flow, and a remote player's own
-    // teleport reaches us as an update whose mapId no longer matches.
-    const recordRemote = (idHex: string, row: PlayerRow) => {
-      if (!row.online || row.mapId !== currentMapId) {
-        remoteViews.remove(idHex);
-        gameApp.removeRemotePlayer(idHex);
-        return;
-      }
-      remoteViews.record(
-        idHex,
-        labelOf(row.identity),
-        { ...row, updatedAtMs: Number(row.updatedAt.toMillis()) },
-        performance.now(),
-      );
-    };
-
-    // A player_name change without the hot row moving: a rename round trip,
-    // or a resumed row whose owner renamed on another device. Row events
-    // carry it to whoever renders the label — the own-name consumers or the
-    // remote view. No onDelete: names are deleted only alongside their
-    // player row, whose own delete handling already tears the view down.
-    const applyName = (row: PlayerNameRow): void => {
-      const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) {
-        publishOwnName(row.name);
-        return;
-      }
-      remoteViews.setName(idHex, row.name);
-    };
+    // The whole-session map state: the shared currentMapId (the tick
+    // callback reads it, and so does the zone feed's seed refresh below,
+    // which is why this comes first), and the rendered map — set here
+    // because a session may resume an identity that left off on another
+    // map, or replace a session that did.
+    sim.currentMapId = settled.mapId;
+    sim.portalPendingAtMs = undefined;
+    gameApp.setMap(mapFor(sim.currentMapId));
 
     // Statuses: state wiring, seed + row events (the opposite of the
     // reaction seed rule) — see statusFeed.ts. The seed half rides labelOf
-    // and handleOwnRow; the events land here.
+    // and handleOwnRow (playerFeed.ts); the events land here.
     wireStatuses(c, myIdHex, {
       isStale: stale,
       applyOwn: publishOwnStatus,
@@ -604,7 +402,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // Gestures (Phase 5 ①c): the third display convention — state poses
     // (sit / sleep / dance) seed + events like statuses, the transient
     // wave events-only like reactions; the split lives in gestureFeed.ts.
-    // The seed half rides labelOf and handleOwnRow.
+    // The seed half rides labelOf and handleOwnRow (playerFeed.ts).
     wireGestures(c, myIdHex, {
       isStale: stale,
       applyOwn: (gesture) => gameApp.setLocalGesture(gesture),
@@ -615,12 +413,12 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
 
     // Zones (ROADMAP Phase 3 増分②): the rendered zone layer, the occupancy
     // tags and the admin panel's zone list — statuses' wiring shape, plus a
-    // per-map projection the map switch below re-pushes. Wired before the
-    // admission block so its enterWorld (which may route through switchMap)
-    // finds the feed ready.
+    // per-map projection the map switch (playerFeed.ts) re-pushes. Wired
+    // before the admission block so its enterWorld (which may route through
+    // switchMap) finds the feed ready.
     const zoneFeed = wireZones(c, myIdentity, {
       isStale: stale,
-      currentMapId: () => currentMapId,
+      currentMapId: () => sim.currentMapId,
       setMapZones: (zones) => gameApp.setZones(zones),
       setMapHuddles: (huddles) => gameApp.setHuddles(huddles),
       applyOwnZone: (tag) => gameApp.setLocalZone(tag),
@@ -655,43 +453,32 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       if (!stale()) bumpStat('groupCallRowsReceived');
     });
 
-    /**
-     * Enters the world once admission says so: resume the surviving own row
-     * (a reload / blip within the retention window), or ask the server to
-     * spawn one. Sitting behind the admission decision means a stale own
-     * row can never start the simulation for a client that is not admitted.
-     */
-    const enterWorld = (): void => {
-      if (prediction) return;
-      const own = c.db.player.identity.find(myIdentity);
-      if (own) {
-        // A resumed row may sit on another map than the one this session
-        // subscribed at connect time (another device of the same identity
-        // teleporting in between): route through the map switch first.
-        if (own.mapId !== currentMapId) switchMap(own);
-        else handleOwnRow(own);
-        return;
-      }
-      joinWorld(c);
-    };
+    // The player rows (playerFeed.ts): the own row drives the simulation,
+    // remote rows the interpolated views, player_name rows the labels.
+    const players = createPlayerFeed(settled, {
+      sim,
+      gameApp,
+      remoteViews,
+      isStale: stale,
+      publishOwnName,
+      publishOwnStatus,
+      sendHeartbeat,
+      sendBatch,
+      countRowUpdate: () => bumpStat('playerRowUpdates'),
+      refreshZones: zoneFeed.refresh,
+    });
 
     // Admission (承認制 / ゲスト入場設定): the rules live in admission.ts;
     // this session supplies what acting on them needs.
     const admission = wireAdmission(c, myIdentity, {
       onSpace: hooks.onSpace,
-      enterWorld,
+      enterWorld: players.enterWorld,
       isStale: stale,
     });
 
-    // Seed the remote players already in the world. Our own surviving row is
-    // deliberately not resumed here: entering goes through the admission
-    // re-evaluation below (its enterWorld picks the row up), so the
-    // simulation can never start for a client the admission rules would
-    // hold out.
-    for (const row of c.db.player.iter()) {
-      const idHex = row.identity.toHexString();
-      if (idHex !== myIdHex) recordRemote(idHex, row);
-    }
+    // Seed the remote players already in the world (our own surviving row
+    // waits for the admission re-evaluation below — see seedRemotes).
+    players.seedRemotes();
 
     // Chat: the feed seeds its log from the cache and keeps it (and the
     // speech bubbles) fed by row events — see chatFeed.ts.
@@ -717,68 +504,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       showRemoteReaction: (idHex, emoji) => gameApp.showRemoteReaction(idHex, emoji),
     });
 
-    // Every handler below refuses to run once stale: the socket closes
-    // asynchronously, so this session's row events can still be delivered
-    // after dispose() or after an idle resume replaced the session, and
-    // acting on one would drive the destroyed Pixi app (gameApp.start,
-    // prediction), re-install the e2e hook from the doomed instance, or
-    // write to consumers shared with the replacement session (onOwnName
-    // feeds the App's rename form). Guarding the event entry points covers
-    // every side effect at once; the synchronous seeding above needs no
-    // guard because neither dispose() nor a newer attempt can interleave
-    // with it.
-    c.db.player.onInsert((_ctx, row) => {
-      if (stale()) return;
-      bumpStat('playerRowUpdates');
-      const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) {
-        // A fresh spawn lands on the session's map, but a re-join racing a
-        // sweep (or another device) can insert the own row elsewhere.
-        if (row.mapId !== currentMapId) switchMap(row);
-        else handleOwnRow(row);
-        return;
-      }
-      recordRemote(idHex, row);
-    });
-    c.db.player.onUpdate((_ctx, _old, row) => {
-      if (stale()) return;
-      bumpStat('playerRowUpdates');
-      const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) applyOwnUpdate(row);
-      else recordRemote(idHex, row);
-    });
-    c.db.playerName.onInsert((_ctx, row) => {
-      if (stale()) return;
-      applyName(row);
-    });
-    c.db.playerName.onUpdate((_ctx, _old, row) => {
-      if (stale()) return;
-      applyName(row);
-    });
-    c.db.player.onDelete((_ctx, row) => {
-      if (stale()) return;
-      const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) {
-        // Our row was reclaimed: by the retention sweep (a backgrounded tab
-        // stops ticking and eventually looks abandoned), by the guest kick
-        // that a guests-off flip performs, or by an admin expelling us. Stop
-        // predicting against a row that no longer exists — and stop the
-        // local simulation too, so a kicked player cannot keep walking a
-        // ghost around under the admission overlay (the next start() snaps
-        // to the authoritative replacement row). Then let the admission rule
-        // decide whether to re-join — the sweep case — or to stay out and
-        // say why.
-        prediction = undefined;
-        gameApp.stop();
-        // No row again until a re-join lands; disable the rename form so a
-        // submit cannot race into the server's no-target refusal.
-        publishOwnName(undefined);
-        admission.reevaluate();
-        return;
-      }
-      remoteViews.remove(idHex);
-      gameApp.removeRemotePlayer(idHex);
-    });
+    // The player / player_name row events, every one refusing to run once
+    // stale (see wireRowEvents); a deleted own row re-runs admission.
+    players.wireRowEvents(admission);
 
     // The first decision: enter (the pre-admission behavior), or hold and
     // show why. The subscription was applied before wireSession, so this
@@ -924,41 +652,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
 
   dispatch({ kind: 'start' });
 
-  const onActivity = (): void => {
-    if (life.disposed) return;
-    if (idle.activity(Date.now()) !== 'resume') return;
-    console.info('SpacetimeDB: user input detected, resuming the connection');
-    dispatch({ kind: 'resume' });
-  };
-  for (const type of ACTIVITY_EVENTS) {
-    window.addEventListener(type, onActivity, { capture: true, passive: true });
-  }
-
-  // ページ復帰の自動回復(lifecycle.ts の page-resume 節を参照): 背景タブで
-  // 停滞した再試行の前倒しと、凍結中に onclose が届かないまま死んだソケット
-  // (ゾンビ)の検出・再構築。SDK 2.7.1 の ConnectionManager と同じイベント
-  // 群を購読する — visibilitychange は非表示→表示、focus は同一表示状態での
-  // ウィンドウ切替、online はネットワーク復旧、pageshow は bfcache 復元
-  // (visibilitychange が発火しないことがある)をそれぞれ拾う。
-  const onPageResume = (): void => {
-    if (life.disposed) return;
-    dispatch({ kind: 'page-resume' });
-  };
-  const onVisibilityChange = (): void => {
-    if (document.visibilityState === 'visible') onPageResume();
-  };
-  document.addEventListener('visibilitychange', onVisibilityChange);
-  window.addEventListener('focus', onPageResume);
-  window.addEventListener('online', onPageResume);
-  window.addEventListener('pageshow', onPageResume);
-  const idleTimer = setInterval(() => {
-    if (life.disposed) return;
-    if (idle.check(Date.now()) !== 'suspend') return;
-    console.info(
-      `SpacetimeDB: no user input for ${idleTimeoutMs}ms, suspending the connection (input resumes it)`,
-    );
-    dispatch({ kind: 'idle-timeout' });
-  }, IDLE_CHECK_INTERVAL_MS);
+  // What the user and the page do (activity.ts): input resumes an idle
+  // suspension, the idle timeout suspends, and a page resume wakes stalled
+  // retries and finds dead sockets.
+  const stopActivity = watchActivity({ isDisposed: () => life.disposed, dispatch });
 
   // 静止中の生存証明: 送信ゲート(prediction.ts)が入力送信を止めている間、
   // サーバー行の updatedAt を進めるのはこの空バッチだけになる。これが絶えると
@@ -970,7 +667,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // (待合室・入場拒否・行の削除後)は行が無いので送らない。
   const heartbeat = createHeartbeat(() => {
     // dispose 後は heartbeat.dispose() 済みかつ conn も undefined。
-    if (!conn || !prediction) return;
+    if (!conn || !sim.prediction) return;
     if (Date.now() - lastSendMs < HEARTBEAT_INTERVAL_MS) return;
     sendHeartbeat(conn);
   });
@@ -986,18 +683,11 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     ...api,
     dispose() {
       dispatch({ kind: 'dispose' });
-      clearInterval(idleTimer);
+      stopActivity();
       heartbeat.dispose();
       // Guarded so a torn-down instance cannot erase the counters installed
       // by the instance that outlives it (StrictMode mounts two in parallel).
       if (netStats && window.__kaedeE2ENet === netStats) window.__kaedeE2ENet = undefined;
-      for (const type of ACTIVITY_EVENTS) {
-        window.removeEventListener(type, onActivity, { capture: true });
-      }
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', onPageResume);
-      window.removeEventListener('online', onPageResume);
-      window.removeEventListener('pageshow', onPageResume);
       conn = undefined;
       // The final "no row" signal. It cannot come from the disconnect
       // handler (which skips dropSession once disposed), and without it a
