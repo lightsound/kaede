@@ -9,7 +9,7 @@ export interface AABB {
 }
 
 /** Left/right/top/bottom edges of a center+half-extents box. */
-export function aabbBounds(box: AABB) {
+function aabbBounds(box: AABB) {
   return {
     left: box.cx - box.hw,
     right: box.cx + box.hw,

@@ -320,12 +320,11 @@ export interface RecordingObject {
 
 /**
  * The recordings in one S3 ListObjectsV2 response (the XML S3 speaks —
- * neither workerd nor the module host has a DOMParser, and the three
- * fields ride fixed tags inside each <Contents> block, so a scoped regex
- * is the whole parser). Keys outside the recordings prefix or not shaped
- * like a provider-named recording are skipped: the bucket may hold other
- * objects, and the list only ever serves what the download route would
- * accept.
+ * the module host has no DOMParser, and the three fields ride fixed tags
+ * inside each <Contents> block, so a scoped regex is the whole parser).
+ * Keys outside the recordings prefix or not shaped like a provider-named
+ * recording are skipped: the bucket may hold other objects, and the list
+ * only ever serves what recording_download_url would accept.
  */
 export function parseBucketListing(xml: string): RecordingObject[] {
   const objects: RecordingObject[] = [];

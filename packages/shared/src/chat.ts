@@ -11,7 +11,7 @@ import {
   type SendAllowanceRequest,
   type SendAllowanceVerdict,
 } from './sendAllowance';
-import { type NormalizedTextVerdict, normalizeSingleLineText, type TextRejectReason } from './text';
+import { type NormalizedTextVerdict, normalizeSingleLineText } from './text';
 
 /**
  * Longest allowed chat message, in Unicode code points. Enough for a few
@@ -20,8 +20,6 @@ import { type NormalizedTextVerdict, normalizeSingleLineText, type TextRejectRea
  * retention rule below multiplies this by CHAT_HISTORY_MAX).
  */
 export const CHAT_TEXT_MAX_LENGTH = 200;
-
-export type ChatTextRejectReason = TextRejectReason;
 
 export type ChatTextVerdict = NormalizedTextVerdict;
 
@@ -237,7 +235,7 @@ export function fallbackChatScope(selected: string, offered: readonly ChatScope[
 export const CHAT_SCOPE_SPACE_LABEL = '全体';
 
 /** What an admin announcement is called in the log (the 強調 marker). */
-export const CHAT_ANNOUNCEMENT_LABEL = 'アナウンス';
+const CHAT_ANNOUNCEMENT_LABEL = 'アナウンス';
 
 /** What a group scope falls back to when its group row is gone (deleted, or trimmed). */
 const CHAT_SCOPE_GROUP_FALLBACK_LABEL = '会話グループ';

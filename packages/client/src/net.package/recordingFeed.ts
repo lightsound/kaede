@@ -4,14 +4,14 @@ import type { DbConnection } from '../module_bindings';
 /**
  * One call_recording row as the 録画一覧 renders it (ROADMAP Phase 4
  * 増分④): the human labels for one recording. The R2 object itself — and
- * whether it is downloadable yet — is the Worker's listing (call.package
- * fetches it when the panel opens); this view only decorates that listing,
- * joined on `fileName`. `key` is the stringified row id (bigint is no
- * React key).
+ * whether it is downloadable yet — is the module's R2 listing
+ * (list_recordings; call.package fetches it when the panel opens); this
+ * view only decorates that listing, joined on `fileName`. `key` is the
+ * stringified row id (bigint is no React key).
  */
 export interface RecordingLabelView {
   key: string;
-  /** The R2 object basename — the join key against the Worker's listing. */
+  /** The R2 object basename — the join key against the R2 listing. */
   fileName: string;
   groupName: string;
   starterName: string;

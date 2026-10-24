@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- a React panel over the vendor's prebuilt meeting components; needs a DOM and WebRTC, and no DOM test environment is configured. The join sequencing around it lives in flow.ts (unit-tested)
+// fallow-ignore-file coverage-gaps -- a React panel over the vendor's prebuilt meeting components; needs a DOM and WebRTC, and no DOM test environment is configured. The join sequencing around it lives server-side in the join_group_call procedure (増分⑥)
 import {
   // Not a React hook despite the name — a plain factory merging a partial
   // dict over the UI Kit's default language (aliased so lint agrees).
@@ -110,7 +110,10 @@ const dockLanguage = makeRtkLanguage({
   'recording.indicator': 'この通話は録画されています',
 });
 
-/** What the recording toggle calls — CallDock binds these to the Worker API. */
+/**
+ * What the recording toggle calls — CallDock binds these to the
+ * start/stop_group_recording procedures (増分⑥).
+ */
 export interface RecordingHandlers {
   /** Starts the recording and logs its label row; rejects on refusal. */
   start(): Promise<void>;
@@ -133,7 +136,7 @@ const recordButtonStyle: CSSProperties = {
  * The provider-side recording state this client currently observes.
  * Subscribed exactly like the UI Kit's own recording parts (the
  * recordingUpdate room event), so it reflects every start/stop whoever
- * caused it — our Worker, another member, the unattended auto-stop.
+ * caused it — our procedures, another member, the unattended auto-stop.
  */
 function useRecordingState(meeting: Meeting): string {
   const [state, setState] = useState<string>(meeting.recording.recordingState);
@@ -213,10 +216,11 @@ function toggleFace(
  * RtkRecordingToggle: that component renders only under a can_record
  * preset and dials the provider from the CLIENT, which cannot carry the
  * storage_config that sends the file to our R2 bucket. This button asks
- * our Worker instead (members only — CallDock offers it to signed-in
- * members, and the Worker 403s anyone else); what it SHOWS still comes
- * from the same room state the indicator renders. The helpers above are
- * split out to keep every uncovered function under the CRAP budget.
+ * our server instead (approved members only — CallDock offers it to
+ * approved members, and the recording procedures refuse anyone else);
+ * what it SHOWS still comes from the same room state the indicator
+ * renders. The helpers above are split out to keep every uncovered
+ * function under the CRAP budget.
  */
 function RecordingToggle({ meeting, handlers }: { meeting: Meeting; handlers: RecordingHandlers }) {
   const phase = recordingPhaseOf(useRecordingState(meeting));
