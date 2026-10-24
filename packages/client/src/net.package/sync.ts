@@ -190,8 +190,9 @@ export interface NetHooks {
   onOwnGroup(groupId: bigint | undefined): void;
   /**
    * Every call_recording change, as the whole label list (newest first —
-   * ROADMAP Phase 4 増分④). The 録画一覧 decorates the Worker's R2
-   * listing with these; the rows themselves carry no download capability.
+   * ROADMAP Phase 4 増分④). The 録画一覧 decorates the module's R2
+   * listing (list_recordings) with these; the rows themselves carry no
+   * download capability.
    */
   onRecordings(labels: RecordingLabelView[]): void;
 }

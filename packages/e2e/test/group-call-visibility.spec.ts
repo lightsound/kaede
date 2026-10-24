@@ -4,17 +4,17 @@ import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, netStats, snapshot, sql, walkWhile } from './helpers';
 
 // What this file fixes is 増分①'s privacy core: a group_call row's meeting
-// id is the JOIN CAPABILITY for the group's call (the token Worker checks
-// a kaede identity, not group membership — SpacetimeDB is the only group
-// authority), so the row must reach group MEMBERS only. Asserted on
-// what crossed the wire (groupCallRowsReceived), not on the DOM — the
-// chat-scope spec's reasoning: a display filter could hide a delivered row.
+// id is the read-side JOIN CAPABILITY for the group's call (which group's
+// call a client may see is decided by who can read the row — the
+// group_call table comment in the server's tables.ts), so the row must
+// reach group MEMBERS only. Asserted on what crossed the wire
+// (groupCallRowsReceived), not on the DOM — the chat-scope spec's
+// reasoning: a display filter could hide a delivered row.
 //
-// The row is seeded through owner SQL rather than the register_group_call
-// reducer: registering through the UI needs the call Worker and a Clerk
-// member (out of E2E — the zone.spec precedent), and what this spec fixes
-// is the RLS delivery, not the reducer's vetting (unit-tested rules +
-// non-owner refusals are the reducer's own coverage).
+// The row is seeded through owner SQL rather than the join_group_call
+// procedure: binding it through the UI needs the live call provider (out
+// of E2E — the zone.spec precedent), and what this spec fixes is the RLS
+// delivery, not the procedure's vetting.
 
 const ZONE_ID = 9101;
 const ZONE_NAME = '通話室';
@@ -51,9 +51,10 @@ test.setTimeout(300_000);
  * reaches A's subscription; B is handed ZERO rows — live, and through the
  * seed after a reload. B then walks in: membership is what the filter
  * reads, so the row arrives (the positive control proving the probe can
- * see rows at all). Guests get the call dock like members (増分② — the
- * Worker verifies their host-issued token), which the button's presence
- * pins; joining stays a manual test (the Worker is out of E2E).
+ * see rows at all). Guests get the call dock like members (増分② —
+ * join_group_call checks group membership, not approval), which the
+ * button's presence pins; joining stays a manual test (the call provider
+ * is out of E2E).
  */
 test('通話レジストリの行はグループのメンバーだけに届き、ゲストにも通話ボタンが出る', async ({
   browser,
@@ -83,8 +84,8 @@ test('通話レジストリの行はグループのメンバーだけに届き�
 
     // A is a GUEST in a group: the dock offers the call (増分② lifted the
     // members-only cut — guests start, join and screen-share like members;
-    // the actual join needs the live Worker, out of E2E). B, outside every
-    // group, is offered nothing.
+    // the actual join needs the live call provider, out of E2E). B,
+    // outside every group, is offered nothing.
     await expect(pageA.getByRole('button', { name: '📞 通話に参加' })).toBeVisible();
     await expect(pageB.getByRole('button', { name: '📞 通話に参加' })).toHaveCount(0);
 

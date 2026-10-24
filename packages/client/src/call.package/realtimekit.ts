@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- the dial half of the RealtimeKit seam: init + join over the vendor SDK, which needs live WebRTC infrastructure, not a unit test. The join orchestration around it is flow.ts (unit-tested)
+// fallow-ignore-file coverage-gaps -- the dial half of the RealtimeKit seam: init + join over the vendor SDK, which needs live WebRTC infrastructure, not a unit test. The join rules live server-side in the join_group_call procedure (増分⑥), which mints the token dialed here
 
 // The Core-SDK half of the vendor seam. Since 増分③ (the UI Kit adoption)
 // the containment unit is the whole call.package, not this single file
@@ -14,7 +14,7 @@ export type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
 
 /** What dialing needs, besides the token: the one exit signal. */
 export interface DialRequest {
-  /** The participant token the Worker minted (api.ts). */
+  /** The participant token join_group_call minted (増分⑥). */
   authToken: string;
   /** The session ended on any path (own leave, kicked, meeting ended). */
   onEnded(): void;

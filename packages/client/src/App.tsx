@@ -147,8 +147,8 @@ function promptFor(signedIn: boolean, space: SpaceView | undefined) {
 /**
  * Whether this client is a signed-in APPROVED member — what the recording
  * surfaces gate on (増分④ 設計①: 録画はメンバー限定。サインイン済みでも
- * 未承認ならゲスト扱い). Cosmetic gates only; the Worker and the label
- * reducer re-check server-side. Split from the component to keep App
+ * 未承認ならゲスト扱い). Cosmetic gates only; the recording procedures
+ * re-check approval server-side. Split from the component to keep App
  * under the CRAP budget.
  */
 function approvedMember(signedIn: boolean, space: SpaceView | undefined): boolean {
@@ -198,7 +198,7 @@ function chatDraftPlannerOf(netRef: { current: Net | undefined }) {
  * The call-related views the net stack publishes (ROADMAP Phase 4):
  * which conversation group this client is in (増分① — the call dock's
  * offer and auto-leave watch ride it) and the recording label rows
- * (増分④ — the 録画一覧 decorates the Worker's R2 listing with them).
+ * (増分④ — the 録画一覧 decorates the module's R2 listing with them).
  */
 function useCallViews() {
   const [ownGroupId, setOwnGroupId] = useState<bigint>();

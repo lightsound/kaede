@@ -455,38 +455,26 @@ export const HUDDLE_BURST_SENDS = 5;
 
 // ── 会話グループ単位の通話 (ROADMAP Phase 4 増分①) ──────────────────────
 // A conversation group's call is one `group_call` row: groupId → the call
-// provider's meeting id (the reusable room the CallProvider joins). The row
-// is REGISTERED by a member (register_group_call) after the Worker
-// provisioned the meeting, and its meeting id is the JOIN CAPABILITY — the
-// token-minting Worker knows nothing about groups, so whoever can read the
-// row can join the call, which is why the row rides a members-only RLS
-// filter (see groupCallVisibility in the server's tables.ts). These are the
-// shared rules of that flow; the reducer stays a thin untestable wrapper
-// (the huddle precedent).
-
-/**
- * Whether `meetingId` has the shape the call provider issues (a UUID) —
- * what register_group_call accepts into the group_call row. The row's
- * meeting id is dialed by every joining member's CallProvider, so garbage
- * must be refused at the write (the sender is the one client the server
- * cannot trust): a wrong-but-well-formed id fails harmlessly at the
- * provider, while an unbounded string is a stored-injection surface.
- */
-export function isMeetingIdLike(meetingId: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(meetingId);
-}
+// provider's meeting id (the reusable room the CallProvider joins). Since
+// 増分⑥ the join_group_call procedure provisions the meeting, binds the
+// row and mints the participant token in one place (the server's
+// calls.ts); the meeting id stays the read-side JOIN CAPABILITY, which is
+// why the row rides a members-only RLS filter (see groupCallVisibility in
+// the server's tables.ts). These are the shared rules of the call and
+// recording procedures, which stay thin untestable wrappers (the huddle
+// precedent).
 
 /**
  * Whether `fileName` has the shape the provider names recording files —
  * `{meetingId}_{epochMillis}.mp4`, fixed at start time as the Start
  * Recording response's `output_file_name` (live-probed 2026-08-06, ROADMAP
- * Phase 4 増分④). Two writes rule on it: log_group_recording accepts it
- * into the call_recording row (the isMeetingIdLike reasoning — the stored
- * value is the join key against the R2 listing, so garbage is refused at
- * the write), and the Worker's download route accepts it into an R2 object
- * key (where the shape rule is also what makes prefix escapes — slashes,
- * dots — unrepresentable). The epoch width is lenient (10–17 digits)
- * because nothing rules on its value, only on the overall shape.
+ * Phase 4 増分④). Two places rule on it: the R2 listing parse
+ * (parseBucketListing) skips objects not shaped like a recording, and the
+ * recording_download_url procedure refuses a client-claimed name before
+ * signing it into an R2 object key (where the shape rule is also what
+ * makes prefix escapes — slashes, dots — unrepresentable). The epoch width
+ * is lenient (10–17 digits) because nothing rules on its value, only on
+ * the overall shape.
  */
 export function isRecordingFileNameLike(fileName: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_\d{10,17}\.mp4$/.test(
@@ -505,11 +493,11 @@ export function isRecordingFileNameLike(fileName: string): boolean {
 export const RECORDING_HISTORY_MAX = 200;
 
 /**
- * The call-registration token bucket's parameters (the huddle numbers, a
- * bucket of its own — register_group_call writes a public row broadcast to
- * the group's subscribers, and buckets shared across features drift from
- * their client-side mirrors). The evaluator wrapper lives server-side
- * (calls.ts), for the HUDDLE_SEND_COST_MICROS reason: a shared wrapper
+ * The call procedures' token bucket parameters (the huddle numbers, one
+ * bucket shared by join_group_call and the recording procedures — the same
+ * UI flow's low-frequency operations, with no client-side mirror to drift
+ * from). The evaluator wrapper lives server-side (chargeCallAllowance in
+ * calls.ts), for the HUDDLE_SEND_COST_MICROS reason: a shared wrapper
  * would add type-coupling edges past the evidence cap.
  */
 export const CALL_SEND_COST_MICROS = 1_000_000n;
