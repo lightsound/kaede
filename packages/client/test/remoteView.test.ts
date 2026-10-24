@@ -321,8 +321,10 @@ describe('createRemoteViews', () => {
   it('ignores a patch for a view that does not exist', () => {
     const views = createRemoteViews();
     views.record('a', label('A'), row(0, 0), 40);
-    views.patchLabel('ghost', { name: 'G', status: '🟡 離席', availability: 'away' });
-    views.patchLabel('ghost', { gesture: 'sleep', zone: '📍 会議室A' });
+    views.patchLabel('ghost', { name: 'G' });
+    views.patchLabel('ghost', { status: '🟡 離席', availability: 'away' });
+    views.patchLabel('ghost', { gesture: 'sleep' });
+    views.patchLabel('ghost', { zone: '📍 会議室A' });
     expect(render(views, 270).map((d) => d.id)).toEqual(['a']);
   });
 

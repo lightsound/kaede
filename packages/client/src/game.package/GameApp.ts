@@ -81,8 +81,10 @@ export interface PlayerLabel {
  * One update to a player's PlayerLabel, the way the rows change it: a
  * rename (player_name), a status line together with its availability
  * (player_status), a state gesture, or a zone tag. A union rather than
- * Partial<PlayerLabel> so a patch can never blank the name or carry a
- * status without its availability.
+ * Partial<PlayerLabel>, so a rename must carry a name and a status line
+ * its availability. Pass one row's fields per patch: the type does not
+ * catch a literal that mixes members (a union's excess-property check
+ * accepts every member's keys).
  */
 export type PlayerLabelPatch =
   | Pick<PlayerLabel, 'name'>
