@@ -9,7 +9,7 @@
  * may import). The gesture vocabulary lives HERE rather than in a file of
  * its own deliberately: a new shared module whose public signatures
  * reference sendAllowance types would add type-coupling evidence edges,
- * and the budget sits at fallow's cap (the 増分③ zone.ts precedent).
+ * and the budget sits at fallow's cap (see AGENTS.md).
  */
 
 import {

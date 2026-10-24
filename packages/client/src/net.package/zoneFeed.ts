@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the zone/huddle layers and occupancy tags; needs a running host. The geometry, labels, membership and occupancy rules live in @kaede/shared (zone.ts), unit-tested there
+// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the zone/huddle layers and occupancy tags; needs a running host. The geometry, labels, membership and occupancy rules live in @kaede/shared (zone.ts, huddle.ts and conversationGroup.ts), unit-tested there
 import {
   findJoinableHuddleId,
   GROUP_KIND_HUDDLE,

@@ -92,7 +92,7 @@ export const CHAT_BUBBLE_DURATION_MS = 6_000;
 // The vocabulary and its rules live here — next to the text and rate rules
 // the same message obeys — rather than in a new shared file, because a new
 // file's public signatures would add type-coupling edges past fallow's
-// evidence cap (the zone.ts 増分③ precedent).
+// evidence cap (see AGENTS.md).
 
 /** 全体: everyone in the space, whatever map or group they are in. */
 export const CHAT_SCOPE_SPACE = 'space';

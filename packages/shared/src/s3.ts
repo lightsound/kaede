@@ -15,7 +15,7 @@
 // surfaced as undefined rather than silently mis-encoded. No exported type
 // here references another file, so the file adds no type-coupling evidence
 // edges (the fallow cap, see AGENTS.md).
-import { isRecordingFileNameLike } from './zone';
+import { isRecordingFileNameLike } from './call';
 
 // ── SHA-256 (FIPS 180-4) ────────────────────────────────────────────────
 

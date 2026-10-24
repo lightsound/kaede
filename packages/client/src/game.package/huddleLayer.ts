@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- draws PixiJS graphics for the huddle layer; needs a WebGL canvas. The membership, labels and geometry rules live in @kaede/shared (zone.ts), unit-tested there
+// fallow-ignore-file coverage-gaps -- draws PixiJS graphics for the huddle layer; needs a WebGL canvas. The membership, labels and geometry rules live in @kaede/shared (huddle.ts), unit-tested there
 import { PLAYER_HALF_H } from '@kaede/shared';
 import { type Container, Graphics, Text, TextStyle } from 'pixi.js';
 
