@@ -7,6 +7,7 @@ import { type Connected, subscribeMapRows } from './connection';
 import { cachedStateGesture } from './gestureFeed';
 import { createPrediction } from './prediction';
 import type { createRemoteViews } from './remoteView';
+import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 import { cachedStatusView } from './statusFeed';
 import { cachedZoneTag } from './zoneFeed';
@@ -57,8 +58,6 @@ export interface PlayerFeedDeps {
   gameApp: GameApp;
   /** The remote players' interpolated views, kept across sessions (remoteView.ts). */
   remoteViews: ReturnType<typeof createRemoteViews>;
-  /** True once this session's events must be ignored (see wireSession). */
-  isStale(): boolean;
   /** startNet's single path for own-name changes (see publishOwnName). */
   publishOwnName(name: string | undefined): void;
   /** startNet's single path for own-status changes (see publishOwnStatus). */
@@ -102,8 +101,12 @@ function joinWorld(c: DbConnection): void {
  * views, and player_name rows feed both sides' labels. Building it has no
  * side effects; wireSession runs the returned steps.
  */
-export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): PlayerFeed {
-  const { conn: c, myIdentity, myIdHex } = settled;
+export function createPlayerFeed(
+  settled: Connected,
+  rows: SessionRows,
+  deps: PlayerFeedDeps,
+): PlayerFeed {
+  const { conn: c, myIdentity } = settled;
   const { sim, gameApp, remoteViews } = deps;
 
   // The map-scoped half of the player subscription (see connection.ts),
@@ -201,13 +204,15 @@ export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): Play
     deps.refreshZones();
     handleOwnRow(row);
     const outgoing = mapSub;
-    mapSub = subscribeMapRows(c, row.mapId, () => {
-      // The destination's rows just landed as insert events (recordRemote
-      // picked them up). A stale session's socket is gone or superseded,
-      // and its handles die with the connection — only a live session
-      // needs to drop the origin's rows.
-      if (!deps.isStale()) outgoing.unsubscribe();
-    });
+    // The destination's rows just landed as insert events (recordRemote
+    // picked them up). A stale session's socket is gone or superseded, and
+    // its handles die with the connection — only a live session needs to
+    // drop the origin's rows.
+    mapSub = subscribeMapRows(
+      c,
+      row.mapId,
+      rows.live(() => outgoing.unsubscribe()),
+    );
   };
 
   /**
@@ -230,6 +235,18 @@ export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): Play
     }
     if (!row.online) deps.sendHeartbeat(c);
     sim.prediction?.onAck(stateFromRow(row), row.tick, performance.now());
+  };
+
+  /**
+   * Starts the simulation from the own row, through the map switch when the
+   * row sits on another map than the one this session subscribed: a resumed
+   * row (another device of the same identity teleporting in between), or an
+   * inserted one (a fresh spawn lands on the session's map, but a re-join
+   * racing a sweep, or another device, can insert it elsewhere).
+   */
+  const startOwnRow = (row: PlayerRow): void => {
+    if (row.mapId !== sim.currentMapId) switchMap(row);
+    else handleOwnRow(row);
   };
 
   // Offline rows linger server-side for the retention window (so their owner
@@ -257,14 +274,12 @@ export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): Play
   // carry it to whoever renders the label — the own-name consumers or the
   // remote view. No onDelete: names are deleted only alongside their
   // player row, whose own delete handling already tears the view down.
-  const applyName = (row: PlayerNameRow): void => {
-    const idHex = row.identity.toHexString();
-    if (idHex === myIdHex) {
-      deps.publishOwnName(row.name);
-      return;
-    }
-    remoteViews.patchLabel(idHex, { name: row.name });
-  };
+  const applyName = (row: PlayerNameRow): void =>
+    rows.route(
+      row.identity,
+      () => deps.publishOwnName(row.name),
+      (idHex) => remoteViews.patchLabel(idHex, { name: row.name }),
+    );
 
   /**
    * Enters the world once admission says so: resume the surviving own row
@@ -276,11 +291,7 @@ export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): Play
     if (sim.prediction) return;
     const own = c.db.player.identity.find(myIdentity);
     if (own) {
-      // A resumed row may sit on another map than the one this session
-      // subscribed at connect time (another device of the same identity
-      // teleporting in between): route through the map switch first.
-      if (own.mapId !== sim.currentMapId) switchMap(own);
-      else handleOwnRow(own);
+      startOwnRow(own);
       return;
     }
     joinWorld(c);
@@ -292,74 +303,58 @@ export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): Play
   // never start for a client the admission rules would hold out.
   const seedRemotes = (): void => {
     for (const row of c.db.player.iter()) {
-      const idHex = row.identity.toHexString();
-      if (idHex !== myIdHex) recordRemote(idHex, row);
+      if (!rows.isOwn(row.identity)) recordRemote(row.identity.toHexString(), row);
     }
   };
 
-  // Every handler below refuses to run once stale: the socket closes
-  // asynchronously, so this session's row events can still be delivered
-  // after dispose() or after an idle resume replaced the session, and
-  // acting on one would drive the destroyed Pixi app (gameApp.start,
-  // prediction), re-install the e2e hook from the doomed instance, or
-  // write to consumers shared with the replacement session (onOwnName
-  // feeds the App's rename form). Guarding the event entry points covers
-  // every side effect at once; the synchronous seeding above needs no
-  // guard because neither dispose() nor a newer attempt can interleave
-  // with it.
+  // Every handler below is registered through `rows`, so none runs once
+  // the session is stale (see SessionRows) — and here acting on one would
+  // drive the destroyed Pixi app (gameApp.start, prediction), re-install
+  // the e2e hook from the doomed instance, or write to consumers shared
+  // with the replacement session (onOwnName feeds the App's rename form).
+  // The synchronous seeding above needs no guard because neither dispose()
+  // nor a newer attempt can interleave with it.
   const wireRowEvents = (admission: { reevaluate(): void }): void => {
-    c.db.player.onInsert((_ctx, row) => {
-      if (deps.isStale()) return;
-      deps.countRowUpdate();
-      const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) {
-        // A fresh spawn lands on the session's map, but a re-join racing a
-        // sweep (or another device) can insert the own row elsewhere.
-        if (row.mapId !== sim.currentMapId) switchMap(row);
-        else handleOwnRow(row);
-        return;
-      }
-      recordRemote(idHex, row);
+    // Our row was reclaimed: by the retention sweep (a backgrounded tab
+    // stops ticking and eventually looks abandoned), by the guest kick that
+    // a guests-off flip performs, or by an admin expelling us. Stop
+    // predicting against a row that no longer exists — and stop the local
+    // simulation too, so a kicked player cannot keep walking a ghost around
+    // under the admission overlay (the next start() snaps to the
+    // authoritative replacement row). Then let the admission rule decide
+    // whether to re-join — the sweep case — or to stay out and say why.
+    const dropOwnRow = (): void => {
+      sim.prediction = undefined;
+      gameApp.stop();
+      // No row again until a re-join lands; disable the rename form so a
+      // submit cannot race into the server's no-target refusal.
+      deps.publishOwnName(undefined);
+      admission.reevaluate();
+    };
+    rows.on(c.db.player, {
+      insert: (row) => {
+        deps.countRowUpdate();
+        rows.route(
+          row.identity,
+          () => startOwnRow(row),
+          (idHex) => recordRemote(idHex, row),
+        );
+      },
+      update: (row) => {
+        deps.countRowUpdate();
+        rows.route(
+          row.identity,
+          () => applyOwnUpdate(row),
+          (idHex) => recordRemote(idHex, row),
+        );
+      },
+      delete: (row) =>
+        rows.route(row.identity, dropOwnRow, (idHex) => {
+          remoteViews.remove(idHex);
+          gameApp.removeRemotePlayer(idHex);
+        }),
     });
-    c.db.player.onUpdate((_ctx, _old, row) => {
-      if (deps.isStale()) return;
-      deps.countRowUpdate();
-      const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) applyOwnUpdate(row);
-      else recordRemote(idHex, row);
-    });
-    c.db.playerName.onInsert((_ctx, row) => {
-      if (deps.isStale()) return;
-      applyName(row);
-    });
-    c.db.playerName.onUpdate((_ctx, _old, row) => {
-      if (deps.isStale()) return;
-      applyName(row);
-    });
-    c.db.player.onDelete((_ctx, row) => {
-      if (deps.isStale()) return;
-      const idHex = row.identity.toHexString();
-      if (idHex === myIdHex) {
-        // Our row was reclaimed: by the retention sweep (a backgrounded tab
-        // stops ticking and eventually looks abandoned), by the guest kick
-        // that a guests-off flip performs, or by an admin expelling us. Stop
-        // predicting against a row that no longer exists — and stop the
-        // local simulation too, so a kicked player cannot keep walking a
-        // ghost around under the admission overlay (the next start() snaps
-        // to the authoritative replacement row). Then let the admission rule
-        // decide whether to re-join — the sweep case — or to stay out and
-        // say why.
-        sim.prediction = undefined;
-        gameApp.stop();
-        // No row again until a re-join lands; disable the rename form so a
-        // submit cannot race into the server's no-target refusal.
-        deps.publishOwnName(undefined);
-        admission.reevaluate();
-        return;
-      }
-      remoteViews.remove(idHex);
-      gameApp.removeRemotePlayer(idHex);
-    });
+    rows.on(c.db.playerName, { insert: applyName, update: applyName });
   };
 
   return { enterWorld, seedRemotes, wireRowEvents };

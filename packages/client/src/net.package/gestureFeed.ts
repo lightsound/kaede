@@ -2,6 +2,7 @@
 import { isGestureKind, isTransientGesture } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
+import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 
 /** The generated gesture row type. */
@@ -13,8 +14,6 @@ type GestureRow = RowOf<'gesture'>;
  * rule on exported signatures).
  */
 export interface GestureFeedHooks {
-  /** True once this session's events must be ignored (see wireSession). */
-  isStale(): boolean;
   /** Applies a STATE gesture directive (sit / sleep / dance), or none. */
   applyOwn(gesture: string | undefined): void;
   applyRemote(idHex: string, gesture: string | undefined): void;
@@ -49,30 +48,31 @@ export function cachedStateGesture(c: DbConnection, identity: Identity): string 
  * rendering), and a repeat of the SAME gesture still fires an update
  * because the row's sentAt changed (how a second wave re-plays).
  */
-export function wireGestures(c: DbConnection, myIdHex: string, hooks: GestureFeedHooks): void {
-  const applyState = (idHex: string, gesture: string | undefined): void => {
-    if (idHex === myIdHex) hooks.applyOwn(gesture);
-    else hooks.applyRemote(idHex, gesture);
-  };
-  const showTransient = (idHex: string): void => {
+export function wireGestures(c: DbConnection, rows: SessionRows, hooks: GestureFeedHooks): void {
+  const applyState = (identity: Identity, gesture: string | undefined): void =>
+    rows.route(
+      identity,
+      () => hooks.applyOwn(gesture),
+      (idHex) => hooks.applyRemote(idHex, gesture),
+    );
+  const showTransient = (identity: Identity): void => {
     // The row no longer holds a state gesture (a sitter who waves stands
     // up into the wave), so the state directive clears alongside.
-    applyState(idHex, undefined);
-    if (idHex === myIdHex) hooks.waveOwn();
-    else hooks.waveRemote(idHex);
+    applyState(identity, undefined);
+    rows.route(
+      identity,
+      () => hooks.waveOwn(),
+      (idHex) => hooks.waveRemote(idHex),
+    );
   };
   const show = (row: GestureRow): void => {
-    if (hooks.isStale()) return;
     if (!isGestureKind(row.gesture)) return;
-    const idHex = row.identity.toHexString();
-    if (isTransientGesture(row.gesture)) showTransient(idHex);
-    else applyState(idHex, row.gesture);
+    if (isTransientGesture(row.gesture)) showTransient(row.identity);
+    else applyState(row.identity, row.gesture);
   };
-  const clear = (row: GestureRow): void => {
-    if (hooks.isStale()) return;
-    applyState(row.identity.toHexString(), undefined);
-  };
-  c.db.gesture.onInsert((_ctx, row) => show(row));
-  c.db.gesture.onUpdate((_ctx, _old, row) => show(row));
-  c.db.gesture.onDelete((_ctx, row) => clear(row));
+  rows.on(c.db.gesture, {
+    insert: show,
+    update: show,
+    delete: (row) => applyState(row.identity, undefined),
+  });
 }

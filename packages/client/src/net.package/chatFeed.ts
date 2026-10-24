@@ -8,6 +8,7 @@ import {
 } from '@kaede/shared';
 import type { DbConnection } from '../module_bindings';
 import { type ChatEntryView, type ChatLog, insertChatEntry, removeChatEntry } from './chatLog';
+import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 
 /** The generated chat_message row type. */
@@ -42,8 +43,6 @@ type DmMessageRow = RowOf<'dmMessage'>;
  * private type.
  */
 export interface ChatFeedHooks {
-  /** True once this session's events must be ignored (see wireSession). */
-  isStale(): boolean;
   showLocalBubble(text: string): void;
   showRemoteBubble(idHex: string, text: string): void;
   /**
@@ -101,14 +100,14 @@ export function createChatFeed(onChat: (log: ChatLog) => void) {
      *   restores from the seed on reload — DM history is state, not a
      *   gesture.
      */
-    wire(c: DbConnection, myIdHex: string, hooks: ChatFeedHooks): void {
+    wire(c: DbConnection, rows: SessionRows, hooks: ChatFeedHooks): void {
       const chatView = (row: ChatMessageRow): ChatEntryView => ({
         kind: 'chat',
         id: row.id,
         sentAtMicros: row.sentAt.microsSinceUnixEpoch,
         senderName: row.senderName,
         text: row.text,
-        own: row.sender.toHexString() === myIdHex,
+        own: rows.isOwn(row.sender),
         scopeTag: scopeTagOf(c, row),
         announcement: row.announcement,
       });
@@ -119,18 +118,15 @@ export function createChatFeed(onChat: (log: ChatLog) => void) {
         senderName: row.senderName,
         recipientName: row.recipientName,
         text: row.text,
-        own: row.sender.toHexString() === myIdHex,
+        own: rows.isOwn(row.sender),
       });
-      const dmEvent = (row: DmMessageRow, source: DmRowSource): DmRowEvent => {
-        const senderKey = row.sender.toHexString();
-        return {
-          source,
-          own: senderKey === myIdHex,
-          senderName: row.senderName,
-          senderKey,
-          text: row.text,
-        };
-      };
+      const dmEvent = (row: DmMessageRow, source: DmRowSource): DmRowEvent => ({
+        source,
+        own: rows.isOwn(row.sender),
+        senderName: row.senderName,
+        senderKey: row.sender.toHexString(),
+        text: row.text,
+      });
 
       let seeded: ChatLog = [];
       for (const row of c.db.chatMessage.iter()) {
@@ -143,32 +139,31 @@ export function createChatFeed(onChat: (log: ChatLog) => void) {
       }
       publish(seeded);
 
-      c.db.chatMessage.onInsert((_ctx, row) => {
-        if (hooks.isStale()) return;
-        hooks.onChatRow(row.scope);
-        publish(insertChatEntry(log, chatView(row)));
-        // The bubble shows over whoever spoke: our own avatar, or the
-        // sender's remote view. A message from a player whose view is not
-        // on screen (hidden as offline, or already removed) is a no-op.
-        const idHex = row.sender.toHexString();
-        if (idHex === myIdHex) hooks.showLocalBubble(row.text);
-        else hooks.showRemoteBubble(idHex, row.text);
+      // Row events keep the log fed: an insert adds its line, and a
+      // retention trim (each history table keeps only its newest cap of
+      // rows) arrives as a delete, so the panel drops the line the moment
+      // the authority does.
+      rows.on(c.db.chatMessage, {
+        insert: (row) => {
+          hooks.onChatRow(row.scope);
+          publish(insertChatEntry(log, chatView(row)));
+          // The bubble shows over whoever spoke: our own avatar, or the
+          // sender's remote view. A message from a player whose view is not
+          // on screen (hidden as offline, or already removed) is a no-op.
+          rows.route(
+            row.sender,
+            () => hooks.showLocalBubble(row.text),
+            (idHex) => hooks.showRemoteBubble(idHex, row.text),
+          );
+        },
+        delete: (row) => publish(removeChatEntry(log, 'chat', row.id)),
       });
-      c.db.dmMessage.onInsert((_ctx, row) => {
-        if (hooks.isStale()) return;
-        hooks.onDmRow(dmEvent(row, 'event'));
-        publish(insertChatEntry(log, dmView(row)));
-      });
-      // Retention trims (each history table keeps only its newest cap of
-      // rows) arrive as deletes; the panel drops the line the moment the
-      // authority does.
-      c.db.chatMessage.onDelete((_ctx, row) => {
-        if (hooks.isStale()) return;
-        publish(removeChatEntry(log, 'chat', row.id));
-      });
-      c.db.dmMessage.onDelete((_ctx, row) => {
-        if (hooks.isStale()) return;
-        publish(removeChatEntry(log, 'dm', row.id));
+      rows.on(c.db.dmMessage, {
+        insert: (row) => {
+          hooks.onDmRow(dmEvent(row, 'event'));
+          publish(insertChatEntry(log, dmView(row)));
+        },
+        delete: (row) => publish(removeChatEntry(log, 'dm', row.id)),
       });
     },
   };

@@ -2,6 +2,7 @@
 import { DEFAULT_STATUS, type StatusView, statusViewOf } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
+import type { SessionRows } from './rowEvents';
 
 /**
  * What acting on status rows needs from the session that wires the feed.
@@ -9,8 +10,6 @@ import type { DbConnection } from '../module_bindings';
  * ReactionFeedHooks: it appears in wireStatuses' exported signature.
  */
 export interface StatusFeedHooks {
-  /** True once this session's events must be ignored (see wireSession). */
-  isStale(): boolean;
   applyOwn(view: StatusView): void;
   applyRemote(idHex: string, view: StatusView): void;
 }
@@ -39,14 +38,16 @@ export function cachedStatusView(c: DbConnection, identity: Identity): StatusVie
  * sprite keeps drawing through that — so the missing row's meaning (the
  * default) must be applied explicitly.
  */
-export function wireStatuses(c: DbConnection, myIdHex: string, hooks: StatusFeedHooks): void {
-  const apply = (identity: Identity, view: StatusView): void => {
-    if (hooks.isStale()) return;
-    const idHex = identity.toHexString();
-    if (idHex === myIdHex) hooks.applyOwn(view);
-    else hooks.applyRemote(idHex, view);
-  };
-  c.db.playerStatus.onInsert((_ctx, row) => apply(row.identity, statusViewOf(row)));
-  c.db.playerStatus.onUpdate((_ctx, _old, row) => apply(row.identity, statusViewOf(row)));
-  c.db.playerStatus.onDelete((_ctx, row) => apply(row.identity, DEFAULT_STATUS));
+export function wireStatuses(c: DbConnection, rows: SessionRows, hooks: StatusFeedHooks): void {
+  const apply = (identity: Identity, view: StatusView): void =>
+    rows.route(
+      identity,
+      () => hooks.applyOwn(view),
+      (idHex) => hooks.applyRemote(idHex, view),
+    );
+  rows.on(c.db.playerStatus, {
+    insert: (row) => apply(row.identity, statusViewOf(row)),
+    update: (row) => apply(row.identity, statusViewOf(row)),
+    delete: (row) => apply(row.identity, DEFAULT_STATUS),
+  });
 }

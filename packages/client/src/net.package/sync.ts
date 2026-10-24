@@ -37,6 +37,7 @@ import { createPlayerFeed, type OwnSim } from './playerFeed';
 import { wireReactions } from './reactionFeed';
 import { type RecordingLabelView, wireRecordings } from './recordingFeed';
 import { createRemoteViews } from './remoteView';
+import { sessionRows } from './rowEvents';
 import { wireStatuses } from './statusFeed';
 import { type HuddleView, wireZones, type ZoneAdminView } from './zoneFeed';
 
@@ -136,8 +137,8 @@ export interface NetHooks {
    * Whether a row becomes a notification, and every environment read that
    * takes (visibility, permission, the mute), lives behind this hook
    * (notify.package), so the net stack stays notification-agnostic.
-   * Already isStale-guarded: it fires inside the chat feed's session
-   * handlers, never for a torn-down or superseded session.
+   * Never fires for a torn-down or superseded session: the chat feed calls
+   * it from its seed and from row events registered through SessionRows.
    */
   onDmRow(event: DmRowEvent): void;
   /**
@@ -317,11 +318,12 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
   // (handleOwnRow and the player_name insert event both publish the same
   // name) is deduplicated here instead of leaning on React's same-value
   // bailout. `undefined` means "no own row is known".
-  // Caller contract: any caller on an async event path must be
-  // dispose-guarded at its entry point (see the row handlers in
-  // playerFeed.ts, and admission.ts's rerun, which reaches it through
-  // enterWorld) — dispose() itself is the only caller that may run after
-  // the flip, and only with `undefined`.
+  // Caller contract: any caller on an async event path must run behind the
+  // session's staleness guard, i.e. from a callback registered through
+  // SessionRows (on / onAny / live): playerFeed.ts's row handlers, and
+  // admission.ts's onAny(reevaluate), which reaches it through enterWorld.
+  // dispose() itself is the only caller that may run after the flip, and
+  // only with `undefined`.
   let lastOwnName: string | undefined;
   function publishOwnName(name: string | undefined): void {
     if (name === lastOwnName) return;
@@ -378,6 +380,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // down, or a newer connect has taken over (an idle resume can start one
     // while this session's socket is still closing).
     const stale = () => life.disposed || generation !== life.generation;
+    // This session's row events: every feed registers its handlers through
+    // them, so none acts once stale (see rowEvents.ts).
+    const rows = sessionRows(myIdHex, stale);
 
     // The whole-session map state: the shared currentMapId (the tick
     // callback reads it, and so does the zone feed's seed refresh below,
@@ -391,8 +396,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // Statuses: state wiring, seed + row events (the opposite of the
     // reaction seed rule) — see statusFeed.ts. The seed half rides labelOf
     // and handleOwnRow (playerFeed.ts); the events land here.
-    wireStatuses(c, myIdHex, {
-      isStale: stale,
+    wireStatuses(c, rows, {
       applyOwn: publishOwnStatus,
       applyRemote: (idHex, view) =>
         remoteViews.patchLabel(idHex, {
@@ -405,8 +409,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // (sit / sleep / dance) seed + events like statuses, the transient
     // wave events-only like reactions; the split lives in gestureFeed.ts.
     // The seed half rides labelOf and handleOwnRow (playerFeed.ts).
-    wireGestures(c, myIdHex, {
-      isStale: stale,
+    wireGestures(c, rows, {
       applyOwn: (gesture) => gameApp.patchLocalLabel({ gesture }),
       applyRemote: (idHex, gesture) => remoteViews.patchLabel(idHex, { gesture }),
       waveOwn: () => gameApp.showLocalWave(),
@@ -418,8 +421,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // per-map projection the map switch (playerFeed.ts) re-pushes. Wired
     // before the admission block so its enterWorld (which may route through
     // switchMap) finds the feed ready.
-    const zoneFeed = wireZones(c, myIdentity, {
-      isStale: stale,
+    const zoneFeed = wireZones(c, rows, myIdentity, {
       currentMapId: () => sim.currentMapId,
       setMapZones: (zones) => gameApp.setZones(zones),
       setMapHuddles: (huddles) => gameApp.setHuddles(huddles),
@@ -435,15 +437,15 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // group rows' names. Its own feed rather than another branch of the
     // zone feed: the answer is about the chat panel, not about the zone
     // layer, and this file is long enough (see chatScopeFeed.ts).
-    wireChatScopes(c, myIdentity, { isStale: stale, onChatScopes: hooks.onChatScopes });
+    wireChatScopes(c, rows, myIdentity, { onChatScopes: hooks.onChatScopes });
 
     // The own-group signal for the call dock (ROADMAP Phase 4 増分①): the
     // same own group_member row the scope feed reads, but as the raw
     // groupId — the call's identity, not a chat affordance (see callFeed.ts).
-    wireOwnGroup(c, myIdentity, { isStale: stale, onOwnGroup: hooks.onOwnGroup });
+    wireOwnGroup(c, rows, myIdentity, { onOwnGroup: hooks.onOwnGroup });
 
     // The recording labels for the 録画一覧 (ROADMAP Phase 4 増分④).
-    wireRecordings(c, { isStale: stale, onRecordings: hooks.onRecordings });
+    wireRecordings(c, rows, { onRecordings: hooks.onRecordings });
 
     // The RLS privacy probe for the call registry (the groupChatRowsReceived
     // idea): how many group_call rows — join capabilities — this connection
@@ -451,17 +453,14 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // cache enumeration below, so a reloaded client still reports what the
     // seed delivered.
     for (const _row of c.db.groupCall.iter()) bumpStat('groupCallRowsReceived');
-    c.db.groupCall.onInsert(() => {
-      if (!stale()) bumpStat('groupCallRowsReceived');
-    });
+    rows.on(c.db.groupCall, { insert: () => bumpStat('groupCallRowsReceived') });
 
     // The player rows (playerFeed.ts): the own row drives the simulation,
     // remote rows the interpolated views, player_name rows the labels.
-    const players = createPlayerFeed(settled, {
+    const players = createPlayerFeed(settled, rows, {
       sim,
       gameApp,
       remoteViews,
-      isStale: stale,
       publishOwnName,
       publishOwnStatus,
       sendHeartbeat,
@@ -472,10 +471,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
 
     // Admission (承認制 / ゲスト入場設定): the rules live in admission.ts;
     // this session supplies what acting on them needs.
-    const admission = wireAdmission(c, myIdentity, {
+    const admission = wireAdmission(c, rows, myIdentity, {
       onSpace: hooks.onSpace,
       enterWorld: players.enterWorld,
-      isStale: stale,
     });
 
     // Seed the remote players already in the world (our own surviving row
@@ -484,8 +482,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
 
     // Chat: the feed seeds its log from the cache and keeps it (and the
     // speech bubbles) fed by row events — see chatFeed.ts.
-    chatFeed.wire(c, myIdHex, {
-      isStale: stale,
+    chatFeed.wire(c, rows, {
       showLocalBubble: (text) => gameApp.showLocalBubble(text),
       showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
       onDmRow: (event) => {
@@ -500,14 +497,13 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // Reactions: display-only wiring, row events only (no seed) — see
     // reactionFeed.ts, which also owns the palette narrowing of the raw
     // row string.
-    wireReactions(c, myIdHex, {
-      isStale: stale,
+    wireReactions(c, rows, {
       showLocalReaction: (emoji) => gameApp.showLocalReaction(emoji),
       showRemoteReaction: (idHex, emoji) => gameApp.showRemoteReaction(idHex, emoji),
     });
 
-    // The player / player_name row events, every one refusing to run once
-    // stale (see wireRowEvents); a deleted own row re-runs admission.
+    // The player / player_name row events (see wireRowEvents); a deleted
+    // own row re-runs admission.
     players.wireRowEvents(admission);
 
     // The first decision: enter (the pre-admission behavior), or hold and
