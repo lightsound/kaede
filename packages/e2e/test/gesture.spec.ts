@@ -2,7 +2,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, snapshot } from './helpers';
 
-/** Clicks the gesture button labelled `label` (the ChatPanel GestureRow). */
+/** Clicks the gesture button labelled `label` (the ChatPanel gesture palette). */
 async function playGesture(page: Page, label: string): Promise<void> {
   await page.getByLabel(`ジェスチャー ${label}`).click();
 }
