@@ -144,7 +144,7 @@ export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): Play
     // events keep it fresh from here (wireStatuses). The own state
     // gesture seeds the same way (①c — a reload must restore the pose).
     deps.publishOwnStatus(cachedStatusView(c, row.identity));
-    gameApp.setLocalGesture(cachedStateGesture(c, row.identity));
+    gameApp.patchLocalLabel({ gesture: cachedStateGesture(c, row.identity) });
     // Announce liveness once per session start, unconditionally. Resuming
     // a surviving row skips join, so nothing server-side flips its offline
     // flag back or refreshes its updatedAt — and the send gate means no
@@ -263,7 +263,7 @@ export function createPlayerFeed(settled: Connected, deps: PlayerFeedDeps): Play
       deps.publishOwnName(row.name);
       return;
     }
-    remoteViews.setName(idHex, row.name);
+    remoteViews.patchLabel(idHex, { name: row.name });
   };
 
   /**

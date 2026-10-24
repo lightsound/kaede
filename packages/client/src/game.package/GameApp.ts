@@ -42,7 +42,7 @@ const BG_COLOR = 0x10131b;
 
 /**
  * The per-player display attributes rendered alongside the pose: the name
- * label, the status line under the avatar, and the zone occupancy tag
+ * label, plus the status line under the avatar and the zone occupancy tag
  * under that (each `undefined` while default/none). One object rather
  * than adjacent positional strings so a swapped call site cannot compile
  * (the NetHooks precedent), and so the Phase 5 avatar attributes (pose,
@@ -50,8 +50,15 @@ const BG_COLOR = 0x10131b;
  */
 export interface PlayerLabel {
   name: string;
+  /**
+   * The composed status line (statusLabel in @kaede/shared) shown under
+   * the avatar, or undefined for the default status (the line hides).
+   */
   status: string | undefined;
-  /** The composed occupancy tag (zoneTagLabel in @kaede/shared), or undefined. */
+  /**
+   * The composed occupancy tag (groupTagLabel in @kaede/shared: the zone
+   * tag, or a huddle's own label), or undefined while in no group.
+   */
   zone: string | undefined;
   /**
    * The player's STATE gesture directive (増分①c — 'sit' | 'sleep' |
@@ -69,6 +76,19 @@ export interface PlayerLabel {
    */
   availability: string | undefined;
 }
+
+/**
+ * One update to a player's PlayerLabel, the way the rows change it: a
+ * rename (player_name), a status line together with its availability
+ * (player_status), a state gesture, or a zone tag. A union rather than
+ * Partial<PlayerLabel> so a patch can never blank the name or carry a
+ * status without its availability.
+ */
+export type PlayerLabelPatch =
+  | Pick<PlayerLabel, 'name'>
+  | Pick<PlayerLabel, 'status' | 'availability'>
+  | Pick<PlayerLabel, 'gesture'>
+  | Pick<PlayerLabel, 'zone'>;
 
 export interface GameApp {
   destroy(): void;
@@ -94,19 +114,14 @@ export interface GameApp {
    * the circle follows the avatars between row events.
    */
   setHuddles(huddles: readonly HuddleRender[]): void;
-  setLocalPlayerName(name: string): void;
   /**
-   * Shows `status` (the composed line from statusLabel) under the local
-   * avatar, or hides the line when undefined (the default status). Persistent
-   * state, not a timed overhead — it stays until the next call.
+   * Updates some of the local avatar's display attributes — the name, the
+   * status line, the zone tag and the pose inputs (the PlayerLabel fields).
+   * Fields left out keep their value. Every field is persistent state, not
+   * a timed overhead: it stays until a later patch sets it. Rendered motion
+   * overrides the gesture visually (avatarView).
    */
-  setLocalStatus(status: string | undefined): void;
-  /**
-   * Shows the zone occupancy tag (the composed zoneTagLabel) under the
-   * local avatar's status line, or hides it when undefined. Persistent
-   * state like the status — it stays until the next call.
-   */
-  setLocalZone(zone: string | undefined): void;
+  patchLocalLabel(patch: PlayerLabelPatch): void;
   /**
    * Begin stepping the local simulation from `state` at `tick`. Until this is
    * called the ticker renders the scene but never steps physics or fires
@@ -147,22 +162,25 @@ export interface GameApp {
   showLocalReaction(emoji: ReactionEmoji): void;
   /** Same, above the remote player `id`; a no-op while that player has no sprite. */
   showRemoteReaction(id: string, emoji: ReactionEmoji): void;
-  /**
-   * Sets the local avatar's state-gesture directive (増分①c — the gesture
-   * row's value, undefined when the row is gone). Persistent like the
-   * status lines; rendered motion overrides it visually (avatarView).
-   */
-  setLocalGesture(gesture: string | undefined): void;
-  /**
-   * Sets the local availability ('online' | 'away' | 'busy') for the
-   * derived poses: away = sleep pose, busy = headphones overlay. The
-   * composed status LINE stays setLocalStatus's business.
-   */
-  setLocalAvailability(availability: string | undefined): void;
   /** Plays the transient wave on the local avatar (増分①c row event). */
   showLocalWave(): void;
   /** Same, on the remote player `id`; a no-op while that player has no sprite. */
   showRemoteWave(id: string): void;
+}
+
+/**
+ * Shows one player's display attributes on their view: the name, the
+ * status and zone lines, the standing-still pose (poseDirective) and the
+ * busy headgear. The whole label every time — each part only sets state,
+ * so re-applying an unchanged field changes nothing on screen (remote
+ * views get it every frame).
+ */
+function applyLabel(view: PlayerView, label: PlayerLabel): void {
+  view.label.text = label.name;
+  setUnderline(view.status, label.status);
+  setUnderline(view.zone, label.zone);
+  view.avatar.play(poseDirective(label.gesture, label.availability));
+  view.avatar.setBusy(label.availability === 'busy');
 }
 
 /** The rendering resolution: the device pixel ratio, or 1 where unreported. */
@@ -231,18 +249,19 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const huddleLayerRoot = new Container();
   world.addChild(huddleLayerRoot);
 
-  const local = createPlayerView(world, 'You', avatarSheet, heldItem, gestureKit);
+  // The local avatar's display attributes (remote views get theirs whole
+  // with every upsertRemotePlayer): the own rows patch them piecemeal
+  // (patchLocalLabel) and every patch applies the whole label. 'You' holds
+  // the name until the own row brings the real one.
+  let localLabel: PlayerLabel = {
+    name: 'You',
+    status: undefined,
+    zone: undefined,
+    gesture: undefined,
+    availability: undefined,
+  };
+  const local = createPlayerView(world, localLabel.name, avatarSheet, heldItem, gestureKit);
   const remotes = new Map<string, PlayerView>();
-  // The local avatar's pose inputs (the remote ones ride PlayerLabel):
-  // the state gesture from the own gesture row, the availability from the
-  // own status row — combined by poseDirective on every change.
-  let localGesture: string | undefined;
-  let localAvailability: string | undefined;
-
-  function applyLocalPose(): void {
-    local.avatar.play(poseDirective(localGesture, localAvailability));
-    local.avatar.setBusy(localAvailability === 'busy');
-  }
 
   /** The member sprites a huddle circle anchors on this frame. */
   function huddleMemberPositions(huddle: HuddleRender): { x: number; y: number }[] {
@@ -429,14 +448,9 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     setHuddles(huddles) {
       huddleLayer.set(huddles);
     },
-    setLocalPlayerName(name) {
-      local.label.text = name;
-    },
-    setLocalStatus(status) {
-      setUnderline(local.status, status);
-    },
-    setLocalZone(zone) {
-      setUnderline(local.zone, zone);
+    patchLocalLabel(patch) {
+      localLabel = { ...localLabel, ...patch };
+      applyLabel(local, localLabel);
     },
     start(state, t) {
       prev = curr = state;
@@ -477,11 +491,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
         view = createPlayerView(world, label.name, avatarSheet, heldItem, gestureKit);
         remotes.set(id, view);
       }
-      view.label.text = label.name;
-      setUnderline(view.status, label.status);
-      setUnderline(view.zone, label.zone);
-      view.avatar.play(poseDirective(label.gesture, label.availability));
-      view.avatar.setBusy(label.availability === 'busy');
+      applyLabel(view, label);
       view.root.position.set(x, y);
       // Flip only the body; flipping the root would mirror the name label.
       view.body.scale.x = facing;
@@ -502,14 +512,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     showLocalReaction: (emoji) => showReaction(local.reaction, emoji, performance.now()),
     showRemoteReaction: (id, emoji) =>
       withRemoteView(id, (view) => showReaction(view.reaction, emoji, performance.now())),
-    setLocalGesture(gesture) {
-      localGesture = gesture;
-      applyLocalPose();
-    },
-    setLocalAvailability(availability) {
-      localAvailability = availability;
-      applyLocalPose();
-    },
     showLocalWave: () => local.avatar.wave(),
     showRemoteWave: (id) => withRemoteView(id, (view) => view.avatar.wave()),
   };

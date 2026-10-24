@@ -329,7 +329,7 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // The label keeps its last text while the row is gone: the local sprite
     // stays visible while offline (the sim keeps running), so blanking the
     // label would flash; the replacement row brings the authoritative name.
-    if (name !== undefined) gameApp.setLocalPlayerName(name);
+    if (name !== undefined) gameApp.patchLocalLabel({ name });
     hooks.onOwnName(name);
   }
 
@@ -354,10 +354,9 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       return;
     }
     lastOwnStatus = view;
-    gameApp.setLocalStatus(statusLabel(view));
-    // The derived poses (away = sleep, busy = headphones — ①c) read the
-    // raw availability; the composed line above stays the text display.
-    gameApp.setLocalAvailability(view.availability);
+    // The composed line is the text display; the derived poses (away =
+    // sleep, busy = headphones — ①c) read the raw availability.
+    gameApp.patchLocalLabel({ status: statusLabel(view), availability: view.availability });
     hooks.onOwnStatus(view);
   }
 
@@ -396,7 +395,10 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       isStale: stale,
       applyOwn: publishOwnStatus,
       applyRemote: (idHex, view) =>
-        remoteViews.setStatus(idHex, statusLabel(view), view.availability),
+        remoteViews.patchLabel(idHex, {
+          status: statusLabel(view),
+          availability: view.availability,
+        }),
     });
 
     // Gestures (Phase 5 ①c): the third display convention — state poses
@@ -405,8 +407,8 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     // The seed half rides labelOf and handleOwnRow (playerFeed.ts).
     wireGestures(c, myIdHex, {
       isStale: stale,
-      applyOwn: (gesture) => gameApp.setLocalGesture(gesture),
-      applyRemote: (idHex, gesture) => remoteViews.setGesture(idHex, gesture),
+      applyOwn: (gesture) => gameApp.patchLocalLabel({ gesture }),
+      applyRemote: (idHex, gesture) => remoteViews.patchLabel(idHex, { gesture }),
       waveOwn: () => gameApp.showLocalWave(),
       waveRemote: (idHex) => gameApp.showRemoteWave(idHex),
     });
@@ -421,8 +423,8 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
       currentMapId: () => sim.currentMapId,
       setMapZones: (zones) => gameApp.setZones(zones),
       setMapHuddles: (huddles) => gameApp.setHuddles(huddles),
-      applyOwnZone: (tag) => gameApp.setLocalZone(tag),
-      applyRemoteZone: (idHex, tag) => remoteViews.setZone(idHex, tag),
+      applyOwnZone: (tag) => gameApp.patchLocalLabel({ zone: tag }),
+      applyRemoteZone: (idHex, tag) => remoteViews.patchLabel(idHex, { zone: tag }),
       onZones: hooks.onZones,
       onHuddle: hooks.onHuddle,
     });
