@@ -174,6 +174,38 @@ function anchorCaption(frame: AssetFrame): string {
   return [size, anchors].filter((part) => part !== '').join(' ');
 }
 
+/**
+ * One pose frame of a sheet, sitting on the sheet's shared ground line
+ * (groundBoxStyle) with its pose name and anchors underneath. Shared by the
+ * avatar and gesture cards; `testId` keeps their separate test ids.
+ */
+function PoseFigure(props: {
+  avatar: AvatarAsset;
+  name: string;
+  frame: AssetFrame;
+  showAnchors: boolean;
+  testId: string;
+}) {
+  const { avatar, name, frame, showAnchors, testId } = props;
+  return (
+    <figure style={figureStyle} data-testid={testId}>
+      <span style={groundBoxStyle(maxFrameSize(avatar), 1)}>
+        <FrameImage
+          frame={frame}
+          scale={1}
+          showAnchors={showAnchors}
+          alt={`${avatar.id} ${name}`}
+        />
+      </span>
+      <figcaption style={captionStyle}>
+        {name}
+        <br />
+        {anchorCaption(frame)}
+      </figcaption>
+    </figure>
+  );
+}
+
 /** One avatar-body: identity, walk playback, every pose cell, the pose-gap badge. */
 export function AvatarCard(props: {
   avatar: AvatarAsset;
@@ -202,21 +234,14 @@ export function AvatarCard(props: {
           <figcaption style={captionStyle}>歩行再生</figcaption>
         </figure>
         {avatar.poses.map(({ pose: name, frame }) => (
-          <figure key={name} style={figureStyle} data-testid="pose-frame">
-            <span style={groundBoxStyle(maxFrameSize(avatar), 1)}>
-              <FrameImage
-                frame={frame}
-                scale={1}
-                showAnchors={showAnchors}
-                alt={`${avatar.id} ${name}`}
-              />
-            </span>
-            <figcaption style={captionStyle}>
-              {name}
-              <br />
-              {anchorCaption(frame)}
-            </figcaption>
-          </figure>
+          <PoseFigure
+            key={name}
+            avatar={avatar}
+            name={name}
+            frame={frame}
+            showAnchors={showAnchors}
+            testId="pose-frame"
+          />
         ))}
         {avatar.handLayer && (
           <figure style={figureStyle} data-testid="hand-layer">
@@ -301,21 +326,14 @@ export function GestureCard(props: { avatar: AvatarAsset; showAnchors: boolean }
       )}
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         {avatar.poses.map(({ pose: name, frame }) => (
-          <figure key={name} style={figureStyle} data-testid="gesture-frame">
-            <span style={groundBoxStyle(maxFrameSize(avatar), 1)}>
-              <FrameImage
-                frame={frame}
-                scale={1}
-                showAnchors={showAnchors}
-                alt={`${avatar.id} ${name}`}
-              />
-            </span>
-            <figcaption style={captionStyle}>
-              {name}
-              <br />
-              {anchorCaption(frame)}
-            </figcaption>
-          </figure>
+          <PoseFigure
+            key={name}
+            avatar={avatar}
+            name={name}
+            frame={frame}
+            showAnchors={showAnchors}
+            testId="gesture-frame"
+          />
         ))}
       </div>
     </section>
