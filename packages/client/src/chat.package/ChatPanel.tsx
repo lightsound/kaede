@@ -20,7 +20,6 @@ import {
   UI_BUTTON_BG,
   UI_DM_COLOR,
   UI_ERROR_COLOR,
-  UI_FONT,
   UI_GOLD,
   UI_GOLD_BORDER,
   UI_GOLD_BORDER_SOFT,
@@ -126,12 +125,17 @@ const reactionButtonStyle: CSSProperties = {
   cursor: 'pointer',
 };
 
-/** The gesture buttons carry words, not emoji — smaller type, same shape. */
+/**
+ * The gesture buttons carry words, not emoji — smaller type, same shape,
+ * in the panel's font family (a button does not inherit it by default).
+ * fontFamily rather than the usual `font: 'inherit'`: the shorthand would
+ * reset the fontSize above.
+ */
 const gestureButtonStyle: CSSProperties = {
   ...reactionButtonStyle,
   fontSize: 11,
   color: UI_TEXT_COLOR,
-  fontFamily: UI_FONT,
+  fontFamily: 'inherit',
 };
 
 /** The sender name lead-in; the local player's own lines get the gold accent. */
