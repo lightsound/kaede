@@ -65,11 +65,10 @@ pmOnFail: ignore
 # pullfrog 指摘)。@effect/vitest@4.0.5 の peer は vitest >=5 <6 で、vitest 5 と
 # 整合する。
 overrides:
-  '@effect/platform-bun': 4.0.5
-  '@effect/platform-node-shared': 4.0.5
-  '@effect/sql-d1': 4.0.5
-  '@effect/sql-sqlite-do': 4.0.5
-  '@effect/vitest': 4.0.5
+  '@effect/platform-bun': 4.0.6
+  '@effect/platform-node-shared': 4.0.6
+  '@effect/sql-d1': 4.0.6
+  '@effect/vitest': 4.0.6
   # @assetpack/core@1.7.0 が ^4 で 4.0.3 を引く。4.0.2 と 4.0.3 は provenance
   # なしで公開されていて trustPolicy が拒む。4.0.1 は 4 系で最後の provenance
   # 付き版で、4.0.2/4.0.3 の差分は型定義だけ。5 系は ESM 専用なので CJS の
