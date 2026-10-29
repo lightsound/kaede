@@ -59,20 +59,20 @@ pmOnFail: ignore
 # @alchemy.run/cloudflare に分離され(infra/package.json に直接依存として
 # 追加)、alchemy / @alchemy.run/cloudflare の peer は effect も @effect/* も
 # ^4.0.5 を要求する。@effect/* の各パッケージは peer に同じ版以上の
-# effect(4.0.6 なら ^4.0.6)を要求する。kaede の effect 利用は alchemy 周辺
+# effect(4.0.7 なら ^4.0.7)を要求する。kaede の effect 利用は alchemy 周辺
 # (infra/alchemy.run.ts の effect/Effect のみ)なので、infra の
 # effect / @effect/platform-node とこの override の effect 系は同じ版に
 # 揃えて一緒に上げる。ここでの override は、alchemy 系が範囲指定で引き込む
 # 残りの @effect/* が別版に解決されて peer 不整合のまま混在するのを防ぐ
 # (pnpm は lockfile 確定後この不整合を警告しない — PR #71 の pullfrog 指摘)。
-# @effect/vitest@4.0.6 の peer は vitest >=5 <6 で、vitest 5 と整合する。
+# @effect/vitest@4.0.7 の peer は vitest >=5 <6 で、vitest 5 と整合する。
 # @effect/sql-sqlite-do は beta.84 のプロバイダ分割で依存元が消え、override が
 # 空振りになったため外した(残すと fallow dead-code が unused override で落ちる)。
 overrides:
-  '@effect/platform-bun': 4.0.6
-  '@effect/platform-node-shared': 4.0.6
-  '@effect/sql-d1': 4.0.6
-  '@effect/vitest': 4.0.6
+  '@effect/platform-bun': 4.0.7
+  '@effect/platform-node-shared': 4.0.7
+  '@effect/sql-d1': 4.0.7
+  '@effect/vitest': 4.0.7
   # @assetpack/core@1.7.0 が ^4 で 4.0.3 を引く。4.0.2 と 4.0.3 は provenance
   # なしで公開されていて trustPolicy が拒む。4.0.1 は 4 系で最後の provenance
   # 付き版で、4.0.2/4.0.3 の差分は型定義だけ。5 系は ESM 専用なので CJS の
