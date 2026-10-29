@@ -10,8 +10,8 @@
 //
 // スクリプトの環境変数(ALCHEMY_PROFILE)は、Windows の cmd.exe でも動くよう
 // cross-env 経由で設定している。
+import * as Cloudflare from '@alchemy.run/cloudflare';
 import * as Alchemy from 'alchemy';
-import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
 
 // アカウント「Kaede」の ID(シークレットではない公開識別子)。API トークンと

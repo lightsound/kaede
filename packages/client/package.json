@@ -11,13 +11,13 @@
     "assets:pack": "python3 ../../scripts/factory/prepare_assetpack.py && ./node_modules/.bin/assetpack"
   },
   "dependencies": {
-    "@clerk/localizations": "^4.24.0",
-    "@clerk/react": "^6.18.0",
+    "@clerk/localizations": "^4.24.3",
+    "@clerk/react": "^6.18.3",
     "@cloudflare/realtimekit": "2.0.4",
     "@cloudflare/realtimekit-react-ui": "2.0.3",
     "@kaede/shared": "workspace:*",
     "pixi.js": "^8.22.0",
-    "posthog-js": "^1.438.15",
+    "posthog-js": "^1.441.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "spacetimedb": "2.13.0"
