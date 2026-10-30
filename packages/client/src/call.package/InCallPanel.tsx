@@ -130,6 +130,7 @@ const recordButtonStyle: CSSProperties = {
 function useRecordingState(meeting: Meeting): string {
   const [state, setState] = useState<string>(meeting.recording.recordingState);
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 外部システム（RealtimeKit の meeting）の観測値を state に同期する定型パターン
     setState(meeting.recording.recordingState);
     const listener = (next: string) => setState(next);
     meeting.recording.addListener('recordingUpdate', listener);

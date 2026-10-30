@@ -241,10 +241,11 @@ describe('netActionsOf once mounted', () => {
     ({ invoke, method, args }) => {
       const net = fakeNet();
       invoke(netActionsOf({ current: net }, () => {}));
-      for (const [name, spy] of Object.entries(net)) {
-        if (name === method) expect(spy, name).toHaveBeenCalledExactlyOnceWith(...args);
-        else expect(spy, name).not.toHaveBeenCalled();
-      }
+      const calledNames = Object.entries(net)
+        .filter(([, spy]) => spy.mock.calls.length > 0)
+        .map(([name]) => name);
+      expect(calledNames).toEqual([method]);
+      expect(net[method]).toHaveBeenCalledExactlyOnceWith(...args);
     },
   );
 

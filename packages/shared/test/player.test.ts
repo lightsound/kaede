@@ -191,11 +191,13 @@ describe('one-way platforms', () => {
     // Continuing to hold down+jump must never re-land on the platform; the
     // player falls all the way to the ground.
     let s = after1;
+    let snappedBack = false;
     for (let i = 0; i < 200; i++) {
       s = stepPlayer(s, dropInput, DEFAULT_MAP);
       // Never snapped back onto the platform top.
-      if (s.onGround) expect(s.y).toBe(GROUNDED_Y);
+      if (s.onGround && s.y !== GROUNDED_Y) snappedBack = true;
     }
+    expect(snappedBack).toBe(false);
     expect(s.onGround).toBe(true);
     expect(s.y).toBe(GROUNDED_Y);
   });

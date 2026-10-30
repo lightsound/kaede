@@ -73,7 +73,7 @@
       // deliberately. describe-table-names.mjs is a standalone helper that
       // backup-maincloud.sh runs with node (fallow checks unreached files
       // against boundaries since 3.31).
-      "allowUnmatched": ["vitest.config.mts", "scripts/describe-table-names.mjs"],
+      "allowUnmatched": ["vite.config.ts", "scripts/describe-table-names.mjs"],
     },
   },
 
