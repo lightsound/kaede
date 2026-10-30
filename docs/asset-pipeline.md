@@ -164,7 +164,7 @@
   [asset-factory.md](./asset-factory.md) / [factory-yield.md](./factory-yield.md)。
   入口は `scripts/factory/run_avatar.py`（テンプレ展開 → 生成 →
   足位置解析 → 頭部合成 → 取り込み → 構造ベース art lint）。アトラスは
-  `pnpm --filter @kaede/client assets:pack`（AssetPack、派生物）。
+  `bun run --filter @kaede/client assets:pack`（AssetPack、派生物）。
 
 ## 5. 販売・UGC への不変条件と決定ポイント
 

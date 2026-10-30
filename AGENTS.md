@@ -15,7 +15,7 @@ Do not add gameplay features (combat, mobs, XP); that direction was abandoned (P
 
 ## Cursor Cloud specific instructions
 
-`kaede` is a single-product pnpm monorepo (a MapleStory-style 2D virtual office). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `test:e2e`, `lint`, `lint:imports`, `analyze`).
+`kaede` is a single-product Bun monorepo (a MapleStory-style 2D virtual office). Full setup, run, and command docs live in `README.md`; the notes below only cover non-obvious cloud caveats. Standard scripts are in the root `package.json` (`dev`, `typecheck`, `test`, `test:coverage`, `test:e2e`, `lint`, `lint:imports`, `analyze`).
 
 ### SpacetimeDB CLI binary name and version
 
@@ -38,7 +38,7 @@ Order matters and the backend must be running before publish:
 1. `spacetimedb-cli start` — long-running host on `ws://localhost:3000` (run in its own tmux session, leave it up).
 2. `spacetimedb-cli publish kaede --server local --yes` — run from repo root (`spacetime.json` points at `packages/server`).
 3. `spacetimedb-cli generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings --yes` — only needed if the server schema changed; committed bindings must not drift (CI enforces this).
-4. `pnpm dev` — Vite client on `http://localhost:5173`. Open two browser windows to see multiplayer sync.
+4. `bun run dev` — Vite client on `http://localhost:5173`. Open two browser windows to see multiplayer sync.
 
 The client defaults to `ws://localhost:3000` and DB `kaede` in dev, so no env vars are needed locally.
 
@@ -53,7 +53,7 @@ tools at `/v1/mcp` since 2.10.0 (currently reporting host version 2.13.0).
 With shell access, plain `spacetimedb-cli sql kaede "..."` / `logs kaede`
 covers the same ground — the MCP server is for MCP-only clients.
 
-`pnpm test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `pnpm --filter @kaede/e2e exec playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli pnpm test:e2e` (CI sets the same variable in `ci.yml`).
+`bun run test:e2e` runs the Playwright smoke tests (`packages/e2e`) and only needs steps 1–2: Playwright boots the Vite dev server itself. Install browsers once with `bunx --cwd packages/e2e playwright install --with-deps chromium`. The guest-admission spec shells out to the CLI (`sql`), whose binary name defaults to `spacetime`; on this VM run `SPACETIME_BIN=spacetimedb-cli bun run test:e2e` (CI sets the same variable in `ci.yml`).
 
 ### Merging checklist
 
@@ -65,10 +65,10 @@ locally and are easy to miss because they arrive asynchronously after a push.
 
 ### Static analysis / testing gotcha
 
-`fallow health` (part of `pnpm analyze` and CI) **requires** `coverage/coverage-final.json`; run `pnpm test:coverage` first if invoking `fallow` directly (`pnpm analyze` already does). `packages/server` has no unit tests — it only runs inside the SpacetimeDB host, so all testable pure logic lives in `packages/shared`.
+`fallow health` (part of `bun run analyze` and CI) **requires** `coverage/coverage-final.json`; run `bun run test:coverage` first if invoking `fallow` directly (`bun run analyze` already does). `packages/server` has no unit tests — it only runs inside the SpacetimeDB host, so all testable pure logic lives in `packages/shared`.
 
-Before pushing, also run `pnpm exec fallow health` **standalone**: CI runs it as
-its own step, and a passing `pnpm analyze` does not guarantee that step passes —
+Before pushing, also run `bunx fallow health` **standalone**: CI runs it as
+its own step, and a passing `bun run analyze` does not guarantee that step passes —
 PR #30 hit exactly this (a new file missing its `fallow-ignore-file
 coverage-gaps` header failed only the CI `fallow health` step). Every new file
 that cannot be unit-tested (reducers, live-connection wiring, DOM components,
@@ -92,8 +92,8 @@ Two more fallow quirks to know about (both bit Phase 3 work):
 
 ### Markdown and YAML formatting
 
-Oxfmt (via Vite+) also formats `*.md` and `*.yml` (`pnpm lint` checks with `vp check`,
-`pnpm format` fixes with `vp fmt`); generated and tool-managed files are excluded via
+Oxfmt (via Vite+) also formats `*.md` and `*.yml` (`bun run lint` checks with `vp check`,
+`bun run format` fixes with `vp fmt`); generated and tool-managed files are excluded via
 `ignorePatterns` in the root `vite.config.ts`. Oxfmt pads every table row to the widest cell in
 each column, so keep table cells short and put long explanations under headings or in lists —
 `docs/VISION.md` uses a short summary table plus one section per item for this reason.
@@ -110,7 +110,7 @@ enforce the workspace-level `client` / `server` / `shared` dependency graph.
 - Package-private exports are the default. Expose the intended API through the package's
   `index.ts`; external consumers must import from that index, never an internal file.
 - Use `/** @public */` only when an export genuinely needs unrestricted project-wide access.
-- Run `pnpm lint:imports` after moving files or changing imports. `pnpm lint` runs both `vp check`
+- Run `bun run lint:imports` after moving files or changing imports. `bun run lint` runs both `vp check`
   (Oxlint + Oxfmt + type check) and ImportLint.
 - Tests are excluded so they may import package-private implementation details directly.
 - Read `.agents/skills/import-lint/SKILL.md` before fixing ImportLint diagnostics.

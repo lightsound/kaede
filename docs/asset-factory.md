@@ -171,7 +171,7 @@ python3 scripts/factory/model_ledger.py retarget --family <f> \
 | 2e  | シート組立       | 5 コマ横一列のグリーンバックシート → `sheet-original.png`                                                                                                                                                                                                  |
 | 3   | 取り込み         | `scripts/import-avatar-sheet.py`（R2 原本解決込み）                                                                                                                                                                                                        |
 | 4   | アート lint      | 構造アンカー乖離・寸法・残渣・頭部整合性・コマ間パレットドリフト・（opt-in）ベース服コントラスト / ペア素体色一致。編集レーンは加えてシルエット IoU                                                                                                        |
-| 5   | アトラス化       | AssetPack（`pnpm --filter @kaede/client assets:pack`）— ビルド派生物。正は個別 PNG                                                                                                                                                                         |
+| 5   | アトラス化       | AssetPack（`bun run --filter @kaede/client assets:pack`）— ビルド派生物。正は個別 PNG                                                                                                                                                                      |
 | 6   | 原本アップロード | `scripts/upload-asset-originals.py` → R2 `kaede-asset-originals`                                                                                                                                                                                           |
 | 7   | PR               | 取り込み結果 PNG が見える PR（run_avatar が検品モンタージュも出力）→ オーナー目視                                                                                                                                                                          |
 
@@ -181,7 +181,7 @@ python3 scripts/factory/model_ledger.py retarget --family <f> \
 export CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=...
 python3 scripts/factory/run_avatar.py packages/client/src/game.package/<dir>/order.json --record-yield
 python3 scripts/upload-asset-originals.py packages/client/src/game.package/<dir>/order.json
-pnpm --filter @kaede/client assets:pack   # 任意・アトラス派生物の確認
+bun run --filter @kaede/client assets:pack   # 任意・アトラス派生物の確認
 ```
 
 歩留まり・コスト・所要時間は各通し運転のたびに

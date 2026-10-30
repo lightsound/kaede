@@ -16,7 +16,7 @@ None for guest-path testing on prod. A Cloudflare **Realtime-Admin** API token i
 When the local DB can't run calls, point the Vite client at prod maincloud — the schema is identical and prod's `call_config` is already seeded:
 
 ```sh
-cd packages/client && VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com VITE_SPACETIME_DB=kaede pnpm dev
+cd packages/client && VITE_SPACETIME_URI=wss://maincloud.spacetimedb.com VITE_SPACETIME_DB=kaede bun run dev
 ```
 
 Guests auto-enter the prod world. Footprint is small and self-cleaning: found a transient huddle (`ここで立ち話`), join its call, then leave both — an empty huddle auto-deletes and the RealtimeKit meeting ends when all participants leave. Flag the prod usage in the report.
