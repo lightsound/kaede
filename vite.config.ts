@@ -13,7 +13,7 @@ import { defineConfig } from 'vite-plus';
 const ignorePatterns = [
   '**/module_bindings/**',
   'infra/.alchemy/**',
-  'pnpm-lock.yaml',
+  'bun.lock',
   '**/skills/sp-*/**',
   '**/skills/stripe-projects-cli/**',
   '.github/workflows/pullfrog.yml',

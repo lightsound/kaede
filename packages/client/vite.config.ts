@@ -27,9 +27,9 @@ function envReader(mode: string): (name: string) => string | undefined {
 /**
  * エラー監視の初期化ゲート(ADR §8.2、ROADMAP Phase 2): 実キーが入るのは
  * 本番ビルド(`vite build` = mode 'production')だけ。「キーの有無」での
- * 判定は不可 — ローカル .env に実キーが常在するため、それでは `pnpm dev`
+ * 判定は不可 — ローカル .env に実キーが常在するため、それでは `bun run dev`
  * のノイズが本番プロジェクト(Free 枠は 1 プロジェクト)を汚染する。
- * 動作確認は明示オプトインのローカル本番ビルド(pnpm --filter
+ * 動作確認は明示オプトインのローカル本番ビルド(bun run --filter
  * @kaede/client build && vite preview)で行う。
  */
 function posthogKey(mode: string, readEnv: (name: string) => string | undefined): string {

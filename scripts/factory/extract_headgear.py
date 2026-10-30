@@ -137,7 +137,7 @@ def main() -> None:
     ]
     order["heightPx"] = max(1, round(cut.height * import_scale))
     order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
-    subprocess.run(["pnpm", "exec", "vp", "fmt", "--write", str(order_path)], check=True)
+    subprocess.run(["bunx", "vp", "fmt", "--write", str(order_path)], check=True)
     print(
         f"wrote {sheet_path} ({cut.width}x{cut.height}); grip={order['grip']} "
         f"heightPx={order['heightPx']}"

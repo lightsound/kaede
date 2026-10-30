@@ -83,7 +83,7 @@ def write_order(order_path: Path, order: dict) -> None:
         temporary.replace(order_path)
         # Format the final path (tmp names are gitignored / ignored by the formatter).
         subprocess.run(
-            ["pnpm", "exec", "vp", "fmt", "--write", str(order_path)],
+            ["bunx", "vp", "fmt", "--write", str(order_path)],
             check=True,
         )
     finally:

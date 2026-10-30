@@ -311,7 +311,7 @@ def run_sheet_edit_lane(order_path: Path, order: dict, work: Path, args) -> None
         order["prompt"] = recorded
         order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
         subprocess.run(
-            ["pnpm", "exec", "vp", "fmt", "--write", str(order_path)],
+            ["bunx", "vp", "fmt", "--write", str(order_path)],
             check=True,
         )
 
@@ -471,7 +471,7 @@ def main() -> None:
         order["walkTemplate"] = walk_template
         order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
         subprocess.run(
-            ["pnpm", "exec", "vp", "fmt", "--write", str(order_path)],
+            ["bunx", "vp", "fmt", "--write", str(order_path)],
             check=True,
         )
 
