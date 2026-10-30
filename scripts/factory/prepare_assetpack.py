@@ -2,7 +2,7 @@
 """Stage game.package pose PNGs into AssetPack's `{tps}` entry folder.
 
 Copies every avatar-body pose (and handLayer) into
-`packages/client/raw-assets/avatars{tps}/<id>/` so `pnpm assets:pack` can
+`packages/client/raw-assets/avatars{tps}/<id>/` so `bun run assets:pack` can
 emit a Pixi spritesheet. Staging + atlas-out are gitignored — the committed
 source of truth remains the individual PNGs.
 """

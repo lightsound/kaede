@@ -27,7 +27,7 @@ WebSocket + `submit_inputs`（400ms に 24 tick、目標 2〜3 calls/秒/人）�
 ```sh
 spacetimedb-cli start
 spacetimedb-cli publish kaede --server local --yes
-pnpm --filter @kaede/client dev
+bun run --filter @kaede/client dev
 node packages/e2e/measure-concurrent-movers.mjs --count 50 --movers 50 --seconds 20 --label 50_all_moving
 ```
 

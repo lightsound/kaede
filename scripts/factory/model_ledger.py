@@ -96,7 +96,7 @@ def load_ledger() -> dict:
 def save_ledger(ledger: dict) -> None:
     LEDGER_PATH.write_text(json.dumps(ledger, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
-        ["pnpm", "exec", "vp", "fmt", "--write", str(LEDGER_PATH)], check=True
+        ["bunx", "vp", "fmt", "--write", str(LEDGER_PATH)], check=True
     )
 
 

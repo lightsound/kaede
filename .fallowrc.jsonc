@@ -80,8 +80,8 @@
   "health": {
     // Real per-function CRAP instead of coverage estimated from the module
     // graph, which scores well-tested code as risky. REQUIRED, not optional:
-    // fallow exits 2 if this file is missing, so run `pnpm test:coverage`
-    // first (`pnpm analyze` and the CI job both do).
+    // fallow exits 2 if this file is missing, so run `bun run test:coverage`
+    // first (`bun run analyze` and the CI job both do).
     "coverage": "coverage/coverage-final.json",
   },
 

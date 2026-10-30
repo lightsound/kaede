@@ -10,7 +10,7 @@ description: How to run and manually test the kaede app end-to-end (local Spacet
 1. `export PATH="$HOME/.local/bin:$PATH"` — the pinned CLI binary is `spacetimedb-cli` (NOT `spacetime`).
 2. `spacetimedb-cli start` — long-running host on `ws://localhost:3000`, keep it up in background.
 3. `spacetimedb-cli publish kaede --server local --yes` from repo root.
-4. `pnpm dev` → Vite client on `http://localhost:5173` (client defaults to ws://localhost:3000 + DB `kaede` in dev; no env vars needed).
+4. `bun run dev` → Vite client on `http://localhost:5173` (client defaults to ws://localhost:3000 + DB `kaede` in dev; no env vars needed).
 
 Verify host: `spacetimedb-cli list --server local` shows `kaede`. The `sql` subcommand needs `--server local` explicitly or it hits maincloud and fails with `InvalidSignature` 401.
 
@@ -29,11 +29,11 @@ Verify host: `spacetimedb-cli list --server local` shows `kaede`. The `sql` subc
 ## Playwright e2e suite
 
 ```sh
-pnpm --filter @kaede/e2e exec playwright install --with-deps chromium   # once
-SPACETIME_BIN=spacetimedb-cli pnpm test:e2e                              # host+publish required first
+bunx --cwd packages/e2e playwright install --with-deps chromium   # once
+SPACETIME_BIN=spacetimedb-cli bun run test:e2e                              # host+publish required first
 ```
 
-- Config `reuseExistingServer: !CI` reuses a running `pnpm dev` on :5173; workers=1, 120s/spec.
+- Config `reuseExistingServer: !CI` reuses a running `bun run dev` on :5173; workers=1, 120s/spec.
 - **Close manual test windows before running the suite** — lingering online player rows count as extra remotes and break count assertions.
 - Specs share one world; helpers write admin state via `sql()` (SPACETIME_BIN needed because helper defaults to `spacetime`).
 

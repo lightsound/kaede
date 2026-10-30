@@ -4,9 +4,9 @@
 // IaC 行のベータ採用条件)。アプリコードはこのファイルの存在を知らない。
 //
 // 実行は infra/ を作業ディレクトリとして `alchemy deploy --stage prod` で行う
-// (`pnpm --filter @kaede/infra deploy:prod`。素の `deploy` は pnpm の
-// 組み込みサブコマンドと衝突するため使わない)。手順の全体は README の
-// 「デプロイ(公開手順)」を参照。
+// (`bun run --filter @kaede/infra deploy:prod`。スクリプト名が `deploy:prod`
+// なのは pnpm 時代の名残で、Bun では衝突しないが維持している)。手順の
+// 全体は README の「デプロイ(公開手順)」を参照。
 //
 // スクリプトの環境変数(ALCHEMY_PROFILE)は、Windows の cmd.exe でも動くよう
 // cross-env 経由で設定している。
@@ -29,7 +29,7 @@ import * as Effect from 'effect/Effect';
 // リソースが「別アカウントにある」扱いになり plan が偽の replace を出す
 // (R2 は中身ごと消える経路)。このため infra のスクリプトはリポジトリ
 // 専用プロファイル `kaede`(ALCHEMY_PROFILE=kaede)に固定してあり、初回の
-// み `pnpm --filter @kaede/infra alchemy login` で Kaede アカウント
+// み `bun run --filter @kaede/infra alchemy login` で Kaede アカウント
 // (下の ID)を選んでリンクする。CI は fresh VM でプロファイルが存在しない
 // ため従来どおり env 認証に落ちる(影響なし)。
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID ?? '751c8a59858c9c04a8e722df7330444d';
@@ -103,7 +103,7 @@ export default Alchemy.Stack(
       name: stagedName(stage, 'kaede'),
       // ビルドはリポジトリルートで実行する(infra/ からの相対)。
       cwd: '..',
-      command: 'pnpm --filter @kaede/client build',
+      command: 'bun run --filter @kaede/client build',
       outdir: 'packages/client/dist',
       assets: {
         notFoundHandling: 'single-page-application',

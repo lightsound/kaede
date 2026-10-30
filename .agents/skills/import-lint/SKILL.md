@@ -39,8 +39,8 @@ export const token = ...;   // also: @package, @private
 ## Running the linter
 
 ```sh
-pnpm lint:imports
-pnpm lint:imports --format json
+bun run lint:imports
+bun run lint:imports --format json
 ```
 
 - Exit codes: `0` clean or warnings only, `1` at least one error, `2` invalid usage/config.
@@ -61,7 +61,7 @@ first fix that fits, in this order:
 3. **Tag the original export `/** @public */`** only when it truly must be importable anywhere.
 
 Do not weaken the rule, expand exclusions, or loosen `defaultImportability` to fix a violation.
-After editing, rerun `pnpm lint:imports`.
+After editing, rerun `bun run lint:imports`.
 
 ### Suppression directives — do not use in kaede
 
@@ -88,7 +88,7 @@ Every directive is a hole in the boundary.
 
 The installed CLI ships documentation matching its exact version:
 
-- `pnpm exec import-lint explain <message-id>`
-- `pnpm exec import-lint docs concepts`
-- `pnpm exec import-lint docs config`
-- `pnpm exec import-lint docs fixing`
+- `bunx import-lint explain <message-id>`
+- `bunx import-lint docs concepts`
+- `bunx import-lint docs config`
+- `bunx import-lint docs fixing`

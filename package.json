@@ -1,23 +1,36 @@
 {
   "name": "kaede",
   "private": true,
-  "packageManager": "pnpm@12.15.0",
+  "workspaces": [
+    "packages/*",
+    "infra"
+  ],
   "scripts": {
-    "dev": "pnpm --filter @kaede/client dev",
+    "dev": "bun run --filter @kaede/client dev",
     "typecheck": "vp check --deny-warnings",
     "test": "vp test run",
     "test:coverage": "vp test run --coverage",
-    "test:e2e": "pnpm --filter @kaede/e2e test",
+    "test:e2e": "bun run --filter @kaede/e2e test",
     "lint": "vp check --deny-warnings && import-lint",
     "lint:imports": "import-lint",
     "format": "vp fmt --write",
-    "analyze": "pnpm test:coverage && fallow && fallow security",
-    "analyze:changed": "pnpm test:coverage && fallow audit"
+    "analyze": "bun run test:coverage && fallow && fallow security",
+    "analyze:changed": "bun run test:coverage && fallow audit"
   },
   "devDependencies": {
     "@import-lint/cli": "0.1.10",
     "@vitest/coverage-v8": "^5.0.5",
     "fallow": "^3.37.0",
     "vite-plus": "1.4.0"
-  }
+  },
+  "overrides": {
+    "@effect/platform-bun": "4.0.7",
+    "@effect/platform-node-shared": "4.0.7",
+    "@effect/sql-d1": "4.0.7",
+    "@effect/vitest": "4.0.7",
+    "chokidar": "4.0.1"
+  },
+  "trustedDependencies": [
+    "@posthog/cli"
+  ]
 }

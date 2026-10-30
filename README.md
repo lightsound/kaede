@@ -16,7 +16,7 @@
 - **PixiJS v8** — 2Dレンダリング
 - **Vite + React** — クライアントのビルド／開発サーバー（Reactの役割はキャンバスのマウントのみ）
 - **SpacetimeDB 2.x** — リアルタイム同期バックエンド（DB兼サーバーロジック）
-- **pnpm workspaces** — モノレポ管理
+- **Bun workspaces** — モノレポ管理
 - **Vite+（vite-plus）** — 同梱の Vitest（ユニットテスト。リポジトリ全体を1回のrunで実行し、カバレッジも1本にまとめる）、Oxlint / Oxfmt（lint とフォーマット）、型チェックを `vp` に集約
 - **fallow** — デッドコード・重複・複雑度・アーキテクチャ境界の静的解析
 
@@ -30,10 +30,10 @@
 - **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
   ままなら通しません。バックエンドは fallow が同梱する TypeScript です（`fallow-type-aware`
   が `typescript@7.0.2` を自前に固定しており、各パッケージの TypeScript とは独立です）。
-  `pnpm exec fallow --format json` の `_meta.check.type_aware` で確認できます。
+  `bunx fallow --format json` の `_meta.check.type_aware` で確認できます。
 - **`boundaries`** — README が説明するアーキテクチャそのものの強制。`shared` は葉であり何も
   import せず、`client` と `server` は `shared` だけを見ます（互いは不可視）。`requireAllFiles`
-  によりどのゾーンにも属さないファイルも検出され、例外は `vitest.config.mts` の1件だけを
+  によりどのゾーンにも属さないファイルも検出され、例外は `vite.config.ts` の1件だけを
   名指しで許可しています。
 - **`duplicates.mode: "semantic"`** — 変数名を変えただけの複製（Type-2 クローン）も検出します。
 - **`includeEntryExports`** — エントリポイントの export も未使用検査の対象にします。
@@ -48,9 +48,33 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 グローバルに無効化しているルールはありません。例外は個別の抑制コメント
 （`// fallow-ignore-file <rule> -- <理由>` またはその行だけに効く `// fallow-ignore-next-line ...`）
 でのみ表明し、`require-suppression-reason` により理由のない抑制は許されません
-（`pnpm exec fallow suppressions` で全件を一覧できます）。
+（`bunx fallow suppressions` で全件を一覧できます）。
 なお `feature-flags` だけは `error` にしても実際には終了コードを変えない報告専用ルールです
 （インベントリは `fallow flags` で確認できます）。
+
+### パッケージマネージャ（Bun）
+
+モノレポ管理は Bun workspaces（版は CI で 1.4.4 に固定、lockfile は `bun.lock`）。
+旧 pnpm 構成から引き継いだサプライチェーン保護と、その移行時の判断は次のとおりです。
+
+- **overrides**（ルート `package.json`）— alchemy の peer 要求に合わせて
+  `@effect/platform-bun` / `@effect/platform-node-shared` / `@effect/sql-d1` /
+  `@effect/vitest` を 4.0.7 に揃えます（infra の `effect` / `@effect/platform-node`
+  と一緒に上げること）。`chokidar` は 4.0.1 に固定します。`@assetpack/core` が引く
+  4.0.2 / 4.0.3 は provenance なしで公開された版で、4系で最後の provenance 付きが
+  4.0.1 のためです（5系は ESM 専用で CJS の assetpack には載せません）。
+- **trustedDependencies** は `@posthog/cli` のみです。postinstall でソースマップ用
+  CLI バイナリを取得するためで、許可しないとデプロイ時のアップロードが落ちます。
+  Bun ではこの指定が組み込みの既定リストを置換するので、esbuild / workerd / sharp
+  などは postinstall に頼らず optionalDependencies のプリビルドで賄います
+  （pnpm 時代の allowBuilds の明示拒否と同じ構成です）。
+- **minimumReleaseAge** は `bunfig.toml` で 86400 秒（1日）です。新規解決時にのみ
+  効き、`bun.lock` 記載済みの版は再検証しません。範囲内に足切りを通る版が無ければ
+  黙って範囲外へ落とさずエラーになります。
+- **trustPolicy（no-downgrade）は Bun に等価物がないため、移行時に喪失を受け入れ
+  ました**。残る防御は minimumReleaseAge と、依存更新 PR での `bun.lock` 差分
+  レビューです。Dependabot / Renovate は導入しておらず、依存更新は手動 PR で
+  行います。更新自動化を入れる場合はこの判断を見直してください。
 
 ## パッケージ構成
 
@@ -139,7 +163,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 2. **依存関係のインストール**
 
    ```sh
-   pnpm install
+   bun install
    ```
 
 3. **SpacetimeDB の起動**（別ターミナルで実行し、起動したままにしておきます）
@@ -163,7 +187,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 6. **クライアントの起動**
 
    ```sh
-   pnpm dev
+   bun run dev
    ```
 
    [http://localhost:5173](http://localhost:5173) を **ブラウザウィンドウ2つ** で開きます。
@@ -186,27 +210,27 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 8. **型チェック・テスト・lint・静的解析**
 
    ```sh
-   pnpm typecheck         # vp check（format + lint + 型チェック）
-   pnpm test              # shared と client のユニットテストを1回の vp test で実行
-   pnpm test:coverage     # 同上 + coverage/coverage-final.json を出力
-   pnpm lint              # vp check + ImportLint（内部パッケージ境界）の検査
-   pnpm lint:imports      # ImportLint のみ実行
-   pnpm format            # Oxfmt（vp fmt）によるフォーマット適用
-   pnpm analyze           # CIと同じ fallow 一式（dead-code / dupes / health / security）
-   pnpm analyze:changed   # 変更ファイルだけを fallow で検査（コミット前向け）
+   bun run typecheck         # vp check（format + lint + 型チェック）
+   bun run test              # shared と client のユニットテストを1回の vp test で実行
+   bun run test:coverage     # 同上 + coverage/coverage-final.json を出力
+   bun run lint              # vp check + ImportLint（内部パッケージ境界）の検査
+   bun run lint:imports      # ImportLint のみ実行
+   bun run format            # Oxfmt（vp fmt）によるフォーマット適用
+   bun run analyze           # CIと同じ fallow 一式（dead-code / dupes / health / security）
+   bun run analyze:changed   # 変更ファイルだけを fallow で検査（コミット前向け）
    ```
 
    テストは shared の物理・入力ガード、client の予測・補間・入力・カメラを対象とします
    （`packages/server` はモジュールホスト上でしか動かず単体テストから import できないため、
    テスト対象になる純粋ロジックは `shared` 側に置いています）。
    `fallow health` は `coverage/coverage-final.json` を**必須**とし、無ければエラー終了します。
-   `fallow` を直接叩くときは先に `pnpm test:coverage` を実行してください
-   （`pnpm analyze` / `pnpm analyze:changed` と CI は込みです）。
+   `fallow` を直接叩くときは先に `bun run test:coverage` を実行してください
+   （`bun run analyze` / `bun run analyze:changed` と CI は込みです）。
 
 9. **E2E スモークテスト（Playwright）**
 
    ```sh
-   pnpm test:e2e
+   bun run test:e2e
    ```
 
    ゲスト2ブラウザで「入場→移動同期→停止後の収束」を検証します（`packages/e2e`）。
@@ -215,7 +239,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
    ジョブも同じ手順を踏みます）。初回はブラウザのインストールが必要です:
 
    ```sh
-   pnpm --filter @kaede/e2e exec playwright install chromium
+   bunx --cwd packages/e2e playwright install chromium
    ```
 
    世界は WebGL キャンバスに描画されるため DOM ではアサートできず、テストは
@@ -291,7 +315,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      次を実行し、OAuth で **Kaede アカウント**を選んでリンクしてください:
 
      ```sh
-     pnpm --filter @kaede/infra alchemy login --configure
+     bun run --filter @kaede/infra alchemy login --configure
      ```
 
      以後の `plan:prod` / `deploy:prod` はこのプロファイルで正しい
@@ -307,20 +331,21 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 2. **クライアントのデプロイ（Alchemy）**
 
    ```sh
-   pnpm --filter @kaede/infra deploy:prod          # plan を表示して確認後に適用
-   CI=true pnpm --filter @kaede/infra deploy:prod --yes   # CI など非対話環境（env 認証 + 自動承認）
+   bun run --filter @kaede/infra deploy:prod          # plan を表示して確認後に適用
+   CI=true bun run --filter @kaede/infra deploy:prod --yes   # CI など非対話環境（env 認証 + 自動承認）
    ```
 
-   デプロイはクライアントのビルド（`pnpm --filter @kaede/client build`）込みです。
-   `pnpm --filter @kaede/infra plan:prod` で差分のプレビューだけもできます。
-   （スクリプト名が `deploy` ではなく `deploy:prod` なのは、`pnpm deploy` が
-   pnpm の組み込みサブコマンドと衝突してスクリプトが実行されないためです。）
+   デプロイはクライアントのビルド（`bun run --filter @kaede/client build`）込みです。
+   `bun run --filter @kaede/infra plan:prod` で差分のプレビューだけもできます。
+   （スクリプト名が `deploy` ではなく `deploy:prod` なのは、pnpm 時代に `pnpm deploy` が
+   pnpm の組み込みサブコマンドと衝突してスクリプトが実行されなかったためです。
+   Bun では衝突しませんが、名前はそのまま維持しています。）
    prod 以外のステージや他の alchemy サブコマンドは、プロファイル固定
    （`ALCHEMY_PROFILE=kaede`）込みの汎用スクリプト経由で実行します。素の
-   `pnpm exec alchemy` や `npx alchemy` はこれを迂回してしまうため使いません:
+   `bunx alchemy` や `npx alchemy` はこれを迂回してしまうため使いません:
 
    ```sh
-   pnpm --filter @kaede/infra alchemy plan --stage dev_yourname
+   bun run --filter @kaede/infra alchemy plan --stage dev_yourname
    ```
 
    prod 以外のステージは `kaede-<ステージ名のスラッグ>` という別の Worker に
@@ -333,8 +358,8 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    同じ構成。乖離させないこと）。
 
    ```sh
-   pnpm --filter @kaede/client build
-   pnpm --filter @kaede/infra exec cf deploy
+   bun run --filter @kaede/client build
+   bunx --cwd infra cf deploy
    ```
 
    `cf` は現行ベータ（1.0.0-beta.5）ではビルドをインストール済みの wrangler に委譲する

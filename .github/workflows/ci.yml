@@ -54,7 +54,7 @@ jobs:
           # not need to stay in the workspace git config.
           persist-credentials: false
 
-      # Tarball download only — no pnpm needed — so it runs as a background
+      # Tarball download only — no package manager needed — so it runs as a background
       # step overlapping the whole check pipeline; the bindings-drift check
       # `wait`s on it below. Its $GITHUB_PATH write only applies after that
       # wait, so nothing may call spacetimedb-cli before it.
@@ -82,15 +82,16 @@ jobs:
           "$RUNNER_TEMP/jactionlint/jactionlint"
         background: true
 
-      - uses: pnpm/action-setup@v6.1.0
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       # Mutually independent post-install checks, run concurrently. The
       # group's implicit wait also guarantees coverage-final.json exists
@@ -99,19 +100,19 @@ jobs:
       - parallel:
           # vp check は format + lint + 型チェック（旧 Biome + tsc の後継）。
           - name: Lint
-            run: pnpm exec vp check --deny-warnings
+            run: bunx vp check --deny-warnings
 
           - name: Import boundaries
-            run: pnpm lint:imports --format github
+            run: bun run lint:imports --format github
 
           # Writes coverage/coverage-final.json, which `fallow health` reads
           # for real per-function CRAP scores (see .fallowrc.jsonc
           # health.coverage).
           - name: Test (with coverage)
-            run: pnpm test:coverage
+            run: bun run test:coverage
 
           - name: Build client
-            run: pnpm --filter @kaede/client build
+            run: bun run --filter @kaede/client build
 
       # Read-only against the source tree and the coverage file written by
       # the group above. The members share fallow's incremental cache
@@ -119,16 +120,16 @@ jobs:
       # own temp file and renames it into place (fallow-rs/fallow#3484).
       - parallel:
           - name: Dead-code check
-            run: pnpm exec fallow dead-code
+            run: bunx fallow dead-code
 
           - name: Duplicate check
-            run: pnpm exec fallow dupes
+            run: bunx fallow dupes
 
           - name: Health check
-            run: pnpm exec fallow health
+            run: bunx fallow health
 
           - name: Security candidates
-            run: pnpm exec fallow security
+            run: bunx fallow security
 
       - name: Wait for workflow lint
         wait: lint-workflows
@@ -166,7 +167,7 @@ jobs:
           persist-credentials: false
 
       # Same tarball-only install as `ci` — backgrounded so the download
-      # overlaps pnpm install and the Playwright setup below. The `wait`
+      # overlaps bun install and the Playwright setup below. The `wait`
       # further down applies its $GITHUB_PATH write before the first
       # spacetimedb-cli call.
       - name: Install SpacetimeDB CLI (pinned)
@@ -176,15 +177,16 @@ jobs:
           version: ${{ env.SPACETIME_VERSION }}
         background: true
 
-      - uses: pnpm/action-setup@v6.1.0
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       # Browser binaries are heavy (~100MB); cache them keyed on the lockfile,
       # which pins the @playwright/test version and thus the browser build.
@@ -193,7 +195,7 @@ jobs:
         uses: actions/cache@v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           # A partial hit still reports cache-hit != 'true', so the full
           # install path runs and re-saves — but skips browser builds that are
           # already present instead of re-downloading ~100MB per lockfile bump.
@@ -201,12 +203,12 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @kaede/e2e exec playwright install --with-deps chromium
+        run: bunx --cwd packages/e2e playwright install --with-deps chromium
 
       # On a cache hit only the OS packages are (re-)checked, not the browser.
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @kaede/e2e exec playwright install-deps chromium
+        run: bunx --cwd packages/e2e playwright install-deps chromium
 
       - name: Wait for SpacetimeDB CLI install
         wait: install-stdb
@@ -239,7 +241,7 @@ jobs:
           spacetimedb-cli publish kaede --server local --yes
 
       - name: E2E smoke test
-        run: pnpm test:e2e
+        run: bun run test:e2e
         env:
           # guest-admission.spec.ts plays admin through `sql`; the pinned CLI
           # tarball ships the binary as spacetimedb-cli, not spacetime.
@@ -313,15 +315,16 @@ jobs:
           # that landed on this ref while the deploy was running.
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v6.1.0
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.4
 
       - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .node-version
-          cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Install SpacetimeDB CLI (pinned)
         uses: ./.github/actions/install-spacetimedb
@@ -368,7 +371,7 @@ jobs:
           POSTHOG_ANALYTICS_HOST: https://us.posthog.com
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_PROJECT_ID: '540373'
-        run: CI=true pnpm --filter @kaede/infra deploy:prod --yes
+        run: CI=true bun run --filter @kaede/infra deploy:prod --yes
 
       # The call Worker's out-of-band secret sync used to run here (増分④⑤);
       # 増分⑥ retired the Worker — the call/recording secrets now live in

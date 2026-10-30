@@ -30,11 +30,12 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // Vite's JS entry, not `pnpm --filter @kaede/client dev`. pnpm 11 puts a
-    // lifecycle script in its own process group when there is no controlling
-    // terminal (Playwright, CI). Killing pnpm's group then leaves Vite holding
-    // the stdio pipes, and Playwright waits forever on `close` after the tests
-    // have passed. A direct `node` child stays in the shell's group, so the
+    // Vite's JS entry, not `bun run --filter @kaede/client dev`. A script
+    // runner puts a lifecycle script in its own process group when there is
+    // no controlling terminal (Playwright, CI) — observed with pnpm 11, and
+    // the reasoning applies to any wrapper. Killing the runner's group then
+    // leaves Vite holding the stdio pipes, and Playwright waits forever on
+    // `close` after the tests have passed. A direct `node` child stays in the shell's group, so the
     // Linux process-group SIGKILL and Windows `taskkill /T` both stop it.
     // `exec` is a POSIX builtin and is not a command under cmd.exe.
     // The path follows the Vite+ layout: the client's `vite` dependency is an
