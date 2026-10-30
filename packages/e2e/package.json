@@ -9,7 +9,6 @@
   "devDependencies": {
     "@kaede/shared": "workspace:*",
     "@playwright/test": "^1.64.1",
-    "@types/node": "^24.19.2",
-    "typescript": "~7.0.2"
+    "@types/node": "^24.19.2"
   }
 }
