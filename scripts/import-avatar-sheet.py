@@ -422,7 +422,7 @@ def main() -> None:
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     # The manifest is committed data reviewed in PRs: keep it in the repo's
     # one JSON style so a re-run never trips `pnpm lint`.
-    subprocess.run(["pnpm", "exec", "biome", "format", "--write", str(manifest_path)], check=True)
+    subprocess.run(["pnpm", "exec", "vp", "fmt", "--write", str(manifest_path)], check=True)
     print("manifest.json")
 
 

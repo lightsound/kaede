@@ -39,7 +39,7 @@ export function evaluateSendAllowance(
   burstSends: number,
 ): SendAllowanceVerdict {
   const bankFloor = request.nowMicros - costMicros * BigInt(burstSends - 1);
-  // biome-ignore lint/complexity/useMathMinMax: bigint operands; Math.max only takes numbers
+  // Ternary rather than Math.max: the operands are bigint, and Math.max only takes numbers.
   const marker = request.allowanceMicros < bankFloor ? bankFloor : request.allowanceMicros;
   if (marker > request.nowMicros) return { ok: false, reason: 'rate-limited' };
   return { ok: true, allowanceMicros: marker + costMicros };

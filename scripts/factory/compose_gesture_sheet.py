@@ -294,7 +294,7 @@ def main() -> None:
 
     order["neckAnchors"] = necks
     order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
-    subprocess.run(["pnpm", "exec", "biome", "format", "--write", str(order_path)], check=True)
+    subprocess.run(["pnpm", "exec", "vp", "fmt", "--write", str(order_path)], check=True)
     print(f"wrote {sheet_path} ({len(cells)} cells {cell_w}x{cell_h}); neck anchors persisted")
 
 
