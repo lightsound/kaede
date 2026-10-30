@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { blurringClick, postingDisabled } from '../src/ui.package';
 
 describe('postingDisabled', () => {

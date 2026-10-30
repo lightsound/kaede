@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { advanceWalk, IDLE_WALK_STATE, selectPose, WALK_POSES } from '../src/game.package/rig';
 
 // One 60fps frame moving at a typical walk speed (~180 logical px/s).

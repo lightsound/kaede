@@ -141,6 +141,7 @@ export function useNetStack() {
     chatScopes,
     ownGroupId: calls.ownGroupId,
     recordings: calls.recordings,
+    // oxlint-disable-next-line react/refs -- netRef は安定したハンドルとして渡し、.current の読み取りはコールバック内でのみ行う
     actions: netActionsOf(netRef, () => setChatSendRefused(false)),
   };
 }

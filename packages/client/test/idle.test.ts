@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import {
   createIdleMonitor,
   IDLE_CHECK_INTERVAL_MS,

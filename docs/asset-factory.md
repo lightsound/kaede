@@ -159,7 +159,6 @@ python3 scripts/factory/model_ledger.py retarget --family <f> \
   次に retarget（運転知見 23 の恒久経路）。姿勢の質はゲート外 —
   オーナー目視の領分（girl Texting の前傾 +20.7° 実測 — 台帳 note 参照）。
 
-
 ## 工程
 
 | #   | 工程             | 実装                                                                                                                                                                                                                                                       |

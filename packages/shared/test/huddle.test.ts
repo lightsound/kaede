@@ -9,7 +9,7 @@ import {
   normalizeHuddleName,
   ZONE_NAME_MAX_LENGTH,
 } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 
 describe('ラベル合成', () => {
   it('立ち話はオープン 💬・クローズド 🤫 前置', () => {

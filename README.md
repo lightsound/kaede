@@ -12,13 +12,12 @@
 
 ## 技術スタック
 
-- **TypeScript 7** — 全パッケージ共通の言語（ネイティブ実装の `tsc`）
+- **TypeScript 7** — 全パッケージ共通の言語（型チェックは Vite+ 同梱の tsgo 系が担う）
 - **PixiJS v8** — 2Dレンダリング
 - **Vite + React** — クライアントのビルド／開発サーバー（Reactの役割はキャンバスのマウントのみ）
 - **SpacetimeDB 2.x** — リアルタイム同期バックエンド（DB兼サーバーロジック）
 - **pnpm workspaces** — モノレポ管理
-- **Vitest** — ユニットテスト（リポジトリ全体を1回のrunで実行し、カバレッジも1本にまとめる）
-- **Biome** — lint とフォーマット
+- **Vite+（vite-plus）** — 同梱の Vitest（ユニットテスト。リポジトリ全体を1回のrunで実行し、カバレッジも1本にまとめる）、Oxlint / Oxfmt（lint とフォーマット）、型チェックを `vp` に集約
 - **fallow** — デッドコード・重複・複雑度・アーキテクチャ境界の静的解析
 
 ### 静的解析の方針
@@ -27,6 +26,7 @@
 クリーンアップ系・スタイル系ルールも、既定で `off` のオプトインルール（`private-type-leaks`、
 `prop-drilling`、`thin-wrapper`、`duplicate-prop-shape`、`coverage-gaps`、`security-*`、
 `require-suppression-reason`、`feature-flags`）も含みます。あわせて次を有効化しています。
+
 - **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
   ままなら通しません。バックエンドは fallow が同梱する TypeScript です（`fallow-type-aware`
   が `typescript@7.0.2` を自前に固定しており、各パッケージの TypeScript とは独立です）。
@@ -40,7 +40,7 @@
 - **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
 - **`sealed`** — 設定が外部の `extends` を引き込めないようにします。
 
-`infra/`（Alchemy の IaC）は typecheck と Biome の対象ですが、ユニットテスト（カバレッジ）と
+`infra/`（Alchemy の IaC）は `vp check`（型チェック込み）の対象ですが、ユニットテスト（カバレッジ）と
 ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する宣言的な単一エントリポイントで、
 アプリのモジュールグラフに参加しないため。fallow は infra も走査し、エントリポイント判定の
 偽陽性1件のみ理由付きコメントで抑制しています）。
@@ -69,6 +69,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 ## 同期方式
 
 サーバー権威（server-authoritative）モデルです。
+
 - **クライアントは入力のみを送信** します。位置や速度は一切送りません。クライアントは
   `submit_inputs` リデューサーへ、`packInput` で u8 のビットフラグにパックした入力バッチを
   送ります（`INPUT_FLUSH_INTERVAL_MS` 間隔、`INPUT_BATCH_MAX_TICKS` ティックごとに分割）。
@@ -185,12 +186,12 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 8. **型チェック・テスト・lint・静的解析**
 
    ```sh
-   pnpm typecheck         # 全パッケージの tsc --noEmit
-   pnpm test              # shared と client のユニットテストを1回の vitest で実行
+   pnpm typecheck         # vp check（format + lint + 型チェック）
+   pnpm test              # shared と client のユニットテストを1回の vp test で実行
    pnpm test:coverage     # 同上 + coverage/coverage-final.json を出力
-   pnpm lint              # Biome + ImportLint（内部パッケージ境界）の検査
+   pnpm lint              # vp check + ImportLint（内部パッケージ境界）の検査
    pnpm lint:imports      # ImportLint のみ実行
-   pnpm format            # Biome によるフォーマット適用
+   pnpm format            # Oxfmt（vp fmt）によるフォーマット適用
    pnpm analyze           # CIと同じ fallow 一式（dead-code / dupes / health / security）
    pnpm analyze:changed   # 変更ファイルだけを fallow で検査（コミット前向け）
    ```
@@ -237,7 +238,8 @@ Maincloud の **`kaede`**（ダッシュボード: https://spacetimedb.com/kaede
 
 **`main` に push（マージ）されると CI がそのまま本番デプロイまで行います。人間の
 承認ゲートはありません**（`.github/workflows/ci.yml` の `deploy` ジョブ）。
-- `ci`（lint / typecheck / test / fallow / バインディングドリフト検査）と `e2e`
+
+- `ci`（vp check / test / fallow / バインディングドリフト検査）と `e2e`
   （Playwright スモーク）の**両方が成功したときだけ**デプロイが走ります。
 - デプロイ順序は **モジュール publish（Maincloud）→ クライアント（Alchemy）**。
   スキーマ変更は互換（additive）が原則なので旧クライアントは新スキーマでも動き続け、
@@ -263,6 +265,7 @@ Maincloud の **`kaede`**（ダッシュボード: https://spacetimedb.com/kaede
 ### 手動デプロイ（逃げ道）
 
 CI を経由できない・したくないとき（Actions 障害、緊急ロールバック等）のための手順です。
+
 1. **前提**
    - 環境変数 `CLOUDFLARE_API_TOKEN`（必要権限: Account / Workers Scripts:Edit と
      User / User Details:Read・Memberships:Read、および Zone:Read。カスタム
@@ -295,6 +298,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      アカウントに解決されます。CI は fresh VM でプロファイルが存在しない
      ため従来どおり env 認証（`CI=true` + `CLOUDFLARE_API_TOKEN`）に
      落ちます（影響なし）。
+
    - Node は **24（Active LTS）** を標準とします（`.node-version` が単一の
      真実源。CI の `setup-node` もこのファイルを参照）。Node 22.18 以降は TS の
      型ストリッピングがデフォルト有効なため、かつて infra スクリプトに
@@ -386,6 +390,7 @@ URL 発行（R2 の S3 API）** は、SpacetimeDB module の **procedure** が�
 （録画系）・グループ解決はすべて procedure 内のサーバー側検査です。
 かつての通話 API Worker `kaede-call` と増分⑤の信頼アンカー
 （`worker_anchor`・録画パス・`RECORDING_PASS_SECRETS`）は撤去済み。
+
 - **資格情報の設営（環境ごとに 1 度・owner SQL）**: 秘密は module の
   非公開テーブル `call_config`（id 0 の 1 行）に置きます。設定 reducer は
   意図的にありません — SQL 書き込みは owner 限定の能力なので、稼働中 DB
@@ -443,7 +448,7 @@ URL 発行（R2 の S3 API）** は、SpacetimeDB module の **procedure** が�
 
 ## CI
 
-`main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
+`main` への push と各 pull request で **CI** ワークフローが走り、vp check（format / lint / 型チェック）・test（カバレッジ付き）・
 build・fallow（dead-code / dupes / health / security）に加えて、バージョンを固定した CLI
 （`spacetimedb-cli generate`）の再実行によりコミット済み
 TypeScript バインディングがサーバースキーマとずれていないことを検証します。並行して

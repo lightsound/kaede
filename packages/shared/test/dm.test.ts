@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { CHAT_TEXT_MAX_LENGTH, collectDmCandidates, type DmCandidate, planChatDraft } from '../src';
 
 const KAEDE: DmCandidate = { name: '楓', key: 'aa11' };

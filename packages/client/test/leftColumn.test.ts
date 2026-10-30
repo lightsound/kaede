@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { COLUMN_INSET, type ColumnControl, columnBand } from '../src/leftColumn';
 
 const CONTROLS: ColumnControl[] = ['name', 'status', 'huddle', 'call'];

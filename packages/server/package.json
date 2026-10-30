@@ -4,14 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "spacetime build",
-    "typecheck": "tsc --noEmit"
+    "build": "spacetime build"
   },
   "dependencies": {
     "@kaede/shared": "workspace:*",
     "spacetimedb": "2.13.0"
   },
-  "devDependencies": {
-    "typescript": "~7.0.2"
-  }
+  "devDependencies": {}
 }

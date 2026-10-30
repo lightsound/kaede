@@ -44,6 +44,7 @@ SPACETIME_BIN=spacetimedb-cli pnpm test:e2e                              # host+
 ## Chat rate-limit / server-refusal testing
 
 Chat sends sit behind a token-bucket (`sendAllowance.ts`: cost 1s/send, burst 5; marker = "paid until T", send ok iff marker ≤ now, accepted → marker += 1s, floored at now-4s). Two mirrors of it exist and produce DIFFERENT notices:
+
 - **Client mirror** = per-tab `allowanceRef` in ChatPanel → block shows 「送信が速すぎます。少し待ってから送ってください」 and the draft STAYS in the input (never dispatched).
 - **Server bucket** = `chat_guard` row per identity → refusal shows 「送信できませんでした。少し待ってからもう一度お試しください」; the refused text never reaches `chat_message` and the draft clears (dispatch happened).
 

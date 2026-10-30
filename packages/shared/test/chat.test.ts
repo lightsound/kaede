@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import {
   CHAT_BURST_MESSAGES,
   CHAT_HISTORY_MAX,
@@ -125,11 +125,11 @@ describe('evaluateChatSend', () => {
     const later = NOW + CHAT_SEND_COST_MICROS;
     const freed = evaluateChatSend({ allowanceMicros: last.allowanceMicros, nowMicros: later });
     expect(freed.ok).toBe(true);
-    if (freed.ok) {
-      expect(
-        evaluateChatSend({ allowanceMicros: freed.allowanceMicros, nowMicros: later }),
-      ).toEqual({ ok: false, reason: 'rate-limited' });
-    }
+    if (!freed.ok) throw new Error('one send should fit after one cost interval');
+    expect(evaluateChatSend({ allowanceMicros: freed.allowanceMicros, nowMicros: later })).toEqual({
+      ok: false,
+      reason: 'rate-limited',
+    });
   });
 
   // The bank cap: a long idle must not accrue more than one burst.

@@ -1,5 +1,5 @@
 import { Identity } from 'spacetimedb';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { type RowEvents, sessionRows } from '../src/net.package/rowEvents';
 
 const ME = new Identity(1n);

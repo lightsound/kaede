@@ -1,5 +1,5 @@
 import { type Facing, GRAVITY, INTERP_DELAY_MS, MAX_FALL_SPEED } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import {
   createRemoteViews,
   REMOTE_EXTRAPOLATION_MAX_MS,

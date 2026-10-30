@@ -321,7 +321,7 @@ def cmd_register(args: argparse.Namespace) -> None:
     ledger["masters"][f"{args.motion}/{args.family}"] = entry
     LEDGER_PATH.write_text(json.dumps(ledger, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
-        ["pnpm", "exec", "biome", "format", "--write", str(LEDGER_PATH)], check=True
+        ["pnpm", "exec", "vp", "fmt", "--write", str(LEDGER_PATH)], check=True
     )
     print(f"registered {args.motion}/{args.family}: {length} frames, "
           f"loop start={tstart} period={period} loop-mean={tscore:.3f} "

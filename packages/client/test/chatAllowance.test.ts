@@ -1,5 +1,5 @@
 import { CHAT_BURST_MESSAGES, CHAT_SEND_COST_MICROS } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import {
   type AllowanceMirror,
   chargeSend,

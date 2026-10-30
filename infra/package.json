@@ -7,7 +7,6 @@
     "node": ">=24"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
     "alchemy": "cross-env ALCHEMY_PROFILE=kaede alchemy",
     "deploy:prod": "cross-env ALCHEMY_PROFILE=kaede alchemy deploy --stage prod",
     "plan:prod": "cross-env ALCHEMY_PROFILE=kaede alchemy plan --stage prod",

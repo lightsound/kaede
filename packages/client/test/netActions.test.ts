@@ -1,6 +1,6 @@
 import type { PlannedSend } from '@kaede/shared';
 import { Identity } from 'spacetimedb';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { type Net, planChatDraftOffline, type SpaceMemberView } from '../src/net.package';
 import { netActionsOf } from '../src/netActions';
 
@@ -16,9 +16,10 @@ function fakeNet() {
     applyForMembership: vi.fn(),
     memberAction: vi.fn(),
     setGuestsAllowed: vi.fn(),
-    planChatSend: vi.fn(
-      (draft: string): PlannedSend => ({ kind: 'public', text: `planned ${draft}` }),
-    ),
+    planChatSend: vi.fn((draft: string): PlannedSend => ({
+      kind: 'public',
+      text: `planned ${draft}`,
+    })),
     sendPlanned: vi.fn(),
     sendAnnouncement: vi.fn(),
     sendReaction: vi.fn(),
@@ -240,10 +241,11 @@ describe('netActionsOf once mounted', () => {
     ({ invoke, method, args }) => {
       const net = fakeNet();
       invoke(netActionsOf({ current: net }, () => {}));
-      for (const [name, spy] of Object.entries(net)) {
-        if (name === method) expect(spy, name).toHaveBeenCalledExactlyOnceWith(...args);
-        else expect(spy, name).not.toHaveBeenCalled();
-      }
+      const calledNames = Object.entries(net)
+        .filter(([, spy]) => spy.mock.calls.length > 0)
+        .map(([name]) => name);
+      expect(calledNames).toEqual([method]);
+      expect(net[method]).toHaveBeenCalledExactlyOnceWith(...args);
     },
   );
 

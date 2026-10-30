@@ -140,7 +140,7 @@ def main() -> None:
         manifest["carryStyle"] = order["carryStyle"]
     manifest_path = resolve_asset_path(out_dir, "manifest.json", asset_root)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-    subprocess.run(["pnpm", "exec", "biome", "format", "--write", str(manifest_path)], check=True)
+    subprocess.run(["pnpm", "exec", "vp", "fmt", "--write", str(manifest_path)], check=True)
     print("manifest.json")
 
 

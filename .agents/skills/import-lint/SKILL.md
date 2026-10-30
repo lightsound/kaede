@@ -55,6 +55,7 @@ pnpm lint:imports --format json
 First locate the exporting file and its package boundary (the nearest ancestor directory matching
 `packageDirectory`, or the file's own directory if `packageDirectory` is unset). Then pick the
 first fix that fits, in this order:
+
 1. **Move the importing file into the package** if it conceptually belongs there.
 2. **Re-export through the package's `index.ts`**. This is kaede's normal public API pattern.
 3. **Tag the original export `/** @public */`** only when it truly must be importable anywhere.
@@ -86,6 +87,7 @@ Every directive is a hole in the boundary.
 ## Deeper documentation
 
 The installed CLI ships documentation matching its exact version:
+
 - `pnpm exec import-lint explain <message-id>`
 - `pnpm exec import-lint docs concepts`
 - `pnpm exec import-lint docs config`

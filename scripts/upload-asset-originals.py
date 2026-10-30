@@ -81,9 +81,9 @@ def write_order(order_path: Path, order: dict) -> None:
             temporary = Path(handle.name)
             handle.write(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
         temporary.replace(order_path)
-        # Format the final path (tmp names are gitignored / ignored by biome).
+        # Format the final path (tmp names are gitignored / ignored by the formatter).
         subprocess.run(
-            ["pnpm", "exec", "biome", "format", "--write", str(order_path)],
+            ["pnpm", "exec", "vp", "fmt", "--write", str(order_path)],
             check=True,
         )
     finally:

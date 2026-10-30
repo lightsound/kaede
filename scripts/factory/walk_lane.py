@@ -271,7 +271,7 @@ def cmd_produce(args: argparse.Namespace) -> None:
     order["walkLane"] = lane
     order_path.write_text(json.dumps(order, ensure_ascii=False, indent=2) + "\n")
     subprocess.run(
-        ["pnpm", "exec", "biome", "format", "--write", str(order_path)], check=True
+        ["pnpm", "exec", "vp", "fmt", "--write", str(order_path)], check=True
     )
 
     # Verdict material: master cells vs composed cells + the 96px loop.

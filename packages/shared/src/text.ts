@@ -53,6 +53,6 @@ export function normalizeSingleLineText(raw: string, maxCodePoints: number): Nor
   const text = raw.normalize('NFC').replace(WHITESPACE_RUN, ' ').trim();
   if (text.length === 0) return { ok: false, reason: 'empty' };
   if (FORBIDDEN.test(text)) return { ok: false, reason: 'forbidden-characters' };
-  if ([...text].length > maxCodePoints) return { ok: false, reason: 'too-long' };
+  if (Array.from(text).length > maxCodePoints) return { ok: false, reason: 'too-long' };
   return { ok: true, text };
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { DISCONNECT_INTENT_FRESH_MS, disconnectReasonFrom } from '../src/connectionEvent';
 
 describe('disconnectReasonFrom', () => {

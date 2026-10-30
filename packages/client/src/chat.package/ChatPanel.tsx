@@ -414,6 +414,7 @@ export function ChatPanel({
   // Refund the mirrored token when a send comes back refused — during render
   // (the when-a-prop-changes pattern), so the rollback lands in the same
   // commit that paints the refusal notice.
+  // oxlint-disable-next-line react/refs -- 意図的な render 中の調整（上のコメント参照）
   allowanceRef.current = refundRefused(allowanceRef.current, sendRefused);
 
   // The one gate for both send controls: the reaction row and the message

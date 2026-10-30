@@ -1,5 +1,5 @@
 import { GRAVITY, INPUT_FLUSH_INTERVAL_MS } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import {
   correctionOffset,
   decayOffset,

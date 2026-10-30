@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { createServerClock } from '../src/net.package/serverClock';
 
 describe('createServerClock', () => {

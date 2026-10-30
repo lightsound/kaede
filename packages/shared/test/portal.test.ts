@@ -14,7 +14,7 @@ import {
   portalIndexAt,
   stepPlayer,
 } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
 const UP: PlayerInput = { ...NO_INPUT, up: true };

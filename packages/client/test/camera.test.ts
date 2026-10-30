@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { cameraOffset, parseZoomOverride } from '../src/game.package/camera';
 
 // A 1000x600 world seen through an 800x400 viewport: 200px of horizontal and
