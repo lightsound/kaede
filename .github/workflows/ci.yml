@@ -99,7 +99,7 @@ jobs:
       - parallel:
           # vp check は format + lint + 型チェック（旧 Biome + tsc の後継）。
           - name: Lint
-            run: pnpm exec vp check
+            run: pnpm exec vp check --deny-warnings
 
           - name: Import boundaries
             run: pnpm lint:imports --format github

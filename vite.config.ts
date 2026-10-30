@@ -29,14 +29,15 @@ export default defineConfig({
     ignorePatterns,
   },
   lint: {
-    plugins: ['typescript', 'react', 'import', 'vitest'],
+    plugins: ['typescript', 'react', 'import', 'vitest', 'jsx-a11y'],
     // 旧 Biome recommended preset のカバー範囲（correctness + suspicious）に
-    // 寄せる。perf / style / pedantic は Biome recommended に相当分がなく、
-    // 移行直後のノイズ（意図的な直列 await、アンダースコア接頭辞など）しか
-    // 出なかったため切る。
+    // 寄せ、重大度は error を既定にする（警告ゼロ運用: CI は
+    // --deny-warnings で警告でも落ちる）。perf / style / pedantic は
+    // Biome recommended に相当分がなく、移行直後のノイズ（意図的な直列
+    // await、アンダースコア接頭辞など）しか出なかったため切る。
     categories: {
       correctness: 'error',
-      suspicious: 'warn',
+      suspicious: 'error',
       perf: 'off',
       style: 'off',
       pedantic: 'off',

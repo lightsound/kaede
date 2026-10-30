@@ -4,11 +4,11 @@
   "packageManager": "pnpm@12.15.0",
   "scripts": {
     "dev": "pnpm --filter @kaede/client dev",
-    "typecheck": "vp check",
+    "typecheck": "vp check --deny-warnings",
     "test": "vp test run",
     "test:coverage": "vp test run --coverage",
     "test:e2e": "pnpm --filter @kaede/e2e test",
-    "lint": "vp check && import-lint",
+    "lint": "vp check --deny-warnings && import-lint",
     "lint:imports": "import-lint",
     "format": "vp fmt --write",
     "analyze": "pnpm test:coverage && fallow && fallow security",
