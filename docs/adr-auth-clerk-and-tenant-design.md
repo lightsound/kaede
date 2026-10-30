@@ -11,6 +11,7 @@
 ## 1. 決定
 
 本 ADR は 2 つの決定を記録する。
+
 1. **認証プロバイダは Clerk を続投する（役割は認証専任）。**
    SpacetimeAuth・WorkOS は不採用。決め手は issuer 主権（§4）。
 2. **テナント（組織）の真実源は Clerk Organizations ではなく各 org DB に置く。**
@@ -65,6 +66,7 @@ Clerk は全プランでユーザー全量エクスポート（sub・パスワ�
 ### 4.1 SpacetimeAuth の評価（ドキュメント精読 2026-08-04）
 
 事実（[公式 docs](https://spacetimedb.com/docs/core-concepts/authentication/spacetimeauth/)）:
+
 - Maincloud に publish したモジュールのダッシュボードから有効化する
   **Maincloud 専用**のマネージド OIDC プロバイダ（ベータ）
 - 認証手段: マジックリンク・Google・GitHub・Discord・Twitch・Kick・Steam。
@@ -80,6 +82,7 @@ Clerk は全プランでユーザー全量エクスポート（sub・パスワ�
 `https://auth.spacetimedb.com` は既に `guestIssuers` に登録済みで、いわば親戚）。
 
 **採らなかった理由**:
+
 1. **issuer 主権がない（§3）**。ベータのバグは無視してよい（P5）が、これは
    バグではなく「復旧ランブックの前提を誰が握るか」の問題。SpacetimeAuth が
    （Maincloud は健在のまま）方針転換した場合、復旧は account テーブルの
@@ -107,12 +110,14 @@ Google へのリダイレクト） ②再接続ごとのトークン取得（接
 ### 4.3 Clerk 続投の条件と脱出手順
 
 続投には 3 条件を付ける（脱出可能性を口約束でなく構造にするため）:
+
 1. **JWT テンプレートは標準クレーム最小構成を維持**する（Clerk 固有クレームに
    依存しない。現行: `aud: kaede-spacetimedb`・寿命 60 秒・`name` のみ）
 2. **Clerk 依存は `auth.package` 隔離を維持**する（現状どおり）
 3. **脱出手順を本 ADR に明文化**する（下記）
 
 **脱出手順（Clerk と決別する日が来た場合）**:
+
 1. Clerk からユーザー全量をエクスポートする（全プランで可能。user ID = `sub`、
    メール、OAuth 連携、パスワードハッシュを含む）
 2. `clerk.kaede.town` の DNS（CNAME）を後継の OIDC プロバイダ（自ホストの
@@ -186,6 +191,7 @@ Clerk Billing（org 単位サブスク）やエンタープライズ SSO を使�
 と 1:1 の Clerk Org を Backend API で作る。**シェルに入れるのは支払い管理者
 だけ**でよい（機能ゲートは Webhook → Worker → リデューサーでサーバー権威に
 強制する既定方針のため、一般メンバーを Clerk Org に入れる必要がない）。帰結:
+
 - 「1 org 20 人まで」の無料枠制限に実質当たらない
 - 1 人シェル org は MRO カウント外（コスト ≒ 0）
 - 課金開始時に Clerk Billing vs Stripe 直結を再評価する（§7）

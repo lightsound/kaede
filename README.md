@@ -26,6 +26,7 @@
 クリーンアップ系・スタイル系ルールも、既定で `off` のオプトインルール（`private-type-leaks`、
 `prop-drilling`、`thin-wrapper`、`duplicate-prop-shape`、`coverage-gaps`、`security-*`、
 `require-suppression-reason`、`feature-flags`）も含みます。あわせて次を有効化しています。
+
 - **`typeAware`（`require: "complete"`）** — TypeScript のセマンティック解析。判定が部分的な
   ままなら通しません。バックエンドは fallow が同梱する TypeScript です（`fallow-type-aware`
   が `typescript@7.0.2` を自前に固定しており、各パッケージの TypeScript とは独立です）。
@@ -68,6 +69,7 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 ## 同期方式
 
 サーバー権威（server-authoritative）モデルです。
+
 - **クライアントは入力のみを送信** します。位置や速度は一切送りません。クライアントは
   `submit_inputs` リデューサーへ、`packInput` で u8 のビットフラグにパックした入力バッチを
   送ります（`INPUT_FLUSH_INTERVAL_MS` 間隔、`INPUT_BATCH_MAX_TICKS` ティックごとに分割）。
@@ -236,6 +238,7 @@ Maincloud の **`kaede`**（ダッシュボード: https://spacetimedb.com/kaede
 
 **`main` に push（マージ）されると CI がそのまま本番デプロイまで行います。人間の
 承認ゲートはありません**（`.github/workflows/ci.yml` の `deploy` ジョブ）。
+
 - `ci`（vp check / test / fallow / バインディングドリフト検査）と `e2e`
   （Playwright スモーク）の**両方が成功したときだけ**デプロイが走ります。
 - デプロイ順序は **モジュール publish（Maincloud）→ クライアント（Alchemy）**。
@@ -262,6 +265,7 @@ Maincloud の **`kaede`**（ダッシュボード: https://spacetimedb.com/kaede
 ### 手動デプロイ（逃げ道）
 
 CI を経由できない・したくないとき（Actions 障害、緊急ロールバック等）のための手順です。
+
 1. **前提**
    - 環境変数 `CLOUDFLARE_API_TOKEN`（必要権限: Account / Workers Scripts:Edit と
      User / User Details:Read・Memberships:Read、および Zone:Read。カスタム
@@ -294,6 +298,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      アカウントに解決されます。CI は fresh VM でプロファイルが存在しない
      ため従来どおり env 認証（`CI=true` + `CLOUDFLARE_API_TOKEN`）に
      落ちます（影響なし）。
+
    - Node は **24（Active LTS）** を標準とします（`.node-version` が単一の
      真実源。CI の `setup-node` もこのファイルを参照）。Node 22.18 以降は TS の
      型ストリッピングがデフォルト有効なため、かつて infra スクリプトに
@@ -385,6 +390,7 @@ URL 発行（R2 の S3 API）** は、SpacetimeDB module の **procedure** が�
 （録画系）・グループ解決はすべて procedure 内のサーバー側検査です。
 かつての通話 API Worker `kaede-call` と増分⑤の信頼アンカー
 （`worker_anchor`・録画パス・`RECORDING_PASS_SECRETS`）は撤去済み。
+
 - **資格情報の設営（環境ごとに 1 度・owner SQL）**: 秘密は module の
   非公開テーブル `call_config`（id 0 の 1 行）に置きます。設定 reducer は
   意図的にありません — SQL 書き込みは owner 限定の能力なので、稼働中 DB

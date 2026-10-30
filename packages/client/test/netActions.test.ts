@@ -16,9 +16,10 @@ function fakeNet() {
     applyForMembership: vi.fn(),
     memberAction: vi.fn(),
     setGuestsAllowed: vi.fn(),
-    planChatSend: vi.fn(
-      (draft: string): PlannedSend => ({ kind: 'public', text: `planned ${draft}` }),
-    ),
+    planChatSend: vi.fn((draft: string): PlannedSend => ({
+      kind: 'public',
+      text: `planned ${draft}`,
+    })),
     sendPlanned: vi.fn(),
     sendAnnouncement: vi.fn(),
     sendReaction: vi.fn(),

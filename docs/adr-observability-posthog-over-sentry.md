@@ -48,6 +48,7 @@
 > これは好みではなくアーキテクチャ上の制約である。
 
 観測手段は以下に限られる。
+
 - `console.log` / `warn` / `error` が内部ロギングに routing され、`spacetime logs --level error` で参照
 - プログラマエラー（バグ由来の想定外エラー）は Maincloud のダッシュボードに表示
 - Maincloud は DB ごとにリアルタイムダッシュボードをホスト（性能計測 + リデューサー直接実行の管理パネル）
@@ -96,6 +97,7 @@ Cloudflare Web Analytics / RUM は **性能計測（Core Web Vitals・ページ�
 ### 4.4 想定される障害モードと相性が良い
 
 心配している「放置タブ・スリープ復帰・再接続失敗」は**例外として投げられないサイレントな劣化**である。
+
 - 捕捉手段は「`reconnect_failed` イベントの発生率が跳ねた」というトレンド検知
 - これは分析ツールの土俵であり、Issue 中心の Sentry のモデルとは噛み合わない
 - PostHog はイベントのトリガー・フィルタ・トレンドに基づくリアルタイムアラートを持ち、Slack / Discord / Teams / Webhook に送出できる
@@ -103,6 +105,7 @@ Cloudflare Web Analytics / RUM は **性能計測（Core Web Vitals・ページ�
 ### 4.5 ソースマップ運用は Sentry とほぼ同等（当初評価を訂正）
 
 Vite は Rollup ベースのため `@posthog/rollup-plugin` をそのまま使用可能。
+
 - `personalApiKey` と `projectId` を渡すだけで生成・アップロードが自動化
 - `deleteAfterUpload` がデフォルト `true` → 公開されない
 - 本番 JS に `//# chunkId=...` を注入して突き合わせる方式
@@ -160,6 +163,7 @@ Sentry を推す最大の根拠だった以下は、**P1 と P3 によって前�
 ## 7. 判断が覆る条件（見直しトリガー）
 
 以下のいずれかが真になったら、この ADR を再評価する。
+
 1. **リプレイが不要と結論が出た** → 最大の減点が消え、Sentry または Honeybadger が優位になる
 2. **フィーチャーフラグを別系統で持つことにした** → §4.2 が失効
 3. **SaaS 期の分析を PostHog 以外で行うと決めた** → §4.3 の「生涯 2 系統」が崩れる
@@ -259,6 +263,7 @@ export default defineConfig({
 ### 8.5 外形監視（外部ベンダー追加なし）
 
 Cron Trigger の Worker から `@cloudflare/playwright` で最小シナリオ（Clerk ログイン → WS 接続 → テーブル同期確認）を実行し、失敗時に PostHog / Discord へ送出。
+
 - `nodejs_compat` + compatibility_date 2025-09-15 以降が必要
 - Playwright の storage state を Workers KV に永続化して Clerk セッションを再利用
 - `@cloudflare/playwright` は上流とバージョンがずれるフォークのため、`e2e` パッケージのスクリプトをそのまま流用せず監視用の最小版を別に書く

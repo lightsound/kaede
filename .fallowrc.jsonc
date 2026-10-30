@@ -6,7 +6,7 @@
   "sealed": true,
 
   "workspaces": {
-    "patterns": ["packages/*"]
+    "patterns": ["packages/*"],
   },
 
   // Generated SpacetimeDB bindings: not ours to prune.
@@ -29,9 +29,9 @@
       "packages/shared/tsconfig.json",
       "packages/client/tsconfig.json",
       "packages/server/tsconfig.json",
-      "packages/e2e/tsconfig.json"
+      "packages/e2e/tsconfig.json",
     ],
-    "require": "complete"
+    "require": "complete",
   },
 
   // The most aggressive blinding, so renamed-variable (Type-2) clones are
@@ -39,7 +39,7 @@
   // pair is already a duplicate in a repo this small.
   "duplicates": {
     "mode": "semantic",
-    "minOccurrences": 2
+    "minOccurrences": 2,
   },
 
   // The architecture the README describes, enforced: shared is the leaf that
@@ -52,7 +52,7 @@
       { "name": "e2e", "patterns": ["packages/e2e/**"] },
       // IaC (Alchemy / cf / wrangler configs). docs/VISION.md keeps Alchemy and
       // Effect inside this directory, so no other zone may import it.
-      { "name": "infra", "patterns": ["infra/**"] }
+      { "name": "infra", "patterns": ["infra/**"] },
     ],
     "rules": [
       { "from": "shared", "allow": [] },
@@ -63,7 +63,7 @@
       // contract (E2EHook) and the physics constants assertions derive from.
       { "from": "e2e", "allow": ["shared"] },
       // The app never imports infra, and infra reads no app code either.
-      { "from": "infra", "allow": [] }
+      { "from": "infra", "allow": [] },
     ],
     "coverage": {
       "requireAllFiles": true,
@@ -73,8 +73,8 @@
       // deliberately. describe-table-names.mjs is a standalone helper that
       // backup-maincloud.sh runs with node (fallow checks unreached files
       // against boundaries since 3.31).
-      "allowUnmatched": ["vitest.config.mts", "scripts/describe-table-names.mjs"]
-    }
+      "allowUnmatched": ["vitest.config.mts", "scripts/describe-table-names.mjs"],
+    },
   },
 
   "health": {
@@ -82,13 +82,13 @@
     // graph, which scores well-tested code as risky. REQUIRED, not optional:
     // fallow exits 2 if this file is missing, so run `pnpm test:coverage`
     // first (`pnpm analyze` and the CI job both do).
-    "coverage": "coverage/coverage-final.json"
+    "coverage": "coverage/coverage-final.json",
   },
 
   // `fallow audit` gates on every finding in the changed files, not just the
   // ones this changeset introduced.
   "audit": {
-    "gate": "all"
+    "gate": "all",
   },
 
   // Every rule fallow ships at `error` (the complexity-* rules already default
@@ -166,6 +166,6 @@
     // flag exists. Promoted anyway so there is no deviation from the policy —
     // verified that a detected flag still exits 0, so this reports without
     // gating. `fallow flags` shows the inventory on demand.
-    "feature-flags": "error"
-  }
+    "feature-flags": "error",
+  },
 }

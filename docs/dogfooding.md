@@ -28,6 +28,7 @@
 再開する — VISION 決定ログ参照。→ **作り込みの前提は Phase 3・4 の完了で
 解消済み（2026-08-07）**。再開＝URL 共有はオーナー判断のまま — この
 ランブックは判断材料と再開手順を揃えておくのが役目）:
+
 1. URL のコミュニティ共有（オーナー。共有した日＝実測の起点）
 2. 共有から数日〜2週間の実測（§6。別セッションで集計 — Phase 4 から
    付け替えた通話コストの実測を含む）
@@ -60,6 +61,7 @@ Phase 6 の組織作成フローでは作成者を初期管理者として明示
 
 Stripe CLI はこの環境ではブラウザ認証が必要（`stripe login --non-interactive`
 で `browser_url` と `verification_code` が出るので、オーナーが完了させる）。
+
 1. `stripe projects status` で現状の Clerk リソース名を確認する。
 2. 既存 Clerk リソースに production 環境（`production_domain`）が無いことを
    確認し、**作り直す**（プロビジョニング後の設定変更は不可 — ROADMAP）。
@@ -88,6 +90,7 @@ Stripe CLI はこの環境ではブラウザ認証が必要（`stripe login --no
    | CNAME | `clkmail`         | `mail.g0p7xy4ozs5m.clerk.services`  |
    | CNAME | `clk._domainkey`  | `dkim1.g0p7xy4ozs5m.clerk.services` |
    | CNAME | `clk2._domainkey` | `dkim2.g0p7xy4ozs5m.clerk.services` |
+
 5. 本番インスタンスに JWT テンプレート `spacetimedb` を Backend API で作成する。
    開発側の既存テンプレートを GET して同じ内容を POST するのが確実
    （aud: `kaede-spacetimedb`、寿命 60 秒、`"name": "{{user.full_name}}"`）:
@@ -111,7 +114,7 @@ Stripe CLI はこの環境ではブラウザ認証が必要（`stripe login --no
    が `https://clerk.kaede.town` であることを確認（違ったら PR #44 の
    `CLERK_PRODUCTION_ISSUER` を修正）。
 9. pk_live_ を GitHub Actions secret `VITE_CLERK_PUBLISHABLE_KEY` に登録する
-   （ローカル用 pk_test_ と混ぜない）。**sk_live_ はクライアントにも git にも
+   （ローカル用 pk_test_ と混ぜない）。**sk_live\_ はクライアントにも git にも
    どのシークレットストアにも入れない** — JWT テンプレート作成など Backend API
    の一時利用のみ。
 
@@ -177,6 +180,7 @@ ListObjectsV2・DL の presign の 3 経路が使う）は、当初デプロイ�
 Workers・Alchemy 等の広い権限を持つため、**バケット `kaede-recordings`
 スコープの専用 R2 トークン**へ差し替える。値の UPDATE のみでコード変更は
 不要（README「通話/録画 API」のローテーション手順そのまま）。
+
 1. **トークン発行（オーナー操作）**: Cloudflare ダッシュボード → R2 →
    Manage R2 API Tokens で「Object Read & Write・バケット指定
    `kaede-recordings`」のトークンを作成する（録画直送の PUT と一覧/presign の
@@ -207,6 +211,7 @@ Workers・Alchemy 等の広い権限を持つため、**バケット `kaede-reco
 「パッケージ名の整理」参照）**: npm スコープ・表示名は `@kaede/*` へ、
 Maincloud の DB 名は `maple-like` → `kaede` へ改名済み（旧 `kaede`・
 `kaede-366x1` はオーナー了承のうえ削除）。以下は当時の判断メモとして残す。
+
 - **npm スコープ・表示名の改名（`maple-like` / `@maple/*` → kaede 系）は
   PR #42/#43/#44 がマージされるまで保留**する。リポジトリ全域に触る改名を
   今開くと、切替系 PR と広範に衝突するため。切替完了後の静かなタイミングで

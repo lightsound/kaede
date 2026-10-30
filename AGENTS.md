@@ -7,6 +7,7 @@ This repository is run in Japanese: commit messages, `docs/*.md` (including ADRs
 ## Project direction (read first)
 
 This project has pivoted from a game MVP to **kaede**, a MapleStory-style 2D side-scrolling **work collaboration tool** (a virtual office replacing oVice for a small community, with future SaaS ambitions). Before starting any task, read:
+
 - `docs/VISION.md` — product vision, target users, and all settled technical decisions (auth, video calls, art pipeline, scope exclusions)
 - `docs/ROADMAP.md` — phase ordering, per-phase goals and completion criteria, and the oVice-migration milestone
 
@@ -33,6 +34,7 @@ mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/spacetime.tar.gz -C "$HOME/.local/b
 ### Running the game end-to-end
 
 Order matters and the backend must be running before publish:
+
 1. `spacetimedb-cli start` — long-running host on `ws://localhost:3000` (run in its own tmux session, leave it up).
 2. `spacetimedb-cli publish kaede --server local --yes` — run from repo root (`spacetime.json` points at `packages/server`).
 3. `spacetimedb-cli generate --lang typescript --module-path packages/server --out-dir packages/client/src/module_bindings --yes` — only needed if the server schema changed; committed bindings must not drift (CI enforces this).
@@ -74,6 +76,7 @@ Playwright specs) needs that header with a reason naming where the testable
 logic lives.
 
 Two more fallow quirks to know about (both bit Phase 3 work):
+
 - The type-coupling check has an evidence cap of **40 edges**; past it the
   proof degrades to "partial" and only the `fallow health` step fails. New
   shared modules whose public signatures reference types from other files add
@@ -101,6 +104,7 @@ result after formatting one.
 
 ImportLint enforces directory-level encapsulation inside each workspace; fallow continues to
 enforce the workspace-level `client` / `server` / `shared` dependency graph.
+
 - Every first-level `packages/*/src/*` directory is automatically a boundary; use the
   `*.package` suffix to make boundaries explicit and for nested packages.
 - Package-private exports are the default. Expose the intended API through the package's
@@ -112,6 +116,7 @@ enforce the workspace-level `client` / `server` / `shared` dependency graph.
 - Read `.agents/skills/import-lint/SKILL.md` before fixing ImportLint diagnostics.
 
 <!-- stripe-projects-cli managed:agents-md:start -->
+
 ## Stripe Projects CLI
 
 This repository is initialized for the Stripe project "kaede".
@@ -119,9 +124,11 @@ This repository is initialized for the Stripe project "kaede".
 ## Tools used
 
 - [Stripe CLI](https://docs.stripe.com/stripe-cli) with the `projects` plugin to manage third-party services, credentials, and deployments for this project. Use the stripe-projects-cli to manage deploying and access to third party services.
+
 <!-- stripe-projects-cli managed:agents-md:end -->
 
 <!-- agent-rules:begin source=base rev=46f775c63bf26702469c263eb93b7590a531558c hash=0ba521f2f137b14e657ffd3de0f4dc764d5a943199c3fd62f6e307f8d64cfbe1 -->
+
 # Shared conventions
 
 Portable conventions for AI coding agents. Everything here holds in any clone of any repository, including a fresh checkout on a cloud VM; nothing depends on one machine's paths or tools. Where a project-specific section of the file that carries this text says otherwise, the project-specific section takes precedence.
@@ -137,4 +144,5 @@ Portable conventions for AI coding agents. Everything here holds in any clone of
 - Tool-scoped rules (glob-activated) go in `.cursor/rules/*.mdc` or `.claude/rules/*.md`, not in the root pair.
 - When an instruction file names a command or path, it must exist in the repository at the time of writing. Remove or update the reference when the target is renamed or deleted.
 - Agent-facing instructions live in `AGENTS.md`. `README.md` is for humans; never duplicate `AGENTS.md` content into it.
+
 <!-- agent-rules:end -->

@@ -63,7 +63,7 @@
       // directory is automatically sealed so a future `src/chat/` cannot
       // silently skip enforcement. `*.package` additionally permits explicit
       // nested boundaries.
-      "packageDirectory": ["packages/*/src/*", "**/*.package"]
-    }
-  }
+      "packageDirectory": ["packages/*/src/*", "**/*.package"],
+    },
+  },
 }

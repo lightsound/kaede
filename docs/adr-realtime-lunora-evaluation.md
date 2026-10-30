@@ -13,6 +13,7 @@
 **方向性としては kaede に最も筋のいい移行先候補だが、現時点で移行はしない。**
 
 理由は 2 つ:
+
 1. **Lunora 自身がアルファ段階**（公式 FAQ が「API はリリース間で壊れる。1.0 まで
    収益を載せるな」と明言。プレリリースはシム無しで旧コードパスを落とす方針）。
    kaede は既にコミュニティが oVice から移行して常用する本番プロダクトであり、
@@ -30,6 +31,7 @@
 ## 2. Lunora とは（2026-08-29 時点の調査）
 
 [lunora.sh](https://lunora.sh/) / [GitHub anolilab/lunora](https://github.com/anolilab/lunora)
+
 - **Convex の DX を自分の Cloudflare アカウント上で再現するフレームワーク**。
   TypeScript でスキーマ・query・mutation・action を書くと、SQLite バックの
   Durable Object（ハイバネーション WebSocket）がリアルタイム購読を配信する。
