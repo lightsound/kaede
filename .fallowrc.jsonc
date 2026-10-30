@@ -14,7 +14,10 @@
   // spacetimedb: used by the generated (ignored) bindings in packages/client.
   // @effect/platform-node: alchemy CLI のランタイム peer 依存。infra/ のコードは
   // import しないが、ベータ採用条件のバージョン厳密ピン留めのために明示している。
-  "ignoreDependencies": ["spacetimedb", "@effect/platform-node"],
+  // @posthog/cli: @posthog/rollup-plugin がビルド時に node_modules/.bin から
+  // 起動するバイナリ。コードは import しないが、プラグインの探索範囲
+  // （対象パッケージと祖先の node_modules/.bin）に置くため直接依存にしている。
+  "ignoreDependencies": ["spacetimedb", "@effect/platform-node", "@posthog/cli"],
 
   // Entry-point exports are checked like any other export, so a stray or
   // misspelled export in an index barrel is reported instead of auto-credited.

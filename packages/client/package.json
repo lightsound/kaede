@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@assetpack/core": "1.7.0",
+    "@posthog/cli": "~0.18.11",
     "@posthog/rollup-plugin": "^1.6.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
