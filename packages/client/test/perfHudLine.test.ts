@@ -1,5 +1,5 @@
 import type { E2EPlayerSnapshot, E2EWorldSnapshot } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { perfHudLine, perSecond } from '../src/perf.package/perfHudLine';
 
 function player(x: number): E2EPlayerSnapshot {

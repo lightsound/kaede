@@ -1,5 +1,5 @@
 import { groupTagLabel, sortedHuddleRows, sortedZoneRows } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 
 describe('sortedZoneRows / sortedHuddleRows', () => {
   const rows = [

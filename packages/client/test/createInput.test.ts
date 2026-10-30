@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createInput } from '../src/game.package/input';
 
 type Listener = (e: { code?: string; target: unknown; preventDefault?(): void }) => void;

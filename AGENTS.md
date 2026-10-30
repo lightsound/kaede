@@ -89,11 +89,12 @@ Two more fallow quirks to know about (both bit Phase 3 work):
 
 ### Markdown and YAML formatting
 
-Biome also formats and lints `*.md` and `*.yml` (`pnpm lint` checks, `pnpm format` fixes);
-generated and tool-managed files are excluded in `biome.json`. Biome pads every table row to the
-widest cell in each column, so keep table cells short and put long explanations under headings or
-in lists — `docs/VISION.md` uses a short summary table plus one section per item for this reason.
-Biome 2.6.2 can change the nesting of a nested list when it re-indents it, so check the rendered
+Oxfmt (via Vite+) also formats `*.md` and `*.yml` (`pnpm lint` checks with `vp check`,
+`pnpm format` fixes with `vp fmt`); generated and tool-managed files are excluded via
+`ignorePatterns` in the root `vite.config.ts`. Oxfmt pads every table row to the widest cell in
+each column, so keep table cells short and put long explanations under headings or in lists —
+`docs/VISION.md` uses a short summary table plus one section per item for this reason.
+A formatter can change the nesting of a nested list when it re-indents it, so check the rendered
 result after formatting one.
 
 ### Internal package boundaries
@@ -105,8 +106,8 @@ enforce the workspace-level `client` / `server` / `shared` dependency graph.
 - Package-private exports are the default. Expose the intended API through the package's
   `index.ts`; external consumers must import from that index, never an internal file.
 - Use `/** @public */` only when an export genuinely needs unrestricted project-wide access.
-- Run `pnpm lint:imports` after moving files or changing imports. `pnpm lint` runs both Biome and
-  ImportLint.
+- Run `pnpm lint:imports` after moving files or changing imports. `pnpm lint` runs both `vp check`
+  (Oxlint + Oxfmt + type check) and ImportLint.
 - Tests are excluded so they may import package-private implementation details directly.
 - Read `.agents/skills/import-lint/SKILL.md` before fixing ImportLint diagnostics.
 

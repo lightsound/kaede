@@ -12,13 +12,12 @@
 
 ## 技術スタック
 
-- **TypeScript 7** — 全パッケージ共通の言語（ネイティブ実装の `tsc`）
+- **TypeScript 7** — 全パッケージ共通の言語（型チェックは Vite+ 同梱の tsgo 系が担う）
 - **PixiJS v8** — 2Dレンダリング
 - **Vite + React** — クライアントのビルド／開発サーバー（Reactの役割はキャンバスのマウントのみ）
 - **SpacetimeDB 2.x** — リアルタイム同期バックエンド（DB兼サーバーロジック）
 - **pnpm workspaces** — モノレポ管理
-- **Vitest** — ユニットテスト（リポジトリ全体を1回のrunで実行し、カバレッジも1本にまとめる）
-- **Biome** — lint とフォーマット
+- **Vite+（vite-plus）** — 同梱の Vitest（ユニットテスト。リポジトリ全体を1回のrunで実行し、カバレッジも1本にまとめる）、Oxlint / Oxfmt（lint とフォーマット）、型チェックを `vp` に集約
 - **fallow** — デッドコード・重複・複雑度・アーキテクチャ境界の静的解析
 
 ### 静的解析の方針
@@ -40,7 +39,7 @@
 - **`health.coverage`** — 実カバレッジを読ませ、CRAP スコアを推定ではなく実測にします。
 - **`sealed`** — 設定が外部の `extends` を引き込めないようにします。
 
-`infra/`（Alchemy の IaC）は typecheck と Biome の対象ですが、ユニットテスト（カバレッジ）と
+`infra/`（Alchemy の IaC）は `vp check`（型チェック込み）の対象ですが、ユニットテスト（カバレッジ）と
 ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する宣言的な単一エントリポイントで、
 アプリのモジュールグラフに参加しないため。fallow は infra も走査し、エントリポイント判定の
 偽陽性1件のみ理由付きコメントで抑制しています）。
@@ -185,12 +184,12 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 8. **型チェック・テスト・lint・静的解析**
 
    ```sh
-   pnpm typecheck         # 全パッケージの tsc --noEmit
-   pnpm test              # shared と client のユニットテストを1回の vitest で実行
+   pnpm typecheck         # vp check（format + lint + 型チェック）
+   pnpm test              # shared と client のユニットテストを1回の vp test で実行
    pnpm test:coverage     # 同上 + coverage/coverage-final.json を出力
-   pnpm lint              # Biome + ImportLint（内部パッケージ境界）の検査
+   pnpm lint              # vp check + ImportLint（内部パッケージ境界）の検査
    pnpm lint:imports      # ImportLint のみ実行
-   pnpm format            # Biome によるフォーマット適用
+   pnpm format            # Oxfmt（vp fmt）によるフォーマット適用
    pnpm analyze           # CIと同じ fallow 一式（dead-code / dupes / health / security）
    pnpm analyze:changed   # 変更ファイルだけを fallow で検査（コミット前向け）
    ```
@@ -237,7 +236,7 @@ Maincloud の **`kaede`**（ダッシュボード: https://spacetimedb.com/kaede
 
 **`main` に push（マージ）されると CI がそのまま本番デプロイまで行います。人間の
 承認ゲートはありません**（`.github/workflows/ci.yml` の `deploy` ジョブ）。
-- `ci`（lint / typecheck / test / fallow / バインディングドリフト検査）と `e2e`
+- `ci`（vp check / test / fallow / バインディングドリフト検査）と `e2e`
   （Playwright スモーク）の**両方が成功したときだけ**デプロイが走ります。
 - デプロイ順序は **モジュール publish（Maincloud）→ クライアント（Alchemy）**。
   スキーマ変更は互換（additive）が原則なので旧クライアントは新スキーマでも動き続け、
@@ -443,7 +442,7 @@ URL 発行（R2 の S3 API）** は、SpacetimeDB module の **procedure** が�
 
 ## CI
 
-`main` への push と各 pull request で **CI** ワークフローが走り、lint（Biome）・typecheck・test（カバレッジ付き）・
+`main` への push と各 pull request で **CI** ワークフローが走り、vp check（format / lint / 型チェック）・test（カバレッジ付き）・
 build・fallow（dead-code / dupes / health / security）に加えて、バージョンを固定した CLI
 （`spacetimedb-cli generate`）の再実行によりコミット済み
 TypeScript バインディングがサーバースキーマとずれていないことを検証します。並行して

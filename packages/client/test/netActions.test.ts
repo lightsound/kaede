@@ -1,6 +1,6 @@
 import type { PlannedSend } from '@kaede/shared';
 import { Identity } from 'spacetimedb';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { type Net, planChatDraftOffline, type SpaceMemberView } from '../src/net.package';
 import { netActionsOf } from '../src/netActions';
 

@@ -97,14 +97,12 @@ jobs:
       # before the fallow group starts (`fallow health` reads it for CRAP
       # scores).
       - parallel:
+          # vp check は format + lint + 型チェック（旧 Biome + tsc の後継）。
           - name: Lint
-            run: pnpm exec biome check .
+            run: pnpm exec vp check
 
           - name: Import boundaries
             run: pnpm lint:imports --format github
-
-          - name: Typecheck
-            run: pnpm typecheck
 
           # Writes coverage/coverage-final.json, which `fallow health` reads
           # for real per-function CRAP scores (see .fallowrc.jsonc

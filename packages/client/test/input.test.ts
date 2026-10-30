@@ -1,5 +1,5 @@
 import type { PlayerInput } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { mergeInputs } from '../src/game.package/mergeInputs';
 
 const NONE: PlayerInput = { left: false, right: false, up: false, down: false, jump: false };

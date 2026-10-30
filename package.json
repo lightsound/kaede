@@ -4,21 +4,20 @@
   "packageManager": "pnpm@12.15.0",
   "scripts": {
     "dev": "pnpm --filter @kaede/client dev",
-    "typecheck": "pnpm -r typecheck",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "typecheck": "vp check",
+    "test": "vp test run",
+    "test:coverage": "vp test run --coverage",
     "test:e2e": "pnpm --filter @kaede/e2e test",
-    "lint": "biome check . && import-lint",
+    "lint": "vp check && import-lint",
     "lint:imports": "import-lint",
-    "format": "biome check --write .",
+    "format": "vp fmt --write",
     "analyze": "pnpm test:coverage && fallow && fallow security",
     "analyze:changed": "pnpm test:coverage && fallow audit"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.3",
     "@import-lint/cli": "0.1.10",
     "@vitest/coverage-v8": "^5.0.5",
     "fallow": "^3.37.0",
-    "vitest": "^5.0.5"
+    "vite-plus": "1.4.0"
   }
 }

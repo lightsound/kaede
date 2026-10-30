@@ -1,5 +1,5 @@
 import { isRecordingFileNameLike } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 
 describe('isRecordingFileNameLike', () => {
   // The live-probed shape (2026-08-06): {meetingId}_{epochMillis}.mp4.

@@ -1,6 +1,6 @@
 import type { MemberStatus } from '@kaede/shared';
 import { Identity } from 'spacetimedb';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { approvedMember, recordingsDockVisible } from '../src/call.package/recordingAccess';
 import type { SpaceMemberView, SpaceView } from '../src/net.package';
 import { promptFor } from '../src/space.package/applyPrompt';

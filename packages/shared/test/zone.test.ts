@@ -11,7 +11,7 @@ import {
   zoneRectContains,
   zoneTagLabel,
 } from '@kaede/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 
 const ZONE_A: ZoneShape = { id: 1n, rect: { x: 400, y: 464, w: 400, h: 192 } };
 const ZONE_B: ZoneShape = { id: 2n, rect: { x: 700, y: 464, w: 400, h: 192 } };
