@@ -37,7 +37,10 @@ export default defineConfig({
     // have passed. A direct `node` child stays in the shell's group, so the
     // Linux process-group SIGKILL and Windows `taskkill /T` both stop it.
     // `exec` is a POSIX builtin and is not a command under cmd.exe.
-    command: 'node ./node_modules/vite/bin/vite.js',
+    // The path follows the Vite+ layout: the client's `vite` dependency is an
+    // alias for @voidzero-dev/vite-plus-core, which ships its CLI under
+    // dist/vite/node/cli.js instead of bin/vite.js.
+    command: 'node ./node_modules/vite/dist/vite/node/cli.js',
     cwd: '../client',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
