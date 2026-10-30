@@ -5,7 +5,7 @@
   "instanceId": "e1ee1052ddaf3ef99dd5b56a1bac1891",
   "resourceType": "Command.Build",
   "props": {
-    "command": "pnpm --filter @kaede/client build",
+    "command": "bun run --filter @kaede/client build",
     "cwd": "..",
     "outdir": "packages/client/dist",
     "env": {}
@@ -13,8 +13,8 @@
   "attr": {
     "outdir": "../packages/client/dist",
     "hash": {
-      "input": "f328fa37df54c23a7f7afff335126bea037844b25b6c6c70e14322013000efad",
-      "output": "822433200f6ed39d69030a1f378ac53a678e34645e52250fd208a6be4f2813ff"
+      "input": "2a499beea14645b56dcf520c6a3620d28fb32315a2133733f9f402a76129a97e",
+      "output": "e5ec4298a2e17df0b7233ebb20136711831b0503cf9982318ead021c770fb6d7"
     }
   },
   "bindings": [],

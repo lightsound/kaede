@@ -7,11 +7,11 @@
   "props": {
     "name": "kaede",
     "cwd": "..",
-    "command": "pnpm --filter @kaede/client build",
+    "command": "bun run --filter @kaede/client build",
     "outdir": "packages/client/dist",
     "assets": {
       "directory": "../packages/client/dist",
-      "hash": "822433200f6ed39d69030a1f378ac53a678e34645e52250fd208a6be4f2813ff",
+      "hash": "e5ec4298a2e17df0b7233ebb20136711831b0503cf9982318ead021c770fb6d7",
       "notFoundHandling": "single-page-application"
     },
     "compatibility": {
@@ -44,10 +44,10 @@
     "routes": [],
     "crons": [],
     "tailConsumers": [],
-    "versionId": "ed168918-1fdd-4fee-9a8c-9a2d0feb8fd0",
-    "deploymentId": "37f1ecfc-1454-43db-9b58-f48564d9cda7",
+    "versionId": "04055672-4675-4f12-a914-8f2648caa3ac",
+    "deploymentId": "416b81cc-fdb7-4239-849e-d5513d6e7bf5",
     "hash": {
-      "assets": "822433200f6ed39d69030a1f378ac53a678e34645e52250fd208a6be4f2813ff",
+      "assets": "e5ec4298a2e17df0b7233ebb20136711831b0503cf9982318ead021c770fb6d7",
       "metadata": "02c4ca75e61eac914ad4baed4929d629530dbf00cd161fa5bc6f4f9058b8f7f5"
     }
   },
