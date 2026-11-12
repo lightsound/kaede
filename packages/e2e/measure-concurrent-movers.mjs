@@ -8,7 +8,7 @@
 // Prerequisites (same as the Playwright specs):
 //   spacetimedb-cli start
 //   spacetimedb-cli publish kaede --server local --yes
-//   pnpm --filter @kaede/client dev   (or let this script's webServer-less
+//   bun run --filter @kaede/client dev   (or let this script's webServer-less
 //     observer hit an already-running Vite; pass --target if needed)
 //
 //   node measure-concurrent-movers.mjs --count 20 --movers 20 --seconds 20

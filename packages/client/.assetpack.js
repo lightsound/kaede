@@ -1,5 +1,5 @@
 // fallow-ignore-file unused-file -- AssetPack CLI config: loaded by the
-// `@assetpack/core` binary via `pnpm assets:pack`, not imported from any app
+// `@assetpack/core` binary via the `assets:pack` script, not imported from any app
 // entry point. The import below is the live link that keeps the dependency
 // credited; the file itself is not part of the Vite graph.
 /**
