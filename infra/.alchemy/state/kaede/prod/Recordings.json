@@ -43,6 +43,6 @@
   "bindings": [],
   "providerVersion": 0,
   "downstream": [],
-  "removalPolicy": "retain",
+  "removalPolicy": "protect",
   "providerMode": "live"
 }
