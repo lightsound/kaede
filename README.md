@@ -58,11 +58,17 @@ ImportLint の対象外です（`alchemy.run.ts` は alchemy CLI が実行する
 旧 pnpm 構成から引き継いだサプライチェーン保護と、その移行時の判断は次のとおりです。
 
 - **overrides**（ルート `package.json`）— alchemy の peer 要求に合わせて
-  `@effect/platform-bun` / `@effect/platform-node-shared` / `@effect/sql-d1` /
-  `@effect/vitest` を 4.0.7 に揃えます（infra の `effect` / `@effect/platform-node`
-  と一緒に上げること）。`chokidar` は 4.0.1 に固定します。`@assetpack/core` が引く
-  4.0.2 / 4.0.3 は provenance なしで公開された版で、4系で最後の provenance 付きが
-  4.0.1 のためです（5系は ESM 専用で CJS の assetpack には載せません）。
+  `@effect/platform-bun` / `@effect/platform-node-shared` / `@effect/sql-d1`
+  を 4.1.4 に揃えます（infra の `effect` / `@effect/platform-node`
+  と一緒に上げること。alchemy 側の peer が `^4.1.4` のため、片方だけの更新は
+  できません。`@effect/vitest` は beta.86 の依存ツリーでは解決されなくなった
+  ため override を外しました。将来 alchemy の任意 peer として採用するときは、
+  pin ではなく infra への明示依存として足します）。`chokidar` は 4.0.1 に固定します。`@assetpack/core` が宣言する
+  4 系（`^4.0.3`）のうち 4.0.2 / 4.0.3 は provenance なしで公開された版で、
+  4系で最後の provenance 付きが 4.0.1 のため、その範囲内で 4.0.1 に留めます。
+  ただし `@alchemy.run/node-utils` は宣言どおり 5 系が必要なので、
+  `@alchemy.run/node-utils>chokidar` の親スコープ指定で `^5.0.0` を別途
+  解決させます（5.0.0 は Trusted Publishing + provenance 付き）。
 - **trustedDependencies** は `@posthog/cli` のみです。postinstall でソースマップ用
   CLI バイナリを取得するためで、許可しないとデプロイ時のアップロードが落ちます。
   Bun ではこの指定が組み込みの既定リストを置換するので、esbuild / workerd / sharp
@@ -362,7 +368,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    bunx --cwd infra cf deploy
    ```
 
-   `cf` は現行ベータ（1.0.0-beta.5）ではビルドをインストール済みの wrangler に委譲する
+   `cf` は現行ベータ（1.0.0-beta.30）ではビルドをインストール済みの wrangler に委譲する
    （`cf migrate` が選んだ "wrangler" バンドラー経路）ため、移行シム `infra/wrangler.config.ts`
    と wrangler の devDependency は引き続き必要です。
 

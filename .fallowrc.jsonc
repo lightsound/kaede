@@ -52,6 +52,16 @@
   // deliberately not an npm dependency.
   "ignoreBinaries": ["getconf", "spacetime"],
 
+  // The root package.json override "@alchemy.run/node-utils>chokidar" is a
+  // Bun parent-scoped override: bun.lock resolves it as the nested entry
+  // "@alchemy.run/node-utils/chokidar" -> chokidar 5.0.0 (the global pin
+  // stays 4.0.1 for @assetpack/core). fallow's unused-override check cannot
+  // evaluate the parent-scoped form and flags it as unused; bun install
+  // --frozen-lockfile is the ground truth, so suppress that one finding.
+  "ignoreDependencyOverrides": [
+    { "package": "@alchemy.run/node-utils>chokidar", "source": "package.json" },
+  ],
+
   // The architecture the README describes, enforced: shared is the leaf that
   // both sides replay physics through, and client/server never see each other.
   "boundaries": {
