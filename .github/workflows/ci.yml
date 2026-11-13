@@ -26,14 +26,18 @@ env:
   # changes codegen — module_bindings/index.ts records the CLI version, so any
   # bump must land together with a bindings regeneration commit.
   #
-  # Kept on the same version as the `spacetimedb` npm dependency (2.13.0):
+  # Kept on the same version as the `spacetimedb` npm dependency (2.15.0):
   # the CLI, the host and the SDK move as one pinned set — the module host
   # and the procedure/HTTP APIs the call stack rides are version-coupled
   # (ROADMAP Phase 4 増分⑥の引き受けたリスク). Maincloud's host is managed
   # by Clockwork and NOT part of this pinned set — check it reports a
   # compatible version before bumping (e.g. POST /v1/mcp initialize on
-  # https://maincloud.spacetimedb.com echoes serverInfo.version).
-  SPACETIME_VERSION: v2.13.0
+  # https://maincloud.spacetimedb.com echoes serverInfo.version — the
+  # endpoint needs a login token; without one it answers nothing).
+  # Verified 2026-11-13 for this bump: Maincloud reports 2.15.0, and a
+  # scratch database accepted a module built with the 2.15 library (a
+  # 2.13 host would have rejected it), then was deleted.
+  SPACETIME_VERSION: v2.15.0
 
 jobs:
   ci:
