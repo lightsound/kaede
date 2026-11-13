@@ -19,9 +19,9 @@
   },
   "devDependencies": {
     "@import-lint/cli": "0.1.10",
-    "@vitest/coverage-v8": "^5.0.5",
-    "fallow": "^3.37.0",
-    "vite-plus": "1.4.0"
+    "@vitest/coverage-v8": "^5.1.0",
+    "fallow": "^3.42.0",
+    "vite-plus": "1.6.0"
   },
   "overrides": {
     "@effect/platform-bun": "4.0.7",

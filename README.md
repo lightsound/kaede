@@ -323,7 +323,7 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
      ため従来どおり env 認証（`CI=true` + `CLOUDFLARE_API_TOKEN`）に
      落ちます（影響なし）。
 
-   - Node は **24（Active LTS）** を標準とします（`.node-version` が単一の
+   - Node は **26（Active LTS）** を標準とします（`.node-version` が単一の
      真実源。CI の `setup-node` もこのファイルを参照）。Node 22.18 以降は TS の
      型ストリッピングがデフォルト有効なため、かつて infra スクリプトに
      あった `NODE_OPTIONS=--experimental-strip-types` は撤去済みです。

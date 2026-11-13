@@ -45,6 +45,13 @@
     "minOccurrences": 2,
   },
 
+  // Binaries that scripts legitimately run but no npm package provides:
+  // `getconf` is an OS (glibc) utility used by an e2e measurement script,
+  // and `spacetime` is the SpacetimeDB CLI — a pinned external toolchain
+  // binary installed from the official tarball (CI) / by hand (local),
+  // deliberately not an npm dependency.
+  "ignoreBinaries": ["getconf", "spacetime"],
+
   // The architecture the README describes, enforced: shared is the leaf that
   // both sides replay physics through, and client/server never see each other.
   "boundaries": {
@@ -112,6 +119,7 @@
     "unused-enum-members": "error",
     "unused-class-members": "error",
     "unused-store-members": "error",
+    "unused-namespace-members": "error",
     "unprovided-injects": "error",
     "unrendered-components": "error",
     "unused-component-props": "error",
@@ -135,7 +143,9 @@
     "css-broken-reference": "error",
     "unresolved-imports": "error",
     "unlisted-dependencies": "error",
+    "unlisted-binaries": "error",
     "duplicate-exports": "error",
+    "duplicate-export-aliases": "error",
     "type-only-dependencies": "error",
     "test-only-dependencies": "error",
     "dev-dependencies-in-production": "error",
