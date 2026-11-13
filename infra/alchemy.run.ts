@@ -134,11 +134,12 @@ export default Alchemy.Stack(
     // README「通話/録画 API」)。録画はコミュニティの資産なので削除
     // ライフサイクルは置かず、失敗したマルチパートアップロードの破片だけ
     // 7 日で掃除する。
-    // removalPolicy: retain — 録画はコミュニティの資産で再取得不能。destroy
+    // removalPolicy: protect — 録画はコミュニティの資産で再取得不能。destroy
     // (既定)だと、スタックからの削除や replace 計画の適用時に Alchemy が
     // バケットを「中身ごと空にしてから削除」する(プロバイダの emptyBucket)。
-    // retain なら放棄するだけでデータは残る。誤った plan(上のアカウント解決の
-    // 注意を参照)や将来のリファクタからの最終防衛線として明示する。
+    // protect なら削除・replace を含む plan 自体が拒否される。誤った plan
+    // (上のアカウント解決の注意を参照)や将来のリファクタからの最終防衛線
+    // として明示する(意図的に外すときはこのポリシーを先に外してから変更する)。
     yield* Cloudflare.R2.Bucket('Recordings', {
       name: stagedName(stage, 'kaede-recordings'),
       lifecycleRules: [
@@ -149,7 +150,7 @@ export default Alchemy.Stack(
           },
         },
       ],
-    }).pipe(Alchemy.RemovalPolicy.retain());
+    }).pipe(Alchemy.RemovalPolicy.protect());
 
     // アセット生成原本の置き場所(ROADMAP Phase 5 ①b⑶): グリーンバックの
     // 生成シート原本(*-original.png)は Git に入れず(1 枚 300KB〜1.3MB で
@@ -167,14 +168,14 @@ export default Alchemy.Stack(
     // order.json / ROADMAP は常に裸の `kaede-asset-originals` を指す
     // (ステージ付きにすると非 prod の空孤児バケットだけが生まれ、ツールは
     // 本番を叩き続ける — thermos CQ)。
-    // removalPolicy: retain — 原本は再生成にクレジット実費がかかる一点物
+    // removalPolicy: protect — 原本は再生成にクレジット実費がかかる一点物
     // (kaede-recordings と同じ最終防衛線)。
     // 本番バケットは 2026-08-09 に API で先行作成済み(移行アップロードの
     // ため): このリコンサイラは observe→create の順で既存バケットを
     // そのまま採用するので、マージ後の CI デプロイは 409 にならず収束する。
     yield* Cloudflare.R2.Bucket('AssetOriginals', {
       name: 'kaede-asset-originals',
-    }).pipe(Alchemy.RemovalPolicy.retain());
+    }).pipe(Alchemy.RemovalPolicy.protect());
 
     // 通話 API Worker `kaede-call` はここに居たが、増分⑥(ROADMAP Phase 4)で
     // 廃止した: 通話/録画 API は SpacetimeDB module の procedure に移り、
