@@ -11,7 +11,7 @@
     "outdir": "packages/client/dist",
     "assets": {
       "directory": "../packages/client/dist",
-      "hash": "335dc925a762c9a87dba7030510af3a4c418dbd881451fd6eba5927022a17b7d",
+      "hash": "904ccb871c9a7078a241597efeb45d96b9f743255148d48119d6cfa5f74ba985",
       "notFoundHandling": "single-page-application"
     },
     "compatibility": {
@@ -44,11 +44,11 @@
     "routes": [],
     "crons": [],
     "tailConsumers": [],
-    "versionId": "ffaf9e8a-e4dc-419e-a4c0-c04148ec413e",
-    "deploymentId": "363c7b21-07c5-4704-bd5b-71b7e2199842",
+    "versionId": "1545c42d-be18-492d-9a36-209cea55f0e6",
+    "deploymentId": "d4cdcaf1-a6a5-425d-9d3e-e6e66e5613a3",
     "secretNames": [],
     "hash": {
-      "assets": "335dc925a762c9a87dba7030510af3a4c418dbd881451fd6eba5927022a17b7d",
+      "assets": "904ccb871c9a7078a241597efeb45d96b9f743255148d48119d6cfa5f74ba985",
       "metadata": "02c4ca75e61eac914ad4baed4929d629530dbf00cd161fa5bc6f4f9058b8f7f5"
     }
   },
