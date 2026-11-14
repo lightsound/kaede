@@ -1,5 +1,3 @@
-// fallow-ignore-file coverage-gaps -- helpers over the SpacetimeDB reducer context; they only run inside a module host, and the rules worth testing (admission, retention, name precedence) are delegated to evaluateJoin / isExpiredRow / resolveJoinName in @kaede/shared and unit-tested there
-
 // Who is in the world, and how their rows enter and leave it — the player
 // lifecycle plus the admission reads it depends on. Its own module (not a
 // reducer file) because every reducer file builds on it. Nothing here is

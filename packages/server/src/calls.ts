@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- procedures only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (file-name shape, rate limit, SigV4 signing, listing parse) are delegated to @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- procedures run inside a SpacetimeDB module host; the flows that need no live providers are covered end-to-end by e2e, and the ctx helper layer they build on is unit-tested via the module test harness (packages/server/test); the rules worth testing (file-name shape, rate limit, SigV4 signing, listing parse) are delegated to @kaede/shared and unit-tested there
 
 // The group-call and recording procedures (ROADMAP Phase 4 増分①〜⑥).
 // Since 増分⑥ this module is BOTH the group authority and the external API

@@ -92,7 +92,7 @@ export default defineConfig({
     ignorePatterns,
   },
   test: {
-    projects: ['packages/shared', 'packages/client'],
+    projects: ['packages/shared', 'packages/client', 'packages/server'],
     coverage: {
       provider: 'v8',
       reporter: ['json', 'text-summary'],

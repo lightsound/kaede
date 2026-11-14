@@ -66,7 +66,7 @@ locally and are easy to miss because they arrive asynchronously after a push.
 
 ### Static analysis / testing gotcha
 
-`fallow health` (part of `bun run analyze` and CI) **requires** `coverage/coverage-final.json`; run `bun run test:coverage` first if invoking `fallow` directly (`bun run analyze` already does). `packages/server` has no unit tests — it only runs inside the SpacetimeDB host, so all testable pure logic lives in `packages/shared`.
+`fallow health` (part of `bun run analyze` and CI) **requires** `coverage/coverage-final.json`; run `bun run test:coverage` first if invoking `fallow` directly (`bun run analyze` already does). The ctx helper layer of `packages/server` (world / occupancy / sendAllowance) is unit-tested through the official module test harness (`spacetimedb/server/test-utils`, wired in `packages/server/vite.config.ts`; see `packages/server/test/harness.ts`) — the real `spacetimedb/server` entry cannot be imported outside a host because it loads the host-only `spacetime:sys` module, so the harness's portable in-process datastore stands in. The reducer files' flows that need no live providers are covered end-to-end by e2e, and all testable pure logic lives in `packages/shared`.
 
 Before pushing, also run `bunx fallow health` **standalone**: CI runs it as
 its own step, and a passing `bun run analyze` does not guarantee that step passes —

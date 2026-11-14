@@ -1,5 +1,3 @@
-// fallow-ignore-file coverage-gaps -- helpers over the SpacetimeDB reducer context; they only run inside a module host, and the rules worth testing (zone hysteresis and overlap priority, the huddle walk-away rule) are delegated to resolveZoneOccupancy / keepsHuddleMembership in @kaede/shared and unit-tested there
-
 // Group occupancy (ROADMAP Phase 3 増分②③): who is in which conversation
 // group, judged server-side wherever the authoritative position or the
 // zone set changes — accepted input batches and portal landings

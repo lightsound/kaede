@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (name normalization, join geometry, walk-away retention, rate limit) are delegated to normalizeHuddleName / evaluateHuddleJoin / keepsHuddleMembership / evaluateSendAllowance in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers run inside a SpacetimeDB module host; the flows that need no live providers are covered end-to-end by e2e, and the ctx helper layer they build on is unit-tested via the module test harness (packages/server/test); the rules worth testing (name normalization, join geometry, walk-away retention, rate limit) are delegated to normalizeHuddleName / evaluateHuddleJoin / keepsHuddleMembership / evaluateSendAllowance in @kaede/shared and unit-tested there
 
 // The 立ち話グループ reducers (ROADMAP Phase 3 増分③): founding, joining
 // and leaving the huddle-kind conversation_group rows. Unlike the zone
