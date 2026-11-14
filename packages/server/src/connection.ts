@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (token classification, member-issuer selection, disconnect labeling) are delegated to classifyConnection / memberIssuersFor / disconnectReasonFrom in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers run inside a SpacetimeDB module host; the flows that need no live providers are covered end-to-end by e2e, and the ctx helper layer they build on is unit-tested via the module test harness (packages/server/test); the rules worth testing (token classification, member-issuer selection, disconnect labeling) are delegated to classifyConnection / memberIssuersFor / disconnectReasonFrom in @kaede/shared and unit-tested there
 
 // The connection lifecycle reducers: vetting every connection's token
 // (onConnect — which issuers mean member and guest), the idle guard's

@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admission, retention, rename validation, application and admin-action transitions) are delegated to evaluateJoin / isExpiredRow / evaluateRename / evaluateApplication / evaluateMemberAction in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers run inside a SpacetimeDB module host; the flows that need no live providers are covered end-to-end by e2e, and the ctx helper layer they build on is unit-tested via the module test harness (packages/server/test); the rules worth testing (admission, retention, rename validation, application and admin-action transitions) are delegated to evaluateJoin / isExpiredRow / evaluateRename / evaluateApplication / evaluateMemberAction in @kaede/shared and unit-tested there
 
 // The membership reducers (承認制 / ゲスト入場設定): world entry with its
 // admission check (join), renaming, the membership application, the four

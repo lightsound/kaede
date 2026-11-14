@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- reducers only run inside a SpacetimeDB module host, so no unit test can import this file; the rules worth testing (admin check, spec validation, placement clamping, occupancy) are delegated to evaluateSettingChange / evaluateZoneSpec / clampZoneRect / resolveZoneOccupancy in @kaede/shared and unit-tested there
+// fallow-ignore-file coverage-gaps -- reducers run inside a SpacetimeDB module host; the flows that need no live providers are covered end-to-end by e2e, and the ctx helper layer they build on is unit-tested via the module test harness (packages/server/test); the rules worth testing (admin check, spec validation, placement clamping, occupancy) are delegated to evaluateSettingChange / evaluateZoneSpec / clampZoneRect / resolveZoneOccupancy in @kaede/shared and unit-tested there
 
 // The meeting-room zone admin reducers (ROADMAP Phase 3 増分②): placing,
 // editing and removing the zone-kind conversation_group rows. Every action

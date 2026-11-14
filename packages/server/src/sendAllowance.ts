@@ -1,5 +1,3 @@
-// fallow-ignore-file coverage-gaps -- helpers over the SpacetimeDB reducer context; they only run inside a module host, and the rule itself (the token bucket) is evaluateSendAllowance and its per-feature wrappers in @kaede/shared, unit-tested there
-
 // The send-rate charge every guarded reducer shares (乱用対策): one token
 // bucket per feature, each on a guard table of its own.
 import type { SendAllowanceRequest, SendAllowanceVerdict } from '@kaede/shared';
