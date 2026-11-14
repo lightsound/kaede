@@ -5,5 +5,5 @@ export type { ChatScopeView } from './chatScopeFeed';
 export type { AuthTokenGetter } from './connection';
 export { planChatDraftOffline, type RecordingFile } from './netApi';
 export type { RecordingLabelView } from './recordingFeed';
-export { type ConnectionStatus, type Net, startNet } from './sync';
+export { type ConnectionStatus, type Net, type NetHooks, startNet } from './sync';
 export type { HuddleView, ZoneAdminView } from './zoneFeed';
