@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the reaction badges; needs a running host. The palette validation and rate rule live in @kaede/shared, unit-tested there
 import { isReactionEmoji, type ReactionEmoji } from '@kaede/shared';
 import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';

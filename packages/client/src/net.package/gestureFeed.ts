@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the avatar poses; needs a running host. The vocabulary validation and the state/transient split live in @kaede/shared, unit-tested there
 import { isGestureKind, isTransientGesture } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';

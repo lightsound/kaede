@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the admission rules; needs a running host. The rules themselves (decideAdmission, evaluateJoin, asMembership, guestsAllowedFrom) are pure and unit-tested in @kaede/shared
 import {
   type Admission,
   asMembership,

@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the chat scope selector; needs a running host. The rules it projects (which scopes exist, what each is called) are chatScopeOptions / chatScopeTag in @kaede/shared, unit-tested there
 import {
   type ChatScope,
   chatScopeOptions,
