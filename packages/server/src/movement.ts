@@ -174,7 +174,7 @@ function clearGestureOnMove(
 
 // Teleports the sender through a portal it is standing in (ROADMAP Phase 3
 // ポータル移動): the one write path that changes a player's mapId. The
-// client flushes its pending inputs before calling (sync.ts), so the
+// client flushes its pending inputs before calling (inputSender.ts), so the
 // deterministic replay has already put the row exactly where the sender's
 // prediction stood and evaluatePortalUse (pure, unit-tested in
 // @kaede/shared) re-checks the same geometry the client's intent detection

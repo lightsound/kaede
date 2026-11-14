@@ -1,4 +1,4 @@
-// fallow-ignore-file coverage-gaps -- spawns a real Web Worker; the decision of WHEN a heartbeat is due lives in sync.ts against HEARTBEAT_INTERVAL_MS, and what the server does with one is evaluateInputBatch, unit-tested in @kaede/shared
+// fallow-ignore-file coverage-gaps -- spawns a real Web Worker; the decision of WHEN a heartbeat is due lives in inputSender.ts against HEARTBEAT_INTERVAL_MS, and what the server does with one is evaluateInputBatch, unit-tested in @kaede/shared
 /**
  * 静止中の生存証明(ハートビート)を予定するタイマー。
  *
