@@ -94,7 +94,7 @@ export const HEARTBEAT_INTERVAL_MS = 120_000;
 /**
  * ハートビートの送りどきを見る判定周期 (ms)。Worker がこの間隔で刻み、
  * メインスレッドが「最後の送信から HEARTBEAT_INTERVAL_MS 以上か」を判定する
- * (heartbeat.ts / sync.ts)。粒度が粗いほど実効間隔が延びるため、上の
+ * (heartbeat.ts / inputSender.ts)。粒度が粗いほど実効間隔が延びるため、上の
  * 掃除余裕の式に含める。
  */
 export const HEARTBEAT_CHECK_INTERVAL_MS = 60_000;

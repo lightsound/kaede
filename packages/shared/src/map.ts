@@ -238,7 +238,7 @@ export interface PortalCallRequest extends PortalIntentRequest {
 /**
  * The whole client-side rule for firing one enter_portal call: the intent
  * (detectPortalIntent) gated by the in-flight window above. Pure so the
- * rule is unit-tested here; the caller (sync.ts) only supplies the live
+ * rule is unit-tested here; the caller (inputSender.ts) only supplies the live
  * clock and connection.
  */
 export function decidePortalCall(request: PortalCallRequest): number | undefined {

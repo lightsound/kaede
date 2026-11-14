@@ -1,8 +1,8 @@
 /**
  * 接続ライフサイクル(再試行・アイドル休止・世代管理)の純粋な状態遷移関数。
  *
- * sync.ts はこの transition が返した効果(エフェクト)を実行するだけの薄い
- * シェルになる: タイマー・ソケット・ステータス通知という副作用はすべて
+ * lifecycleDriver.ts はこの transition が返した効果(エフェクト)を実行する
+ * だけの薄いシェルになる: タイマー・ソケット・ステータス通知という副作用はすべて
  * エフェクトとして宣言され、「いつ何をしてよいか」の判断はここに閉じる。
  * 切り出しの動機は2つ(ROADMAP Phase 2):
  * ① 再試行・休止・世代のからみ合う規則を実時間なしで単体テストできること。
@@ -333,7 +333,7 @@ function onDispose(d: Draft): void {
 
 /**
  * One handler per event kind, each receiving its narrowed payload — the
- * sync.ts EffectRunners shape. A map rather than the original `switch`: at
+ * lifecycleDriver.ts EffectRunners shape. A map rather than the original `switch`: at
  * ten uniform `case` arms the switch became two structurally identical
  * halves that fallow's clone detector rightly flags, while the map stays
  * duplication-free and keeps the same compile-time exhaustiveness (a new
@@ -357,7 +357,7 @@ const eventHandlers: {
 /**
  * Calls the handler matching the event's kind. Generic over the kind so the
  * indexed access stays correlated — the handler receives exactly its own
- * payload type, with no cast (the sync.ts runEffect precedent).
+ * payload type, with no cast (the lifecycleDriver.ts runEffect precedent).
  */
 function runEventHandler<K extends LifecycleEvent['kind']>(
   d: Draft,
