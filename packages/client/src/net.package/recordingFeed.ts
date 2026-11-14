@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the recording-label list; needs a running host. It carries no rules of its own — the rows are published verbatim, newest first
 import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';
 

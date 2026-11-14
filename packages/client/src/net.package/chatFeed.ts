@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the chat log and bubbles; needs a running host. The log operations it applies are pure and unit-tested (chatLog.ts), as are the scope rules it composes labels with (chat.ts in @kaede/shared)
 import {
   CHAT_SCOPE_MAP,
   chatScopeTag,

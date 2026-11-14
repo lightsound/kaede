@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB row events to the own-group signal; needs a running host. It carries no rules of its own — the value is the own group_member row's groupId, verbatim
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';

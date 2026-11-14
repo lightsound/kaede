@@ -1,4 +1,3 @@
-// fallow-ignore-file coverage-gaps -- wires live SpacetimeDB player rows to the game and the remote views; needs a running host. What it acts on is pure and unit-tested: the prediction (prediction.ts) and the remote interpolation (remoteView.ts)
 import { mapFor, type StatusView, stateFromRow, statusLabel } from '@kaede/shared';
 import type { Identity } from 'spacetimedb';
 import type { GameApp } from '../game.package';
