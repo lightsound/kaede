@@ -368,9 +368,10 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
    bunx --cwd infra cf deploy
    ```
 
-   `cf` は現行ベータ（1.0.0-beta.30）ではビルドをインストール済みの wrangler に委譲する
+   `cf` は現行 RC（1.0.0-rc.1）でもビルドをインストール済みの wrangler に委譲する
    （`cf migrate` が選んだ "wrangler" バンドラー経路）ため、移行シム `infra/wrangler.config.ts`
-   と wrangler の devDependency は引き続き必要です。
+   と wrangler の devDependency は引き続き必要です。委譲先 wrangler は 4.163.0 以上が
+   必須です（cf 1.0.0-rc.1 の要件のため、infra のピンも 4.163.0 に揃えています）。
 
    cf で上書きした後も、次の Alchemy デプロイで再収束する想定です（アップロード経路は
    wrangler 共通のため。cf 経路での実測は未実施）。
