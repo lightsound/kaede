@@ -22,9 +22,6 @@ packages/*/.alchemy/
 # 通話 API Worker のローカル開発シークレット(README「通話 API Worker」)。
 infra/.dev.vars
 
-# wrangler dev の作業キャッシュ(通話 API Worker のローカル開発で生成される)。
-infra/.wrangler/
-
 # cf deploy のビルド出力(infra/cloudflare.config.ts での手動デプロイ時に生成される)。
 infra/.cloudflare/
 

@@ -70,7 +70,7 @@
       { "name": "client", "patterns": ["packages/client/**"] },
       { "name": "server", "patterns": ["packages/server/**"] },
       { "name": "e2e", "patterns": ["packages/e2e/**"] },
-      // IaC (Alchemy / cf / wrangler configs). docs/VISION.md keeps Alchemy and
+      // IaC (Alchemy / cf configs). docs/VISION.md keeps Alchemy and
       // Effect inside this directory, so no other zone may import it.
       { "name": "infra", "patterns": ["infra/**"] },
     ],

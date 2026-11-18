@@ -21,7 +21,6 @@
     "cf": "1.0.0-rc.1",
     "cross-env": "^10.1.0",
     "effect": "4.1.4",
-    "typescript": "~7.0.2",
-    "wrangler": "4.163.0"
+    "typescript": "~7.0.2"
   }
 }

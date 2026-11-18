@@ -359,22 +359,23 @@ CI を経由できない・したくないとき（Actions 障害、緊急ロー
 
 3. **手動デプロイの逃げ道（cf CLI）**
 
-   Alchemy が使えないとき（ベータ起因の不具合など）は、同じ Worker に `cf` CLI（wrangler の
-   後継）で直接デプロイできます。設定は `infra/cloudflare.config.ts`（`alchemy.run.ts` と
+   Alchemy が使えないとき（ベータ起因の不具合など）は、同じ Worker に `cf` CLI
+   で直接デプロイできます。設定は `infra/cloudflare.config.ts`（`alchemy.run.ts` と
    同じ構成。乖離させないこと）。
 
    ```sh
    bun run --filter @kaede/client build
-   bunx --cwd infra cf deploy
+   bunx --cwd infra cf deploy ../packages/client/dist
    ```
 
-   `cf` は現行 RC（1.0.0-rc.1）でもビルドをインストール済みの wrangler に委譲する
-   （`cf migrate` が選んだ "wrangler" バンドラー経路）ため、移行シム `infra/wrangler.config.ts`
-   と wrangler の devDependency は引き続き必要です。委譲先 wrangler は 4.163.0 以上が
-   必須です（cf 1.0.0-rc.1 の要件のため、infra のピンも 4.163.0 に揃えています）。
+   ビルド済みのクライアント dist をそのまま渡す assets-only 形式です（この
+   Worker はサーバーコードを持たず、アセット構成は `cloudflare.config.ts` 側が
+   持ちます）。`cf deploy` にビルドを委譲させないため、wrangler は依存に
+   含めていません。
 
-   cf で上書きした後も、次の Alchemy デプロイで再収束する想定です（アップロード経路は
-   wrangler 共通のため。cf 経路での実測は未実施）。
+   cf で上書きした後も、次の Alchemy デプロイで再収束する想定です（どちらも
+   同じ Worker・同じアセット構成を対象とするため。cf 経路の実測は dry-run
+   までで、実際のアップロードは未実施）。
 
 4. **Alchemy のステート管理**
 
