@@ -23,9 +23,9 @@ export default defineConfig({
     // (WorkersDevConfig.enabled: true).
     workersDev: true,
     assets: {
-      // The directory itself is declared in wrangler.config.ts
-      // (assetsDirectory): `cf deploy` delegates the build to wrangler,
-      // which reads that shim.
+      // The assets directory is not declared in config: the escape-hatch
+      // procedure passes the prebuilt client dist to `cf deploy` as a
+      // positional argument (assets-only deploy; see README「デプロイ」).
       notFoundHandling: 'single-page-application',
     },
   },
