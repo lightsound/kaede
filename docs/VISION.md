@@ -78,7 +78,7 @@ Gather や oVice のように「同じ空間に人がいる感覚」を作るツ
 | 課金（将来）             | **Clerk Billing**                                                                                           |
 | i18n                     | **Paraglide JS（確定）**                                                                                    |
 | E2E テスト               | **Playwright を CI で**                                                                                     |
-| 内部モジュール境界       | **ImportLint**（`@import-lint/cli`、v0.1.8 を厳密ピン留め）                                                 |
+| 内部モジュール境界       | **ImportLint**（`@import-lint/cli`、v0.1.10 を厳密ピン留め）                                                |
 | マップ制作               | コード定義（開発者が作る）                                                                                  |
 | 名前・ドメイン           | **kaede（名前確定）／ドメイン取得は実ユーザー投入直前に後置**                                               |
 

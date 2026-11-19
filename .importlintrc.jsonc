@@ -51,7 +51,7 @@
 
       // How a bare specifier matching the importer's own package name is
       // classified. "external" (never checked) | "internal" (checked normally).
-      "treatSelfReferenceAs": "external",
+      "treatSelfReferenceAs": "internal",
 
       // Generated SpacetimeDB bindings are consumed as an opaque public API;
       // they must not acquire hand-written access annotations.
