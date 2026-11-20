@@ -10,28 +10,22 @@ import type { CollisionMap, PlayerInput, PlayerState, Rect } from './types';
 export const WORLD_WIDTH = 3840;
 export const WORLD_HEIGHT = 720;
 
-/** y coordinate of the walkable ground surface (shared by every map). */
 export const GROUND_TOP = 656;
 
-/** A player's center y while standing on the ground slab. */
 const STANDING_Y = GROUND_TOP - PLAYER_HALF_H;
 
-/** Where new players appear (AABB center), on the default map. */
 export const SPAWN_X = 200;
 export const SPAWN_Y = STANDING_Y;
 
-/** Where a portal drops the traveler: a map, and a standing position on it. */
 export interface PortalTarget {
   readonly mapId: number;
   readonly x: number;
   readonly y: number;
 }
 
-/** Portal trigger size: wide enough to stop in at walk speed, gate-tall. */
 const PORTAL_W = 80;
 const PORTAL_H = 96;
 
-/** A ground-level portal trigger centered on `centerX`. */
 function groundPortalRect(centerX: number): Rect {
   return { x: centerX - PORTAL_W / 2, y: GROUND_TOP - PORTAL_H, w: PORTAL_W, h: PORTAL_H };
 }
@@ -48,11 +42,9 @@ export interface Portal {
   /** The trigger area. Keep it clear of rope columns: up grabs ropes first. */
   readonly rect: Rect;
   readonly target: PortalTarget;
-  /** Destination name shown at the portal (ポータルの行き先表示). */
   readonly label: string;
 }
 
-/** The map new players spawn on, and the fallback for unknown map ids. */
 export const DEFAULT_MAP_ID = 0;
 
 /**
@@ -102,9 +94,9 @@ const PLAZA: WorldMap = {
       { x: 3260, y: 540, w: 280, h: 24 },
     ],
     ropes: [
-      { x: 550, top: 540, bottom: STANDING_Y }, // ground → platform at 420
-      { x: 990, top: 440, bottom: STANDING_Y }, // ground → platform at 860
-      { x: 1400, top: 300, bottom: 540 - PLAYER_HALF_H }, // platform at 1320 → high platform
+      { x: 550, top: 540, bottom: STANDING_Y },
+      { x: 990, top: 440, bottom: STANDING_Y },
+      { x: 1400, top: 300, bottom: 540 - PLAYER_HALF_H },
     ],
   },
   portals: [
@@ -136,9 +128,7 @@ const MEETING_FLOOR: WorldMap = {
       { x: 1080, y: 440, w: 280, h: 24 },
       { x: 1560, y: 540, w: 240, h: 24 },
     ],
-    ropes: [
-      { x: 650, top: 540, bottom: STANDING_Y }, // ground → platform at 520
-    ],
+    ropes: [{ x: 650, top: 540, bottom: STANDING_Y }],
   },
   portals: [
     {
@@ -149,7 +139,6 @@ const MEETING_FLOOR: WorldMap = {
   ],
 };
 
-/** Every map, indexed by its id (MAPS[id].id === id — fixed by unit test). */
 export const MAPS: readonly WorldMap[] = [PLAZA, MEETING_FLOOR];
 
 /**
@@ -179,7 +168,6 @@ export const DEFAULT_MAP: CollisionMap = PLAZA.collision;
  * an exact re-check, with no position slack to tune.
  */
 
-/** True when the player AABB centered on `state` overlaps the portal's trigger area. */
 function touchesPortal(state: PlayerState, portal: Portal): boolean {
   return overlaps({ cx: state.x, cy: state.y, hw: PLAYER_HALF_W, hh: PLAYER_HALF_H }, portal.rect);
 }
@@ -196,12 +184,9 @@ export function portalIndexAt(state: PlayerState, map: WorldMap): number | undef
   return index >= 0 ? index : undefined;
 }
 
-/** One tick's inputs as the intent rule reads them (see detectPortalIntent). */
 export interface PortalIntentRequest {
-  /** This tick's input and the previous tick's, for the press edge. */
   input: PlayerInput;
   prevInput: PlayerInput;
-  /** The post-step predicted state of this tick. */
   state: PlayerState;
   map: WorldMap;
 }
@@ -228,10 +213,8 @@ export function detectPortalIntent(request: PortalIntentRequest): number | undef
  */
 export const PORTAL_PENDING_TIMEOUT_MS = 2000;
 
-/** detectPortalIntent's inputs plus the in-flight-call state (see decidePortalCall). */
 export interface PortalCallRequest extends PortalIntentRequest {
   nowMs: number;
-  /** When the previous enter_portal call went out; undefined when none is pending. */
   pendingSinceMs: number | undefined;
 }
 
@@ -251,18 +234,14 @@ export function decidePortalCall(request: PortalCallRequest): number | undefined
   return detectPortalIntent(request);
 }
 
-/** Why a enter_portal call was refused (the server logs it; honest clients never see one). */
 export type PortalRejectReason = 'no-such-portal' | 'not-at-portal';
 
 export type PortalUseVerdict =
   | { ok: true; target: PortalTarget }
   | { ok: false; reason: PortalRejectReason };
 
-/** What ruling on one enter_portal call needs (see evaluatePortalUse). */
 export interface PortalUseRequest {
-  /** The sender's authoritative row state, on `map`. */
   state: PlayerState;
-  /** The portal index the client resolved (into the map the row is on). */
   portalId: number;
   map: WorldMap;
 }
@@ -292,7 +271,7 @@ export function evaluatePortalUse(request: PortalUseRequest): PortalUseVerdict {
  * The burst covers honest play (a quick there-and-back, a mis-tap), the
  * sustained rate bounds the hostile case (the status_guard reasoning).
  */
-const PORTAL_SEND_COST_MICROS = 1_000_000n; // sustained 1 use/second
+const PORTAL_SEND_COST_MICROS = 1_000_000n;
 const PORTAL_BURST_USES = 5;
 
 /**

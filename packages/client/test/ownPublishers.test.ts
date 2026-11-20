@@ -37,14 +37,12 @@ describe('publishOwnName', () => {
 
   it('reports a lost row as undefined without blanking the label', () => {
     const { publishers, patches, names } = harness();
-    // A fresh stack starts at "no row known": nothing to report yet.
     publishers.publishOwnName(undefined);
     expect(names).toEqual([]);
     publishers.publishOwnName('Aoi');
     publishers.publishOwnName(undefined);
     publishers.publishOwnName(undefined);
     expect(names).toEqual(['Aoi', undefined]);
-    // The label keeps its last text while the row is gone.
     expect(patches).toEqual([{ name: 'Aoi' }]);
   });
 });
@@ -54,8 +52,6 @@ describe('publishOwnStatus', () => {
     const { publishers, patches, statuses } = harness();
     const away: StatusView = { availability: 'away', text: '' };
     publishers.publishOwnStatus(away);
-    // Same value in a fresh object (the session-entry double report) is
-    // still the same status.
     publishers.publishOwnStatus({ availability: 'away', text: '' });
     expect(patches).toEqual([{ status: statusLabel(away), availability: 'away' }]);
     expect(statuses).toEqual([away]);

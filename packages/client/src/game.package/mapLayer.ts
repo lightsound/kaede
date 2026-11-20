@@ -1,28 +1,20 @@
 // fallow-ignore-file coverage-gaps -- draws the map geometry and portals as PixiJS graphics; needs a WebGL canvas. The map data and the rules it draws (collision, portal triggers) live in @kaede/shared (map.ts, physics.ts), unit-tested there
 
-// The static map visuals: the collision geometry and the portals, built
-// once per map. GameApp.ts parks the layer at the bottom of the world
-// container and rebuilds it whole on every map switch.
 import { type CollisionMap, PLAYER_HALF_H, type Portal, type WorldMap } from '@kaede/shared';
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 
 const SOLID_COLOR = 0x3b4252;
-const PLATFORM_COLOR = 0x5e81ac; // one-way platforms: lighter than solid ground
+const PLATFORM_COLOR = 0x5e81ac;
 const ROPE_COLOR = 0xd8a657;
 const ROPE_WIDTH = 4;
 
 const PORTAL_COLOR = 0x7aa2f7;
-// The portal's destination and the up-key affordance, hovering over the gate.
 const PORTAL_LABEL_STYLE = new TextStyle({
   fill: 0xbdd3ff,
   fontSize: 12,
   fontFamily: 'sans-serif',
 });
 
-/**
- * One portal's visuals: the glowing gate over its trigger area and the
- * destination label (with the up-key affordance) above it.
- */
 function drawPortal(layer: Container, portal: Portal): void {
   const { rect } = portal;
   const gate = new Graphics()
@@ -36,10 +28,6 @@ function drawPortal(layer: Container, portal: Portal): void {
   layer.addChild(gate, label);
 }
 
-/**
- * The collision geometry as one Graphics: ropes hang behind everything;
- * platforms and the ground slab draw on top of them.
- */
 function drawCollision(collision: CollisionMap): Graphics {
   const gfx = new Graphics();
   for (const r of collision.ropes) {

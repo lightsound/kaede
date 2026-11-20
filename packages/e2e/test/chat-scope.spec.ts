@@ -65,18 +65,15 @@ async function expectUnseen(page: Page, text: string, timeout = 5_000): Promise<
   await expect(page.getByText(text, { exact: false })).toHaveCount(0, { timeout });
 }
 
-/** Picks the send scope by the label the selector renders (see ScopeRow). */
 async function pickScope(page: Page, label: string): Promise<void> {
   await page.getByRole('radio', { name: label, exact: true }).check({ timeout: 15_000 });
 }
 
-/** Sends `text` under the scope labelled `scopeLabel`. */
 async function sendScoped(page: Page, scopeLabel: string, text: string): Promise<void> {
   await pickScope(page, scopeLabel);
   await sendChat(page, text);
 }
 
-/** Walks into the portal's trigger column and stops there (the map-travel routine). */
 async function standInPortal(page: Page): Promise<void> {
   for (let i = 0; i < 5; i++) {
     const x = await localX(page);
@@ -90,7 +87,6 @@ async function standInPortal(page: Page): Promise<void> {
   throw new Error('could not stop inside the portal trigger');
 }
 
-/** One up-press, held across a few ticks so the 60Hz sampler cannot miss it. */
 async function pressUp(page: Page): Promise<void> {
   await page.keyboard.down('ArrowUp');
   await page.waitForTimeout(150);
@@ -129,19 +125,14 @@ test('マップスコープは同じマップにだけ届き、ポータル移�
     const nonce = Date.now().toString(36);
     const plazaLine = `広場のみんなへ ${nonce}`;
     await sendScoped(pageA, PLAZA_NAME, plazaLine);
-    // The line carries its scope marker, so a reader can tell who heard it.
     await expect(pageB.getByRole('log')).toContainText(`[${PLAZA_NAME}] `, { timeout: 10_000 });
     await expect(pageB.getByRole('log')).toContainText(plazaLine, { timeout: 10_000 });
 
-    // B takes the portal to the meeting floor: the plaza's chat is not part
-    // of that map, so the line goes with the subscription.
     await standInPortal(pageB);
     await pressUp(pageB);
     await expect.poll(() => mapId(pageB), { timeout: 15_000 }).toBe(1);
     await expectUnseen(pageB, plazaLine);
 
-    // A keeps talking to the plaza; B, a floor away, hears none of it — but
-    // still hears 全体, which is what makes the negative meaningful.
     const afterLine = `まだ広場にいる人へ ${nonce}`;
     await sendScoped(pageA, PLAZA_NAME, afterLine);
     const spaceLine = `全員へ ${nonce}`;
@@ -149,8 +140,6 @@ test('マップスコープは同じマップにだけ届き、ポータル移�
     await expect(pageB.getByRole('log')).toContainText(spaceLine, { timeout: 10_000 });
     await expectUnseen(pageB, afterLine);
 
-    // Returning through the paired portal re-subscribes the plaza, and the
-    // retained lines arrive with the seed.
     await pressUp(pageB);
     await expect.poll(() => mapId(pageB), { timeout: 15_000 }).toBe(0);
     await expect(pageB.getByRole('log')).toContainText(afterLine, { timeout: 15_000 });
@@ -197,8 +186,6 @@ test('クローズドな会話は非メンバーに届かず、参加で届き�
     await pageA.getByRole('button', { name: 'ここで立ち話' }).click();
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBe(closedLabel);
 
-    // A speaks into the closed group. Its own log shows it under the
-    // group's name; B's client is handed nothing at all.
     const secret = `ここだけの話 ${nonce}`;
     await sendScoped(pageA, groupName, secret);
     await expect(pageA.getByRole('log')).toContainText(secret, { timeout: 10_000 });
@@ -221,21 +208,15 @@ test('クローズドな会話は非メンバーに届かず、参加で届き�
     expect(await groupChatRows(pageB)).toBe(0);
     await expectUnseen(pageB, secret);
 
-    // B joins the huddle it was standing next to: membership is what the
-    // filter reads, so the retained history arrives immediately.
     await pageB.getByRole('button', { name: `${closedLabel} に参加` }).click({ timeout: 15_000 });
     await expect.poll(() => localZone(pageB), { timeout: 15_000 }).toBe(closedLabel);
     await expect(pageB.getByRole('log')).toContainText(secret, { timeout: 15_000 });
     expect(await groupChatRows(pageB)).toBeGreaterThan(0);
 
-    // B walks out of the conversation: the server-side walk-away rule drops
-    // the membership, and the rows leave B's cache with it.
     const start = await localX(pageB);
     await walkWhile(pageB, 'ArrowRight', (x) => x >= start + HUDDLE_LEAVE_DISTANCE + 100);
     await expect.poll(() => localZone(pageB), { timeout: 15_000 }).toBeUndefined();
     await expectUnseen(pageB, secret, 15_000);
-    // A, still inside, keeps its copy: this was a visibility change, not a
-    // deletion.
     await expect(pageA.getByRole('log')).toContainText(secret);
   } finally {
     await contextA.close();
@@ -274,8 +255,6 @@ test('オープンな会話グループの発言は非メンバーにも届く',
       .poll(() => localZone(pageA), { timeout: 15_000 })
       .toBe(huddleLabel(groupName, false));
 
-    // B walks away first, so nothing about proximity can be mistaken for
-    // membership; it is a plain bystander on the same map.
     const start = await localX(pageB);
     await walkWhile(pageB, 'ArrowRight', (x) => x >= start + HUDDLE_LEAVE_DISTANCE + 100);
     expect(await localZone(pageB)).toBeUndefined();
@@ -320,19 +299,15 @@ test('下書き中に会話グループが消えた送信は拒否され、全�
       .poll(() => localZone(page), { timeout: 15_000 })
       .toBe(huddleLabel(groupName, true));
 
-    // Pick the group scope and type the draft — but do not send yet.
     await pickScope(page, groupName);
     const secret = `送ってはいけない話 ${nonce}`;
     await page.getByLabel('チャット入力').fill(secret);
 
-    // The huddle disbands under the draft (leaving a solo huddle deletes
-    // it), and the group scope leaves the offered list.
     await page.getByRole('button', { name: '抜ける' }).click();
     await expect(page.getByRole('radio', { name: groupName, exact: true })).toHaveCount(0, {
       timeout: 15_000,
     });
 
-    // Enter now must refuse — not fall back to 全体 — and keep the draft.
     await page.getByLabel('チャット入力').press('Enter');
     await expect(page.getByText('選択していた送信先が無くなった')).toBeVisible();
     await expect(page.getByLabel('チャット入力')).toHaveValue(secret);

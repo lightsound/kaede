@@ -1,39 +1,19 @@
-/**
- * Manifest interpretation for the asset studio (Phase 5 ①b⑷ — the
- * read-only inspection viewer): turns the raw glob records that
- * game.package enumerates (parsed manifest JSON + bundled PNG URLs, both
- * keyed by `./dir/file` paths) into a typed catalog, and runs the
- * read-side integrity checks — the pose-diff against the whole roster
- * (ROADMAP ①b(b): manifest poses の差集合) plus the plumbing ones a
- * broken import would cause (referenced PNG absent, duplicate id,
- * unknown type). Pure functions only; the DOM side just renders the
- * result.
- */
-
-/** One drawable frame a manifest points at (a pose cell, an item, a hand layer). */
 export interface AssetFrame {
   file: string;
-  /** The bundled PNG's served URL, or undefined when the file is absent (also reported as a problem). */
   url: string | undefined;
-  /** [width, height] in source pixels (4x display resolution), when the manifest carries it. */
   size: readonly [number, number] | undefined;
-  /** Anchor points by name (neck / hand / grip …), in source pixels from the frame's top-left. */
   anchors: Readonly<Record<string, readonly [number, number]>>;
 }
 
-/** One avatar-body manifest, poses in manifest order. */
 export interface AvatarAsset {
   id: string;
   name: string;
   dir: string;
   poses: ReadonlyArray<{ readonly pose: string; readonly frame: AssetFrame }>;
-  /** The carry sheets' hand overlay (manifest handLayer), when present. */
   handLayer: AssetFrame | undefined;
-  /** Poses other avatars declare but this one lacks (the ①b(b) set difference). */
   missingPoses: readonly string[];
 }
 
-/** One held-item manifest. */
 export interface ItemAsset {
   id: string;
   name: string;
@@ -58,11 +38,8 @@ export interface AssetCatalog {
    * the type once more characters gain gesture sheets.
    */
   gestures: readonly AvatarAsset[];
-  /** The worn overlays (type headgear — the busy headphones), item-shaped. */
   headgear: readonly ItemAsset[];
-  /** Every pose name any avatar-body declares, in first-seen order — the diff baseline. */
   poseUnion: readonly string[];
-  /** Human-readable integrity findings; empty when every manifest checks out. */
   problems: readonly string[];
 }
 
@@ -70,7 +47,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** A two-number tuple ([x, y] anchor or [w, h] size), or undefined. */
 function asPair(value: unknown): readonly [number, number] | undefined {
   if (!Array.isArray(value) || value.length !== 2) return undefined;
   const [a, b] = value;
@@ -87,7 +63,6 @@ function parseAnchors(value: unknown): Record<string, readonly [number, number]>
   return anchors;
 }
 
-/** The mutable state threaded through one buildCatalog run. */
 interface Collect {
   avatars: AvatarAsset[];
   items: ItemAsset[];
@@ -97,11 +72,6 @@ interface Collect {
   seenIds: Map<string, string>;
 }
 
-/**
- * Reads one frame object ({file, size, anchors}) and resolves its PNG
- * against the bundled URLs; a missing file or PNG is reported under
- * `label` (e.g. `./avatar/manifest.json poses.stand`).
- */
 function parseFrame(
   value: unknown,
   dir: string,
@@ -118,7 +88,6 @@ function parseFrame(
   return { file: value.file, url, size: asPair(value.size), anchors: parseAnchors(value.anchors) };
 }
 
-/** Reads the identity fields every manifest type shares, or reports why not. */
 function parseHeader(
   manifest: Record<string, unknown>,
   path: string,
@@ -135,7 +104,6 @@ function parseHeader(
   return { id, name: typeof name === 'string' ? name : id };
 }
 
-/** Where one manifest sits: its parsed JSON, glob path, directory, and the PNG URL space. */
 interface ManifestSite {
   manifest: Record<string, unknown>;
   path: string;
@@ -170,12 +138,6 @@ function parseItem(site: ManifestSite, collect: Collect, into: ItemAsset[]): voi
   if (frame) into.push({ ...header, dir: site.dir, frame, carryStyle });
 }
 
-/**
- * The ①b(b) missing-pose detection: the baseline vocabulary is the union
- * of every avatar's declared poses (first-seen order), and each avatar's
- * gap is the set difference against it. Returns the union and rewrites
- * each avatar with its diff filled in.
- */
 function diffPoses(avatars: readonly AvatarAsset[]): {
   poseUnion: readonly string[];
   avatars: readonly AvatarAsset[];
@@ -234,9 +196,6 @@ export function buildCatalog(
   // glob-path order — the path sort would lead with the carry variants.
   const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
   const { poseUnion, avatars } = diffPoses([...collect.avatars].sort(byId));
-  // Gesture sheets diff within their own type: once several characters
-  // carry gesture sheets, a missing dance frame shows up here the way a
-  // missing walk frame shows up for the bodies.
   const gestureDiff = diffPoses([...collect.gestures].sort(byId));
   return {
     avatars,

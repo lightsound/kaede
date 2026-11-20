@@ -69,12 +69,9 @@ function useWalkPose(playing: boolean): string {
       cancelAnimationFrame(raf);
     };
   }, [playing]);
-  // Paused reads 'stand' by derivation, not by resetting state — the effect
-  // only owns the raf loop.
   return playing ? pose : 'stand';
 }
 
-/** The roster-wide inspection summary: counts, pose vocabulary, gaps, integrity findings. */
 function SummaryBar(props: { catalog: AssetCatalog }) {
   const { catalog } = props;
   const gaps = catalog.avatars.filter((avatar) => avatar.missingPoses.length > 0);
@@ -102,7 +99,6 @@ function SummaryBar(props: { catalog: AssetCatalog }) {
   );
 }
 
-/** The playback / anchor-marker controls row. */
 function Controls(props: {
   playing: boolean;
   onPlayingChange: (on: boolean) => void;
@@ -139,14 +135,6 @@ function Controls(props: {
   );
 }
 
-/**
- * The read-only asset inspection viewer (Phase 5 ①b⑷ / ROADMAP ①b(b)):
- * every character × every pose from the bundled manifests, live walk
- * playback on the real rig cadence, side-by-side comparison, and the
- * missing-pose detection. Renders only what ships in the bundle — no
- * SpacetimeDB connection, no writes; the ordering console the roadmap
- * plans next lands as a sibling view in this package.
- */
 export function AssetStudio() {
   const [catalog, setCatalog] = useState<AssetCatalog>();
   const [playing, setPlaying] = useState(true);

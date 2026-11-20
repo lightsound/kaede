@@ -19,12 +19,11 @@ const AWS_DOC_CREDENTIALS = {
   accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
   secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
 };
-const AWS_DOC_NOW_MS = Date.UTC(2013, 4, 24); // 20130524T000000Z
+const AWS_DOC_NOW_MS = Date.UTC(2013, 4, 24);
 const AWS_DOC_REGION = 'us-east-1';
 
 describe('hmacSha256Hex', () => {
   it('RFC 4231 のテストベクタに一致する(純 TS 実装の正しさの根拠)', () => {
-    // Test case 2: ASCII key and data.
     expect(hmacSha256Hex('Jefe', 'what do ya want for nothing?')).toBe(
       '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843',
     );

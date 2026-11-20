@@ -27,10 +27,6 @@ export const IDLE_DISCONNECT_MS = 60 * 60_000;
 export const IDLE_CHECK_INTERVAL_MS = 1000;
 
 export interface IdleMonitor {
-  /**
-   * ユーザー操作を記録する。休止中に呼ばれたら 'resume'(再接続せよ)を返し、
-   * 監視は稼働状態に戻る。'none' は何もしない。
-   */
   activity(now: number): 'resume' | 'none';
   /**
    * 周期チェック。最後の操作からタイムアウト以上経っていれば 'suspend'

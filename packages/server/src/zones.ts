@@ -24,7 +24,6 @@ import { deleteGroupCall, recomputeZoneOccupancyOnMap } from './occupancy';
 import { spacetimedb } from './tables';
 import { type Ctx, requireAdmin } from './world';
 
-/** The zone-kind group row `zoneId` names, or a loud refusal. */
 function requireZone(ctx: Ctx, zoneId: bigint, reducerName: string) {
   const row = ctx.db.conversationGroup.id.find(zoneId);
   if (row === null || row.kind !== GROUP_KIND_ZONE) {
@@ -45,12 +44,10 @@ function senderPlacement(ctx: Ctx, reducerName: string): { x: number; y: number;
   return { x: row.x, y: row.y, mapId: row.mapId };
 }
 
-/** How many conversation-group rows exist (the ZONE_MAX cap counts all kinds). */
 function groupCount(ctx: Ctx): number {
   return Number(ctx.db.conversationGroup.count());
 }
 
-/** The rect a zone occupies centered on (centerX, centerY), clamped into map `mapId`. */
 function placeRect(mapId: number, centerX: number, centerY: number, w: number, h: number) {
   const bounds = mapFor(mapId).collision;
   return clampZoneRect({

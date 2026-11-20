@@ -30,7 +30,6 @@ function warmInCallPanel(): void {
   void import('./InCallPanel');
 }
 
-// Where the dock sits is App's: the bottom-left column (leftColumn.ts).
 const panelStyle: CSSProperties = {
   ...UI_STACKED_PANEL_STYLE,
   maxWidth: 420,
@@ -54,7 +53,6 @@ const buttonStyle: CSSProperties = {
   flexShrink: 0,
 };
 
-/** The out-of-call offer: one button, plus the last failure if any. */
 function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () => void }) {
   return (
     <div style={panelStyle}>
@@ -68,13 +66,6 @@ function IdlePanel({ notice, onJoin }: { notice: string | undefined; onJoin: () 
   );
 }
 
-/**
- * Where the join currently waits, for the staged progress copy (増分⑤ —
- * the single 接続中… hid which half was slow): 'ticket' is the
- * join_group_call procedure (~0.7–1.4s measured; longer when it
- * provisions the meeting), 'dial' is the SDK init + WebRTC handshake
- * (~2–4s measured — the irreducible floor, provider-side).
- */
 type JoinStage = 'ticket' | 'dial';
 
 const JOINING_FACES: Record<JoinStage, string> = {
@@ -82,7 +73,6 @@ const JOINING_FACES: Record<JoinStage, string> = {
   dial: '📞 通話サーバーに接続しています…',
 };
 
-/** The dock's phase: out of a call, dialing, or in one. */
 type CallPhase =
   | { kind: 'idle'; notice?: string }
   | { kind: 'joining'; stage: JoinStage }
@@ -104,16 +94,12 @@ function dockHidden(connected: boolean, ownGroupId: bigint | undefined, phase: C
   return !connected || ownGroupId === undefined;
 }
 
-/** What the dock calls on the net facade (the HuddleActions shape). */
 export interface CallDockNet {
-  /** NetApi.joinGroupCall — the whole 増分⑥ join procedure. */
   joinGroupCall(): Promise<{ groupId: bigint; authToken: string }>;
-  /** NetApi.startGroupRecording / stopGroupRecording (増分④→⑥). */
   startGroupRecording(groupId: bigint): Promise<void>;
   stopGroupRecording(groupId: bigint): Promise<void>;
 }
 
-/** Everything the join sequence below needs from the mounted dock. */
 interface JoinContext {
   net: CallDockNet;
   setPhase: (update: (current: CallPhase) => CallPhase) => void;
@@ -216,14 +202,12 @@ export function CallDock({
    * server-side.
    */
   member: boolean;
-  /** The own-group signal (NetHooks.onOwnGroup). */
   ownGroupId: bigint | undefined;
   net: CallDockNet;
 }) {
   const [phase, setPhase] = useState<CallPhase>({ kind: 'idle' });
   // The live meeting for the unmount cleanup — state would be stale there.
   const meetingRef = useRef<Meeting>(undefined);
-  // See JoinContext.joiningRef.
   const joiningRef = useRef(false);
 
   // The auto-leave watch: a call is the GROUP's, so the session ends the

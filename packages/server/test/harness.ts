@@ -27,18 +27,12 @@ import type { Ctx } from '../src/world';
 
 export type Harness = ModuleTestHarness<InferSchema<typeof schema>>;
 
-/** A harness on a fresh datastore, its clock pinned at `millis`. */
 export function makeHarness(millis = 100_000): Harness {
   return createModuleTestHarness(schema, moduleExports, { clock: new TestClock(at(millis)) });
 }
 
 const ISSUER = 'https://clerk.kaede.town';
 
-/**
- * An authenticated test auth for the member whose provider subject is
- * `sub`. The harness derives the sender Identity from iss+sub, so one
- * sub is one stable identity across harnesses.
- */
 function authFor(sub: string): TestAuth {
   return TestAuth.fromJwtPayload(
     JSON.stringify({ iss: ISSUER, sub, exp: 9_999_999_999 }),
@@ -46,12 +40,10 @@ function authFor(sub: string): TestAuth {
   );
 }
 
-/** The sender identity `sub` maps to in this harness. */
 export function identityFor(harness: Harness, sub: string): Identity {
   return harness.withReducerTx(authFor(sub), (ctx) => ctx.sender);
 }
 
-/** Runs `body` as `sub` in one reducer transaction and returns its result. */
 export function as<T>(harness: Harness, sub: string, body: (ctx: Ctx) => T): T {
   // The harness's ctx is the same ReducerCtx the helpers take (Ctx);
   // its expanded readonly form just does not unify with the alias, so
@@ -59,12 +51,10 @@ export function as<T>(harness: Harness, sub: string, body: (ctx: Ctx) => T): T {
   return harness.withReducerTx(authFor(sub), body);
 }
 
-/** Runs `body` as the module itself (seeding and cross-member reads). */
 export function asModule<T>(harness: Harness, body: (ctx: Ctx) => T): T {
   return harness.withReducerTx(TestAuth.internal(), body);
 }
 
-/** A Timestamp `millis` after the epoch. */
 export function at(millis: number): Timestamp {
   return new Timestamp(BigInt(millis) * 1000n);
 }

@@ -7,18 +7,11 @@ const MOVE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'S
 // consumers, and fallow's health gate flags the pairing as a high-impact
 // split candidate.
 
-/**
- * True when the key event is aimed at a text-entry element (the display-name
- * form today, chat later), so the avatar must not react to it. Structural
- * rather than `instanceof HTMLElement`: the check needs no DOM globals, which
- * also keeps it testable under the fake window the unit tests install.
- */
 function isTextEntry(target: EventTarget | null): boolean {
   const el = target as { tagName?: string; isContentEditable?: boolean } | null;
   return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable === true;
 }
 
-/** Window keyboard listener that samples held keys into a PlayerInput. */
 export function createInput(): { sample(): PlayerInput; dispose(): void } {
   const held = new Set<string>();
 

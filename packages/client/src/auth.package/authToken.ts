@@ -9,10 +9,6 @@ import type { AuthTokenGetter } from '../net.package';
  */
 const CLERK_JWT_TEMPLATE = 'spacetimedb';
 
-/**
- * The guest path: connect tokenless and let the connection layer resume this
- * tab's anonymous identity. Also the default when Clerk is not configured.
- */
 const guestToken: AuthTokenGetter = () => Promise.resolve(undefined);
 
 /**

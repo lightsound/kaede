@@ -62,9 +62,6 @@ function harness() {
       return Promise.resolve();
     },
   };
-  // The fake fires onApplied synchronously inside subscribe(); the real
-  // SDK fires it asynchronously once the subscription applies. The feed
-  // tests below pin the wiring (which handle gets dropped), not timing.
   raw.subscriptionBuilder = () => {
     let applied: (() => void) | undefined;
     const builder = {
@@ -188,7 +185,6 @@ describe('createPlayerFeed.enterWorld', () => {
     expect(h.calls).toContain('game start');
     expect(h.heartbeats()).toBe(1);
     expect(h.sim.prediction).toBeDefined();
-    // Idempotent: a second admission pass must not restart the simulation.
     h.calls.length = 0;
     h.feed.enterWorld();
     expect(h.calls).toEqual([]);
@@ -289,7 +285,6 @@ describe('createPlayerFeed.wireRowEvents', () => {
     expect(h.zoneRefreshes()).toBe(1);
     expect(h.unsubscribed).toEqual(['initial']);
     expect(h.calls).toContain('game start');
-    // The prediction is rebuilt for the destination map, not carried over.
     expect(h.sim.prediction).toBeDefined();
     expect(h.sim.prediction).not.toBe(predictionBefore);
     // The swapped-in subscription is the stored one: switching back drops

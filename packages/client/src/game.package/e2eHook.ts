@@ -1,9 +1,5 @@
 // fallow-ignore-file coverage-gaps -- reads live PixiJS display state (and samples the frame rate) for the dev-only test hook; the contract lives in @kaede/shared (e2eHook.ts) and the Playwright specs exercise it end to end
 
-// The dev-only window into the scene (window.__kaedeE2E): what the
-// Playwright specs and the dev PerfHud read. Every entry point gates on the
-// build-time DEV constant, so production bundles drop this code; GameApp.ts
-// installs the hook (see its start()).
 import type { E2EHook, E2EPlayerSnapshot } from '@kaede/shared';
 import { visibleBubbleText, visibleReactionEmoji } from './bubble';
 import type { PlayerView } from './playerView';
@@ -42,7 +38,6 @@ function withUnderlineSnapshots(view: PlayerView, snap: E2EPlayerSnapshot): E2EP
   return snap;
 }
 
-/** Rolling Pixi FPS over ~500ms. Production builds compile this to `return 0`. */
 export function sampleFpsWindow(
   now: number,
   state: { frames: number; windowStart: number; fps: number },
@@ -56,12 +51,6 @@ export function sampleFpsWindow(
   return state.fps;
 }
 
-/**
- * Test affordance for the Playwright smoke tests — see E2EHook in
- * @kaede/shared for the contract and who consumes it. Constructed only in dev
- * builds, so the build-time DEV constant lets production bundles drop the
- * hook code entirely.
- */
 export function createE2EHook(
   local: PlayerView,
   remotes: Map<string, PlayerView>,

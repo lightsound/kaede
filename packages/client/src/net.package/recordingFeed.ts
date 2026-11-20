@@ -11,17 +11,13 @@ import type { SessionRows } from './rowEvents';
  */
 export interface RecordingLabelView {
   key: string;
-  /** The R2 object basename — the join key against the R2 listing. */
   fileName: string;
   groupName: string;
   starterName: string;
-  /** When the recording started, in epoch milliseconds (display only). */
   startedAtMs: number;
 }
 
-/** What publishing the label list needs from the session that wires the feed. */
 export interface RecordingFeedHooks {
-  /** Every call_recording change, as the whole list (newest first). */
   onRecordings(labels: RecordingLabelView[]): void;
 }
 

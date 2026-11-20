@@ -19,12 +19,10 @@ function box(x: number, y: number): AABB {
   return { cx: x, cy: y, hw: PLAYER_HALF_W, hh: PLAYER_HALF_H };
 }
 
-/** True when the player's horizontal span at center x overlaps the rect's. */
 function spansRect(x: number, r: Rect): boolean {
   return x + PLAYER_HALF_W > r.x && x - PLAYER_HALF_W < r.x + r.w;
 }
 
-/** Normalize a raw facing column (any sign) into the Facing union. */
 export function toFacing(f: number): Facing {
   return f < 0 ? -1 : 1;
 }
@@ -48,7 +46,6 @@ export function isQuiescent(state: PlayerState): boolean {
   return state.onGround && state.vx === 0 && state.vy === 0 && state.rope === -1;
 }
 
-/** Build a PlayerState from a player row's dynamic columns. */
 export function stateFromRow(r: {
   x: number;
   y: number;
@@ -123,10 +120,6 @@ function climb(state: PlayerState, input: PlayerInput, rope: Rope): PlayerState 
   return at(y, false, state.rope);
 }
 
-/**
- * Outcome of the rope phase. `done` means the tick was fully handled on a rope;
- * otherwise `state` is what the regular ground step continues from.
- */
 interface ClimbStep {
   done: boolean;
   state: PlayerState;
@@ -168,7 +161,6 @@ function stepRopePhase(state: PlayerState, input: PlayerInput, map: CollisionMap
   return { done: false, state };
 }
 
-/** This tick's horizontal velocity, plus the facing it implies. */
 function horizontalIntent(state: PlayerState, input: PlayerInput): { vx: number; facing: Facing } {
   const vx = ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * MOVE_SPEED;
   if (vx > 0) return { vx, facing: 1 };
@@ -192,7 +184,6 @@ function applyJump(
     if (!input.down) {
       vy = JUMP_VELOCITY;
     } else if (platformUnderfoot(state, map)) {
-      // Nudge the feet just below the top edge so the one-way check lets us fall.
       y0 += PLATFORM_DROP_NUDGE;
     }
   }
@@ -214,14 +205,12 @@ function moveX(state: PlayerState, vx: number, y0: number, map: CollisionMap): n
   return Math.min(Math.max(x, PLAYER_HALF_W), map.width - PLAYER_HALF_W);
 }
 
-/** Where the vertical move left the player, and whether it put them on ground. */
 interface VerticalStep {
   y: number;
   vy: number;
   onGround: boolean;
 }
 
-/** Vertical move + resolution against solids. A downward hit lands us; either hit zeroes vy. */
 function moveY(x: number, y0: number, vy: number, map: CollisionMap): VerticalStep {
   let y = y0 + vy * DT;
   let out = vy;

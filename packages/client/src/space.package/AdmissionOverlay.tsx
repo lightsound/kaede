@@ -57,11 +57,8 @@ const MESSAGES: Record<
   },
 };
 
-/** The prompt's button labels; no prompt, no button (e.g. banned, guests). */
 const PROMPT_LABELS: Record<MembershipPrompt, string> = {
   apply: '参加を申請する',
-  // The space-first application seeds the admin (membershipPrompt) —
-  // labeled with what the press actually does, like the ApplyBanner.
   'apply-first': '管理者として参加する',
   reapply: 'もう一度申請する',
 };
@@ -94,9 +91,7 @@ function bodyFor(
  */
 export interface AdmissionSurfaceProps {
   connected: boolean;
-  /** The current admission, or undefined before the net stack's first report. */
   admission: Admission | undefined;
-  /** The application affordance to offer, if any (see membershipPrompt). */
   prompt: MembershipPrompt | undefined;
   onApply: () => void;
 }

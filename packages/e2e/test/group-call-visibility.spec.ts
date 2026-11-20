@@ -53,8 +53,7 @@ test.setTimeout(300_000);
  * reads, so the row arrives (the positive control proving the probe can
  * see rows at all). Guests get the call dock like members (増分② —
  * join_group_call checks group membership, not approval), which the
- * button's presence pins; joining stays a manual test (the call provider
- * is out of E2E).
+ * button's presence pins.
  */
 test('通話レジストリの行はグループのメンバーだけに届き、ゲストにも通話ボタンが出る', async ({
   browser,
@@ -68,14 +67,12 @@ test('通話レジストリの行はグループのメンバーだけに届き�
     await enterWorld(pageA);
     await enterWorld(pageB);
 
-    // A walks into the zone and becomes its member; B stays put at spawn.
     const tag = zoneTagLabel(ZONE_NAME);
     await walkWhile(pageA, 'ArrowRight', (x) => x >= ZONE_RECT.x + 120);
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBe(tag);
     expect(await callRows(pageA)).toBe(0);
     expect(await callRows(pageB)).toBe(0);
 
-    // The call registry row lands: the member's subscription is handed it…
     await sql(`INSERT INTO group_call (group_id, meeting_id) VALUES (${ZONE_ID}, '${MEETING_ID}')`);
     await expect.poll(() => callRows(pageA), { timeout: 15_000 }).toBeGreaterThan(0);
     // …and the non-member's is not. Timed AFTER A provably received it, so
@@ -95,8 +92,6 @@ test('通話レジストリの行はグループのメンバーだけに届き�
     await enterWorld(pageB);
     expect(await callRows(pageB)).toBe(0);
 
-    // The positive control: B walks in, the server grants the membership,
-    // and row-level security hands B the capability row it was hiding.
     await walkWhile(pageB, 'ArrowRight', (x) => x >= ZONE_RECT.x + 120);
     await expect.poll(() => localZone(pageB), { timeout: 15_000 }).toBe(tag);
     await expect.poll(() => callRows(pageB), { timeout: 15_000 }).toBeGreaterThan(0);

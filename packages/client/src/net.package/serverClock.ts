@@ -10,13 +10,10 @@
  * while still adapting to clock drift and route changes.
  */
 
-/** Rotation period of the min-offset buckets (ms). */
 const WINDOW_MS = 10_000;
 
 export interface ServerClock {
-  /** Feed one observed pair: a row's server timestamp and its local receive time. */
   record(serverMs: number, localMs: number): void;
-  /** The current moment on the server timeline, or undefined before any sample. */
   serverNow(localMs: number): number | undefined;
 }
 

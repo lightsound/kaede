@@ -21,12 +21,9 @@ export interface ChatScopeOption {
   label: string;
 }
 
-/** Everything the scope selector renders: the offered scopes, widest first. */
 export type ChatScopeView = readonly ChatScopeOption[];
 
-/** What projecting the scope selector needs from the session that wires it. */
 export interface ChatScopeFeedHooks {
-  /** Every change of the offered scopes, deduplicated by value. */
   onChatScopes(view: ChatScopeView): void;
 }
 

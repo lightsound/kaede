@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { cameraOffset, parseZoomOverride } from '../src/game.package/camera';
 
-// A 1000x600 world seen through an 800x400 viewport: 200px of horizontal and
-// 200px of vertical scroll before the camera hits an edge.
 const VIEW_W = 800;
 const VIEW_H = 400;
 const WORLD_W = 1000;

@@ -47,7 +47,6 @@ export interface HeldItemDisplay {
   texture: Texture;
   grip: readonly number[];
   hands: { readonly [P in keyof AvatarSheetTextures]: readonly number[] };
-  /** The carry sheet's hand overlay (manifest handLayer), drawn over the item. */
   hand: { texture: Texture; grip: readonly number[] };
 }
 
@@ -71,21 +70,12 @@ export interface GestureSheetTextures {
   'dance-h': Texture;
 }
 
-/**
- * The busy-status headgear (取り込み中=ヘッドホン — VISION 体験の核 2),
- * composited onto the current pose's NECK anchor the way held items ride
- * the hand anchor: `grip` is the point in the headgear frame that lands on
- * the anchor, `necks` the per-pose neck anchors (frame pixels, 4x, from
- * the manifests). Poses without a neck entry — and the sleep pose, whose
- * head lies sideways — simply hide the gear.
- */
 export interface HeadgearDisplay {
   texture: Texture;
   grip: readonly number[];
   necks: Readonly<Record<string, readonly number[] | undefined>>;
 }
 
-/** The ①c gesture assets one avatar view renders with (optional as a unit). */
 export interface GestureKit {
   sheet: GestureSheetTextures;
   headgear?: HeadgearDisplay;
@@ -98,11 +88,6 @@ export interface GestureKit {
  * in Spine) stays behind this interface. Dress-up (増分①d) adds a setSkin.
  */
 export interface AvatarView {
-  /**
-   * Advances the walk cycle from where the avatar is rendered this frame
-   * (`xPx` the root's logical world x, `dtMs` the frame time) and shows the
-   * resulting pose frame. The first call only records the position.
-   */
   update(xPx: number, dtMs: number): void;
   /**
    * Sets the standing-still pose directive (増分①c): a STATE gesture
@@ -113,11 +98,8 @@ export interface AvatarView {
    * Unknown strings read as none (the isReactionEmoji narrowing rule).
    */
   play(gesture: string | undefined): void;
-  /** Plays the transient wave for WAVE_GESTURE_DURATION_MS (増分①c). */
   wave(): void;
-  /** Shows/hides the busy headgear overlay (取り込み中 — 増分①c). */
   setBusy(busy: boolean): void;
-  /** The pose frame currently shown (the e2e snapshot's evidence). */
   pose(): string;
 }
 
@@ -144,19 +126,12 @@ function createGripSprite(texture: Texture, grip: readonly number[]): Sprite {
   return sprite;
 }
 
-/**
- * Parks the held item's grip on the pose's hand anchor. The anchor is in
- * frame pixels (4x, origin top-left); the avatar sprite renders that frame
- * bottom-centered at the AABB's bottom edge at ASSET_SCALE, so the same
- * transform maps the anchor into body-local coordinates.
- */
 function placeHeldItem(item: Sprite, frame: Texture, hand: readonly number[]): void {
   const [handX, handY] = hand;
   item.x = ((handX ?? 0) - frame.width / 2) * ASSET_SCALE;
   item.y = PLAYER_HALF_H - (frame.height - (handY ?? 0)) * ASSET_SCALE;
 }
 
-/** The two carried sprites, stacked item-then-hand (see createGripSprite). */
 interface CarriedSprites {
   item: Sprite;
   hand: Sprite;
@@ -169,13 +144,11 @@ function createCarriedSprites(held: HeldItemDisplay): CarriedSprites {
   };
 }
 
-/** Parks both carried sprites on the pose's hand anchor. */
 function placeCarried(carried: CarriedSprites, frame: Texture, hand: readonly number[]): void {
   placeHeldItem(carried.item, frame, hand);
   placeHeldItem(carried.hand, frame, hand);
 }
 
-/** The dance loop's frame keys in play order (100ms each — DANCE_FRAME_MS). */
 const DANCE_POSES = [
   'dance-a',
   'dance-b',
@@ -187,12 +160,10 @@ const DANCE_POSES = [
   'dance-h',
 ] as const;
 
-/** Narrows a row string to a state-gesture directive; anything else is none. */
 function stateGestureOf(value: string | undefined): 'sit' | 'sleep' | 'dance' | undefined {
   return value === 'sit' || value === 'sleep' || value === 'dance' ? value : undefined;
 }
 
-/** The state gesture's pose frame: the dance cycles on the view clock. */
 function gesturePose(gesture: 'sit' | 'sleep' | 'dance' | undefined, clockMs: number): string {
   if (gesture === 'dance') {
     return DANCE_POSES[Math.floor(clockMs / DANCE_FRAME_MS) % DANCE_POSES.length];
@@ -200,7 +171,6 @@ function gesturePose(gesture: 'sit' | 'sleep' | 'dance' | undefined, clockMs: nu
   return gesture ?? 'stand';
 }
 
-/** The hidden-by-default headgear sprite, when a headgear display exists. */
 function createGearSprite(body: Container, headgear?: HeadgearDisplay): Sprite | undefined {
   if (!headgear) return undefined;
   const sprite = createGripSprite(headgear.texture, headgear.grip);
@@ -242,28 +212,23 @@ export function createAvatarView(
 
   let walk: WalkState = IDLE_WALK_STATE;
   let lastX: number | undefined;
-  // The view's own clock (summed frame times): the dance frame index and
-  // the wave expiry both read it, so neither needs wall time.
   let clockMs = 0;
   let waveUntilMs: number | undefined;
   let stateGesture: 'sit' | 'sleep' | 'dance' | undefined;
   let busy = false;
   let shownPose = 'stand';
 
-  /** The standing-still pose: wave > state gesture > stand (idle priority). */
   function idlePose(): string {
     if (waveUntilMs !== undefined && clockMs < waveUntilMs) return 'wave';
     waveUntilMs = undefined;
     return gesturePose(stateGesture, clockMs);
   }
 
-  /** The texture for `pose`, from whichever sheet declares it. */
   function textureOf(pose: string): Texture {
     const base = sheet[pose as keyof AvatarSheetTextures];
     return base ?? kit?.sheet[pose as keyof GestureSheetTextures] ?? sheet.stand;
   }
 
-  /** The held item follows poses with measured hand anchors, hides elsewhere. */
   function updateCarried(pose: string, frame: Texture): void {
     if (!carried || !held) return;
     const hands = held.hands[pose as keyof AvatarSheetTextures];
@@ -281,7 +246,6 @@ export function createAvatarView(
     return kit?.headgear?.necks[pose];
   }
 
-  /** Parks the busy headgear on the current pose's neck anchor. */
   function placeHeadgear(pose: string, frame: Texture): void {
     if (!gear) return;
     const neck = headgearNeck(pose);

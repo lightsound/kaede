@@ -90,7 +90,6 @@ function senderContext(c: DbConnection, identity: Identity) {
   };
 }
 
-/** Each member transition's generated reducer call, keyed by the shared vocabulary. */
 const MEMBER_ACTION_CALLS: Record<
   MemberAction,
   (c: DbConnection, identity: Identity) => Promise<unknown>
@@ -101,7 +100,6 @@ const MEMBER_ACTION_CALLS: Record<
   unban: (c, identity) => c.reducers.unbanMember({ identity }),
 };
 
-/** The user-action surface of Net (see sync.ts for the lifecycle half). */
 export interface NetApi {
   /**
    * Asks the server to rename this player (set_display_name). The result
@@ -254,26 +252,17 @@ export interface NetApi {
   recordingDownloadUrl(fileName: string): Promise<string>;
 }
 
-/** One finished recording, as the listing procedure reports it (増分④→⑥). */
 export interface RecordingFile {
   fileName: string;
-  /** Object size in bytes (the u64 return narrowed — far below 2^53). */
   size: number;
-  /** The R2 LastModified timestamp (ISO 8601) — when the upload landed. */
   uploadedAt: string;
 }
 
-/** What forwarding user actions needs from the lifecycle owner (sync.ts). */
 export interface NetApiDeps {
-  /** The CURRENT connection — undefined while disconnected or suspended. */
   conn(): DbConnection | undefined;
-  /** See NetHooks.onChatRefused (sync.ts). */
   onChatRefused(): void;
 }
 
-/**
- * Builds the user-action surface over the live connection the deps expose.
- */
 export function createNetApi(deps: NetApiDeps): NetApi {
   /**
    * The shared shell of every user-triggered reducer call: drop with a

@@ -1,26 +1,18 @@
-/** Simulation tick rate (Hz). Rendering is decoupled from this. */
 export const TICK_RATE = 60;
-/** Seconds per simulation tick. */
 export const DT = 1 / TICK_RATE;
 
 /** Gravity in px/s^2. The y axis points down (screen coordinates). */
 export const GRAVITY = 2400;
-/** Horizontal move speed in px/s. */
 export const MOVE_SPEED = 240;
-/** Initial vertical velocity of a jump in px/s (negative = up). */
 export const JUMP_VELOCITY = -840;
-/** Terminal fall speed in px/s. */
 export const MAX_FALL_SPEED = 1200;
 
 /** Player AABB half extents in px. PlayerState (x, y) is the AABB center. */
 export const PLAYER_HALF_W = 16;
 export const PLAYER_HALF_H = 24;
 
-/** Climbing speed on ropes/ladders in px/s. */
 export const CLIMB_SPEED = 140;
-/** Max horizontal distance (px) between the player center and a rope to grab it. */
 export const ROPE_GRAB_RANGE = 16;
-/** Initial vertical velocity when jumping off a rope in px/s (negative = up). */
 export const ROPE_JUMP_VELOCITY = -540;
 /**
  * Downward nudge (px) applied when dropping through a one-way platform, so the
@@ -111,5 +103,4 @@ export const HEARTBEAT_MIN_AGE_MS = 60_000;
  * re-sending on every ordinarily-timed ack.
  */
 export const RESEND_TIMEOUT_MS = 1200;
-/** Client keeps at most this many ticks of prediction history (~10s). */
 export const PREDICTION_HISTORY_MAX_TICKS = 600;

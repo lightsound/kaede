@@ -10,14 +10,10 @@ import { type Container, Graphics, Text, TextStyle } from 'pixi.js';
  * as smoothly as the people in it.
  */
 export interface HuddleRender {
-  /** The group row id, stringified — a stable identity for the view map. */
   key: string;
-  /** The composed label (huddleLabel in @kaede/shared — 🤫 rides it when closed). */
   label: string;
   closed: boolean;
-  /** Whether the local player is a member (its sprite anchors the circle too). */
   includesLocal: boolean;
-  /** The remote members' identity hexes; sprites may be absent (offline-hidden). */
   memberIds: readonly string[];
 }
 
@@ -28,8 +24,6 @@ export interface HuddleRender {
  */
 type HuddleFrame = { label: string; closed: boolean; members: number };
 
-// An open huddle reads as a warm spot on the floor; a closed one shifts to
-// a hushed violet — with the 🤫 label, the「コソコソ話している」look.
 const HUDDLE_OPEN_COLOR = 0xebcb8b;
 const HUDDLE_CLOSED_COLOR = 0xb48ead;
 
@@ -39,11 +33,8 @@ const HUDDLE_LABEL_STYLE = new TextStyle({
   fontFamily: 'sans-serif',
 });
 
-/** The circle's minimum half-width (px): a solo huddle still reads as a spot. */
 const HUDDLE_MIN_RADIUS = 70;
-/** Horizontal padding past the farthest member (px). */
 const HUDDLE_RADIUS_PAD = 50;
-/** The floor ellipse is this fraction as tall as it is wide. */
 const HUDDLE_ELLIPSE_FLATTEN = 0.35;
 
 interface HuddleView {
@@ -51,7 +42,6 @@ interface HuddleView {
   label: Text;
 }
 
-/** The members' rendered footprint: center x/y and the farthest x-offset. */
 function huddleFootprint(positions: readonly { x: number; y: number }[]): {
   cx: number;
   cy: number;

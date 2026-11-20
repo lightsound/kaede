@@ -1,15 +1,5 @@
 // fallow-ignore-file coverage-gaps -- hand-run load probe against a live SpacetimeDB host; not part of the app or unit coverage
 // fallow-ignore-file unused-file -- run via packages/e2e/measure-concurrent-movers.mjs (esbuild bundle), never imported
-/**
- * Headless guest movers for the concurrent-character load probe.
- *
- * Each bot opens a real SpacetimeDB WebSocket, joins as a guest, subscribes
- * to the default-map player rows (the same AoI query a browser uses), and
- * optionally walks at the production flush cadence (24 ticks / 400ms).
- *
- * Usage (via the e2e measure script, which bundles this file):
- *   --count 50 --movers 50 --seconds 20
- */
 import {
   DEFAULT_MAP_ID,
   INPUT_FLUSH_INTERVAL_MS,

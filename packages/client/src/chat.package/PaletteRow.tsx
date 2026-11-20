@@ -38,10 +38,6 @@ const gestureButtonStyle: CSSProperties = {
   fontFamily: 'inherit',
 };
 
-/**
- * What one palette row offers: its items, and how each item's button
- * reads. The accessible name is what the specs find the buttons by.
- */
 export interface Palette<T extends string> {
   items: readonly T[];
   buttonStyle: CSSProperties;

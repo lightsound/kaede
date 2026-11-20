@@ -13,10 +13,6 @@ export interface RowEvents<Row> {
   onDelete(handler: (ctx: unknown, row: Row) => void): unknown;
 }
 
-/**
- * What a feed does on one table's row events. Each kind is optional; an
- * update hands over the new row (no feed reads the old one).
- */
 export interface RowHandlers<Row> {
   insert?: (row: Row) => void;
   update?: (row: Row) => void;
@@ -42,30 +38,13 @@ export interface RowHandlers<Row> {
  *   that; they are called from inside guarded handlers.
  */
 export interface SessionRows {
-  /** Registers `handlers` on `table`'s row events; none runs once stale. */
   on<Row>(table: RowEvents<Row>, handlers: RowHandlers<Row>): void;
-  /**
-   * Registers `handler` on every row event of `table`, called with no
-   * arguments — for feeds that re-project a whole view from the cache on any
-   * change rather than acting on the individual row.
-   */
   onAny(table: RowEvents<unknown>, handler: () => void): void;
-  /**
-   * Wraps a callback that is not a row event (a subscription's onApplied)
-   * so it, too, does nothing once the session is stale.
-   */
   live(callback: () => void): () => void;
-  /** Whether `identity` is this client's own. */
   isOwn(identity: Identity): boolean;
-  /** Calls `own` for this client's identity, else `remote` with the identity's hex. */
   route(identity: Identity, own: () => void, remote: (idHex: string) => void): void;
 }
 
-/**
- * Builds one session's row events for the client whose identity hex is
- * `myIdHex`. `isStale` turns true once this session's events must be
- * ignored, and stays true.
- */
 export function sessionRows(myIdHex: string, isStale: () => boolean): SessionRows {
   const on = <Row>(table: RowEvents<Row>, handlers: RowHandlers<Row>): void => {
     const { insert, update, delete: remove } = handlers;

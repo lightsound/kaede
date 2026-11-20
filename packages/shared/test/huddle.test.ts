@@ -74,7 +74,6 @@ describe('evaluateHuddleJoin', () => {
   });
 
   it('距離はユークリッド(斜め方向も同じ半径)', () => {
-    // Floored: the exact diagonal reconstructs the radius with float error above it.
     const diagonal = Math.floor(HUDDLE_JOIN_DISTANCE / Math.SQRT2);
     expect(
       evaluateHuddleJoin({

@@ -73,7 +73,7 @@ describe('wireChatScopes', () => {
   it('deduplicates by value: a row event that changes no label publishes nothing', () => {
     const { player, conn, rows, hooks, published } = harness();
     wireChatScopes(conn, rows, ME, hooks);
-    player.insert(playerRow(0)); // own row lands, still the default map
+    player.insert(playerRow(0));
     player.update(playerRow(0));
     expect(published).toHaveLength(1);
   });

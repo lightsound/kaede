@@ -10,21 +10,13 @@ export const UI_FONT = '13px sans-serif';
 export const UI_TEXT_COLOR = '#eceff4';
 export const UI_ERROR_COLOR = '#e8a2a2';
 export const UI_GOLD = '#d8a657';
-/** DM lines in the chat log: private traffic reads apart from room chatter. */
 export const UI_DM_COLOR = '#c6a0e8';
 export const UI_PANEL_BG = 'rgba(11, 13, 18, 0.85)';
-/** Denser than UI_PANEL_BG: full-canvas covers that must hide the world. */
 export const UI_OVERLAY_BG = 'rgba(11, 13, 18, 0.92)';
 export const UI_GOLD_BORDER = '1px solid rgba(216, 166, 87, 0.6)';
 export const UI_GOLD_BORDER_SOFT = '1px solid rgba(216, 166, 87, 0.4)';
 export const UI_BUTTON_BG = 'rgba(216, 166, 87, 0.15)';
 
-/**
- * The chrome every HUD panel shares: the dark panel in the gold frame,
- * set in the HUD type. Where a panel sits and how big it is are not part
- * of the chrome: the panel sets them, or App's ColumnSlot for the
- * bottom-left column (leftColumn.ts).
- */
 export const UI_PANEL_STYLE: CSSProperties = {
   padding: '6px 8px',
   borderRadius: 8,
@@ -34,7 +26,6 @@ export const UI_PANEL_STYLE: CSSProperties = {
   color: UI_TEXT_COLOR,
 };
 
-/** UI_PANEL_STYLE plus the layout most panels share: rows stacked top to bottom, 6px apart. */
 export const UI_STACKED_PANEL_STYLE: CSSProperties = {
   ...UI_PANEL_STYLE,
   display: 'flex',

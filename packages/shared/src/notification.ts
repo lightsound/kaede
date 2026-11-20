@@ -52,11 +52,8 @@ export interface DmRowEvent {
  */
 export interface DmNotifyContext {
   permission: NotificationPermissionState;
-  /** The session-local toggle (NotificationControl); never persisted. */
   muted: boolean;
-  /** document.hidden — true when the tab is switched away or minimized. */
   hidden: boolean;
-  /** document.hasFocus() — false while another window/app holds the focus. */
   hasFocus: boolean;
 }
 
@@ -87,7 +84,6 @@ export function shouldNotifyDm(event: DmRowEvent, context: DmNotifyContext): boo
   );
 }
 
-/** What one DM notification shows; the Notification constructor's inputs. */
 export interface DmNotificationContent {
   title: string;
   body: string;

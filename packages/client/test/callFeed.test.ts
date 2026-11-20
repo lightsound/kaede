@@ -31,9 +31,9 @@ describe('wireOwnGroup', () => {
   it('follows the own row only: joins, moves and leaves, deduplicated', () => {
     const { groupMember, conn, rows, hooks, published } = harness();
     wireOwnGroup(conn, rows, ME, hooks);
-    groupMember.insert(memberRow(OTHER, 3n)); // someone else's row: no publish
+    groupMember.insert(memberRow(OTHER, 3n));
     groupMember.insert(memberRow(ME, 3n));
-    groupMember.update(memberRow(ME, 3n)); // same group again: deduplicated
+    groupMember.update(memberRow(ME, 3n));
     groupMember.update(memberRow(ME, 4n));
     groupMember.remove(memberRow(ME, 4n));
     expect(published).toEqual([undefined, 3n, 4n, undefined]);

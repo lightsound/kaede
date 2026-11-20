@@ -184,7 +184,6 @@ describe('stageOverlays', () => {
 
   it('stacks the bare item then the sheet hand cutout, grips landing on the hand anchor', () => {
     const look = { outfit: carry, body: carry, item: mug, note: undefined };
-    // hand (26,64): item grip (5,12) → (21,52); hand-layer grip (14,4) → (12,60).
     expect(stageOverlays(look, frame())).toEqual([
       { url: '/items/item.mug.png', left: 21, top: 52, width: 10 },
       { url: '/carry/hand.png', left: 12, top: 60, width: 16 },
@@ -203,7 +202,6 @@ describe('stageOverlays', () => {
       note: undefined,
     };
     brokenItem.item.frame.url = undefined;
-    // The broken item drops out; the hand cutout still renders over the empty hand.
     expect(stageOverlays(brokenItem, frame())).toEqual([
       { url: '/carry/hand.png', left: 12, top: 60, width: 16 },
     ]);

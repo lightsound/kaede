@@ -9,7 +9,6 @@ import {
 
 const NOW = 1_000_000_000_000n;
 
-/** Charges `count` sends at NOW, failing the test if the bucket refuses one. */
 function chargeBurst(count: number): AllowanceMirror {
   let mirror = FRESH_ALLOWANCE;
   for (let i = 0; i < count; i++) {
@@ -47,9 +46,7 @@ describe('refundRefused', () => {
       allowanceMicros: full.chargedFromMicros,
       chargedFromMicros: undefined,
     });
-    // The refunded token is spendable again — the retry the server would accept.
     expect(chargeSend(refunded, NOW)).toBeDefined();
-    // A replayed render cannot refund a second time.
     expect(refundRefused(refunded, true)).toBe(refunded);
   });
 

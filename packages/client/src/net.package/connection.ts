@@ -24,13 +24,9 @@ const TOKEN_KEY = 'kaede.spacetime.token';
 
 export interface Connected {
   conn: DbConnection;
-  /** This connection's identity: the key into own rows and reducer targets. */
   myIdentity: Identity;
-  /** Its hex form, pre-computed once: the map key for remote-player views. */
   myIdHex: string;
-  /** The map the map-scoped subscription covers: the own row's map, or the default. */
   mapId: number;
-  /** The map-scoped subscription (players + chat); the session swaps it on every portal move. */
   mapSub: SubscriptionHandle;
 }
 
@@ -178,23 +174,11 @@ export async function connect(
             tables.chatMessage.where((c) => c.scope.eq(CHAT_SCOPE_GROUP)),
             tables.dmMessage,
             tables.reaction,
-            // Gestures (Phase 5 ①c): whole-table like reactions/statuses —
-            // bounded by the world population. State poses (sit / sleep /
-            // dance) display from this seed; the transient wave from row
-            // events only (see gestureFeed.ts).
             tables.gesture,
             tables.playerStatus,
             tables.conversationGroup,
             tables.groupMember,
-            // The group-call registry (Phase 4 増分①): whole-table like the
-            // groups themselves, but row-level security narrows it to the
-            // groups this client is a member of — the meeting id it carries
-            // is the join capability (see group_call in the server).
             tables.groupCall,
-            // The recording labels (Phase 4 増分④): whole-table, small by
-            // construction (RECORDING_HISTORY_MAX) — the 録画一覧 decorates
-            // the R2 listing with them (see call_recording in the server
-            // for why these rows carry no download capability).
             tables.callRecording,
           ]);
       })

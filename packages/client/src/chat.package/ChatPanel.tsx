@@ -59,7 +59,7 @@ const logStyle: CSSProperties = {
 
 const formStyle: CSSProperties = {
   display: 'flex',
-  flexWrap: 'wrap', // the inline error wraps onto its own line
+  flexWrap: 'wrap',
   alignItems: 'center',
   gap: 6,
 };
@@ -104,11 +104,8 @@ export function ChatPanel({
   onPlayGesture,
 }: {
   connected: boolean;
-  /** The authoritative name from the own player row; undefined without one. */
   ownName: string | undefined;
-  /** The subscribed chat+DM history, ascending by send order. */
   log: ChatLog;
-  /** The scopes a send may address right now, widest first (see ScopeRow). */
   scopes: ChatScopeView;
   /**
    * True after a send was dropped or refused server-side (e.g. the
@@ -117,17 +114,11 @@ export function ChatPanel({
    * the only trace the sender gets.
    */
   sendRefused: boolean;
-  /** Classifies one draft (public / DM / refused) — see Net.planChatSend. */
   planDraft: (draft: string) => ChatDraftPlan;
-  /** Dispatches one accepted plan under the picked scope — see Net.sendPlanned. */
   onSendPlan: (plan: PlannedSend, scope: ChatScope) => void;
-  /** Sends one palette-emoji reaction (fire-and-forget; see REACTION_PALETTE). */
   onSendReaction: (emoji: ReactionEmoji) => void;
-  /** Plays one pose gesture (fire-and-forget; see GESTURE_PALETTE — ①c). */
   onPlayGesture: (gesture: GestureKind) => void;
 }) {
-  // The client-side mirror of the server's chat_guard token bucket, with
-  // its one-level refund on refusal (chatAllowance.ts).
   const allowanceRef = useRef(FRESH_ALLOWANCE);
   const logRef = useRef<HTMLDivElement>(null);
   // What the next send addresses. Held as a raw pick and reconciled against
@@ -143,8 +134,6 @@ export function ChatPanel({
     scopes.map((option) => option.scope),
   );
 
-  // Keep the newest line in view. Scrolling on every log change also covers
-  // the initial seed after (re)connecting.
   useEffect(() => {
     const el = logRef.current;
     if (el && log.length > 0) el.scrollTop = el.scrollHeight;
@@ -156,8 +145,6 @@ export function ChatPanel({
   // oxlint-disable-next-line react/refs -- 意図的な render 中の調整（上のコメント参照）
   allowanceRef.current = refundRefused(allowanceRef.current, sendRefused);
 
-  // The one gate for both send controls: the reaction row and the message
-  // form need the same player row to speak from.
   const disabled = postingDisabled(connected, ownName);
 
   // The stale-pick gate: the pick going stale (scope !== picked) means the

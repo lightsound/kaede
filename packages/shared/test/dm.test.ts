@@ -40,8 +40,6 @@ describe('planChatDraft', () => {
     });
   });
 
-  // Display names may contain spaces; the name's end is decided by
-  // candidate matching, not by the first space.
   it('resolves a name containing spaces', () => {
     const spaced: DmCandidate = { name: 'かえで さん', key: 'cc33' };
     expect(planChatDraft('@かえで さん 会議です', [spaced, ...ROOM])).toEqual({
@@ -52,8 +50,6 @@ describe('planChatDraft', () => {
     });
   });
 
-  // Display names may contain '@' itself (normalizeSingleLineText refuses
-  // only category C).
   it('resolves a name containing an @', () => {
     const atName: DmCandidate = { name: '楓@作業中', key: 'dd44' };
     expect(planChatDraft('@楓@作業中 いまいい?', [atName, ...ROOM])).toEqual({
@@ -111,8 +107,6 @@ describe('planChatDraft', () => {
     });
   });
 
-  // A prefix of a candidate name is NOT that candidate: the mention must
-  // cover the whole name up to a space (or the end).
   it('refuses a mention that stops mid-name', () => {
     expect(planChatDraft('@もみ じゃなくて', ROOM)).toEqual({
       kind: 'refused',
@@ -135,7 +129,6 @@ describe('planChatDraft', () => {
     expect(planChatDraft('@楓   ', ROOM)).toEqual({ kind: 'refused', reason: 'dm-empty-body' });
   });
 
-  // The sender may appear in the candidate list: a self-DM is a memo.
   it('resolves a self-mention when the caller includes the sender', () => {
     expect(planChatDraft('@楓 自分メモ', ROOM)).toMatchObject({ kind: 'dm', recipientKey: 'aa11' });
   });

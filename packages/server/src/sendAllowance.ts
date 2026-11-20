@@ -4,14 +4,12 @@ import type { SendAllowanceRequest, SendAllowanceVerdict } from '@kaede/shared';
 import { SenderError } from 'spacetimedb/server';
 import type { Ctx } from './world';
 
-/** A send-rate token-bucket marker table (identity → allowanceMicros). */
 export type SendGuardTable =
   | Ctx['db']['chatGuard']
   | Ctx['db']['reactionGuard']
   | Ctx['db']['statusGuard']
   | Ctx['db']['portalGuard'];
 
-/** A send-rate guard row, as any marker table returns it. */
 type SendGuardRow = NonNullable<ReturnType<SendGuardTable['identity']['find']>>;
 
 /**
@@ -42,7 +40,6 @@ export function chargeSendAllowance(
   writeSendAllowance(ctx, guardTable, guard, verdict.allowanceMicros);
 }
 
-/** Writes the advanced marker back: the sender's row, or its lazy first one. */
 function writeSendAllowance(
   ctx: Ctx,
   guardTable: SendGuardTable,

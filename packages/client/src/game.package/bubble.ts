@@ -25,8 +25,6 @@ const TEXT_STYLE = new TextStyle({
   breakWords: true,
 });
 
-/** The bubble box: fill, padding around the text, and where its bottom edge
- * sits (clear of the name label above the avatar). */
 const BOX = {
   color: 0xf4f6fa,
   padX: 6,
@@ -34,11 +32,8 @@ const BOX = {
   bottomY: -PLAYER_HALF_H - 24,
 } as const;
 
-// The reaction emoji, rendered at speech-bubble text scale ×2 so a gesture
-// reads at a glance.
 const REACTION_STYLE = new TextStyle({ fontSize: 24, fontFamily: 'sans-serif' });
 
-/** Gap between a visible bubble's top edge and the reaction stacked above it. */
 const REACTION_STACK_GAP = 4;
 
 /**
@@ -49,28 +44,22 @@ const REACTION_STACK_GAP = 4;
  * (remove, clear, app teardown).
  */
 export interface Overhead {
-  /** Parent this under the player's root container. */
   root: Container;
-  /** When the visible display hides (performance.now() ms); see expireOverhead. */
   expiresAt: number;
 }
 
-/** Reveals the overhead and arms its hide time. */
 function armOverhead(overhead: Overhead, nowMs: number, durationMs: number): void {
   overhead.root.visible = true;
   overhead.expiresAt = nowMs + durationMs;
 }
 
-/** Hides the overhead once its time is up (call from the frame loop). */
 export function expireOverhead(overhead: Overhead, nowMs: number): void {
   if (overhead.root.visible && nowMs >= overhead.expiresAt) overhead.root.visible = false;
 }
 
-/** One player's speech bubble (chat — ROADMAP Phase 2), hidden until it speaks. */
 export interface Bubble extends Overhead {
   bg: Graphics;
   text: Text;
-  /** The box's top edge (local y), valid while visible; see layoutReaction. */
   topY: number;
 }
 
@@ -85,7 +74,6 @@ export function createBubble(): Bubble {
   return { root, bg, text, expiresAt: 0, topY: BOX.bottomY };
 }
 
-/** Fills the bubble with `text`, sized to fit, and arms its hide time. */
 export function showBubble(bubble: Bubble, text: string, nowMs: number): void {
   bubble.text.text = text;
   const w = bubble.text.width + BOX.padX * 2;
@@ -98,12 +86,10 @@ export function showBubble(bubble: Bubble, text: string, nowMs: number): void {
   armOverhead(bubble, nowMs, CHAT_BUBBLE_DURATION_MS);
 }
 
-/** The visible bubble's text, or undefined while hidden (the e2e snapshot shape). */
 export function visibleBubbleText(bubble: Bubble): string | undefined {
   return bubble.root.visible ? bubble.text.text : undefined;
 }
 
-/** One player's emoji reaction (ROADMAP Phase 2), hidden until it reacts. */
 export interface ReactionBadge extends Overhead {
   text: Text;
 }
@@ -117,13 +103,11 @@ export function createReactionBadge(): ReactionBadge {
   return { root, text, expiresAt: 0 };
 }
 
-/** Shows `emoji` above the avatar and arms its hide time. */
 export function showReaction(badge: ReactionBadge, emoji: ReactionEmoji, nowMs: number): void {
   badge.text.text = emoji;
   armOverhead(badge, nowMs, REACTION_DURATION_MS);
 }
 
-/** The visible reaction's emoji, or undefined while hidden (the e2e snapshot shape). */
 export function visibleReactionEmoji(badge: ReactionBadge): string | undefined {
   return badge.root.visible ? badge.text.text : undefined;
 }

@@ -4,7 +4,6 @@ import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 
-/** The generated gesture row type. */
 type GestureRow = RowOf<'gesture'>;
 
 /**
@@ -13,10 +12,8 @@ type GestureRow = RowOf<'gesture'>;
  * rule on exported signatures).
  */
 export interface GestureFeedHooks {
-  /** Applies a STATE gesture directive (sit / sleep / dance), or none. */
   applyOwn(gesture: string | undefined): void;
   applyRemote(idHex: string, gesture: string | undefined): void;
-  /** Plays the transient wave — row events only, never the seed. */
   waveOwn(): void;
   waveRemote(idHex: string): void;
 }

@@ -88,7 +88,6 @@ export const setDisplayName = spacetimedb.reducer({ name: t.string() }, (ctx, { 
   }
 });
 
-/** Writes the sender's application: a fresh row, or the rejected row re-filed. */
 function fileApplication(ctx: Ctx, accountName: string | undefined): Membership {
   const existing = ctx.db.spaceMember.identity.find(ctx.sender);
   if (existing !== null) {
@@ -104,7 +103,6 @@ function fileApplication(ctx: Ctx, accountName: string | undefined): Membership 
   }
   const inserted = ctx.db.spaceMember.insert({
     identity: ctx.sender,
-    // The public projection of the account's persisted name.
     displayName: accountName,
     ...initialMembership(ctx.db.spaceMember.count() === 0n),
     requestedAt: ctx.timestamp,
@@ -187,23 +185,17 @@ function transitionMember(ctx: Ctx, identity: SenderIdentity, action: MemberActi
   syncPlayerToStatus(ctx, identity, verdict.nextStatus);
 }
 
-/** One admin action as a callable reducer; the export name names the reducer. */
 function memberActionReducer(action: MemberAction) {
   return spacetimedb.reducer({ identity: t.identity() }, (ctx, { identity }) =>
     transitionMember(ctx, identity, action),
   );
 }
 
-// The four admin actions (what each does and when it is allowed:
-// MemberAction and evaluateMemberAction in @kaede/shared). An approved
-// member's waiting client sees its space_member row update and joins on its
-// own; the other three also remove the target's avatar (transitionMember).
 export const approveMember = memberActionReducer('approve');
 export const rejectMember = memberActionReducer('reject');
 export const banMember = memberActionReducer('ban');
 export const unbanMember = memberActionReducer('unban');
 
-/** Writes the guest-admission flag to the settings singleton (id 0). */
 function upsertGuestsAllowed(ctx: Ctx, allowed: boolean): void {
   const existing = ctx.db.spaceSetting.id.find(0);
   if (existing) {

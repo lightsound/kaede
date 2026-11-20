@@ -28,10 +28,8 @@ import type { InferSchema, ProcedureCtx } from 'spacetimedb/server';
 import type { spacetimedb } from './tables';
 import type { Ctx } from './world';
 
-/** The synchronous HTTP client a procedure exposes (ctx.http). */
 export type Http = ProcedureCtx<InferSchema<typeof spacetimedb>>['http'];
 
-/** The provider configuration row (call_config in tables.ts, seeded by owner SQL). */
 export type CallConfig = NonNullable<ReturnType<Ctx['db']['callConfig']['id']['find']>>;
 
 /**
@@ -66,7 +64,6 @@ function timeoutOf(ms: number): NonNullable<Parameters<Http['fetch']>[1]>['timeo
  * not mid-stream); short enough that a leaked URL is a stale one. */
 const DOWNLOAD_URL_TTL_SECONDS = 600;
 
-/** Whether the response body is RealtimeKit's success envelope (増分0 spike). */
 function isSuccessEnvelope(payload: unknown): payload is { success: true; data?: unknown } {
   const record = (payload ?? {}) as Record<string, unknown>;
   return record.success === true;
@@ -136,7 +133,6 @@ function stringField(data: unknown, field: string): string {
   throw new Error(`RealtimeKit response missing ${field}`);
 }
 
-/** Creates one meeting (a reusable room) and returns its id. */
 export function createMeeting(http: Http, cfg: CallConfig): string {
   const data = providerRequest(http, cfg, 'POST', `/${cfg.realtimekitAppId}/meetings`, {
     title: 'kaede 通話',
@@ -237,7 +233,6 @@ export function stopCloudRecording(
   return 'stopped';
 }
 
-/** The bucket's S3 host and the SigV4 inputs shared by both R2 reads. */
 function r2Host(cfg: CallConfig): string {
   return `${cfg.cloudflareAccountId}.r2.cloudflarestorage.com`;
 }
@@ -249,7 +244,6 @@ function r2Credentials(cfg: CallConfig) {
 /** R2's SigV4 region is the literal 'auto'. */
 const R2_REGION = 'auto';
 
-/** How long the listing's own presigned URL lives: one immediate fetch. */
 const LIST_URL_TTL_SECONDS = 60;
 
 /**

@@ -34,14 +34,6 @@ const errorStyle: CSSProperties = {
   color: UI_ERROR_COLOR,
 };
 
-/**
- * The one-line text form behind the rename control and the chat input: an
- * input, a submit button, and an inline error. The caller owns the rule —
- * `submit` validates the draft and either dispatches it (returning
- * undefined) or returns the error message to show. Editing clears the
- * error; whether an accepted submit clears the draft is the caller's call
- * (chat clears, rename keeps the draft for resubmission).
- */
 export function DraftForm({
   disabled,
   placeholder,
@@ -55,11 +47,8 @@ export function DraftForm({
   placeholder: string;
   ariaLabel: string;
   buttonLabel: string;
-  /** Whether an accepted submit clears the draft. */
   clearOnSubmit: boolean;
-  /** The form row's layout, plus the panel chrome when the form is the whole panel (rename). */
   formStyle: CSSProperties;
-  /** Validates and dispatches the draft; a returned string shows as the error. */
   submit: (draft: string) => string | undefined;
 }) {
   const [draft, setDraft] = useState('');

@@ -29,19 +29,16 @@ export const AVAILABILITIES = ['online', 'away', 'busy'] as const;
 
 export type Availability = (typeof AVAILABILITIES)[number];
 
-/** Whether `value` is exactly one of the availabilities (the send validation). */
 export function isAvailability(value: string): value is Availability {
   return AVAILABILITIES.some((availability) => availability === value);
 }
 
-/** The Japanese wording of each availability, shared by the UI buttons and the canvas label. */
 export const AVAILABILITY_LABELS: Record<Availability, string> = {
   online: 'オンライン',
   away: '離席',
   busy: '取り込み中',
 };
 
-/** The presence dot rendered before the label — the classic traffic-light triad. */
 export const AVAILABILITY_ICONS: Record<Availability, string> = {
   online: '🟢',
   away: '🟡',
@@ -58,7 +55,6 @@ export interface StatusView {
   text: string;
 }
 
-/** What a missing player_status row means: online, nothing to say. */
 export const DEFAULT_STATUS: StatusView = { availability: 'online', text: '' };
 
 /**
@@ -85,13 +81,11 @@ export function statusViewOf(
  */
 export const STATUS_TEXT_MAX_LENGTH = 32;
 
-/** Why a free-text status was refused. Never 'empty': an empty text means "clear". */
 export type StatusTextRejectReason = Exclude<TextRejectReason, 'empty'>;
 
 export type StatusTextVerdict =
   | {
       ok: true;
-      /** The normalized text to persist and render; '' clears the status line. */
       text: string;
     }
   | { ok: false; reason: StatusTextRejectReason };
@@ -143,7 +137,6 @@ export function statusLabel(view: StatusView): string | undefined {
  */
 export const STATUS_SEND_COST_MICROS = 1_000_000n;
 
-/** Burst allowance: writes that may land back-to-back (e.g. 取り込み中 then the text). */
 export const STATUS_BURST_SENDS = 5;
 
 /**

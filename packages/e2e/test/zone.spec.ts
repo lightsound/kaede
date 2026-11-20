@@ -13,8 +13,6 @@ import { enterWorld, snapshot, sql, walkWhile } from './helpers';
 // row can never collide with a zone created through the reducer.
 const ZONE_ID = 9001;
 const ZONE_NAME = '会議室A';
-// On the plaza (map 0), on the ground band right of spawn (x=200): the
-// player's standing center (y=632) falls inside 464..656.
 const ZONE_RECT = { x: 500, y: 464, w: 400, h: 192 };
 
 async function seedZone(): Promise<void> {
@@ -58,7 +56,6 @@ test('ゾーンの入退室が相手ブラウザに同期し、クローズド�
     await enterWorld(pageB);
     await expect.poll(() => remoteZone(pageB), { timeout: 15_000 }).toBeUndefined();
 
-    // The seeded zone renders on both clients, open (no lock marker).
     const openLabel = zoneLabel(ZONE_NAME, false);
     await expect
       .poll(async () => (await zoneList(pageA)).map((zone) => zone.label), { timeout: 15_000 })
@@ -67,22 +64,16 @@ test('ゾーンの入退室が相手ブラウザに同期し、クローズド�
       .poll(async () => (await zoneList(pageB)).map((zone) => zone.label), { timeout: 15_000 })
       .toContain(openLabel);
 
-    // A walks into the zone; the occupancy tag appears on A's own avatar
-    // AND on B's view of A — the server judged the entry and every client
-    // heard it.
     const tag = zoneTagLabel(ZONE_NAME);
     await walkWhile(pageA, 'ArrowRight', (x) => x >= ZONE_RECT.x + 120);
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBe(tag);
     await expect.poll(() => remoteZone(pageB), { timeout: 15_000 }).toBe(tag);
 
-    // A walks back out, past the exit hysteresis margin: the tag clears on
-    // both browsers.
     const exitGoal = ZONE_RECT.x - ZONE_EXIT_MARGIN - 80;
     await walkWhile(pageA, 'ArrowLeft', (x) => x <= exitGoal);
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBeUndefined();
     await expect.poll(() => remoteZone(pageB), { timeout: 15_000 }).toBeUndefined();
 
-    // The オープン/クローズド flag syncs into the rendering (the lock marker).
     await sql(`UPDATE conversation_group SET closed = true WHERE id = ${ZONE_ID}`);
     const closedLabel = zoneLabel(ZONE_NAME, true);
     await expect

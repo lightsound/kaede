@@ -33,9 +33,8 @@ describe('normalizeChatText', () => {
     });
   });
 
-  // IME input can produce combining marks; both spellings must be one message.
   it('normalizes to NFC so composed and decomposed forms agree', () => {
-    const decomposed = 'か\u3099'; // か + combining voiced mark
+    const decomposed = 'か\u3099';
     expect(normalizeChatText(decomposed)).toEqual({ ok: true, text: 'が' });
   });
 
@@ -56,9 +55,8 @@ describe('normalizeChatText', () => {
     });
   });
 
-  // Length is code points, not UTF-16 units: surrogate-pair characters count once.
   it('counts astral-plane characters as one', () => {
-    const text = '𩸽'.repeat(CHAT_TEXT_MAX_LENGTH); // U+29E3D, 2 UTF-16 units each
+    const text = '𩸽'.repeat(CHAT_TEXT_MAX_LENGTH);
     expect(normalizeChatText(text)).toEqual({ ok: true, text });
   });
 
@@ -85,9 +83,8 @@ describe('normalizeChatText', () => {
 });
 
 describe('evaluateChatSend', () => {
-  const NOW = 1_700_000_000_000_000n; // an arbitrary wall-clock instant
+  const NOW = 1_700_000_000_000_000n;
 
-  /** Runs `count` sends back-to-back at NOW, returning the verdicts. */
   function sendBurst(count: number, startMarker: bigint) {
     const verdicts = [];
     let marker = startMarker;
@@ -116,12 +113,10 @@ describe('evaluateChatSend', () => {
     const verdicts = sendBurst(CHAT_BURST_MESSAGES, 0n);
     const last = verdicts[CHAT_BURST_MESSAGES - 1];
     if (!last?.ok) throw new Error('burst should have been accepted');
-    // Immediately after the burst: refused.
     expect(evaluateChatSend({ allowanceMicros: last.allowanceMicros, nowMicros: NOW })).toEqual({
       ok: false,
       reason: 'rate-limited',
     });
-    // One cost interval later: exactly one more send fits.
     const later = NOW + CHAT_SEND_COST_MICROS;
     const freed = evaluateChatSend({ allowanceMicros: last.allowanceMicros, nowMicros: later });
     expect(freed.ok).toBe(true);
@@ -132,7 +127,6 @@ describe('evaluateChatSend', () => {
     });
   });
 
-  // The bank cap: a long idle must not accrue more than one burst.
   it('caps the banked allowance at the burst size no matter how stale the marker', () => {
     const staleMarker = NOW - CHAT_SEND_COST_MICROS * 1_000n;
     const verdicts = sendBurst(CHAT_BURST_MESSAGES + 1, staleMarker);
@@ -151,7 +145,6 @@ describe('chatOverflowIds', () => {
     expect(chatOverflowIds([5n, 3n, 9n, 1n, 7n], 3)).toEqual([1n, 3n]);
   });
 
-  // Ids past Number.MAX_SAFE_INTEGER must still sort correctly (bigint compare).
   it('sorts as bigints, not as numbers or strings', () => {
     const big = 2n ** 60n;
     expect(chatOverflowIds([big + 1n, 2n, big], 2)).toEqual([2n]);
@@ -188,9 +181,6 @@ describe('resolveChatRoute', () => {
     });
   });
 
-  // The in-flight teleport: the draft was addressed to the map the sender
-  // was on, the row says otherwise. Refused rather than re-routed (the DM
-  // no-fallback rule).
   it('refuses a map send addressed to a map the sender is not on', () => {
     expect(resolveChatRoute({ scope: CHAT_SCOPE_MAP, target: 0n, context: onMap })).toEqual({
       ok: false,
@@ -206,8 +196,6 @@ describe('resolveChatRoute', () => {
     });
   });
 
-  // The impersonation this check exists for: a hostile client naming a
-  // group id it never joined, and the honest race of walking out of one.
   it('refuses a group send naming another group, or any group while in none', () => {
     expect(resolveChatRoute({ scope: CHAT_SCOPE_GROUP, target: 43n, context: inGroup })).toEqual({
       ok: false,
@@ -264,8 +252,6 @@ describe('chatTargetFor', () => {
     expect(chatTargetFor(CHAT_SCOPE_GROUP, { mapId: 3, groupId: undefined })).toBeUndefined();
   });
 
-  // The two halves of the pair must agree: whatever the sender addresses
-  // from a context, the server's verification of that same context accepts.
   it('produces targets the routing rule accepts', () => {
     const context = { mapId: 2, groupId: 9n };
     for (const scope of chatScopeOptions(context)) {
@@ -292,12 +278,10 @@ describe('chatScopeTag', () => {
     expect(tag({ scope: CHAT_SCOPE_GROUP })).toBe('会議室A');
   });
 
-  // The announcement marker outranks the scope it is stored under (space).
   it('marks an announcement whatever its scope column says', () => {
     expect(tag({ announcement: true })).toBe('アナウンス');
   });
 
-  // A closed group deleted mid-history, or a map this build does not have.
   it('falls back to a generic group label and drops an unknown map or scope', () => {
     expect(tag({ scope: CHAT_SCOPE_GROUP, groupName: undefined })).toBe('会話グループ');
     expect(tag({ scope: CHAT_SCOPE_MAP, mapName: undefined })).toBeUndefined();

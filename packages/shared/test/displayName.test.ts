@@ -16,9 +16,8 @@ describe('normalizeDisplayName', () => {
     expect(normalizeDisplayName('  楓 \t\n の樹  ')).toEqual({ ok: true, name: '楓 の樹' });
   });
 
-  // IME input can produce combining marks; both spellings must be one identity.
   it('normalizes to NFC so composed and decomposed forms agree', () => {
-    const decomposed = 'か\u3099えで'; // か + combining voiced mark
+    const decomposed = 'か\u3099えで';
     expect(normalizeDisplayName(decomposed)).toEqual({ ok: true, name: 'がえで' });
   });
 
@@ -39,19 +38,16 @@ describe('normalizeDisplayName', () => {
     });
   });
 
-  // Length is code points, not UTF-16 units: surrogate-pair characters count once.
   it('counts astral-plane characters as one', () => {
-    const name = '𩸽'.repeat(DISPLAY_NAME_MAX_LENGTH); // U+29E3D, 2 UTF-16 units each
+    const name = '𩸽'.repeat(DISPLAY_NAME_MAX_LENGTH);
     expect(normalizeDisplayName(name)).toEqual({ ok: true, name });
   });
 
   it('refuses control and format characters', () => {
     expect(normalizeDisplayName('a\u0000b')).toEqual({ ok: false, reason: 'forbidden-characters' });
-    // RIGHT-TO-LEFT OVERRIDE: would reverse surrounding text on other screens.
     expect(normalizeDisplayName('a\u202Eb')).toEqual({ ok: false, reason: 'forbidden-characters' });
   });
 
-  // \s covers most controls (\t, \n); the verdict must be on the collapsed text.
   it('treats whitespace-class controls as whitespace, not as forbidden', () => {
     expect(normalizeDisplayName('a\tb')).toEqual({ ok: true, name: 'a b' });
   });
@@ -87,7 +83,6 @@ describe('evaluateRename', () => {
 });
 
 describe('resolveJoinName', () => {
-  // A rename made on another device must win over this device's stale row.
   it('prefers the persisted account name over the resumed row name', () => {
     expect(
       resolveJoinName({

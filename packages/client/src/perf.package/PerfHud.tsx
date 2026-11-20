@@ -1,8 +1,5 @@
 // fallow-ignore-file coverage-gaps -- a React overlay that polls the dev-only window hooks on an interval; needs a DOM, and no DOM test environment is configured. The readout it prints is perfHudLine.ts, which is unit-tested
 
-// The dev-only `?perf=1` overlay for the concurrent-mover probe: FPS, how
-// many remote players are drawn, the player-row update rate and how far
-// apart the remotes stand, sampled four times a second.
 import type { E2EWorldSnapshot } from '@kaede/shared';
 import { type CSSProperties, useEffect, useState } from 'react';
 import { UI_GOLD, UI_GOLD_BORDER, UI_PANEL_BG } from '../theme';
@@ -46,7 +43,6 @@ function samplePerfHud(
   return { text: perfHudLine(snap, updateRate), updates, at: now };
 }
 
-/** Dev-only `?perf=1` overlay for the concurrent-mover probe. */
 function PerfHud() {
   const [text, setText] = useState('measuring…');
   useEffect(() => {

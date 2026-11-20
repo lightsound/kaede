@@ -53,7 +53,6 @@ const columnStyle: CSSProperties = {
   pointerEvents: 'none',
 };
 
-/** Puts one control on the bottom edge of its band (leftColumn.ts). */
 function ColumnSlot({ control, children }: { control: ColumnControl; children: ReactNode }) {
   const { order, minHeight } = columnBand(control);
   return (
@@ -73,8 +72,6 @@ function ColumnSlot({ control, children }: { control: ColumnControl; children: R
 
 export function App() {
   const session = useContext(AuthSessionContext);
-  // What the net stack publishes, and the commands that reach it
-  // (useNetStack). App only decides which surface goes where.
   const {
     hostRef,
     status,

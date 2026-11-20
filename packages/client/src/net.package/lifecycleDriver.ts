@@ -10,33 +10,18 @@ import {
   transition,
 } from './lifecycle';
 
-/** What the lifecycle driver needs from the net stack that owns it (startNet). */
 export interface LifecycleDriverDeps {
-  /** The pure lifecycle state (lifecycle.ts), owned by startNet. */
   getState(): LifecycleState;
-  /** Stores the state a transition produced. */
   setState(state: LifecycleState): void;
-  /** The live connection, read when an effect runs. */
   getConnection(): DbConnection | undefined;
-  /** Adopts (wire-session) or drops the live connection. */
   setConnection(conn: DbConnection | undefined): void;
-  /** Reports the connection status to the UI (NetHooks.onStatus). */
   onStatus(status: ConnectionStatus): void;
-  /** Wires a freshly settled connection as the live session (sessionWiring.ts). */
   wireSession(settled: Connected, generation: number): void;
-  /** Tears the live session's state down (sessionWiring.ts). */
   dropSession(): void;
-  /** Produces a fresh OIDC token per connect attempt (connection.ts). */
   getAuthToken: AuthTokenGetter;
 }
 
-/**
- * The shell around the pure lifecycle machine (lifecycle.ts): the one
- * path lifecycle events enter through, performing each returned effect
- * (timers, sockets, session wiring, status callbacks) in order.
- */
 export interface LifecycleDriver {
-  /** Runs one lifecycle step and performs its effects in order. */
   dispatch(event: LifecycleEvent, settled?: Connected): LifecycleEffect[];
 }
 
@@ -123,7 +108,7 @@ export function createLifecycleDriver(deps: LifecycleDriverDeps): LifecycleDrive
       },
       'probe-session': (e) => {
         // Read the socket state the pure machine cannot: isSocketClosed
-        // (SDK 2.7.1) is true even when the browser never delivered the
+        // is true even when the browser never delivered the
         // close event — the zombie a frozen tab leaves behind. Dispatching
         // from inside a runner is safe here because probe-session is always
         // its transition's only effect, so no sibling effect runs against
@@ -137,7 +122,6 @@ export function createLifecycleDriver(deps: LifecycleDriverDeps): LifecycleDrive
     };
   }
 
-  /** Runs one lifecycle step and performs its effects in order. */
   function dispatch(event: LifecycleEvent, settled?: Connected): LifecycleEffect[] {
     const step = transition(deps.getState(), event);
     deps.setState(step.state);
@@ -146,7 +130,6 @@ export function createLifecycleDriver(deps: LifecycleDriverDeps): LifecycleDrive
     return step.effects;
   }
 
-  /** One connect attempt; every outcome is reported back as a lifecycle event. */
   function startConnect(generation: number, consecutiveFailures: number): void {
     connect(
       {

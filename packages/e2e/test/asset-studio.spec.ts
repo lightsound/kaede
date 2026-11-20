@@ -22,23 +22,14 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await expect(page.getByTestId('avatar-card')).toHaveCount(10);
   await expect(page.getByTestId('pose-frame')).toHaveCount(50);
   await expect(page.getByTestId('item-card')).toHaveCount(5);
-  // Every carry variant ships a hand overlay (the hand-over-item layer).
   await expect(page.getByTestId('hand-layer')).toHaveCount(6);
-  // The ①c gesture sheets (boy-basic and girl-basic, 12 cells each:
-  // stand + sit + sleep + wave + 8 dance frames) and the busy headgear
-  // render in sections of their own, outside the avatar-body pose diff.
   await expect(page.getByTestId('gesture-card')).toHaveCount(2);
   await expect(page.getByTestId('gesture-frame')).toHaveCount(24);
   await expect(page.getByTestId('headgear-card')).toHaveCount(1);
 
-  // The shipped manifests share one pose vocabulary, so the diff is clean —
-  // and no integrity problem (missing PNG, duplicate id) is reported.
   await expect(page.getByTestId('missing-summary')).toContainText('ポーズ欠落なし');
   await expect(page.getByTestId('problems')).toHaveCount(0);
 
-  // Walk playback cycles the preview through the walk frames (200ms per
-  // frame at the rig cadence, so half a second sees a frame change), and
-  // pausing settles every preview back on stand.
   const firstPreview = page.getByTestId('walk-preview').first();
   await expect
     .poll(async () => firstPreview.getAttribute('data-pose'), { timeout: 10_000 })
@@ -46,7 +37,6 @@ test('アセット検品ビューアが全キャラ・全アイテムを描画�
   await page.getByTestId('playback-toggle').click();
   await expect(firstPreview).toHaveAttribute('data-pose', 'stand');
 
-  // Checking two avatars builds the comparison strip with both figures.
   await page.getByTestId('avatar-card').first().getByRole('checkbox').check();
   await page.getByTestId('avatar-card').nth(1).getByRole('checkbox').check();
   const strip = page.getByTestId('compare-strip');

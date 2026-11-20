@@ -47,10 +47,8 @@ export const HUDDLE_JOIN_DISTANCE = 140;
  */
 export const HUDDLE_LEAVE_DISTANCE = 320;
 
-/** Why a huddle name was refused (empty is not a refusal — see normalizeHuddleName). */
 export type HuddleNameRejectReason = 'too-long' | 'forbidden-characters';
 
-/** `name` is the normalized name to persist and render. */
 export type HuddleNameVerdict =
   | { ok: true; name: string }
   | { ok: false; reason: HuddleNameRejectReason };
@@ -72,7 +70,6 @@ export function normalizeHuddleName(raw: string): HuddleNameVerdict {
   return { ok: true, name: verdict.text };
 }
 
-/** Distance from `position` to the closest of `members`, +Infinity for none. */
 function nearestMemberDistance(
   position: { x: number; y: number },
   members: readonly { x: number; y: number }[],
@@ -84,15 +81,10 @@ function nearestMemberDistance(
   return nearest;
 }
 
-/** What ruling on one join_huddle call needs (see evaluateHuddleJoin). */
 export interface HuddleJoinRequest {
-  /** The joiner's authoritative AABB center. */
   position: { x: number; y: number };
-  /** The joiner's map. */
   mapId: number;
-  /** The huddle's map (the conversation_group row's mapId, its founding map). */
   huddleMapId: number;
-  /** The huddle's current members' authoritative AABB centers. */
   memberPositions: readonly { x: number; y: number }[];
 }
 
@@ -114,15 +106,10 @@ export function evaluateHuddleJoin(request: HuddleJoinRequest): HuddleJoinVerdic
   return { ok: true };
 }
 
-/** What ruling on one member's huddle retention needs (see keepsHuddleMembership). */
 export interface HuddleRetentionRequest {
-  /** The member's authoritative AABB center after the movement being ruled on. */
   position: { x: number; y: number };
-  /** The member's map after the movement (a portal landing may change it). */
   mapId: number;
-  /** The huddle's map (the conversation_group row's mapId). */
   huddleMapId: number;
-  /** The OTHER members' authoritative AABB centers (empty for a solo huddle). */
   otherMemberPositions: readonly { x: number; y: number }[];
 }
 
@@ -142,7 +129,6 @@ export function keepsHuddleMembership(request: HuddleRetentionRequest): boolean 
   return nearest <= HUDDLE_LEAVE_DISTANCE;
 }
 
-/** One huddle as the join-button rule reads it (see findJoinableHuddleId). */
 export interface JoinableHuddleCandidate {
   id: bigint;
   mapId: number;

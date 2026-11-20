@@ -32,7 +32,6 @@ const optionLabelStyle: CSSProperties = { fontSize: 11, opacity: 0.8, marginTop:
 
 const noteStyle: CSSProperties = { color: '#e8a2a2', fontSize: 12, marginTop: 8 };
 
-/** A selectable thumbnail button (an outfit or an item), gold-framed while worn/held. */
 function optionButtonStyle(selected: boolean): CSSProperties {
   return {
     background: selected ? 'rgba(216, 166, 87, 0.2)' : 'transparent',
@@ -46,17 +45,10 @@ function optionButtonStyle(selected: boolean): CSSProperties {
   };
 }
 
-/** A thumbnail image at `height` CSS px, width following the aspect ratio. */
 function thumbStyle(height: number): CSSProperties {
   return { imageRendering: 'pixelated', height, width: 'auto', display: 'block', margin: '0 auto' };
 }
 
-/**
- * The dressed figure: the worn sheet's frame for the current walk pose,
- * with the held layers composited at the hand anchor (body → item → hand,
- * the avatarView order). All placement math lives in dressup.ts; here it
- * is only multiplied by the stage scale.
- */
 function StageFigure(props: { look: StageLook; pose: string }) {
   const { look, pose } = props;
   const resolved = frameFor(look.body, pose);
@@ -97,7 +89,6 @@ function StageFigure(props: { look: StageLook; pose: string }) {
   );
 }
 
-/** One outfit choice: the stand frame as the thumbnail (服はコーデ単位のシート). */
 function OutfitOption(props: { outfit: AvatarAsset; selected: boolean; onSelect: () => void }) {
   const stand = frameFor(props.outfit, 'stand');
   return (
@@ -116,7 +107,6 @@ function OutfitOption(props: { outfit: AvatarAsset; selected: boolean; onSelect:
   );
 }
 
-/** One held-item choice; clicking again puts the item back. */
 function ItemOption(props: { item: ItemAsset; held: boolean; onToggle: () => void }) {
   return (
     <button

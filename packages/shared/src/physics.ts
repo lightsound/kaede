@@ -1,6 +1,5 @@
 import type { Rect } from './types';
 
-/** Axis-aligned box described by its center and half extents. */
 export interface AABB {
   cx: number;
   cy: number;
@@ -8,7 +7,6 @@ export interface AABB {
   hh: number;
 }
 
-/** Left/right/top/bottom edges of a center+half-extents box. */
 function aabbBounds(box: AABB) {
   return {
     left: box.cx - box.hw,
@@ -18,12 +16,10 @@ function aabbBounds(box: AABB) {
   };
 }
 
-/** Left/right/top/bottom edges of a top-left+size rectangle. */
 export function rectBounds(r: Rect) {
   return { left: r.x, right: r.x + r.w, top: r.y, bottom: r.y + r.h };
 }
 
-/** True when a center+half-extents box overlaps a top-left+size rect. */
 export function overlaps(box: AABB, r: Rect): boolean {
   const b = aabbBounds(box);
   const s = rectBounds(r);

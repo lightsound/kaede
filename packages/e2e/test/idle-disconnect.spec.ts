@@ -13,8 +13,6 @@ const IDLE_MS = 8000;
 test('無操作のクライアントは接続を休止して退出し、操作すると自動で再入場する', async ({
   browser,
 }) => {
-  // 2 コンテキスト = sessionStorage が別の 2 タブなので、サーバーからは
-  // 別々のゲスト Identity に見える。B が観測者、A が放置されるタブ。
   const contextA = await browser.newContext();
   const contextB = await browser.newContext();
   const pageA = await contextA.newPage();
@@ -28,9 +26,6 @@ test('無操作のクライアントは接続を休止して退出し、操作�
   await enterWorld(pageA, `/?idleMs=${IDLE_MS}`);
   await expect.poll(() => remoteCount(pageB), { timeout: 15_000 }).toBe(1);
 
-  // A を無操作のまま放置すると、A は自分から接続を休止し(バナーで告知)、
-  // B からは退出して見える(サーバーが行を offline にし、offline 行は
-  // 描画されない)。
   await expect(pageA.getByText('接続を休止しています')).toBeVisible({
     timeout: IDLE_MS + 10_000,
   });

@@ -1,18 +1,11 @@
-/** The JWT claims the module needs to decide what a connection may become. */
 export interface ConnectionClaims {
-  /** The `iss` claim: which provider minted this token. */
   readonly issuer: string;
-  /** The `aud` claim: which application the issuer minted it for. */
   readonly audience: readonly string[];
-  /** The `sub` claim: the issuer's stable id for this user. */
   readonly subject: string;
 }
 
-/** Which issuers we trust, and for what. */
 export interface ConnectionPolicy {
-  /** Issuers we recognise as our own identity provider, so they mint members. */
   readonly memberIssuers: readonly string[];
-  /** The `aud` our JWT template pins, proving the token was minted for kaede. */
   readonly memberAudience: string;
   /**
    * SpacetimeDB hosts whose own tokens we expect to see. A guest that connects
@@ -54,8 +47,7 @@ export type ConnectionAuth =
  * gain would widen what its stable identity quietly reaches (world entry
  * itself was always ruled by join, not by this admission). The cost is that
  * every host we deploy to must have its issuer named in `guestIssuers` first
- * (localhost and Maincloud are both registered — see the server's
- * CONNECTION_POLICY).
+ * (localhost and Maincloud are both registered).
  */
 /**
  * Builds the member-issuer list for the database the module woke up in —
@@ -68,8 +60,7 @@ export type ConnectionAuth =
  * development with the pk_test_ Clerk instance keeps signing in as members.
  *
  * Which database counts as production is the caller's judgment; the server
- * pins its own database identity (see CONNECTION_POLICY in the server
- * package) because a reducer cannot see which host it runs on.
+ * pins its own database identity because a reducer cannot see which host it runs on.
  */
 export function memberIssuersFor(
   isProductionDatabase: boolean,

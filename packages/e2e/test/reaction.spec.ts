@@ -3,7 +3,6 @@ import { REACTION_DURATION_MS } from '@kaede/shared';
 import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, snapshot } from './helpers';
 
-/** Clicks the palette button for `emoji` (the ChatPanel reaction row). */
 async function sendReaction(page: Page, emoji: string): Promise<void> {
   await page.getByLabel(`リアクション ${emoji}`).click();
 }
@@ -34,16 +33,12 @@ test('リアクションが両画面のアバター頭上に表示され、連�
   await enterWorld(pageA);
   await enterWorld(pageB);
 
-  // B must see A before the reaction, so the assertions below measure
-  // reaction propagation and not mere entry.
   await expect
     .poll(async () => (await snapshot(pageB)).remotePlayers.length, { timeout: 15_000 })
     .toBe(1);
 
   await sendReaction(pageA, '👍');
 
-  // The send round-trips through the server row before anything renders:
-  // A's own badge and B's view of it come from the same row event.
   await expect
     .poll(async () => (await snapshot(pageA)).local.reaction, { timeout: 10_000 })
     .toBe('👍');
@@ -62,7 +57,6 @@ test('リアクションが両画面のアバター頭上に表示され、連�
     .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.reaction, { timeout: 10_000 })
     .toBe('🎉');
 
-  // Transient: gone from both screens once the display window elapses.
   await expect
     .poll(async () => (await snapshot(pageA)).local.reaction, {
       timeout: REACTION_DURATION_MS + 10_000,

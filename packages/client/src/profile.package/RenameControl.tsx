@@ -28,9 +28,7 @@ export function RenameControl({
   onSubmit,
 }: {
   connected: boolean;
-  /** The authoritative name from the own player row; undefined without one. */
   ownName: string | undefined;
-  /** The own membership row; undefined for guests. */
   self: SpaceMemberView | undefined;
   onSubmit: (name: string) => void;
 }) {

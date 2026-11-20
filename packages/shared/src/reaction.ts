@@ -30,7 +30,6 @@ export const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '🙏'
 
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 
-/** Whether `value` is exactly one of the palette emojis (the send validation). */
 export function isReactionEmoji(value: string): value is ReactionEmoji {
   return REACTION_EMOJIS.some((emoji) => emoji === value);
 }
@@ -54,7 +53,6 @@ export const REACTION_DURATION_MS = 5_000;
  */
 export const REACTION_SEND_COST_MICROS = 1_000_000n;
 
-/** Burst allowance: reactions that may land back-to-back (e.g. 👍 then 🎉). */
 export const REACTION_BURST_SENDS = 5;
 
 /**
@@ -78,12 +76,10 @@ export const GESTURES = ['sit', 'sleep', 'dance', 'wave'] as const;
 
 export type GestureKind = (typeof GESTURES)[number];
 
-/** Whether `value` is exactly one of the gestures (the send validation). */
 export function isGestureKind(value: string): value is GestureKind {
   return GESTURES.some((gesture) => gesture === value);
 }
 
-/** The Japanese wording of each gesture, shared by the UI buttons. */
 export const GESTURE_LABELS: Record<GestureKind, string> = {
   sit: '座る',
   sleep: '寝る',
@@ -106,7 +102,6 @@ export function isTransientGesture(gesture: GestureKind): boolean {
   return gesture === 'wave';
 }
 
-/** How long a wave plays after its row event (ms) — the reaction-window idea. */
 export const WAVE_GESTURE_DURATION_MS = 4_000;
 
 /**
@@ -129,5 +124,4 @@ export const DANCE_FRAME_MS = 100;
  */
 export const GESTURE_SEND_COST_MICROS = 1_000_000n;
 
-/** Burst allowance: gestures that may land back-to-back (sit, stand, wave…). */
 export const GESTURE_BURST_SENDS = 5;

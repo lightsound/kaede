@@ -20,7 +20,7 @@ describe('correctionOffset', () => {
 describe('decayOffset', () => {
   it('decays exponentially toward zero', () => {
     const start = { x: 100, y: 0 };
-    const once = decayOffset(start, 80); // one time constant: ~36.8% remains
+    const once = decayOffset(start, 80);
     expect(once.x).toBeCloseTo(100 * Math.exp(-1), 5);
     expect(decayOffset(once, 80).x).toBeLessThan(once.x);
   });
@@ -42,13 +42,11 @@ describe('hermite', () => {
   });
 
   it('reduces to linear interpolation when velocities match the segment slope', () => {
-    // 100px/s over a 100ms segment is exactly the chord slope: the curve is a line.
     expect(hermite(a, b, 50).x).toBeCloseTo(5, 10);
   });
 
   it('falls back to linear interpolation on segments longer than the cap', () => {
     const far = { t: 1000, x: 10, y: 0, vx: -10_000, vy: 0 };
-    // With hermite tangents this would swing wildly; linear gives the midpoint.
     expect(hermite(a, far, 500)).toEqual({ x: 5, y: 0 });
   });
 

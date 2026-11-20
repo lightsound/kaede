@@ -10,7 +10,6 @@ import type { HuddleView } from '../net.package';
 import { UI_BUTTON_BG, UI_GOLD_BORDER, UI_STACKED_PANEL_STYLE, UI_TEXT_COLOR } from '../theme';
 import { blurringClick, DraftForm, postingDisabled } from '../ui.package';
 
-/** The user-facing wording of each huddle-name refusal (normalizeHuddleName). */
 const NAME_ERRORS: Record<HuddleNameRejectReason, string> = {
   'too-long': `名前は${ZONE_NAME_MAX_LENGTH}文字以内にしてください`,
   'forbidden-characters': '使えない文字が含まれています',
@@ -34,7 +33,6 @@ const actionButtonStyle: CSSProperties = {
   flexShrink: 0,
 };
 
-/** What the control dispatches — one callback per huddle reducer (see NetApi). */
 export interface HuddleActions {
   onCreateHuddle(spec: { name: string; closed: boolean }): void;
   onJoinHuddle(groupId: bigint): void;
@@ -106,12 +104,10 @@ export function HuddleControl({
   actions,
 }: {
   connected: boolean;
-  /** The authoritative name from the own player row; undefined without one. */
   ownName: string | undefined;
   view: HuddleView;
   actions: HuddleActions;
 }) {
-  // The shared posting gate: a huddle action needs a player row to act from.
   const disabled = postingDisabled(connected, ownName);
 
   if (view.own !== undefined) {

@@ -10,7 +10,6 @@ import {
 } from '../smoothing.package';
 import { createServerClock } from './serverClock';
 
-/** One position sample for a remote player, timestamped on the SERVER clock. */
 export interface Snapshot extends HermitePoint {
   facing: Facing;
   /**
@@ -21,12 +20,6 @@ export interface Snapshot extends HermitePoint {
   airborne: boolean;
 }
 
-/**
- * Per-remote render state: the display attributes (the PlayerLabel that
- * record() and patchLabel keep current), the snapshot buffer, plus the
- * smoothing carry (the decaying error offset and the previous rendered
- * position used to detect target discontinuities).
- */
 interface RemoteView {
   label: PlayerLabel;
   snaps: Snapshot[];
@@ -35,7 +28,6 @@ interface RemoteView {
   lastFrameMs?: number;
 }
 
-/** Discard samples older than this, but always keep the last two to interpolate. */
 const SNAPSHOT_TTL_MS = 1500;
 
 /**
@@ -58,9 +50,6 @@ export function createRemoteViews() {
   const views = new Map<string, RemoteView>();
   const clock = createServerClock();
 
-  // Inbound (remote): buffer a snapshot for each remote row change with the
-  // display attributes the caller read from its cache, and feed the clock
-  // estimator with the (server time, receive time) pair.
   function record(
     idHex: string,
     label: PlayerLabel,
@@ -114,20 +103,16 @@ export function createRemoteViews() {
     views.delete(idHex);
   }
 
-  /** Drop all remote state (e.g. when the connection is lost). */
   function clear(): void {
     views.clear();
   }
 
-  // Render remote players interpolated INTERP_DELAY_MS in the past, smoothing
-  // over any snapshot discontinuities (teleports, reorders) with a decaying
-  // error offset so the rendered path stays continuous.
   function renderFrame(
     nowMs: number,
     draw: (idHex: string, label: PlayerLabel, x: number, y: number, facing: Facing) => void,
   ): void {
     const serverNowMs = clock.serverNow(nowMs);
-    if (serverNowMs === undefined) return; // no samples yet: nothing to render anyway
+    if (serverNowMs === undefined) return;
     const renderTime = serverNowMs - INTERP_DELAY_MS;
     for (const [idHex, view] of views) {
       prune(view.snaps, serverNowMs);
@@ -157,12 +142,10 @@ export function createRemoteViews() {
   return { record, patchLabel, remove, clear, renderFrame };
 }
 
-/** Euclidean distance between two points. */
 function dist(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** Drop samples older than the TTL, always keeping at least the last two. */
 function prune(buf: Snapshot[], serverNowMs: number): void {
   while (buf.length > 2 && serverNowMs - buf[0].t > SNAPSHOT_TTL_MS) buf.shift();
 }

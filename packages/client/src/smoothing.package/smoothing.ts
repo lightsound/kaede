@@ -8,13 +8,9 @@ export interface Vec2 {
   y: number;
 }
 
-/** Error offsets decay as exp(-dt/tau); tau in ms. */
 const SMOOTH_TAU_MS = 80;
-/** Corrections larger than this (px) snap instantly instead of smearing. */
 const SMOOTH_MAX_OFFSET_PX = 160;
-/** Offsets below this magnitude (px) are zeroed to avoid endless drift. */
 const SMOOTH_EPSILON_PX = 0.5;
-/** Frame-to-frame remote target motion above this (px/s) is a discontinuity. */
 export const REMOTE_DISCONTINUITY_SPEED = 2000;
 /**
  * Hermite segments longer than this (ms) fall back to linear interpolation.
@@ -40,7 +36,6 @@ export function correctionOffset(prevRendered: Vec2, corrected: Vec2): Vec2 {
   return { x, y };
 }
 
-/** Exponentially decay an offset toward zero; snaps to zero below epsilon. */
 export function decayOffset(off: Vec2, dtMs: number): Vec2 {
   const k = Math.exp(-dtMs / SMOOTH_TAU_MS);
   const x = off.x * k;
@@ -49,7 +44,6 @@ export function decayOffset(off: Vec2, dtMs: number): Vec2 {
   return { x, y };
 }
 
-/** An interpolation endpoint: a timestamped position with its velocity. */
 export interface HermitePoint {
   t: number;
   x: number;
@@ -58,12 +52,6 @@ export interface HermitePoint {
   vy: number;
 }
 
-/**
- * Cubic Hermite interpolation on the segment [a, b], using each endpoint's
- * velocity for the tangents. Callers guarantee a.t <= renderTime <= b.t and
- * a.t < b.t. Segments longer than HERMITE_MAX_SEGMENT_MS fall back to linear
- * interpolation, since velocity * a long gap swings the curve wildly.
- */
 export function hermite(a: HermitePoint, b: HermitePoint, renderTime: number): Vec2 {
   const span = b.t - a.t;
   const s = (renderTime - a.t) / span;

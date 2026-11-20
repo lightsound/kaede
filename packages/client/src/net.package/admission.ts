@@ -11,20 +11,14 @@ import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 
-/** The generated space_member row type (all columns). */
 type SpaceMemberRow = RowOf<'spaceMember'>;
 
-/** One space_member row, shaped for the admin UI. */
 export interface SpaceMemberView {
-  /** The live row's identity: the target handle for the admin actions. */
   identity: Identity;
-  /** Its hex form: the stable React key, and the fallback label. */
   idHex: string;
-  /** The member's chosen name; undefined until they set one. */
   displayName: string | undefined;
   status: MemberStatus;
   role: MemberRole;
-  /** When the latest application was filed, for a stable oldest-first order. */
   requestedAtMs: number;
 }
 
@@ -38,18 +32,13 @@ export interface SpaceMemberView {
  */
 export interface SpaceView {
   admission: Admission;
-  /** This client's own membership row, or undefined for guests. */
   self: SpaceMemberView | undefined;
   guestsAllowed: boolean;
-  /** The whole directory, oldest membership first. */
   members: SpaceMemberView[];
 }
 
-/** What the admission wiring needs from the session that owns it. */
 export interface AdmissionHooks {
-  /** Reports every change of the membership / settings view. */
   onSpace(view: SpaceView): void;
-  /** Admission allows being in the world: resume or join (idempotent). */
   enterWorld(): void;
 }
 
@@ -102,8 +91,6 @@ export function wireAdmission(
     if (admission === 'admitted') hooks.enterWorld();
   };
 
-  // Membership and settings drive admission and the admin panel; every
-  // change re-runs the one admission rule and republishes the view.
   rows.onAny(c.db.spaceMember, reevaluate);
   rows.onAny(c.db.spaceSetting, reevaluate);
 

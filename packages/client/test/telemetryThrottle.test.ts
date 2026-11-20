@@ -64,7 +64,6 @@ describe('exceptionFingerprint', () => {
     expect(exceptionFingerprint(undefined)).toBe('unknown');
     expect(exceptionFingerprint({})).toBe('unknown');
     expect(exceptionFingerprint({ $exception_list: [] })).toBe('unknown');
-    // リスト要素の形が壊れていても文字列キーには畳める。
     expect(exceptionFingerprint({ $exception_list: [null] })).toBe('||||');
   });
 });
@@ -84,7 +83,6 @@ describe('createRateGate', () => {
     for (let frame = 0; frame < 3600; frame++) {
       if (gate('ticker-bug', frame * 16.7)) sent += 1;
     }
-    // 3,600 発火(約 60 秒)が 0 秒・30 秒・60 秒時点の 3 回に落ちる。
     expect(sent).toBe(3);
   });
 
@@ -98,8 +96,8 @@ describe('createRateGate', () => {
     const gate = createRateGate(1000, 2);
     expect(gate('a', 0)).toBe(true);
     expect(gate('b', 1)).toBe(true);
-    expect(gate('c', 2)).toBe(true); // a が捨てられる
-    expect(gate('a', 3)).toBe(true); // 記憶喪失により1回通る(送信は止めない)
-    expect(gate('c', 4)).toBe(false); // c は覚えている
+    expect(gate('c', 2)).toBe(true);
+    expect(gate('a', 3)).toBe(true);
+    expect(gate('c', 4)).toBe(false);
   });
 });

@@ -7,13 +7,11 @@ import { Circle, Container, Graphics, Text, TextStyle } from 'pixi.js';
 // overlap. Adjacent pad buttons sit PAD_SPACING * sqrt(2) apart, so the
 // no-overlap rule is PAD_SPACING * sqrt(2) >= 2 * PAD_HIT_RADIUS.
 const PAD_BTN_RADIUS = 48;
-const PAD_HIT_RADIUS = PAD_BTN_RADIUS * 1.25; // 60; fat-finger tolerance, no overlap
+const PAD_HIT_RADIUS = PAD_BTN_RADIUS * 1.25;
 const PAD_SPACING = 90; // 90 * sqrt(2) ~= 127 >= 2 * 60 = 120, so hit areas clear
 
-// Jump button (bottom-right): standalone, so it keeps the larger size and the
-// original generous hit multiplier.
 const JUMP_BTN_RADIUS = 64;
-const JUMP_HIT_RADIUS = JUMP_BTN_RADIUS * 1.4; // oversized for fat-finger tolerance
+const JUMP_HIT_RADIUS = JUMP_BTN_RADIUS * 1.4;
 
 // The overlay was designed on a 1280x720 canvas; now that the canvas follows
 // the window (Phase 4.5 増分②), layout() re-anchors the two clusters to the
@@ -22,10 +20,10 @@ const JUMP_HIT_RADIUS = JUMP_BTN_RADIUS * 1.4; // oversized for fat-finger toler
 // collide or leave the screen.
 const DESIGN_W = 1280;
 const DESIGN_H = 720;
-const PAD_ANCHOR_X = 160; // pad center, from the left edge
-const PAD_ANCHOR_Y = 160; // pad center, from the bottom edge
-const JUMP_ANCHOR_X = 110; // jump center, from the right edge
-const JUMP_ANCHOR_Y = 120; // jump center, from the bottom edge
+const PAD_ANCHOR_X = 160;
+const PAD_ANCHOR_Y = 160;
+const JUMP_ANCHOR_X = 110;
+const JUMP_ANCHOR_Y = 120;
 
 const BTN_COLOR = 0xeceff4;
 const IDLE_ALPHA = 0.35;
@@ -34,15 +32,6 @@ const PRESSED_ALPHA = 0.7;
 const GLYPH_STYLE = new TextStyle({ fill: 0x10131b, fontSize: 36, fontFamily: 'sans-serif' });
 const JUMP_STYLE = new TextStyle({ fill: 0x10131b, fontSize: 24, fontFamily: 'sans-serif' });
 
-/**
- * A single round button. Each button owns its own pointer handlers, so holding
- * one (e.g. ▶) while tapping another (e.g. ▲) works for free: Pixi delivers a
- * separate pointer stream per touch point.
- *
- * Note: a finger that slides off one button onto another without lifting fires
- * pointerupoutside on the first but no pointerdown on the second (the second
- * never saw a fresh press), so the press does not transfer. Acceptable.
- */
 function createButton(
   cx: number,
   cy: number,
@@ -86,19 +75,14 @@ function createButton(
   return { node, pressed: () => down };
 }
 
-/** Screen-space touch overlay: a 4-way pad bottom-left, JUMP bottom-right. */
 export function createTouchControls(): {
   container: Container;
-  /** Re-anchors (and, below the design size, shrinks) the clusters for a window of width x height CSS pixels. */
   layout(width: number, height: number): void;
   sample(): PlayerInput;
   dispose(): void;
 } {
   const container = new Container();
 
-  // Two anchored clusters: the buttons sit at offsets from their cluster's
-  // center, and layout() places (and scales) the clusters — so a resize
-  // never has to know about individual buttons.
   const pad = new Container();
   const jumpCluster = new Container();
 

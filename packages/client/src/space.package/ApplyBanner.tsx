@@ -31,7 +31,6 @@ const buttonStyle: CSSProperties = {
   cursor: 'pointer',
 };
 
-/** What the banner says per affordance (labels shared with AdmissionOverlay's button). */
 const BANNER_TEXT: Record<'apply' | 'apply-first', { lead: string; button: string }> = {
   apply: { lead: 'メンバーとして参加できます', button: '参加を申請する' },
   // The space-first application seeds the admin (initialMembership), and

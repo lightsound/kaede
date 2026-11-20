@@ -19,12 +19,6 @@ import {
 import { netActionsOf } from './netActions';
 import { dmNotifier } from './notify.package';
 
-/**
- * The connection status and the authoritative own-row views: how the
- * connection stands, and the display name and manual status the server
- * holds for this client, republished by the net stack on session entry
- * and every own-row change.
- */
 function useConnectionViews() {
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   // The authoritative display name from the own player row; undefined
@@ -33,68 +27,32 @@ function useConnectionViews() {
   // While undefined a rename has nowhere to land (the server would refuse it
   // as no-target), so the form stays disabled.
   const [ownName, setOwnName] = useState<string>();
-  // The authoritative own status (ステータス手動切替), published by the net
-  // stack on session entry and every own player_status change. Never
-  // undefined: a missing row IS the default status.
   const [ownStatus, setOwnStatus] = useState<StatusView>(DEFAULT_STATUS);
   return { status, setStatus, ownName, setOwnName, ownStatus, setOwnStatus };
 }
 
-/**
- * The space-structure views the net stack publishes: the membership
- * value (admission, roster, guest setting) and the meeting-room zones
- * the admin panel renders.
- */
 function useSpaceViews() {
-  // Everything membership-related (own admission, roster, guest setting),
-  // published by the net stack on every space_member / space_setting change;
-  // undefined until the first session reports. Held as one value so the
-  // overlays and the admin panel can never disagree about the same instant.
   const [space, setSpace] = useState<SpaceView>();
-  // The meeting-room zones (every map), published by the net stack on every
-  // conversation_group change — the admin panel's zone section renders it.
   const [zones, setZones] = useState<ZoneAdminView[]>([]);
   return { space, setSpace, zones, setZones };
 }
 
-/**
- * The chat views the net stack publishes: the global-scope log, the
- * refused-send flag, and the scopes a send may address — everything the
- * chat panel renders from.
- */
 function useChatViews() {
-  // The global-scope chat history, published whole by the net stack on
-  // every chat_message change (seed and row events alike).
   const [chatLog, setChatLog] = useState<ChatLog>([]);
   // True after a send was dropped or refused server-side (onChatRefused) —
   // the panel clears its draft optimistically, so this is the only trace
   // the sender gets. Cleared by the next send attempt.
   const [chatSendRefused, setChatSendRefused] = useState(false);
-  // Which chat scopes a send may address right now (全体 / このマップ /
-  // いまの会話グループ), published deduplicated by the net stack (ROADMAP
-  // Phase 3 増分④). Empty until the first session reports; the panel is
-  // disabled until then anyway.
   const [chatScopes, setChatScopes] = useState<ChatScopeView>([]);
   return { chatLog, setChatLog, chatSendRefused, setChatSendRefused, chatScopes, setChatScopes };
 }
 
-/**
- * The call-related views the net stack publishes (ROADMAP Phase 4):
- * which conversation group this client is in (増分① — the call dock's
- * offer and auto-leave watch ride it) and the recording label rows
- * (増分④ — the 録画一覧 decorates the module's R2 listing with them).
- */
 function useCallViews() {
   const [ownGroupId, setOwnGroupId] = useState<bigint>();
   const [recordings, setRecordings] = useState<RecordingLabelView[]>([]);
   return { ownGroupId, setOwnGroupId, recordings, setRecordings };
 }
 
-/**
- * The view setters the net stack's hooks publish through: the view
- * bundles' setters, plus the huddle setter useNetStack holds inline.
- * Every one is a useState setter, hence identity-stable.
- */
 type NetViewSetters = {
   setStatus: Dispatch<SetStateAction<ConnectionStatus>>;
   setOwnName: Dispatch<SetStateAction<string | undefined>>;
@@ -109,12 +67,6 @@ type NetViewSetters = {
   setRecordings: Dispatch<SetStateAction<RecordingLabelView[]>>;
 };
 
-/**
- * Assembles the hooks the boot hands to startNet: each view the net
- * stack publishes lands in its bundle's state. Assembled inside the
- * boot effect, not during render — the object is per-boot and is never
- * a render input.
- */
 function netHooksOf(setters: NetViewSetters): NetHooks {
   return {
     onStatus: setters.setStatus,
@@ -128,9 +80,6 @@ function netHooksOf(setters: NetViewSetters): NetHooks {
     onChatScopes: setters.setChatScopes,
     onOwnGroup: setters.setOwnGroupId,
     onRecordings: setters.setRecordings,
-    // The DM → browser-notification pipeline: the notifier decides
-    // (shouldNotifyDm) and raises; nothing app-side needs to re-render,
-    // so no state rides this hook.
     onDmRow: (event) => dmNotifier().onDmRow(event),
   };
 }
@@ -189,14 +138,9 @@ function bootNetStack(
 export function useNetStack() {
   const session = useContext(AuthSessionContext);
   const hostRef = useRef<HTMLDivElement>(null);
-  // The published views, bundled by surface (see the bundle hooks above)
-  // to keep this hook under the cognitive budget.
   const connection = useConnectionViews();
   const spaceViews = useSpaceViews();
   const chatViews = useChatViews();
-  // The huddle control's answer (own huddle / joinable huddle / neither),
-  // published deduplicated by the net stack (ROADMAP Phase 3 増分③). A lone
-  // state with no bundle to join, so it stays inline.
   const [huddle, setHuddle] = useState<HuddleView>({ own: undefined, joinable: undefined });
   const calls = useCallViews();
   // The one handle on the net stack: created inside the effect, disposed by
@@ -204,8 +148,6 @@ export function useNetStack() {
   // rather than state because nothing needs to re-render when it changes.
   const netRef = useRef<Net>(undefined);
 
-  // Boot: assemble the hooks from the view setters, then run the boot
-  // stage, whose return value is the effect's cleanup.
   useEffect(() => {
     const hooks = netHooksOf({
       setStatus: connection.setStatus,

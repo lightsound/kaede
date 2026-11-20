@@ -1,24 +1,13 @@
 // fallow-ignore-file coverage-gaps -- dev-only preview loader over PixiJS Assets and Vite's literal import() chunks, which needs a browser to decode the images (the unit-test setup has no browser or DOM); it only picks which bundled files to load, and the manifests it reads are validated by studio.package/catalog.ts, which is unit-tested
 
-// The dev-only dress-up preview (?outfit=red, ?held=<item>). GameApp.ts
-// calls only resolveAvatarLook, which gates on import.meta.env.DEV, so
-// production bundles drop the rest of this module and its loaders.
 import { Assets } from 'pixi.js';
 import type { AvatarSheetTextures, HeldItemDisplay } from './avatarView';
 
-/**
- * What the dev-only dress-up preview swaps in (ROADMAP ①b 着手順⑵ — the
- * layer-composition verification spike): an outfit-swapped pose sheet
- * and/or a held item pinned to the hand anchors. 増分①e replaces this with
- * real selection UI + persistence; until then the preview exists so the
- * generated assets can be verified walking in the actual game.
- */
 interface DressUpPreview {
   sheet?: AvatarSheetTextures;
   held?: HeldItemDisplay;
 }
 
-/** Builds one pose sheet from its five loaded frame modules, in pose order. */
 async function sheetFromModules(mods: { default: string }[]): Promise<AvatarSheetTextures> {
   const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
     mods.map((m) => Assets.load(m.default)),
@@ -26,7 +15,6 @@ async function sheetFromModules(mods: { default: string }[]): Promise<AvatarShee
   return { stand, 'walk-a': walkA, 'walk-b': walkB, 'walk-c': walkC, 'walk-d': walkD };
 }
 
-/** The red-hoodie outfit sheet (avatar.boy-basic-red), loaded on demand. */
 async function loadRedSheet(): Promise<AvatarSheetTextures> {
   return sheetFromModules(
     await Promise.all([
@@ -89,7 +77,6 @@ const CARRY_SHEET_LOADERS: Record<string, () => Promise<{ default: string }[]>> 
     ]),
 };
 
-/** The carry sheets' manifest + hand cutout, keyed like CARRY_SHEET_LOADERS. */
 const CARRY_KIT_LOADERS = {
   'heavy-base': () =>
     Promise.all([import('./avatar-carry/manifest.json'), import('./avatar-carry/hand.png')]),

@@ -18,11 +18,8 @@ export interface E2EWorldSnapshot {
    * after every start/map switch. The map-travel spec polls this.
    */
   mapId: number;
-  /** Rendered position and label of the local player (world pixels, y-down). */
   local: E2EPlayerSnapshot;
-  /** Rendered positions and labels of every remote player currently in the world. */
   remotePlayers: E2EPlayerSnapshot[];
-  /** The meeting-room zones rendered on the current map (ROADMAP Phase 3 増分②). */
   zones: E2EZoneSnapshot[];
   /**
    * The huddles rendered on the current map this frame (ROADMAP Phase 3
@@ -99,11 +96,8 @@ export interface E2EHook {
  * the wire.
  */
 export interface E2ENetStats {
-  /** submit_inputs calls carrying input ticks (movement batches). */
   inputBatchesSent: number;
-  /** Empty submit_inputs calls (the idle-suppression liveness heartbeat). */
   heartbeatsSent: number;
-  /** dm_message rows handed to this client (subscription seed + insert events). */
   dmRowsReceived: number;
   /**
    * GROUP-scoped chat_message rows handed to this client (seed + insert

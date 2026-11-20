@@ -25,7 +25,6 @@ export async function sql(query: string): Promise<void> {
   await exec(SPACETIME_BIN, ['sql', 'kaede', query, '--server', 'local']);
 }
 
-/** Reads the world through the client's read-only test hook (see e2eHook.ts). */
 export function snapshot(page: Page): Promise<E2EWorldSnapshot> {
   return page.evaluate(() => {
     const hook = window.__kaedeE2E;
@@ -48,7 +47,6 @@ export function netStats(page: Page): Promise<E2ENetStats> {
   });
 }
 
-/** Fills the chat input and submits (Enter, like a chat box should). */
 export async function sendChat(page: Page, text: string): Promise<void> {
   await page.getByLabel('チャット入力').fill(text);
   await page.getByLabel('チャット入力').press('Enter');
@@ -66,7 +64,6 @@ export async function enterWorld(page: Page, path = '/'): Promise<void> {
   await page.waitForFunction(() => (window.__kaedeE2E?.snapshot().tick ?? -1) >= 0);
 }
 
-/** The local player's rendered x, through the snapshot hook. */
 export async function localX(page: Page): Promise<number> {
   return (await snapshot(page)).local.x;
 }

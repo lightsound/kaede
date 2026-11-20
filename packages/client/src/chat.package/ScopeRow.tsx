@@ -40,7 +40,6 @@ const scopeButtonStyle: CSSProperties = {
   cursor: 'pointer',
 };
 
-/** The picked scope, filled so "where this goes" is readable at a glance. */
 const scopeSelectedStyle: CSSProperties = {
   ...scopeButtonStyle,
   border: UI_GOLD_BORDER,

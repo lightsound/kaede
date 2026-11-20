@@ -9,7 +9,6 @@ interface Row {
   id: number;
 }
 
-/** A table handle that keeps its handlers, so a test can fire its row events. */
 function fakeTable() {
   const inserts: ((ctx: unknown, row: Row) => void)[] = [];
   const updates: ((ctx: unknown, oldRow: Row, newRow: Row) => void)[] = [];
@@ -34,7 +33,6 @@ function fakeTable() {
   };
 }
 
-/** A session whose staleness the test flips. */
 function session() {
   const state = { stale: false };
   return { state, rows: sessionRows(ME.toHexString(), () => state.stale) };

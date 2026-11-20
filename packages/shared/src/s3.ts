@@ -17,8 +17,6 @@
 // edges (the fallow cap, see AGENTS.md).
 import { isRecordingFileNameLike } from './call';
 
-// ── SHA-256 (FIPS 180-4) ────────────────────────────────────────────────
-
 // The round constants: the fractional parts of the cube roots of the
 // first 64 primes, as the spec fixes them.
 // oxfmt-ignore: the spec's constant table reads as a table
@@ -33,7 +31,6 @@ const K = [
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-/** The message padded to 512-bit blocks (length in bits appended, big-endian). */
 function paddedBlocks(bytes: number[]): number[] {
   const padded = [...bytes, 0x80];
   while (padded.length % 64 !== 56) padded.push(0);
@@ -49,7 +46,6 @@ function paddedBlocks(bytes: number[]): number[] {
   return padded;
 }
 
-/** One block's 64-entry message schedule (the W expansion). */
 function messageSchedule(padded: number[], block: number): number[] {
   const w: number[] = [];
   for (let t = 0; t < 16; t += 1) {
@@ -76,7 +72,6 @@ function rotr(x: number, n: number): number {
   return ((x >>> n) | (x << (32 - n))) >>> 0;
 }
 
-/** One block's compression rounds over the running hash state (in place). */
 function compressBlock(state: number[], w: number[]): void {
   let [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0] = state;
   for (let t = 0; t < 64; t += 1) {
@@ -100,10 +95,7 @@ function compressBlock(state: number[], w: number[]): void {
     state[i] = (((state[i] ?? 0) + (round[i] ?? 0)) & 0xffffffff) >>> 0;
 }
 
-/** SHA-256 over a byte array, as a 32-entry byte array. */
 function sha256Bytes(bytes: number[]): number[] {
-  // The initial hash values: fractional parts of the square roots of the
-  // first 8 primes.
   const state = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
   ];
@@ -133,7 +125,6 @@ function bytesToHex(bytes: number[]): string {
   return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-/** HMAC-SHA-256 (RFC 2104) over byte arrays — SigV4's key-chaining primitive. */
 function hmacBytes(key: number[], message: number[]): number[] {
   const blockKey = key.length > 64 ? sha256Bytes(key) : key;
   const ipad: number[] = [];
@@ -161,8 +152,6 @@ export function hmacSha256Hex(secret: string, message: string): string | undefin
   return bytesToHex(hmacBytes(keyBytes, messageBytes));
 }
 
-// ── SigV4 request signing (AWS Signature Version 4, for R2's S3 API) ───
-
 /**
  * Percent-encoding as SigV4 canonicalization demands it: everything but
  * the RFC 3986 unreserved set, uppercase hex. encodeURIComponent leaves
@@ -175,7 +164,6 @@ function sigv4Encode(value: string): string {
   );
 }
 
-/** The canonical URI: each path segment encoded once, '/' preserved. */
 function canonicalUri(path: string): string {
   return path
     .split('/')
@@ -183,7 +171,6 @@ function canonicalUri(path: string): string {
     .join('/');
 }
 
-/** The canonical query string: entries sorted by encoded name, then value. */
 function canonicalQuery(query: readonly (readonly [string, string])[]): string {
   return query
     .map(([name, value]) => [sigv4Encode(name), sigv4Encode(value)] as const)
@@ -198,16 +185,13 @@ function amzDates(nowMs: number): { amzDate: string; dateStamp: string } {
   return { amzDate, dateStamp: amzDate.slice(0, 8) };
 }
 
-/** One S3 request to sign. `query` entries arrive unencoded. */
 export interface S3Request {
   method: string;
   host: string;
-  /** The path-style object path, e.g. `/bucket/recordings/file.mp4`. */
   path: string;
   query: readonly (readonly [string, string])[];
 }
 
-/** The R2 S3 credentials (an R2-permitted API token in another form). */
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
@@ -219,7 +203,6 @@ export interface S3Credentials {
  */
 const S3_SERVICE = 's3';
 
-/** The derived signature over one canonical request (the SigV4 core). */
 function sigv4Signature(
   credentials: S3Credentials,
   region: string,
@@ -293,8 +276,6 @@ export function presignedS3Url(
   return `https://${request.host}${canonicalUri(request.path)}?${encoded}&X-Amz-Signature=${signature}`;
 }
 
-// ── The recordings bucket layout and listing parse ─────────────────────
-
 /**
  * Where recordings live inside the bucket: the storage_config `path` the
  * recording start sends the provider, the prefix the listing asks for,
@@ -303,18 +284,13 @@ export function presignedS3Url(
  */
 export const RECORDINGS_PREFIX = 'recordings';
 
-/** The full R2 object key of one recording (its provider-named basename). */
 export function recordingObjectKey(fileName: string): string {
   return `${RECORDINGS_PREFIX}/${fileName}`;
 }
 
-/** One finished recording, as the listing reports it. */
 export interface RecordingObject {
-  /** The provider-named basename — the call_recording rows' join key. */
   fileName: string;
-  /** Object size in bytes. */
   size: number;
-  /** The R2 LastModified timestamp (ISO 8601) — when the upload landed. */
   uploadedAt: string;
 }
 

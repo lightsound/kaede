@@ -8,24 +8,15 @@ import {
 } from './idle';
 import type { LifecycleEvent } from './lifecycle';
 
-/** ユーザーの在席とみなす操作イベント。タイムスタンプを書くだけなので capture+passive で広く拾う。 */
 const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'] as const;
 
-/** What the activity signals drive in the net stack that owns them (startNet). */
 export interface ActivityHooks {
-  /** True once the stack is torn down: every signal is ignored from then on. */
   isDisposed(): boolean;
-  /** Runs one lifecycle step — only the three this module raises. */
   dispatch(
     event: Extract<LifecycleEvent, { kind: 'resume' | 'page-resume' | 'idle-timeout' }>,
   ): void;
 }
 
-/**
- * Records every user input in the idle monitor (the clock watchIdleTimeout
- * checks) and resumes an idle-suspended connection on it; returns the
- * teardown.
- */
 function watchUserInput(idle: IdleMonitor, hooks: ActivityHooks): () => void {
   const onActivity = (): void => {
     if (hooks.isDisposed()) return;
@@ -71,7 +62,6 @@ function watchPageResume(hooks: ActivityHooks): () => void {
   };
 }
 
-/** Suspends the connection after the idle timeout without user input; returns the teardown. */
 function watchIdleTimeout(
   idle: IdleMonitor,
   idleTimeoutMs: number,
@@ -88,11 +78,6 @@ function watchIdleTimeout(
   return () => clearInterval(idleTimer);
 }
 
-/**
- * Watches what the user and the page do, for the connection lifecycle:
- * user input, the idle timeout and page resume. Returns the teardown,
- * which removes every listener and the timer.
- */
 export function watchActivity(hooks: ActivityHooks): () => void {
   // 無操作ガード: タイムアウトを超えたら接続(と再試行ループ)を休止し、次の
   // 操作で再開する。開発ビルドだけ ?idleMs= で短縮できる(E2E・手動確認用)。

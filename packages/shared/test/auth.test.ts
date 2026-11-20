@@ -17,7 +17,6 @@ const policy: ConnectionPolicy = {
   guestIssuers: ['localhost', 'https://auth.maincloud.example'],
 };
 
-/** Claims from our own provider, overridable per test. */
 function claims(overrides: Partial<ConnectionClaims> = {}): ConnectionClaims {
   return {
     issuer: CLERK_PRODUCTION,
@@ -121,7 +120,6 @@ describe('memberIssuersFor', () => {
       issuer: CLERK_DEVELOPMENT,
     });
     expect(classifyConnection(devToken, local)).toEqual({ kind: 'member', subject: 'user_abc' });
-    // The production issuer is a member mint on both.
     expect(classifyConnection(claims(), production)).toEqual({
       kind: 'member',
       subject: 'user_abc',

@@ -17,7 +17,6 @@ import {
   panelRowStyle,
 } from './panelChrome';
 
-/** The zone edits the panel dispatches (update_zone's payload, sans the id). */
 export interface ZoneEdit {
   name: string;
   closed: boolean;
@@ -25,7 +24,6 @@ export interface ZoneEdit {
   h: number;
 }
 
-/** What the zone section does — one callback per zone reducer (see NetApi). */
 export interface ZoneActions {
   onCreateZone(spec: { name: string; closed: boolean }): void;
   onUpdateZone(zoneId: bigint, edit: ZoneEdit): void;
@@ -33,13 +31,11 @@ export interface ZoneActions {
   onDeleteZone(zoneId: bigint): void;
 }
 
-/** The size fields are narrow and fixed, unlike the name field. */
 const sizeInputStyle: CSSProperties = {
   ...panelInputStyle,
   flex: '0 0 52px',
 };
 
-/** The user-facing wording of each zone-spec refusal (evaluateZoneSpec). */
 const SPEC_ERRORS: Record<ZoneSpecRejectReason, string> = {
   empty: '名前を入力してください',
   'too-long': '名前が長すぎます',
@@ -197,20 +193,7 @@ function ZoneRow({ zone, actions }: { zone: ZoneAdminView; actions: ZoneActions 
   );
 }
 
-/**
- * The admin panel's zone section (ROADMAP Phase 3 増分②): place a
- * meeting-room zone where the admin stands, edit its name / size /
- * オープン・クローズド, move it here, delete it. Rendering is gated with
- * the rest of the admin panel; every action is re-checked server-side.
- */
-export function ZonePanel({
-  zones,
-  actions,
-}: {
-  /** The whole zone list, every map, creation order (see ZoneAdminView). */
-  zones: ZoneAdminView[];
-  actions: ZoneActions;
-}) {
+export function ZonePanel({ zones, actions }: { zones: ZoneAdminView[]; actions: ZoneActions }) {
   return (
     <div>
       <div style={panelHeadingStyle}>ゾーン(会議室) ({zones.length})</div>

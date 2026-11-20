@@ -23,13 +23,10 @@ import { SenderError } from 'spacetimedb/server';
 import { cleanupEmptyHuddle, syncGroupOccupancy } from './occupancy';
 import type { spacetimedb } from './tables';
 
-/** The reducer context for this module's schema, for helpers that touch the db. */
 export type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
-/** The Identity type as this schema's rows carry it (not re-exported by the server SDK). */
 export type SenderIdentity = Ctx['sender'];
 
-/** The sender-facing standing of an identity: its membership, or undefined for guests. */
 export function membershipOf(ctx: Ctx, identity: SenderIdentity): Membership | undefined {
   const row = ctx.db.spaceMember.identity.find(identity);
   return row === null ? undefined : asMembership(row);
@@ -50,12 +47,10 @@ export function requireAdmin(ctx: Ctx, reducerName: string): void {
   if (!verdict.ok) throw new SenderError(`${reducerName} refused (${verdict.reason})`);
 }
 
-/** The guest-admission setting, read with the shared missing-row default. */
 export function guestsAllowed(ctx: Ctx): boolean {
   return guestsAllowedFrom(ctx.db.spaceSetting.id.find(0));
 }
 
-/** An append-log table as the retention trim needs it (id = insert order). */
 export interface HistoryTable {
   iter(): Iterable<{ id: bigint }>;
   id: { delete(id: bigint): unknown };
@@ -129,12 +124,10 @@ export function removePlayer(ctx: Ctx, identity: SenderIdentity): void {
   if (membership !== null) cleanupEmptyHuddle(ctx, membership.groupId);
 }
 
-/** A row as this schema's tables return it (not re-exported by the server SDK). */
 export type RowIn<T extends 'player' | 'playerName' | 'playerGuard'> = NonNullable<
   ReturnType<Ctx['db'][T]['identity']['find']>
 >;
 
-/** The player_name row as this schema returns it (not re-exported by the server SDK). */
 type PlayerNameRow = RowIn<'playerName'>;
 
 /**
@@ -157,7 +150,6 @@ function upsertPlayerSiblings(ctx: Ctx, nameRow: PlayerNameRow | null, name: str
   else ctx.db.playerGuard.insert({ identity: ctx.sender, allowanceMicros });
 }
 
-/** Resumes the sender's surviving player row, or spawns a fresh one. */
 export function spawnOrResume(ctx: Ctx): void {
   const existing = ctx.db.player.identity.find(ctx.sender);
   const nameRow = ctx.db.playerName.identity.find(ctx.sender);
@@ -196,7 +188,7 @@ export function spawnOrResume(ctx: Ctx): void {
     tick: 0,
     online: true,
     updatedAt: ctx.timestamp,
-    mapId: DEFAULT_MAP_ID, // fresh spawns start on the default map; resumes keep theirs
+    mapId: DEFAULT_MAP_ID,
   });
   syncGroupOccupancy(ctx, ctx.sender, { x: SPAWN_X, y: SPAWN_Y }, DEFAULT_MAP_ID);
 }
@@ -213,7 +205,6 @@ export function syncNameOnline(ctx: Ctx, nameRow: RowIn<'playerName'>, online: b
   ctx.db.playerName.identity.update({ ...nameRow, online });
 }
 
-/** The rows the in-world reducers act on. */
 export interface WorldRows {
   row: RowIn<'player'>;
   guard: RowIn<'playerGuard'>;
@@ -366,4 +357,3 @@ export function sweepExpiredRows(ctx: Ctx): void {
   }
   for (const identity of stale) removePlayer(ctx, identity);
 }
-// ── End player lifecycle ────────────────────────────────────────────────

@@ -19,7 +19,6 @@ import type { RowEvents } from '../src/net.package/rowEvents';
  * initial snapshot does.
  */
 
-/** The index extractors a fake table can answer `find` through. */
 export interface FakeTableIndexes<Row> {
   identity?: (row: Row) => { toHexString(): string };
   id?: (row: Row) => bigint | number;
@@ -27,17 +26,11 @@ export interface FakeTableIndexes<Row> {
 
 export interface FakeTable<Row> extends RowEvents<Row> {
   iter(): Iterable<Row>;
-  /** The `.identity.find(...)` index accessor, when an extractor was given. */
   identity: { find(key: { toHexString(): string }): Row | null };
-  /** The `.id.find(...)` index accessor, when an extractor was given. */
   id: { find(key: bigint | number): Row | null };
-  /** Fills the cache without firing events (a subscription's seed). */
   seed(rows: readonly Row[]): void;
-  /** Applies a row to the cache, then fires the insert handlers. */
   insert(row: Row): void;
-  /** Replaces a row in the cache, then fires the update handlers. Throws for a row the cache does not hold — the SDK fires no update for one. */
   update(row: Row): void;
-  /** Removes a row from the cache, then fires the delete handlers. Throws for a row the cache does not hold, like update. */
   remove(row: Row): void;
 }
 
@@ -119,18 +112,10 @@ export function fakeTable<Row>(indexes: FakeTableIndexes<Row>): FakeTable<Row> {
   };
 }
 
-/**
- * Wraps a record of fake tables (plus any extra surface a feed touches,
- * like `reducers`) as the generated DbConnection type the feeds take.
- * The cast is the test seam's one unsafe step: the fake implements only
- * the members the feed under test actually reads, each pinned by that
- * feed's own tests.
- */
 export function fakeConnection(db: Record<string, unknown>): DbConnection {
   return { db } as unknown as DbConnection;
 }
 
-/** A Timestamp `millis` after the epoch, for row factories. */
 export function at(millis: number): Timestamp {
   return new Timestamp(BigInt(millis) * 1000n);
 }

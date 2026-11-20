@@ -1,6 +1,3 @@
-// The dev-only perf overlay's readout (PerfHud.tsx): plain arithmetic over
-// one world snapshot and the player-row update counter, kept out of the
-// component so it is unit-tested.
 import type { E2EWorldSnapshot } from '@kaede/shared';
 
 export function perSecond(delta: number, dt: number): number {

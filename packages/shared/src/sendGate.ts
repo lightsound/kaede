@@ -28,11 +28,8 @@ import type { PlayerState } from './types';
 export type SendWindowVerdict = 'send' | 'skip';
 
 export function evaluateSendWindow(window: {
-  /** 保留ウィンドウ ((lastSentTick, currentTick]) に空でない入力があるか。 */
   anyInput: boolean;
-  /** ウィンドウ先頭の状態 = サーバーが確認済みの状態(lastSentTick 時点)。 */
   windowStartState: PlayerState;
-  /** 送信済みの全 tick が ack 済みか (lastSentTick === ackedTick)。 */
   fullyAcked: boolean;
 }): SendWindowVerdict {
   const { anyInput, windowStartState, fullyAcked } = window;
