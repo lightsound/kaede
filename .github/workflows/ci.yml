@@ -109,6 +109,9 @@ jobs:
           - name: Import boundaries
             run: bun run lint:imports --format github
 
+          - name: Comment ratchet
+            run: bun run lint:comments
+
           # Writes coverage/coverage-final.json, which `fallow health` reads
           # for real per-function CRAP scores (see .fallowrc.jsonc
           # health.coverage).
