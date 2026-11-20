@@ -10,12 +10,10 @@ import {
 const MICROS_PER_SECOND = 1_000_000n;
 const TICK_RATE_BIG = BigInt(TICK_RATE);
 
-/** Whole simulation ticks spanned by `micros` (truncated toward zero). */
 function ticksFromMicros(micros: bigint): number {
   return Number((micros * TICK_RATE_BIG) / MICROS_PER_SECOND);
 }
 
-/** Microseconds spanned by `ticks` simulation ticks (truncated toward zero). */
 function microsFromTicks(ticks: number): bigint {
   return (BigInt(ticks) * MICROS_PER_SECOND) / TICK_RATE_BIG;
 }
@@ -37,7 +35,6 @@ export type BatchRejectReason =
 export type BatchVerdict =
   | {
       kind: 'apply';
-      /** The advanced token-bucket marker to persist on the player_guard row. */
       allowanceMicros: bigint;
     }
   | {
@@ -54,7 +51,6 @@ export type BatchVerdict =
     }
   | { kind: 'rejected'; reason: BatchRejectReason };
 
-/** A verdict the server acts on (everything but a rejection). */
 export type AcceptedBatchVerdict = Exclude<BatchVerdict, { kind: 'rejected' }>;
 
 /**
@@ -88,21 +84,13 @@ export type AcceptedBatchVerdict = Exclude<BatchVerdict, { kind: 'rejected' }>;
  * sustained input rate at exactly the simulation tick rate.
  */
 export function evaluateInputBatch(batch: {
-  /** Number of input ticks in the batch; 0 is a heartbeat. */
   batchLength: number;
-  /** Tick the batch claims to start after; row tick, or past it (gap). */
   startTick: number;
-  /** Ticks the server has applied so far (row.tick). */
   rowTick: number;
-  /** Whether the row's state is a fixpoint of empty input (isQuiescent). */
   rowQuiescent: boolean;
-  /** Time since the row last changed (ms); gates heartbeat refreshes. */
   rowAgeMs: number;
-  /** The row's online flag; an offline row's heartbeat always refreshes. */
   rowOnline: boolean;
-  /** Token-bucket marker persisted on the player_guard row (micros since Unix epoch). */
   allowanceMicros: bigint;
-  /** Server wall clock (micros since Unix epoch). */
   nowMicros: bigint;
 }): BatchVerdict {
   const { batchLength, startTick, rowTick, nowMicros } = batch;
@@ -118,7 +106,6 @@ export function evaluateInputBatch(batch: {
     return { kind: 'rejected', reason: 'gap-ahead-of-row' };
   }
 
-  // Cap the accrued bank by pulling the marker forward if it fell too far behind.
   let marker = batch.allowanceMicros;
   const bankCapMarker = nowMicros - microsFromTicks(MAX_TICK_BANK);
   if (marker < bankCapMarker) marker = bankCapMarker;

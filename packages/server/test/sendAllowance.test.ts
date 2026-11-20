@@ -18,8 +18,6 @@ describe('chargeSendAllowance', () => {
       chargeSendAllowance(ctx, ctx.db.chatGuard, evaluateChatSend, 'send_test');
       return ctx.db.chatGuard.identity.find(ctx.sender)?.allowanceMicros;
     });
-    // now=100s in micros; the bank floor is now − (burst−1)·cost = 96s,
-    // and the first charge advances the marker one cost past it.
     expect(marker).toBe(97_000_000n);
   });
 

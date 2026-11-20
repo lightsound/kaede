@@ -1,9 +1,5 @@
 // fallow-ignore-file coverage-gaps -- builds one player's PixiJS display objects (avatar, name, status and zone lines, overheads), and the unit-test setup has no browser or DOM; the pose-priority rule here (poseDirective) is asserted end to end by gesture.spec.ts, and the labels and overheads by the status, zone, chat, reaction and display-name specs
 
-// One player as the scene draws it: the avatar, the name label above it,
-// the persistent status and zone lines under it, and the transient
-// overheads (speech bubble, reaction). Local and remote players share this
-// one shape; GameApp.ts decides where each view stands and what it shows.
 import { PLAYER_HALF_H } from '@kaede/shared';
 import { Container, Text, TextStyle } from 'pixi.js';
 import {
@@ -38,16 +34,11 @@ export interface PlayerView {
    * make the flip erase them.
    */
   body: Container;
-  /** The pose-frame avatar inside `body` (Phase 5 増分①a); animated every frame. */
   avatar: AvatarView;
   label: Text;
-  /** The status line under the avatar, hidden while the status is default (setUnderline). */
   status: Text;
-  /** The zone occupancy tag under the status line, hidden while in no zone (setUnderline). */
   zone: Text;
-  /** The speech bubble, hidden until this player chats (showBubble). */
   bubble: Bubble;
-  /** The emoji reaction, hidden until this player reacts (showReaction). */
   reaction: ReactionBadge;
 }
 
@@ -61,10 +52,6 @@ const STATUS_STYLE = new TextStyle({ fill: 0xb8c2d9, fontSize: 11, fontFamily: '
 // one slot further down so the two persistent lines never collide.
 const ZONE_TAG_STYLE = new TextStyle({ fill: 0x9ccfd8, fontSize: 11, fontFamily: 'sans-serif' });
 
-/**
- * One persistent under-avatar line (the status at PLAYER_HALF_H+4, the
- * zone tag at +20), parked at `y` and hidden until a value arrives.
- */
 function createUnderline(style: TextStyle, y: number): Text {
   const line = new Text({ text: '', style });
   line.anchor.set(0.5, 0);

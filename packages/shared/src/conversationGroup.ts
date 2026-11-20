@@ -30,7 +30,6 @@ function sortedGroupRowsOf<T extends { id: bigint; kind: string }>(
   return groups;
 }
 
-/** The zone-kind rows in the shared deterministic order (see sortedGroupRowsOf). */
 export function sortedZoneRows<T extends { id: bigint; kind: string }>(rows: Iterable<T>): T[] {
   return sortedGroupRowsOf(rows, GROUP_KIND_ZONE);
 }

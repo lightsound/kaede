@@ -2,17 +2,14 @@
 import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, snapshot } from './helpers';
 
-/** Clicks the gesture button labelled `label` (the ChatPanel gesture palette). */
 async function playGesture(page: Page, label: string): Promise<void> {
   await page.getByLabel(`ジェスチャー ${label}`).click();
 }
 
-/** The pose the local avatar shows (avatarView.pose() via the snapshot hook). */
 async function localPose(page: Page): Promise<string | undefined> {
   return (await snapshot(page)).local.pose;
 }
 
-/** The pose B renders for its one remote player (A). */
 async function remotePose(page: Page): Promise<string | undefined> {
   return (await snapshot(page)).remotePlayers[0]?.pose;
 }
@@ -40,13 +37,10 @@ test('ジェスチャーが両画面に反映され、リロードで復元、�
   await enterWorld(pageA);
   await enterWorld(pageB);
 
-  // B must see A before the gesture, so the assertions measure gesture
-  // propagation and not mere entry.
   await expect
     .poll(async () => (await snapshot(pageB)).remotePlayers.length, { timeout: 15_000 })
     .toBe(1);
 
-  // 座る: the pose round-trips through the server row on both sides.
   await playGesture(pageA, '座る');
   await expect.poll(() => localPose(pageA), { timeout: 10_000 }).toBe('sit');
   await expect.poll(() => remotePose(pageB), { timeout: 10_000 }).toBe('sit');
@@ -68,7 +62,6 @@ test('ジェスチャーが両画面に反映され、リロードで復元、�
   await expect.poll(() => localPose(pageA), { timeout: 10_000 }).toBe('stand');
   await expect.poll(() => remotePose(pageB), { timeout: 10_000 }).toBe('stand');
 
-  // ダンス: a state gesture whose pose cycles through the dance frames.
   await playGesture(pageA, 'ダンス');
   await expect.poll(() => localPose(pageA), { timeout: 10_000 }).toMatch(/^dance-/);
   await expect.poll(() => remotePose(pageB), { timeout: 10_000 }).toMatch(/^dance-/);
@@ -77,8 +70,6 @@ test('ジェスチャーが両画面に反映され、リロードで復元、�
   await pageA.keyboard.up('ArrowLeft');
   await expect.poll(() => localPose(pageA), { timeout: 10_000 }).toBe('stand');
 
-  // 手を振る: transient — it plays on both sides, then reverts to stand by
-  // itself (WAVE_GESTURE_DURATION_MS) with no movement and no clear call.
   await playGesture(pageA, '手を振る');
   await expect.poll(() => localPose(pageA), { timeout: 10_000 }).toBe('wave');
   await expect.poll(() => remotePose(pageB), { timeout: 10_000 }).toBe('wave');

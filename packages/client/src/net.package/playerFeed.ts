@@ -11,10 +11,8 @@ import type { RowOf } from './rows';
 import { cachedStatusView } from './statusFeed';
 import { cachedZoneTag } from './zoneFeed';
 
-/** The generated own/remote player row type (all columns). */
 type PlayerRow = RowOf<'player'>;
 
-/** The generated player_name row type (the display name split off the hot row). */
 type PlayerNameRow = RowOf<'playerName'>;
 
 /**
@@ -51,41 +49,24 @@ export interface OwnSim {
   portalPendingAtMs: number | undefined;
 }
 
-/** What the player feed needs from the net stack that owns it (startNet). */
 export interface PlayerFeedDeps {
   sim: OwnSim;
   gameApp: GameApp;
-  /** The remote players' interpolated views, kept across sessions (remoteView.ts). */
   remoteViews: ReturnType<typeof createRemoteViews>;
-  /** startNet's single path for own-name changes (see publishOwnName). */
   publishOwnName(name: string | undefined): void;
-  /** startNet's single path for own-status changes (see publishOwnStatus). */
   publishOwnStatus(view: StatusView): void;
-  /** Sends one liveness heartbeat on `c` (startNet's sendHeartbeat). */
   sendHeartbeat(c: DbConnection): void;
-  /** Sends one input batch for the prediction (startNet's sendBatch). */
   sendBatch(startTick: number, packed: Uint8Array): void;
-  /** Counts one player row event (the dev-only playerRowUpdates stat). */
   countRowUpdate(): void;
-  /** Re-pushes the zone feed's per-map projection after a map switch. */
   refreshZones(): void;
 }
 
-/**
- * One session's player wiring. enterWorld is admission's hook, run
- * whenever admission lets this client in; seedRemotes and wireRowEvents
- * are steps wireSession runs, in that order.
- */
 export interface PlayerFeed {
-  /** Resumes the surviving own row, or asks the server to spawn one. */
   enterWorld(): void;
-  /** Seeds the remote players already in the world. */
   seedRemotes(): void;
-  /** Wires the player / player_name row events. */
   wireRowEvents(admission: { reevaluate(): void }): void;
 }
 
-/** Ask the server to spawn or resume our row; the answer arrives as a row event. */
 function joinWorld(c: DbConnection): void {
   // Admission is checked before calling this, so a refusal here means the
   // client's view of the rules drifted from the server's — worth a log.
@@ -94,12 +75,6 @@ function joinWorld(c: DbConnection): void {
   });
 }
 
-/**
- * Builds one session's player wiring: the own row starts, acknowledges
- * and re-maps the local simulation, remote rows feed the interpolated
- * views, and player_name rows feed both sides' labels. Building it has no
- * side effects; wireSession runs the returned steps.
- */
 export function createPlayerFeed(
   settled: Connected,
   rows: SessionRows,
@@ -108,8 +83,6 @@ export function createPlayerFeed(
   const { conn: c, myIdentity } = settled;
   const { sim, gameApp, remoteViews } = deps;
 
-  // The map-scoped half of the player subscription (see connection.ts),
-  // swapped by switchMap on every teleport.
   let mapSub = settled.mapSub;
 
   // Names live on player_name, split off the hot row so movement updates
@@ -130,14 +103,10 @@ export function createPlayerFeed(
     name: nameOf(identity),
     status: statusLabel(cachedStatusView(c, identity)),
     zone: cachedZoneTag(c, identity),
-    // The ①c pose inputs ride the label like the status seed: a view
-    // (re)created for a sitting or busy player must start posed.
     gesture: cachedStateGesture(c, identity),
     availability: cachedStatusView(c, identity).availability,
   });
 
-  // Our row appears (or already exists, when resuming an identity) via join
-  // below. Start/refresh the simulation from that authoritative state.
   const handleOwnRow = (row: PlayerRow) => {
     if (sim.prediction) return;
     deps.publishOwnName(nameOf(row.identity));
@@ -198,8 +167,6 @@ export function createPlayerFeed(
     remoteViews.clear();
     gameApp.clearRemotePlayers();
     gameApp.setMap(mapFor(row.mapId));
-    // The zone layer is a per-map projection like the map geometry; the
-    // occupancy tags re-derive with it.
     deps.refreshZones();
     handleOwnRow(row);
     const outgoing = mapSub;

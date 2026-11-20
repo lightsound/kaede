@@ -47,13 +47,6 @@ function chatDraftPlannerOf(netRef: { current: Net | undefined }) {
   return (draft: string) => netRef.current?.planChatSend(draft) ?? planChatDraftOffline(draft);
 }
 
-/**
- * Every command the App's surfaces dispatch: the flat ones named after the
- * Net method they reach, the rest grouped the way the surfaces take them
- * (HuddleControl's actions, AdminSection's zoneActions, the call docks'
- * net). `onChatSend` runs before every chat send: useNetStack clears its
- * "send refused" trace there, since the new attempt supersedes it.
- */
 export function netActionsOf(netRef: { current: Net | undefined }, onChatSend: () => void) {
   return {
     applyForMembership: () => netRef.current?.applyForMembership(),

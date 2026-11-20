@@ -8,7 +8,6 @@ import {
 
 const facing: Facing = 1;
 
-/** A snapshot on the server timeline with sensible defaults (grounded, at rest). */
 function snap(
   t: number,
   x: number,
@@ -42,7 +41,6 @@ describe('sampleAt', () => {
 
   it('extrapolates past the newest snapshot along its velocity', () => {
     const buf = [snap(1000, 10), snap(1100, 20, { vx: 100 })];
-    // 50ms past the last snapshot at 100px/s: 5px further.
     expect(sampleAt(buf, 1150).x).toBeCloseTo(25, 10);
   });
 
@@ -71,9 +69,7 @@ describe('sampleAt', () => {
     for (const t of [1100, 1133, 1200, 1300]) {
       expect(sampleAt(buf, t).y).toBeLessThanOrEqual(floorY);
     }
-    // The clamp engages (the raw cubic would sit below the floor here)...
     expect(sampleAt(buf, 1133).y).toBe(floorY);
-    // ...and the endpoints stay exact.
     expect(sampleAt(buf, 1400).y).toBeCloseTo(floorY, 10);
   });
 
@@ -100,10 +96,10 @@ describe('sampleAt', () => {
       snap(1000, 0, { y: 0, vy: MAX_FALL_SPEED, airborne: true }),
       snap(1400, 40, { y: 120 }),
     ];
-    expect(sampleAt(buf, 1050).y).toBeCloseTo(60, 10); // mid-fall, undecelerated
-    expect(sampleAt(buf, 1100).y).toBeCloseTo(120, 10); // touchdown at full speed
-    expect(sampleAt(buf, 1250).y).toBe(120); // dwelling on the floor
-    expect(sampleAt(buf, 1250).x).toBeCloseTo(25, 10); // x stays linear
+    expect(sampleAt(buf, 1050).y).toBeCloseTo(60, 10);
+    expect(sampleAt(buf, 1100).y).toBeCloseTo(120, 10);
+    expect(sampleAt(buf, 1250).y).toBe(120);
+    expect(sampleAt(buf, 1250).x).toBeCloseTo(25, 10);
   });
 
   it('reconstructs a rising-then-landing segment over the full gravity arc', () => {
@@ -111,12 +107,10 @@ describe('sampleAt', () => {
     // arcs over, and lands. Touchdown = the arc's downward crossing.
     const floorY = 200;
     const vy0 = -600;
-    // Downward crossing of the arc y(t) = 100 - 600t + 1200t^2 with y = 200:
-    // t = (600 + sqrt(600^2 + 2*2400*100)) / 2400 ≈ 0.632s < span 0.65s.
     const buf = [snap(1000, 0, { y: 100, vy: vy0, airborne: true }), snap(1650, 0, { y: floorY })];
-    const apex = sampleAt(buf, 1250); // t = 0.25s: y = 100 - 150 + 75 = 25
+    const apex = sampleAt(buf, 1250);
     expect(apex.y).toBeCloseTo(25, 8);
-    expect(sampleAt(buf, 1640).y).toBe(floorY); // landed and dwelling
+    expect(sampleAt(buf, 1640).y).toBe(floorY);
   });
 
   it('falls back to clamped hermite when jitter leaves the arc short of the floor', () => {
@@ -138,8 +132,8 @@ describe('sampleAt', () => {
     const buf = [snap(1000, 0, { y: 200, vy: 1000, airborne: true }), snap(1400, 0, { y: 150 })];
     const early = sampleAt(buf, 1050).y;
     expect(Number.isFinite(early)).toBe(true);
-    expect(early).not.toBe(150); // not glued to b's floor from the segment start
-    expect(sampleAt(buf, 1399).y).toBeCloseTo(150, 0); // endpoint still lands on b
+    expect(early).not.toBe(150);
+    expect(sampleAt(buf, 1399).y).toBeCloseTo(150, 0);
   });
 
   it('falls back (no NaN) when a rising sample cannot reach the platform it landed on', () => {
@@ -162,7 +156,7 @@ describe('sampleAt', () => {
       snap(1400, 0, { y: platformY }),
     ];
     const apexish = sampleAt(buf, 1250).y;
-    expect(apexish).toBeLessThan(platformY); // above the platform (y grows down)
+    expect(apexish).toBeLessThan(platformY);
   });
 
   it('extrapolates an airborne sample under gravity, not in a straight line', () => {
@@ -171,7 +165,7 @@ describe('sampleAt', () => {
     const buf = [snap(1100, 20, { y: 0, vy: -840, airborne: true })];
     const s = sampleAt(buf, 1300);
     expect(s.y).toBeCloseTo(-840 * 0.2 + (GRAVITY * 0.2 * 0.2) / 2, 10);
-    expect(s.y).toBeGreaterThan(-840 * 0.2); // higher y = lower on screen
+    expect(s.y).toBeGreaterThan(-840 * 0.2);
   });
 
   it('extrapolates an airborne fall at terminal velocity without further acceleration', () => {
@@ -191,17 +185,14 @@ describe('sampleAt', () => {
 });
 
 describe('createRemoteViews', () => {
-  /** Row shape record() expects, built from a server-time position sample. */
   function row(updatedAtMs: number, x: number, vx = 0) {
     return { x, y: 0, vx, vy: 0, facing: 1, onGround: true, rope: -1, updatedAtMs };
   }
 
-  /** The display attributes record() expects; everything but the name defaults to "none". */
   function label(name: string, status?: string, zone?: string) {
     return { name, status, zone, gesture: undefined, availability: undefined };
   }
 
-  /** Collect draw() calls for one renderFrame. */
   function render(views: ReturnType<typeof createRemoteViews>, nowMs: number) {
     const drawn: {
       id: string;
@@ -236,7 +227,6 @@ describe('createRemoteViews', () => {
     for (let i = 0; i <= 12; i++) {
       views.record('a', label('A'), row(i * 100, i * 10, 100), i * 100 + 40);
     }
-    // Local 1240 maps to server 1200; render time is 1200 - INTERP_DELAY_MS.
     const drawn = render(views, 1240);
     expect(drawn).toHaveLength(1);
     expect(drawn[0].x).toBeCloseTo((1200 - INTERP_DELAY_MS) / 10, 5);
@@ -245,7 +235,6 @@ describe('createRemoteViews', () => {
   it('derives airborne from the row (onGround/rope), so run-dry extrapolation falls', () => {
     const views = createRemoteViews();
     views.record('a', label('A'), { ...row(0, 0), onGround: false, vy: -840 }, 40);
-    // Local 640 maps to server 600; renderTime sits 50ms past the only snapshot.
     const drawn = render(views, 640);
     expect(drawn[0].y).toBeCloseTo(-840 * 0.05 + (GRAVITY * 0.05 * 0.05) / 2, 8);
   });
@@ -259,7 +248,6 @@ describe('createRemoteViews', () => {
       jittered.record('a', label('A'), row(i * 100, i * 10, 100), i * 100 + 40 + jitter);
       steady.record('a', label('A'), row(i * 100, i * 10, 100), i * 100 + 40);
     }
-    // Both estimated the same (minimum) offset, so they render identically.
     expect(render(jittered, 540)[0].x).toBeCloseTo(render(steady, 540)[0].x, 5);
   });
 
@@ -279,7 +267,6 @@ describe('createRemoteViews', () => {
     expect(render(views, 240)[0].gesture).toBe('sit');
     views.patchLabel('a', { gesture: 'dance' });
     expect(render(views, 250)[0].gesture).toBe('dance');
-    // The server clears the row on movement; the delete must clear the pose.
     views.patchLabel('a', { gesture: undefined });
     expect(render(views, 260)[0].gesture).toBeUndefined();
   });
@@ -313,7 +300,6 @@ describe('createRemoteViews', () => {
     views.record('a', full, row(0, 0), 40);
     views.patchLabel('a', { name: 'B' });
     expect(render(views, 250)[0]).toMatchObject({ ...full, name: 'B' });
-    // An explicit undefined clears that field only.
     views.patchLabel('a', { zone: undefined });
     expect(render(views, 260)[0]).toMatchObject({ ...full, name: 'B', zone: undefined });
   });

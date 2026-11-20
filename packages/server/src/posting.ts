@@ -261,7 +261,6 @@ export const sendDm = spacetimedb.reducer(
   },
 );
 
-/** An identity-keyed table, as the upsert-row features (reaction, status) shape theirs. */
 interface IdentityKeyedTable<Row extends { identity: SenderIdentity }> {
   insert(row: Row): unknown;
   identity: {
@@ -350,7 +349,6 @@ export const playGesture = spacetimedb.reducer({ gesture: t.string() }, (ctx, { 
   writeGestureRow(ctx, gesture);
 });
 
-/** The row half of play_gesture: '' deletes (the clear), a gesture upserts. */
 function writeGestureRow(ctx: Ctx, gesture: string): void {
   if (gesture === '') {
     ctx.db.gesture.identity.delete(ctx.sender);
@@ -363,7 +361,6 @@ function writeGestureRow(ctx: Ctx, gesture: string): void {
   }));
 }
 
-/** One VALIDATED column of the status row, as either reducer writes it. */
 type StatusPatch = { availability: Availability } | { text: string };
 
 /**

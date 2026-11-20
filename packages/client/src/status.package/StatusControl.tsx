@@ -31,12 +31,11 @@ const rowStyle: CSSProperties = {
 
 const textRowStyle: CSSProperties = {
   display: 'flex',
-  flexWrap: 'wrap', // the inline error wraps onto its own line
+  flexWrap: 'wrap',
   alignItems: 'center',
   gap: 6,
 };
 
-/** One availability button's chrome; the current selection gets the gold fill. */
 function availabilityButtonStyle(selected: boolean): CSSProperties {
   return {
     flex: '1 1 0',
@@ -123,15 +122,11 @@ export function StatusControl({
   onSetStatusText,
 }: {
   connected: boolean;
-  /** The authoritative name from the own player row; undefined without one. */
   ownName: string | undefined;
-  /** The authoritative own status (DEFAULT_STATUS while no row exists). */
   status: StatusView;
   onSetAvailability: (availability: Availability) => void;
-  /** Sets the free-text status line; '' clears it. */
   onSetStatusText: (text: string) => void;
 }) {
-  // The shared posting gate: a status write needs a player row to land on.
   const disabled = postingDisabled(connected, ownName);
 
   const submit = (draft: string): string | undefined => {

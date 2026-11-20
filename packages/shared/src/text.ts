@@ -1,10 +1,8 @@
-/** Why a piece of user-entered text was refused. */
 export type TextRejectReason = 'empty' | 'too-long' | 'forbidden-characters';
 
 export type NormalizedTextVerdict =
   | {
       ok: true;
-      /** The normalized text to persist and render. */
       text: string;
     }
   | { ok: false; reason: TextRejectReason };
@@ -23,7 +21,6 @@ export type NormalizedTextVerdict =
  */
 const RAW_LENGTH_FACTOR = 4;
 
-/** Whitespace runs (including tabs/newlines pasted in) collapse to one space. */
 const WHITESPACE_RUN = /\s+/gu;
 
 /**

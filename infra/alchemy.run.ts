@@ -18,11 +18,11 @@ import * as Effect from 'effect/Effect';
 // 違い環境変数で配る必要がないため、ここに固定して deploy コマンドの前提を
 // 減らす。別アカウントに向けたいときは環境変数が優先される。
 //
-// 認証解決の優先順位(beta.79 時点): 環境変数セット(CLOUDFLARE_ACCOUNT_ID
+// 認証解決の優先順位: 環境変数セット(CLOUDFLARE_ACCOUNT_ID
 // + CLOUDFLARE_API_TOKEN — API_KEY+EMAIL でも可)が揃っていればプロファイル
 // の有無に関係なく env 認証が常に勝ち、揃っていなければプロファイル経路
 // (プロファイルの accountId が優先され CLOUDFLARE_ACCOUNT_ID は読まれない)。
-// beta.70 までは env が勝つのは CI=true のときだけだった。つまりローカルで
+// つまりローカルで
 // CLOUDFLARE_API_TOKEN をエクスポートしていればこの env 固定がそのまま
 // 効くが、プロファイル認証だけの対話実行では依然 profile の accountId が
 // 優先される。プロファイルが別アカウントにリンクされていると、全
@@ -35,7 +35,6 @@ import * as Effect from 'effect/Effect';
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID ?? '751c8a59858c9c04a8e722df7330444d';
 process.env.CLOUDFLARE_ACCOUNT_ID = ACCOUNT_ID;
 
-/** 依存なしの安定ハッシュ(FNV-1a 32bit、16進8桁)。スラッグの一意化サフィックス用。 */
 const fnv1a = (input: string): string => {
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i += 1) {
@@ -101,7 +100,6 @@ export default Alchemy.Stack(
       // ハイフンのみで、既定ステージ dev_$USER は $USER 由来の任意文字
       // (ドット等)を含み得るため、使えない文字はまとめて - に潰す。
       name: stagedName(stage, 'kaede'),
-      // ビルドはリポジトリルートで実行する(infra/ からの相対)。
       cwd: '..',
       command: 'bun run --filter @kaede/client build',
       outdir: 'packages/client/dist',

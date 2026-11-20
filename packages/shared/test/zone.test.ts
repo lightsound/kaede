@@ -17,13 +17,9 @@ const ZONE_A: ZoneShape = { id: 1n, rect: { x: 400, y: 464, w: 400, h: 192 } };
 const ZONE_B: ZoneShape = { id: 2n, rect: { x: 700, y: 464, w: 400, h: 192 } };
 const ZONES = [ZONE_A, ZONE_B];
 
-/** A point inside ZONE_A only. */
 const IN_A = { x: 500, y: 560 };
-/** A point inside the A∩B overlap. */
 const IN_BOTH = { x: 750, y: 560 };
-/** A point outside both rects but within ZONE_A's exit margin. */
 const A_MARGIN = { x: 400 - ZONE_EXIT_MARGIN / 2, y: 560 };
-/** A point beyond every rect and margin. */
 const FAR = { x: 100, y: 560 };
 
 describe('zoneRectContains', () => {

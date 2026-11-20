@@ -13,7 +13,6 @@ async function dmNotifyDecisions(page: Page): Promise<number> {
   return (await netStats(page)).dmNotifyDecisions;
 }
 
-/** The privacy probe (the dm.spec rule): rows actually handed to this client. */
 async function dmRowsReceived(page: Page): Promise<number> {
   return (await netStats(page)).dmRowsReceived;
 }
@@ -69,7 +68,6 @@ test('バックグラウンドの B への DM だけが通知判定になり、�
     ),
   ).toBe('granted');
 
-  // A must see both B and C before renaming/mentioning (the dm.spec rule).
   await expect
     .poll(async () => (await snapshot(pageA)).remotePlayers.length, { timeout: 15_000 })
     .toBe(2);
@@ -84,9 +82,6 @@ test('バックグラウンドの B への DM だけが通知判定になり、�
     })
     .toContain(nameB);
 
-  // (1) A visible, permission-granted B receives a DM: delivered to the
-  // log, but never a notification — the tab is visible (un-hidden and
-  // focused, the headless default).
   const dmVisible = `見えてるとき ${nonce}`;
   await sendChat(pageA, `@${nameB} ${dmVisible}`);
   await expect(pageB.getByRole('log')).toContainText(dmVisible, { timeout: 10_000 });
@@ -100,21 +95,16 @@ test('バックグラウンドの B への DM だけが通知判定になり、�
   expect(await dmRowsReceived(pageB)).toBeGreaterThan(0);
   expect(await dmNotifyDecisions(pageB)).toBe(0);
 
-  // (3) A DMs the backgrounded B: THE notification case.
   const dmHidden = `背景あての通知 ${nonce}`;
   await sendChat(pageA, `@${nameB} ${dmHidden}`);
   await expect(pageB.getByRole('log')).toContainText(dmHidden, { timeout: 10_000 });
   await expect.poll(() => dmNotifyDecisions(pageB), { timeout: 5_000 }).toBe(1);
 
-  // (4) B's own send (a self-DM memo) lands as a row event on B while
-  // hidden and granted — own must be the clause that refuses it.
   const memo = `自分メモ ${nonce}`;
   await sendChat(pageB, `@${nameB} ${memo}`);
   await expect(pageB.getByRole('log')).toContainText(memo, { timeout: 10_000 });
   expect(await dmNotifyDecisions(pageB)).toBe(1);
 
-  // (5) Scope is DM-only: a public message reaching the backgrounded B
-  // must not notify.
   const publicBody = `みんなへ ${nonce}`;
   await sendChat(pageA, publicBody);
   await expect(pageB.getByRole('log')).toContainText(publicBody, { timeout: 10_000 });
@@ -126,8 +116,6 @@ test('バックグラウンドの B への DM だけが通知判定になり、�
   expect(await dmRowsReceived(pageC)).toBe(0);
   expect(await dmNotifyDecisions(pageC)).toBe(0);
 
-  // A never notified either: visible, and its context has no permission —
-  // and nothing about A's session (sending, receiving echoes) broke.
   expect(await dmNotifyDecisions(pageA)).toBe(0);
   await expect(pageA.getByRole('log')).toContainText(dmHidden);
 

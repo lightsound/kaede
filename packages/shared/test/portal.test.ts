@@ -23,7 +23,6 @@ const PLAZA = MAPS[0];
 const PORTAL = PLAZA.portals[0];
 const PORTAL_CENTER_X = PORTAL.rect.x + PORTAL.rect.w / 2;
 
-/** Standing on the ground slab at `x` (the portal-eligible pose). */
 function standingAt(x: number): PlayerState {
   return {
     x,
@@ -88,7 +87,6 @@ describe('マップ定義の不変条件', () => {
   it('ポータルのトリガー域はロープの掴み範囲と重ならない(up の意味が競合しない)', () => {
     for (const map of MAPS) {
       for (const portal of map.portals) {
-        // トリガー域の全幅を歩きながら up しても、ロープ掴みが起きないこと。
         for (let x = portal.rect.x; x <= portal.rect.x + portal.rect.w; x += 4) {
           const stepped = stepPlayer(
             { ...standingAt(x), y: map.collision.solids[0].y - PLAYER_HALF_H },
@@ -199,7 +197,6 @@ describe('evaluatePortalSend(レート制限)', () => {
   it('バースト分を使い切ると拒否され、実時間の経過で回復する', () => {
     let marker = 0n;
     const now = 1_000n * SECOND;
-    // 初回はエポックのマーカー = ちょうどフルバースト(5回)。
     for (let i = 0; i < 5; i++) {
       const verdict = evaluatePortalSend({ allowanceMicros: marker, nowMicros: now });
       expect(verdict.ok).toBe(true);
@@ -209,7 +206,6 @@ describe('evaluatePortalSend(レート制限)', () => {
       ok: false,
       reason: 'rate-limited',
     });
-    // 1秒(= コスト1回分)進めば1回ぶん回復する。
     const later = now + SECOND;
     const verdict = evaluatePortalSend({ allowanceMicros: marker, nowMicros: later });
     expect(verdict.ok).toBe(true);

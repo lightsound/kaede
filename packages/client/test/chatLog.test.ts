@@ -46,7 +46,6 @@ describe('insertChatEntry', () => {
     expect(log.map(chatEntryKey)).toEqual(['chat:1', 'chat:2']);
   });
 
-  // The initial seed iterates two unordered row caches.
   it('places an out-of-order entry by send time', () => {
     let log = insertChatEntry([], chat(3n));
     log = insertChatEntry(log, chat(1n));

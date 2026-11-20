@@ -74,7 +74,6 @@ describe('buildCatalog', () => {
         './b/sit.png': 'u',
       },
     );
-    // First-seen order: avatar.a's poses, then avatar.b's novel ones.
     expect(catalog.poseUnion).toEqual(['stand', 'walk-a', 'walk-b', 'sit']);
     expect(catalog.avatars.map((a) => a.missingPoses)).toEqual([['sit'], ['walk-b']]);
     expect(catalog.problems).toEqual([]);
@@ -163,7 +162,6 @@ describe('buildCatalog', () => {
       './c/manifest.json: 未知の type（mystery）です',
       './d/manifest.json: JSON がオブジェクトではありません',
     ]);
-    // Both rows still render — inspection shows the duplicate instead of hiding it.
     expect(catalog.avatars).toHaveLength(2);
   });
 

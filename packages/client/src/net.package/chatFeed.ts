@@ -10,7 +10,6 @@ import { type ChatEntryView, type ChatLog, insertChatEntry, removeChatEntry } fr
 import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 
-/** The generated chat_message row type. */
 type ChatMessageRow = RowOf<'chatMessage'>;
 
 /**
@@ -32,7 +31,6 @@ function scopeTagOf(c: DbConnection, row: ChatMessageRow): string | undefined {
   });
 }
 
-/** The generated dm_message row type. */
 type DmMessageRow = RowOf<'dmMessage'>;
 
 /**
@@ -138,17 +136,10 @@ export function createChatFeed(onChat: (log: ChatLog) => void) {
       }
       publish(seeded);
 
-      // Row events keep the log fed: an insert adds its line, and a
-      // retention trim (each history table keeps only its newest cap of
-      // rows) arrives as a delete, so the panel drops the line the moment
-      // the authority does.
       rows.on(c.db.chatMessage, {
         insert: (row) => {
           hooks.onChatRow(row.scope);
           publish(insertChatEntry(log, chatView(row)));
-          // The bubble shows over whoever spoke: our own avatar, or the
-          // sender's remote view. A message from a player whose view is not
-          // on screen (hidden as offline, or already removed) is a no-op.
           rows.route(
             row.sender,
             () => hooks.showLocalBubble(row.text),

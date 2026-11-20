@@ -97,7 +97,6 @@ describe('createInput', () => {
     input.dispose();
   });
 
-  // Typing a name (or, later, chatting) must not walk the avatar around.
   it('ignores keys pressed inside a text-entry element', () => {
     const win = install();
     const input = createInput();
@@ -109,7 +108,6 @@ describe('createInput', () => {
     input.dispose();
   });
 
-  // Press in the world, release over the form: the key must not stay held.
   it('releases a held key even when the keyup lands on a text-entry element', () => {
     const win = install();
     const input = createInput();

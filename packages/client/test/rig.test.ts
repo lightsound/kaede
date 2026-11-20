@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { advanceWalk, IDLE_WALK_STATE, selectPose, WALK_POSES } from '../src/game.package/rig';
 
-// One 60fps frame moving at a typical walk speed (~180 logical px/s).
 const FRAME_MS = 16.7;
 const WALK_DX = 3;
 
-/** Runs `frames` frames of steady motion (dx per frame) from `state`. */
 function run(state = IDLE_WALK_STATE, frames = 1, dx = WALK_DX) {
   let s = state;
   for (let i = 0; i < frames; i++) s = advanceWalk(s, dx, FRAME_MS);
@@ -47,16 +45,15 @@ describe('advanceWalk', () => {
   it('treats a teleport-sized jump as a discontinuity: no stride, no walking', () => {
     const walking = run(IDLE_WALK_STATE, 30);
     const jump = advanceWalk(walking, 1500, FRAME_MS);
-    expect(jump.phase).toBe(walking.phase); // the legs did not spin
+    expect(jump.phase).toBe(walking.phase);
     expect(jump.intensity).toBeLessThanOrEqual(walking.intensity);
   });
 
   it('keeps a lag frame walking: many ticks of travel in one long frame', () => {
-    // 120px over 500ms is ordinary MOVE_SPEED travel, just delivered late.
     const walking = run(IDLE_WALK_STATE, 30);
     const lag = advanceWalk(walking, 120, 500);
     expect(lag.intensity).toBeGreaterThan(0.9);
-    expect(lag.phase).not.toBe(walking.phase); // the stride advanced with the travel
+    expect(lag.phase).not.toBe(walking.phase);
   });
 
   it('returns the state unchanged for a zero-length frame', () => {
@@ -91,13 +88,12 @@ describe('selectPose', () => {
   });
 
   it('advances through the cycle with continued travel', () => {
-    let state = run(IDLE_WALK_STATE, 30); // steady walk, some phase
+    let state = run(IDLE_WALK_STATE, 30);
     const seen = new Set([selectPose(state)]);
     for (let i = 0; i < 90; i++) {
       state = advanceWalk(state, WALK_DX, FRAME_MS);
       seen.add(selectPose(state));
     }
-    // 90 more frames ≈ 270px ≈ 1.4 strides: every cycle frame appears.
     for (const pose of WALK_POSES) expect(seen).toContain(pose);
   });
 });

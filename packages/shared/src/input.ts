@@ -1,6 +1,5 @@
 import type { PlayerInput } from './types';
 
-/** Bit flags for one tick of input packed into a u8 (0..31). */
 const LEFT = 1;
 const RIGHT = 2;
 const JUMP = 4;

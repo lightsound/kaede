@@ -8,7 +8,6 @@ type Actions = ReturnType<typeof netActionsOf>;
 
 const RECORDINGS = [{ fileName: 'rec.mp4', size: 2048, uploadedAt: '2026-10-24T00:00:00.000Z' }];
 
-/** A Net whose every method is a spy; the procedure calls resolve to distinctive answers. */
 function fakeNet() {
   return {
     dispose: vi.fn(),
@@ -55,7 +54,6 @@ const ZONE = { name: '会議室', closed: true };
 const EDIT = { name: '会議室', closed: true, w: 200, h: 120 };
 const NOT_CONNECTED = 'SpacetimeDB: not connected';
 
-/** One surface command, the one Net method it must reach, and the arguments that method must see. */
 interface Wiring {
   command: string;
   invoke: (actions: Actions) => unknown;
@@ -274,10 +272,8 @@ describe('netActionsOf once mounted', () => {
     const net = fakeNet();
     const ref: { current: Net | undefined } = { current: undefined };
     const actions = netActionsOf(ref, () => {});
-    // The mount finishes after the render that built the actions...
     ref.current = net;
     actions.setDisplayName('かえで');
-    // ...and the effect's cleanup disposes the stack before the next render.
     ref.current = undefined;
     actions.setDisplayName('もみじ');
     expect(net.setDisplayName).toHaveBeenCalledTimes(1);

@@ -9,14 +9,10 @@
 // @livekit/components-react) means rewriting this package and nothing else.
 import RealtimeKitClient from '@cloudflare/realtimekit';
 
-/** The SDK's meeting object, as Client.init returns it. */
 export type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
 
-/** What dialing needs, besides the token: the one exit signal. */
 export interface DialRequest {
-  /** The participant token join_group_call minted (増分⑥). */
   authToken: string;
-  /** The session ended on any path (own leave, kicked, meeting ended). */
   onEnded(): void;
 }
 

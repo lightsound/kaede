@@ -21,14 +21,12 @@ describe('isReactionEmoji', () => {
   it('refuses free-form text', () => {
     expect(isReactionEmoji('')).toBe(false);
     expect(isReactionEmoji('こんにちは')).toBe(false);
-    expect(isReactionEmoji('👍 ')).toBe(false); // trailing space: not an exact match
+    expect(isReactionEmoji('👍 ')).toBe(false);
     expect(isReactionEmoji('👍👍')).toBe(false);
   });
 
   it('refuses near-miss variants of palette emojis', () => {
-    // Skin-tone modifier on the palette's plain 👍.
     expect(isReactionEmoji('👍🏻')).toBe(false);
-    // ❤ without the VS16 the palette entry carries.
     expect(isReactionEmoji('\u2764')).toBe(false);
     // A ZWJ composition (❤️‍🔥): exact matching refuses it without any
     // normalization reasoning.
@@ -44,10 +42,10 @@ describe('isReactionEmoji', () => {
 // (chat.test.ts) — both delegate to evaluateSendAllowance. These pin the
 // reaction-specific parameters.
 describe('evaluateReactionSend', () => {
-  const NOW = 1_700_000_000_000_000n; // an arbitrary wall-clock instant
+  const NOW = 1_700_000_000_000_000n;
 
   it('allows exactly the reaction burst back-to-back, then refuses', () => {
-    let marker = 0n; // no guard row yet = the epoch marker
+    let marker = 0n;
     for (let i = 0; i < REACTION_BURST_SENDS; i += 1) {
       const verdict = evaluateReactionSend({ allowanceMicros: marker, nowMicros: NOW });
       expect(verdict.ok).toBe(true);

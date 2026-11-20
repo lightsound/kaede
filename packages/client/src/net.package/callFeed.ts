@@ -2,12 +2,7 @@ import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';
 
-/**
- * What acting on the own membership needs from the session that wires the
- * feed (the StatusFeedHooks shape).
- */
 export interface CallFeedHooks {
-  /** The conversation group the own membership names, or undefined in none. */
   onOwnGroup(groupId: bigint | undefined): void;
 }
 

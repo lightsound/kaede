@@ -4,11 +4,6 @@ import { UI_GOLD, UI_GOLD_BORDER_SOFT, UI_PANEL_BG, UI_TEXT_COLOR } from '../the
 import type { AssetFrame, AvatarAsset, ItemAsset } from './catalog';
 import { frameFor, maxFrameSize } from './dressup';
 
-/**
- * Anchor marker colors by anchor name (neck/hand from avatar-body poses,
- * grip from held-item frames and hand layers); unknown names fall back to
- * the kaede gold.
- */
 const ANCHOR_COLORS: Record<string, string> = {
   neck: '#7aa2f7',
   hand: '#f2777a',
@@ -58,7 +53,6 @@ const captionStyle: CSSProperties = { fontSize: 11, opacity: 0.7, marginTop: 4 }
 
 const figureStyle: CSSProperties = { margin: 0, textAlign: 'center' };
 
-/** The pixel-exact img sizing: `scale` × the manifest size, or natural when the size is absent. */
 function frameImageStyle(size: AssetFrame['size'], scale: number): CSSProperties {
   const [w, h] = size ?? [undefined, undefined];
   return {
@@ -68,7 +62,6 @@ function frameImageStyle(size: AssetFrame['size'], scale: number): CSSProperties
   };
 }
 
-/** The anchor-point overlay dots, positioned at the manifest coordinates. */
 function AnchorMarkers(props: { anchors: AssetFrame['anchors']; scale: number }) {
   return (
     <>
@@ -115,7 +108,6 @@ function FrameImage(props: {
   );
 }
 
-/** The identity row every card starts with: display name, stable id, optional trailing controls. */
 function CardHeader(props: { name: string; id: string; children?: ReactNode }) {
   return (
     <header style={cardHeaderStyle}>
@@ -145,7 +137,6 @@ export function groundBoxStyle(size: readonly [number, number], scale: number): 
   };
 }
 
-/** The animated figure driven by the shared walk clock (data-pose carries the shown frame). */
 function WalkPreview(props: { avatar: AvatarAsset; pose: string; showAnchors: boolean }) {
   const { avatar, pose, showAnchors } = props;
   const resolved = frameFor(avatar, pose);
@@ -174,11 +165,6 @@ function anchorCaption(frame: AssetFrame): string {
   return [size, anchors].filter((part) => part !== '').join(' ');
 }
 
-/**
- * One pose frame of a sheet, sitting on the sheet's shared ground line
- * (groundBoxStyle) with its pose name and anchors underneath. Shared by the
- * avatar and gesture cards; `testId` keeps their separate test ids.
- */
 function PoseFigure(props: {
   avatar: AvatarAsset;
   name: string;
@@ -206,7 +192,6 @@ function PoseFigure(props: {
   );
 }
 
-/** One avatar-body: identity, walk playback, every pose cell, the pose-gap badge. */
 export function AvatarCard(props: {
   avatar: AvatarAsset;
   pose: string;
@@ -263,7 +248,6 @@ export function AvatarCard(props: {
   );
 }
 
-/** The side-by-side comparison row: every checked avatar in the same walk phase. */
 export function CompareStrip(props: {
   avatars: readonly AvatarAsset[];
   pose: string;
@@ -284,13 +268,11 @@ export function CompareStrip(props: {
   );
 }
 
-/** CSS px per source px for an item frame: aim near 96px tall on screen, clamped. */
 function itemScale(size: readonly [number, number] | undefined): number {
   if (!size) return 1;
   return Math.max(0.5, Math.min(6, 96 / size[1]));
 }
 
-/** One held-item: the bare sprite with its grip point (the rest point on the carry mitten). */
 export function ItemCard(props: { item: ItemAsset; showAnchors: boolean; testId?: string }) {
   const { item, showAnchors } = props;
   return (
@@ -309,11 +291,6 @@ export function ItemCard(props: { item: ItemAsset; showAnchors: boolean; testId?
   );
 }
 
-/**
- * One gesture sheet (avatar-gesture — Phase 5 ①c): every gesture frame with
- * its anchors. No walk preview — the sheet has no walk cycle — and its own
- * test ids so the avatar-body counts the studio spec pins stay stable.
- */
 export function GestureCard(props: { avatar: AvatarAsset; showAnchors: boolean }) {
   const { avatar, showAnchors } = props;
   return (
@@ -340,7 +317,6 @@ export function GestureCard(props: { avatar: AvatarAsset; showAnchors: boolean }
   );
 }
 
-/** A labeled section heading shared by the studio's blocks. */
 export function SectionHeading(props: { children: ReactNode }) {
   return <h2 style={{ fontSize: 15, margin: '24px 0 12px', color: UI_GOLD }}>{props.children}</h2>;
 }

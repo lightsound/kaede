@@ -6,7 +6,6 @@ import {
   shouldNotifyDm,
 } from '../src';
 
-/** A row and context that DO notify; each test flips exactly one input. */
 const EVENT: DmRowEvent = {
   source: 'event',
   own: false,

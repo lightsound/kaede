@@ -126,10 +126,6 @@ describe('removePlayer', () => {
     const harness = makeHarness();
     const alice = seedPlayerRows(harness, ALICE);
     asModule(harness, (ctx) => {
-      // Every identity-keyed table removePlayer sweeps (world.ts's
-      // identityKeyed list): the three player_* siblings seeded above,
-      // the public reaction / gesture / player_status rows, and the
-      // lazy guard tables (playerGuard arrived with the siblings).
       ctx.db.chatGuard.insert({ identity: alice, allowanceMicros: 1n });
       ctx.db.reaction.insert({ identity: alice, emoji: '👍', sentAt: ctx.timestamp });
       ctx.db.reactionGuard.insert({ identity: alice, allowanceMicros: 1n });

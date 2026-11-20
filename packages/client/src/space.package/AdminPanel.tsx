@@ -18,7 +18,6 @@ const panelStyle: CSSProperties = {
   overflowY: 'auto',
 };
 
-/** A member row pushes its actions to the right edge, unlike a form row. */
 const memberRowStyle: CSSProperties = {
   ...panelRowStyle,
   justifyContent: 'space-between',
@@ -31,7 +30,6 @@ const nameStyle: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-/** One labelled member transition, as a section offers it. */
 interface ActionButton {
   label: string;
   action: MemberAction;
@@ -49,7 +47,6 @@ const SECTIONS: readonly {
   title: string;
   status: MemberStatus;
   actions: readonly ActionButton[];
-  /** Sections for exceptional states hide while empty; the core two stay. */
   hideWhenEmpty: boolean;
 }[] = [
   {
@@ -87,12 +84,10 @@ const SECTIONS: readonly {
   },
 ];
 
-/** What the list shows for a member who has not set a name yet. */
 function labelOf(member: SpaceMemberView): string {
   return member.displayName ?? `未設定 (${member.idHex.slice(0, 6)})`;
 }
 
-/** One member with the actions its section offers. */
 function MemberRow({
   member,
   actions,
@@ -142,15 +137,12 @@ export function AdminPanel({
   onGuestsAllowedChange,
   onSendAnnouncement,
 }: {
-  /** The whole member directory, oldest application first (see SpaceView.members). */
   members: SpaceMemberView[];
   guestsAllowed: boolean;
-  /** The whole zone list, every map, creation order (see ZoneAdminView). */
   zones: ZoneAdminView[];
   zoneActions: ZoneActions;
   onMemberAction: (action: MemberAction, member: SpaceMemberView) => void;
   onGuestsAllowedChange: (allowed: boolean) => void;
-  /** Posts one space-wide announcement (see AnnouncePanel / Net.sendAnnouncement). */
   onSendAnnouncement: (text: string) => void;
 }) {
   return (

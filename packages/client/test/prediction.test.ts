@@ -17,12 +17,10 @@ import { createPrediction, type PredictionDeps } from '../src/net.package/predic
 
 const NO_INPUT: PlayerInput = { left: false, right: false, jump: false, up: false, down: false };
 
-/** The authoritative spawn state the prediction loop starts from (mid-air). */
 function spawn(): PlayerState {
   return { x: SPAWN_X, y: 200, vx: 0, vy: 0, facing: 1, onGround: false, rope: -1 };
 }
 
-/** 地面の上で静止(送信ゲートが閉じられる状態)。 */
 function grounded(): PlayerState {
   return {
     x: SPAWN_X,
@@ -45,7 +43,6 @@ interface Reset {
   tick: number;
 }
 
-/** Spy deps that record every sendBatch / resetLocal call into plain arrays. */
 function spyDeps(): {
   deps: PredictionDeps;
   sent: SentBatch[];
@@ -81,7 +78,6 @@ function driver(start: PlayerState, startTick: number) {
   return {
     states,
     packedAt,
-    /** Step one tick with `input` at virtual time `nowMs`, feeding the loop. */
     step(loop: ReturnType<typeof createPrediction>, input: PlayerInput, nowMs: number) {
       tick += 1;
       const next = stepPlayer(prev, input, DEFAULT_MAP);
@@ -128,7 +124,6 @@ describe('createPrediction', () => {
       }
 
       expect(sent).toHaveLength(windows);
-      // Contiguous batches: startTick is the tick before the window's first input.
       expect(sent.map((b) => b.startTick)).toEqual([0, 6, 12]);
       for (const batch of sent) expect(batch.packed).toHaveLength(ticksPerWindow);
     });
@@ -158,7 +153,6 @@ describe('createPrediction', () => {
   it('flushNow はケイデンス外でも保留ウィンドウを即時送信する(ポータル経路)', () => {
     const loop = createPrediction(deps, 0, grounded(), DEFAULT_MAP, 0);
     const drv = driver(grounded(), 0);
-    // 3 tick 刻む(up 入力 = ポータルの押下)がケイデンス未満なので未送信。
     for (let i = 1; i <= 3; i++) drv.step(loop, { ...NO_INPUT, up: true }, 0);
     expect(sent).toHaveLength(0);
 
@@ -167,7 +161,6 @@ describe('createPrediction', () => {
     expect(sent[0].startTick).toBe(0);
     expect(sent[0].packed).toHaveLength(3);
 
-    // 送信済み位置が進んでいるので、直後の flushNow は何も送らない。
     loop.flushNow(0);
     expect(sent).toHaveLength(1);
   });
@@ -176,7 +169,6 @@ describe('createPrediction', () => {
     const loop = createPrediction(deps, 0, spawn(), DEFAULT_MAP, 0);
     const drv = driver(spawn(), 0);
 
-    // Feed a few ticks with varied input so prediction has real content.
     const inputs: PlayerInput[] = [
       { ...NO_INPUT, right: true },
       { ...NO_INPUT, right: true, jump: true },
@@ -188,7 +180,6 @@ describe('createPrediction', () => {
     });
 
     const ackTick = 2;
-    // Server replayed the same inputs deterministically: ack the exact predicted state.
     loop.onAck(drv.state(ackTick), ackTick, 1000);
 
     expect(resets).toHaveLength(0);
@@ -211,11 +202,8 @@ describe('createPrediction', () => {
 
     const ackTick = 2;
     const currentTick = drv.tick;
-    // Authoritative state differs from our prediction at the ack tick.
     const authoritative: PlayerState = { ...drv.state(ackTick), x: drv.state(ackTick).x + 7 };
 
-    // Expected: fold the recorded un-acked inputs forward from the authoritative
-    // state, ackTick+1 .. currentTick, with the real shared physics.
     let expected = authoritative;
     for (let t = ackTick + 1; t <= currentTick; t++) {
       expected = stepPlayer(expected, inputs[t - 1], DEFAULT_MAP);
@@ -232,7 +220,6 @@ describe('createPrediction', () => {
     const loop = createPrediction(deps, 0, spawn(), DEFAULT_MAP, 0);
     const drv = driver(spawn(), 0);
 
-    // Window 1: ticks 1..3 flush as one batch at t=INPUT_FLUSH_INTERVAL_MS. Never acked.
     drv.step(loop, NO_INPUT, 0);
     drv.step(loop, NO_INPUT, 0);
     drv.step(loop, NO_INPUT, INPUT_FLUSH_INTERVAL_MS);
@@ -245,13 +232,11 @@ describe('createPrediction', () => {
     drv.step(loop, NO_INPUT, watchdogNow);
 
     expect(sent).toHaveLength(2);
-    // Re-send starts from ackedTick (0), re-covering the un-acked ticks 1..4.
     expect(sent[1].startTick).toBe(0);
     expect(sent[1].packed.length).toBe(drv.tick);
   });
 
   describe('送信ゲート(アイドル抑制): 静止中は送信が止まる', () => {
-    /** 1フラッシュウィンドウぶん(6 tick)進め、最後の tick でフラッシュさせる。 */
     function window(
       loop: ReturnType<typeof createPrediction>,
       drv: ReturnType<typeof driver>,
@@ -277,14 +262,11 @@ describe('createPrediction', () => {
       const drv = driver(spawn(), 0);
       for (let w = 1; w <= 10; w++) {
         window(loop, drv, NO_INPUT, w);
-        // サーバー役: 決定論リプレイの結果を ack(常に予測と一致)。
         loop.onAck(drv.state(drv.tick), drv.tick, w * INPUT_FLUSH_INTERVAL_MS);
       }
-      // 落下中のウィンドウはすべて送られた(少なくとも着地までの6本)。
       expect(sent.length).toBeGreaterThanOrEqual(6);
       expect(drv.state(drv.tick).onGround).toBe(true);
 
-      // 静止到達+ack後: それ以降のウィンドウは1本も送られない。
       const settled = sent.length;
       for (let w = 11; w <= 14; w++) window(loop, drv, NO_INPUT, w);
       expect(sent).toHaveLength(settled);
@@ -293,7 +275,6 @@ describe('createPrediction', () => {
     it('抑制中に飛ばした tick は、再開バッチの startTick のギャップとして現れる', () => {
       const loop = createPrediction(deps, 0, grounded(), DEFAULT_MAP, 0);
       const drv = driver(grounded(), 0);
-      // ウィンドウ2本(tick 1..12)は静止スキップ: サーバーの行 tick は 0 のまま。
       for (let w = 1; w <= 2; w++) window(loop, drv, NO_INPUT, w);
       expect(sent).toHaveLength(0);
 
@@ -322,7 +303,6 @@ describe('createPrediction', () => {
     it('未ackのバッチが残っている間は静止しても黙らない(ackが揃ってから止まる)', () => {
       const loop = createPrediction(deps, 0, grounded(), DEFAULT_MAP, 0);
       const drv = driver(grounded(), 0);
-      // ウィンドウ1: 最初の tick だけ右入力 → 送信。ack はまだ返さない。
       drv.step(loop, { ...NO_INPUT, right: true }, 0);
       for (let i = 2; i <= 6; i++) {
         drv.step(loop, NO_INPUT, i === 6 ? INPUT_FLUSH_INTERVAL_MS : 0);
@@ -334,7 +314,6 @@ describe('createPrediction', () => {
       window(loop, drv, NO_INPUT, 2);
       expect(sent).toHaveLength(2);
 
-      // ackが揃うと次のウィンドウから止まる。
       loop.onAck(drv.state(drv.tick), drv.tick, 2 * INPUT_FLUSH_INTERVAL_MS);
       window(loop, drv, NO_INPUT, 3);
       expect(sent).toHaveLength(2);
@@ -345,7 +324,6 @@ describe('createPrediction', () => {
     const loop = createPrediction(deps, 0, spawn(), DEFAULT_MAP, 0);
     const drv = driver(spawn(), 0);
 
-    // Feed more ticks than the history cap so the oldest entries are pruned.
     const total = PREDICTION_HISTORY_MAX_TICKS + 50;
     for (let i = 1; i <= total; i++) {
       const nowMs = i % 6 === 0 ? i * INPUT_FLUSH_INTERVAL_MS : 0;

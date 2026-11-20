@@ -10,43 +10,23 @@ import {
 import type { DbConnection } from '../module_bindings';
 import type { OwnSim } from './playerFeed';
 
-/** What the input sender needs from the net stack that owns it (startNet). */
 export interface InputSenderDeps {
   /**
    * The live connection, read at each send — a reconnect swaps it under
    * every send at once (the same getter shape netApi.ts reads through).
    */
   conn(): DbConnection | undefined;
-  /** The own simulation's state, held across sessions (see OwnSim in playerFeed.ts). */
   sim: OwnSim;
-  /** Counts one send on the dev-only E2E counters (see installNetStats in sync.ts). */
   bumpStat(key: keyof E2ENetStats): void;
 }
 
-/**
- * The own simulation's send paths: everything this client pushes to the
- * server while playing — input batches, liveness heartbeats and portal
- * intents — plus the tick and heartbeat checks that drive them.
- */
 export interface InputSender {
-  /** 生存証明の空バッチを1本送る(定期便と再接続時の生存宣言の共通路)。 */
   sendHeartbeat(c: DbConnection): void;
-  /** One input batch: the prediction's send path (see handleOwnRow in playerFeed.ts). */
   sendBatch(startTick: number, packed: Uint8Array): void;
-  /**
-   * The game loop's local tick: feeds the prediction, flushes on ground
-   * contact edges, and fires a portal intent when this tick asks for one.
-   */
   handleLocalTick(state: PlayerState, tick: number, packedInput: number): void;
-  /** The heartbeat worker's check: sends the empty batch when one is due. */
   heartbeatTick(): void;
 }
 
-/**
- * Builds the input sender. It owns the send cadence state — when the last
- * batch went out, the previous tick's input and ground contact — across
- * sessions, like the OwnSim it reads.
- */
 export function createInputSender(deps: InputSenderDeps): InputSender {
   const { sim } = deps;
 
@@ -73,7 +53,6 @@ export function createInputSender(deps: InputSenderDeps): InputSender {
       .catch(() => {});
   }
 
-  // The previous tick's packed input, for the portal intent's press edge.
   let prevPackedInput = 0;
 
   // 前 tick の接地状態(接地エッジ検出用)。undefined = まだ tick がない。
@@ -136,7 +115,6 @@ export function createInputSender(deps: InputSenderDeps): InputSender {
   // lastSendMs を進めるので、ハートビートは自然に黙る。prediction がない間
   // (待合室・入場拒否・行の削除後)は行が無いので送らない。
   function heartbeatTick(): void {
-    // dispose 後は heartbeat.dispose() 済みかつ conn も undefined。
     const c = deps.conn();
     if (!c || !sim.prediction) return;
     if (Date.now() - lastSendMs < HEARTBEAT_INTERVAL_MS) return;

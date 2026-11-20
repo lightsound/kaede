@@ -4,7 +4,6 @@
 // レート制限は「見やすさ」ではなく無料枠と課金の生存条件。規則をここに
 // 切り出して単体テストし、posthog.ts の before_send は薄い配線に留める。
 
-/** 同一フィンガープリントの例外を送る最短間隔。 */
 export const EXCEPTION_THROTTLE_MS = 30_000;
 
 /**
@@ -14,7 +13,6 @@ export const EXCEPTION_THROTTLE_MS = 30_000;
  */
 const EXCEPTION_KEYS_MAX = 200;
 
-/** posthog-js が $exception イベントに載せる例外リストの、指紋に使う部分。 */
 interface ExceptionItem {
   type?: unknown;
   value?: unknown;
@@ -54,11 +52,6 @@ export function exceptionFingerprint(properties: Record<string, unknown> | undef
   ].join('|');
 }
 
-/**
- * キーごとのレートゲート: 前回通過から windowMs 未満の再送を止める。
- * 返り値 true = 送ってよい。記憶は挿入順(= Map の反復順)で捨てるので、
- * サイズは maxKeys に有界。
- */
 export function createRateGate(
   windowMs: number = EXCEPTION_THROTTLE_MS,
   maxKeys: number = EXCEPTION_KEYS_MAX,

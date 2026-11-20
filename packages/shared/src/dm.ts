@@ -25,13 +25,9 @@ export interface DmCandidate {
   readonly key: string;
 }
 
-/** One in-world player as the candidate rule reads it (see collectDmCandidates). */
 export interface DmCandidateSource {
-  /** The player row's online flag — an offline row lingers unrendered. */
   readonly online: boolean;
-  /** The current display name; undefined when the name row is missing. */
   readonly name: string | undefined;
-  /** Opaque identity key (hex). */
   readonly key: string;
 }
 
@@ -124,7 +120,6 @@ export function planChatDraft(raw: string, candidates: readonly DmCandidate[]): 
   return planDm(verdict.text.slice(sigil.length), candidates);
 }
 
-/** Resolves the mention half of a '@'-leading draft (see planChatDraft). */
 function planDm(rest: string, candidates: readonly DmCandidate[]): ChatDraftPlan {
   const holders = mentionHolders(rest, candidates);
   const recipient = holders[0];
@@ -138,8 +133,6 @@ function planDm(rest: string, candidates: readonly DmCandidate[]): ChatDraftPlan
     kind: 'dm',
     recipientKey: recipient.key,
     recipientName: recipient.name,
-    // Past "name + space"; already normalized (whitespace runs collapsed,
-    // ends trimmed), so no leading/trailing space can survive here.
     text: rest.slice(recipient.name.length + 1),
   };
 }

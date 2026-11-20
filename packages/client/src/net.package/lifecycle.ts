@@ -33,20 +33,14 @@
  */
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'idle';
 
-/** First retry delay after a failure; doubles per attempt up to the max. */
 export const RETRY_INITIAL_MS = 1000;
 export const RETRY_MAX_MS = 30_000;
 
 export interface LifecycleState {
-  /** Terminal: dispose() ran, nothing may act again. */
   disposed: boolean;
-  /** The idle guard holds the connection closed; only `resume` ends this. */
   suspended: boolean;
-  /** Some connect succeeded before, so progress reads 'reconnecting'. */
   everConnected: boolean;
-  /** A connect() promise is outstanding (attempts are single-flight). */
   attemptInFlight: boolean;
-  /** A settled connection is wired as the live session. */
   sessionLive: boolean;
   /**
    * Which connect is current. Socket-close events carry the generation of
@@ -54,59 +48,30 @@ export interface LifecycleState {
    * a superseded session and must not touch the newer one.
    */
   generation: number;
-  /** A retry timer is armed (at most one per failure). */
   retryArmed: boolean;
-  /** Delay the NEXT armed retry will use (doubles per armed retry). */
   retryDelayMs: number;
-  /**
-   * Failed connects in a row since the last success; connect() uses it to
-   * decide when the stored identity token has become the likely culprit.
-   */
   consecutiveFailures: number;
 }
 
 export type LifecycleEvent =
-  /** startNet's initial kick. */
   | { kind: 'start' }
-  /** A connect attempt settled successfully. */
   | { kind: 'connect-ok' }
-  /** A connect attempt rejected. */
   | { kind: 'connect-failed' }
-  /** The socket of the connect attempt `generation` closed. */
   | { kind: 'socket-closed'; generation: number }
-  /** The armed retry timer fired. */
   | { kind: 'retry-due' }
-  /** The idle monitor decided to suspend (idle.check → 'suspend'). */
   | { kind: 'idle-timeout' }
-  /** User input while suspended (idle.activity → 'resume'). */
   | { kind: 'resume' }
-  /**
-   * The page likely resumed from a background/frozen state: the tab became
-   * visible or focused, the network came back, or a bfcache page was restored.
-   */
   | { kind: 'page-resume' }
-  /**
-   * The shell's probe-session verdict: the live session of `generation` holds
-   * a socket that is CLOSING/CLOSED but never delivered its close event.
-   */
   | { kind: 'session-dead'; generation: number }
-  /** The stack is being torn down. */
   | { kind: 'dispose' };
 
 export type LifecycleEffect =
-  /** Start a connect attempt stamped with `generation`. */
   | { kind: 'connect'; generation: number; consecutiveFailures: number }
-  /** Adopt the just-settled connection as the live session. */
   | { kind: 'wire-session'; generation: number }
-  /** Close the just-settled connection nobody wants (disposed/suspended). */
   | { kind: 'discard-attempt' }
-  /** Arm the retry timer to fire `retry-due` after delayMs. */
   | { kind: 'arm-retry'; delayMs: number }
-  /** Cancel the armed retry timer. */
   | { kind: 'cancel-retry' }
-  /** Tear down the session state (prediction, remote views, conn ref). */
   | { kind: 'drop-session' }
-  /** Close the current live connection (a ref captured before drop-session). */
   | { kind: 'disconnect' }
   /**
    * Tell the server the upcoming disconnect is the idle guard's deliberate
@@ -114,12 +79,7 @@ export type LifecycleEffect =
    * 'idle' rather than 'unannounced' — see onIdleTimeout.
    */
   | { kind: 'announce-suspend' }
-  /**
-   * Check the live session's socket for a silent death; the shell answers
-   * with `session-dead` when it finds one (see onPageResume).
-   */
   | { kind: 'probe-session'; generation: number }
-  /** Report the connection status to the UI. */
   | { kind: 'status'; status: ConnectionStatus };
 
 export interface Transition {
@@ -141,10 +101,6 @@ export function initialLifecycle(): LifecycleState {
   };
 }
 
-/**
- * One transition being built: the handlers below edit the draft state and
- * append effects in the order the shell must perform them.
- */
 interface Draft {
   next: LifecycleState;
   effects: LifecycleEffect[];
@@ -153,7 +109,6 @@ interface Draft {
 const progressStatus = (d: Draft): ConnectionStatus =>
   d.next.everConnected ? 'reconnecting' : 'connecting';
 
-/** Start a connect unless torn down, one is in flight, or suspended. */
 function attempt(d: Draft): void {
   if (d.next.disposed || d.next.attemptInFlight || d.next.suspended) return;
   d.next.attemptInFlight = true;
@@ -200,8 +155,6 @@ function onConnectOk(d: Draft): void {
 function onConnectFailed(d: Draft): void {
   d.next.attemptInFlight = false;
   d.next.consecutiveFailures += 1;
-  // While suspended or disposed this is a deliberate no-op; the shell's
-  // log must not promise a retry that will not happen.
   scheduleRetry(d);
 }
 
@@ -225,7 +178,6 @@ function onRetryDue(d: Draft): void {
   attempt(d);
 }
 
-/** Cancel an armed retry timer; idle suspension and dispose both must. */
 function disarmRetry(d: Draft): void {
   if (!d.next.retryArmed) return;
   d.next.retryArmed = false;

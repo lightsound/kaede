@@ -16,7 +16,6 @@ function member(status: MemberStatus): SpaceMemberView {
   };
 }
 
-/** A space view whose directory holds `members`, with `self` as this client's own row. */
 function space(self: SpaceMemberView | undefined, members: SpaceMemberView[]): SpaceView {
   return { admission: 'admitted', self, guestsAllowed: true, members };
 }

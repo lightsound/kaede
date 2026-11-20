@@ -12,7 +12,6 @@ export function approvedMember(signedIn: boolean, space: SpaceView | undefined):
   return signedIn && space?.self?.status === 'approved';
 }
 
-/** The 録画一覧's mount gate: connected AND an approved member. */
 export function recordingsDockVisible(
   connected: boolean,
   signedIn: boolean,

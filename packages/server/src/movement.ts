@@ -1,9 +1,5 @@
 // fallow-ignore-file coverage-gaps -- reducers run inside a SpacetimeDB module host; the flows that need no live providers are covered end-to-end by e2e, and the ctx helper layer they build on is unit-tested via the module test harness (packages/server/test); the rules worth testing (input admission, replay, portal geometry, rate limit) are delegated to evaluateInputBatch / replayInputs / evaluatePortalUse / evaluatePortalSend in @kaede/shared and unit-tested there
 
-// The movement reducers: what changes a player's position once it is in
-// the world — the input batches (submit_inputs) and the portal teleport
-// (enter_portal) — with the side effects every authoritative move carries
-// (the group-occupancy pass, the gesture clear).
 import {
   type AcceptedBatchVerdict,
   type BatchRejectReason,

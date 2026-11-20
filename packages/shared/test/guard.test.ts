@@ -16,10 +16,8 @@ import {
 
 const MICROS_PER_TICK = 1_000_000 / TICK_RATE;
 
-/** Micros since epoch after `ticks` ticks of wall-clock time (exact at 60Hz is fractional; truncate). */
 const micros = (ticks: number): bigint => BigInt(Math.floor(ticks * MICROS_PER_TICK));
 
-/** An evaluateInputBatch argument with sane defaults, overridable per test. */
 function batch(overrides: Partial<Parameters<typeof evaluateInputBatch>[0]>) {
   return evaluateInputBatch({
     batchLength: 6,
@@ -122,7 +120,6 @@ describe('evaluateInputBatch', () => {
       nowMicros: now,
     });
     if (v.kind !== 'apply') throw new Error('expected apply');
-    // マーカー前進はギャップ(1000 tick)ではなくバッチ長(6 tick)ぶん。
     expect(v.allowanceMicros).toBe(micros(1000) + BigInt(Math.floor(6 * MICROS_PER_TICK)));
   });
 
@@ -138,7 +135,6 @@ describe('evaluateInputBatch', () => {
   });
 
   it('allows a burst up to TICK_ALLOWANCE_SLACK ahead of the wall clock', () => {
-    // Marker == now: no accrued bank, only slack is available.
     const now = micros(1000);
     const v = batch({
       batchLength: TICK_ALLOWANCE_SLACK,
@@ -150,19 +146,16 @@ describe('evaluateInputBatch', () => {
 
   it('rejects once the slack is spent, until real time catches up', () => {
     const now = micros(1000);
-    // Marker already TICK_ALLOWANCE_SLACK ticks in the future: nothing left.
     const ahead = now + BigInt(Math.ceil(TICK_ALLOWANCE_SLACK * MICROS_PER_TICK));
     expect(batch({ batchLength: 1, allowanceMicros: ahead, nowMicros: now })).toEqual({
       kind: 'rejected',
       reason: 'rate-limited',
     });
-    // One tick of wall clock later, one tick of input is allowed again.
     const later = now + BigInt(Math.ceil((TICK_ALLOWANCE_SLACK + 1) * MICROS_PER_TICK));
     expect(batch({ batchLength: 1, allowanceMicros: ahead, nowMicros: later }).kind).toBe('apply');
   });
 
   it('caps the idle bank: a long-idle player cannot replay more than bank + slack', () => {
-    // One hour idle, then hammer max-size batches with no wall-clock progress.
     const now = micros(3600 * TICK_RATE);
     let marker = 0n;
     let accepted = 0;
@@ -186,8 +179,6 @@ describe('evaluateInputBatch', () => {
   });
 
   it('sustains exactly real-time rate in steady state', () => {
-    // Simulate 10 seconds of a client flushing 6 ticks every 6 ticks of wall
-    // clock: every batch must be accepted (no false positives).
     let marker = 0n;
     let tick = 0;
     for (let flush = 1; flush <= 100; flush++) {
@@ -215,7 +206,6 @@ describe('isExpiredRow', () => {
   it('keeps a row until the retention window has fully elapsed', () => {
     expect(isExpiredRow(0)).toBe(false);
     expect(isExpiredRow(OFFLINE_RETENTION_MS - 1)).toBe(false);
-    // Exactly at the window the row is still kept: the comparison is strict.
     expect(isExpiredRow(OFFLINE_RETENTION_MS)).toBe(false);
   });
 

@@ -10,7 +10,6 @@ interface SubmitArgs {
   inputs: Uint8Array;
 }
 
-/** A fake connection whose reducers only record their calls. */
 function recordingConn() {
   const submits: SubmitArgs[] = [];
   const portals: { portalId: number }[] = [];
@@ -29,7 +28,6 @@ function recordingConn() {
   return { conn, submits, portals };
 }
 
-/** A prediction stub that records the tick feed and the flushes. */
 function recordingPrediction() {
   const ticks: { tick: number; packedInput: number }[] = [];
   const flushes: number[] = [];
@@ -132,7 +130,6 @@ describe('heartbeatTick', () => {
     const { prediction } = recordingPrediction();
     sim.prediction = prediction;
     setConn(conn);
-    // The sender was built at the pinned time, so nothing is due yet.
     sender.heartbeatTick();
     vi.setSystemTime(1_000_000 + HEARTBEAT_INTERVAL_MS - 1);
     sender.heartbeatTick();
@@ -187,8 +184,6 @@ describe('handleLocalTick', () => {
       { tick: 1, packedInput: 0 },
       { tick: 2, packedInput: 0 },
     ]);
-    // The first tick has no previous ground state, and a steady state is
-    // no edge: neither flushes.
     expect(flushes).toEqual([]);
     sender.handleLocalTick(standing({ onGround: false }), 3, 0);
     expect(flushes).toHaveLength(1);
@@ -207,10 +202,8 @@ describe('handleLocalTick', () => {
     const up = packInput({ left: false, right: false, jump: false, up: true, down: false });
     sender.handleLocalTick(inPortal, 1, up);
     expect(portals).toEqual([{ portalId: 0 }]);
-    // The pending window is flushed first, and the call is marked pending.
     expect(flushes).toHaveLength(1);
     expect(sim.portalPendingAtMs).toBeTypeOf('number');
-    // Release and press again inside the pending window: no second call.
     sender.handleLocalTick(inPortal, 2, 0);
     sender.handleLocalTick(inPortal, 3, up);
     expect(portals).toEqual([{ portalId: 0 }]);
@@ -226,7 +219,6 @@ describe('handleLocalTick', () => {
     sender.handleLocalTick(standing(), 1, up);
     const rect = mapFor(0).portals[0].rect;
     const inPortal = standing({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });
-    // Held from the previous tick (no press edge), even inside the portal.
     sender.handleLocalTick(inPortal, 2, up);
     expect(portals).toEqual([]);
   });

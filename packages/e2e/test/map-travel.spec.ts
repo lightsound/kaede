@@ -30,7 +30,6 @@ async function standInPortal(page: Page): Promise<void> {
   throw new Error('could not stop inside the portal trigger');
 }
 
-/** One up-press (held across a few ticks so the 60Hz sampler cannot miss it). */
 async function pressUp(page: Page): Promise<void> {
   await page.keyboard.down('ArrowUp');
   await page.waitForTimeout(150);
@@ -52,7 +51,6 @@ test('ポータルでマップを移動すると相手ブラウザに同期し�
   await enterWorld(pageA);
   await enterWorld(pageB);
 
-  // Both spawn on the plaza (map 0) and see each other.
   expect(await mapId(pageA)).toBe(0);
   await expect.poll(() => remoteCount(pageA), { timeout: 15_000 }).toBe(1);
   await expect.poll(() => remoteCount(pageB), { timeout: 15_000 }).toBe(1);
@@ -70,13 +68,10 @@ test('ポータルでマップを移動すると相手ブラウザに同期し�
     })
     .toContain(nameB);
 
-  // A walks to the portal (the deliberate 1,500px friction walk) and takes it.
   await standInPortal(pageA);
   await pressUp(pageA);
   await expect.poll(() => mapId(pageA), { timeout: 15_000 }).toBe(1);
 
-  // The move syncs both ways: A's world no longer shows B (different map),
-  // and B watches A vanish from the plaza.
   await expect.poll(() => remoteCount(pageA), { timeout: 15_000 }).toBe(0);
   await expect.poll(() => remoteCount(pageB), { timeout: 15_000 }).toBe(0);
 
@@ -87,15 +82,12 @@ test('ポータルでマップを移動すると相手ブラウザに同期し�
   await sendChat(pageA, `@${nameB} ${dmBody}`);
   await expect(pageB.getByRole('log')).toContainText(dmBody, { timeout: 10_000 });
 
-  // B follows through the same portal; the two meet on the meeting floor.
   await standInPortal(pageB);
   await pressUp(pageB);
   await expect.poll(() => mapId(pageB), { timeout: 15_000 }).toBe(1);
   await expect.poll(() => remoteCount(pageA), { timeout: 15_000 }).toBe(1);
   await expect.poll(() => remoteCount(pageB), { timeout: 15_000 }).toBe(1);
 
-  // Movement keeps syncing on the destination map (the movement-sync
-  // assertion, replayed on map 1): B walks, A's interpolated view follows.
   const startX = await localX(pageB);
   const walkGoal = startX + MOVE_SPEED / 2;
   await walkWhile(pageB, 'ArrowRight', (x) => x > walkGoal);

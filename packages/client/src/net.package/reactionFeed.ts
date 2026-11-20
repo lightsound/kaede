@@ -3,7 +3,6 @@ import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';
 import type { RowOf } from './rows';
 
-/** The generated reaction row type. */
 type ReactionRow = RowOf<'reaction'>;
 
 /**
@@ -34,9 +33,6 @@ export function wireReactions(c: DbConnection, rows: SessionRows, hooks: Reactio
     // renders nothing rather than arbitrary text on the canvas.
     const emoji = row.emoji;
     if (!isReactionEmoji(emoji)) return;
-    // The badge shows over whoever reacted: our own avatar, or the
-    // sender's remote view. A reaction from a player whose view is not on
-    // screen (hidden as offline, or already removed) is a no-op.
     rows.route(
       row.identity,
       () => hooks.showLocalReaction(emoji),

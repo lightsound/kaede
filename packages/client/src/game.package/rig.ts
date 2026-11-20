@@ -11,21 +11,13 @@
  * selected pose frame.
  */
 
-/** The walk animation state carried per player view across frames. */
 export interface WalkState {
-  /** Walk-cycle phase in radians; advances with rendered horizontal motion. */
   phase: number;
-  /** 0 = standing, 1 = fully walking; eases between the two on start/stop. */
   intensity: number;
 }
 
-/**
- * The walk-cycle pose frames in stride order (avatar/manifest.json poses):
- * contact, passing, the mirrored contact, the mirrored passing.
- */
 export const WALK_POSES = ['walk-a', 'walk-b', 'walk-c', 'walk-d'] as const;
 
-/** One pose frame of the avatar sheet (docs/avatar-rig.md §3). */
 export type AvatarPose = 'stand' | (typeof WALK_POSES)[number];
 
 export const IDLE_WALK_STATE: WalkState = { phase: 0, intensity: 0 };
@@ -48,9 +40,7 @@ const PHASE_PER_PX = (2 * Math.PI) / STRIDE_PX;
  * simulates many ticks at once, so double that separates lag from jumps.
  */
 const MAX_TRAVEL_SPEED = 480;
-/** Rendered speed (logical px/s) below which the player counts as standing. */
 const WALK_SPEED_MIN = 30;
-/** Time constant for easing intensity toward walking/standing. */
 const INTENSITY_TAU_MS = 90;
 /**
  * The intensity above which the walk frames replace the stand frame. The
@@ -60,11 +50,6 @@ const INTENSITY_TAU_MS = 90;
  */
 const WALK_POSE_MIN_INTENSITY = 0.5;
 
-/**
- * Advances the walk state by one rendered frame: `dxPx` is how far the
- * sprite moved horizontally (logical px, sign ignored), `dtMs` the frame
- * time. Returns a new state; never mutates.
- */
 export function advanceWalk(state: WalkState, dxPx: number, dtMs: number): WalkState {
   if (dtMs <= 0) return state;
   const speed = (Math.abs(dxPx) / dtMs) * 1000;
@@ -77,12 +62,6 @@ export function advanceWalk(state: WalkState, dxPx: number, dtMs: number): WalkS
   };
 }
 
-/**
- * The pose frame for a walk state: standing below the intensity threshold,
- * otherwise the walk cycle frame the phase has reached — each frame owns an
- * equal slice of the stride, so the cadence follows rendered travel
- * (STRIDE_PX / WALK_POSES.length pixels per frame).
- */
 export function selectPose(state: WalkState): AvatarPose {
   if (state.intensity < WALK_POSE_MIN_INTENSITY) return 'stand';
   const slice = Math.floor((state.phase / (2 * Math.PI)) * WALK_POSES.length);

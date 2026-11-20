@@ -94,7 +94,6 @@ export const CHAT_BUBBLE_DURATION_MS = 6_000;
 // file's public signatures would add type-coupling edges past fallow's
 // evidence cap (see AGENTS.md).
 
-/** 全体: everyone in the space, whatever map or group they are in. */
 export const CHAT_SCOPE_SPACE = 'space';
 
 /**
@@ -106,7 +105,6 @@ export const CHAT_SCOPE_SPACE = 'space';
  */
 export const CHAT_SCOPE_MAP = 'map';
 
-/** 会話グループ: a conversation_group row (zone or huddle, kind-agnostic). */
 export const CHAT_SCOPE_GROUP = 'group';
 
 /**
@@ -118,7 +116,6 @@ export type ChatScope = typeof CHAT_SCOPE_SPACE | typeof CHAT_SCOPE_MAP | typeof
 
 const CHAT_SCOPES: readonly string[] = [CHAT_SCOPE_SPACE, CHAT_SCOPE_MAP, CHAT_SCOPE_GROUP];
 
-/** True when `value` is a scope this build knows (the raw column is a string). */
 export function isChatScope(value: string): value is ChatScope {
   return CHAT_SCOPES.includes(value);
 }
@@ -143,16 +140,9 @@ export interface ChatContext {
  */
 export type ChatScopeRejectReason = 'unknown-scope' | 'wrong-map' | 'not-a-member';
 
-/** One scoped send as the routing rule reads it: what the sender addressed. */
 export interface ChatRouteRequest {
-  /** The raw scope column value the sender named. */
   readonly scope: string;
-  /**
-   * The target the sender addressed: its own map's id (zero-extended) for
-   * 'map', the conversation group's id for 'group', ignored for 'space'.
-   */
   readonly target: bigint;
-  /** Where the sender actually is, read from the authoritative rows. */
   readonly context: ChatContext;
 }
 
@@ -231,23 +221,16 @@ export function fallbackChatScope(selected: string, offered: readonly ChatScope[
   return offered.find((scope) => scope === selected) ?? CHAT_SCOPE_SPACE;
 }
 
-/** What 全体 is called wherever a scope names itself (the selector, the log). */
 export const CHAT_SCOPE_SPACE_LABEL = '全体';
 
-/** What an admin announcement is called in the log (the 強調 marker). */
 const CHAT_ANNOUNCEMENT_LABEL = 'アナウンス';
 
-/** What a group scope falls back to when its group row is gone (deleted, or trimmed). */
 const CHAT_SCOPE_GROUP_FALLBACK_LABEL = '会話グループ';
 
-/** One log line's scope, as the panel and the E2E specs read it (see chatScopeTag). */
 export interface ChatScopeTagRequest {
   readonly scope: string;
-  /** The announcement flag off the row. */
   readonly announcement: boolean;
-  /** The target map's display name, when the scope is 'map' and the map is known. */
   readonly mapName: string | undefined;
-  /** The target group's name, when the scope is 'group' and the row is still there. */
   readonly groupName: string | undefined;
 }
 

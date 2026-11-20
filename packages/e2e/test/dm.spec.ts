@@ -46,8 +46,6 @@ test('DM が宛先にだけ届き、第三者にはリロード後も行が届�
   await enterWorld(pageB);
   await enterWorld(pageC);
 
-  // A must see both B and C before renaming/mentioning, so resolution
-  // rules on a fully-propagated room.
   await expect
     .poll(async () => (await snapshot(pageA)).remotePlayers.length, { timeout: 15_000 })
     .toBe(2);
@@ -57,14 +55,12 @@ test('DM が宛先にだけ届き、第三者にはリロード後も行が届�
   await pageB.getByLabel('表示名').fill(nameB);
   await pageB.getByRole('button', { name: '変更' }).click();
 
-  // The rename round-trips through the server before A can resolve it.
   await expect
     .poll(async () => (await snapshot(pageA)).remotePlayers.map((p) => p.name), {
       timeout: 10_000,
     })
     .toContain(nameB);
 
-  // A → B. The DM must reach B's log (and A's own), never C.
   const dmBody = `ひみつの話 ${nonce}`;
   await sendChat(pageA, `@${nameB} ${dmBody}`);
   await expect(pageB.getByRole('log')).toContainText(dmBody, { timeout: 10_000 });
@@ -83,11 +79,9 @@ test('DM が宛先にだけ届き、第三者にはリロード後も行が届�
   // absent element instead of passing (the chat-scope expectUnseen rule).
   expect(await dmRowsReceived(pageC)).toBe(0);
   await expect(pageC.getByText(dmBody, { exact: false })).toHaveCount(0);
-  // Positive control for the probe itself: both participants counted rows.
   expect(await dmRowsReceived(pageB)).toBeGreaterThan(0);
   expect(await dmRowsReceived(pageA)).toBeGreaterThan(0);
 
-  // A resolution failure shows a send error and must not leak anywhere.
   const leakBody = `もれてはいけない ${nonce}`;
   await sendChat(pageA, `@Nobody-${nonce} ${leakBody}`);
   await expect(pageA.getByText('宛先が見つかりません', { exact: false })).toBeVisible();
@@ -109,8 +103,6 @@ test('DM が宛先にだけ届き、第三者にはリロード後も行が届�
   expect(await dmRowsReceived(pageC)).toBe(0);
   await expect(pageC.getByRole('log')).not.toContainText(dmBody);
 
-  // Retention: both participants reload and the DM history comes back
-  // through the seed (row-level security hands each its own rows).
   await enterWorld(pageA);
   await expect(pageA.getByRole('log')).toContainText(dmBody, { timeout: 10_000 });
   await enterWorld(pageB);

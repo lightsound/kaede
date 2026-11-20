@@ -13,11 +13,6 @@ import type { HuddleRender, ZoneRender } from '../game.package';
 import type { DbConnection } from '../module_bindings';
 import type { SessionRows } from './rowEvents';
 
-/**
- * One zone as the admin panel edits it (会議室ゾーンの管理 UI — ROADMAP
- * Phase 3 増分②): the row's fields plus the map's display name. `key` is
- * the stringified group id (bigint is no React key).
- */
 export interface ZoneAdminView {
   id: bigint;
   key: string;
@@ -37,25 +32,17 @@ export interface ZoneAdminView {
  * never coexist — one conversation group at a time is structural.
  */
 export interface HuddleView {
-  /** The own huddle's composed label, or undefined while in none. */
   own: string | undefined;
-  /** The joinable huddle right now (client-side UX; join_huddle re-rules). */
   joinable: { id: bigint; label: string } | undefined;
 }
 
-/** What acting on zone and occupancy rows needs from the session that wires the feed. */
 export interface ZoneFeedHooks {
-  /** The map whose zones the canvas currently renders. */
   currentMapId(): number;
-  /** Replaces the rendered zone layer (already filtered to the current map). */
   setMapZones(zones: readonly ZoneRender[]): void;
-  /** Replaces the rendered huddles (already filtered to the current map). */
   setMapHuddles(huddles: readonly HuddleRender[]): void;
   applyOwnZone(tag: string | undefined): void;
   applyRemoteZone(idHex: string, tag: string | undefined): void;
-  /** Every conversation_group change, as the whole admin view (all maps). */
   onZones(zones: ZoneAdminView[]): void;
-  /** Every change of the huddle control's answer (deduplicated by value). */
   onHuddle(view: HuddleView): void;
 }
 
@@ -92,8 +79,6 @@ export function wireZones(
   myIdentity: Identity,
   hooks: ZoneFeedHooks,
 ): { refresh(): void } {
-  // The zone-kind rows in the shared deterministic order (sortedZoneRows —
-  // the same order the server resolves overlap in).
   const zoneRows = () => sortedZoneRows(c.db.conversationGroup.iter());
 
   const pushLayer = (): void => {
@@ -166,7 +151,6 @@ export function wireZones(
     return { own: undefined, joinable: findJoinable() };
   };
 
-  /** The joinable huddle from the own authoritative position, if any. */
   const findJoinable = (): HuddleView['joinable'] => {
     const own = c.db.player.identity.find(myIdentity);
     if (own === null) return undefined;
@@ -182,7 +166,6 @@ export function wireZones(
     return row === undefined ? undefined : { id, label: huddleLabel(row.name, row.closed) };
   };
 
-  /** The authoritative positions of `groupId`'s members visible in the cache. */
   const huddleMemberPositions = (groupId: bigint): { x: number; y: number }[] => {
     const positions = [];
     for (const member of c.db.groupMember.iter()) {
@@ -217,7 +200,6 @@ export function wireZones(
 
   const applyTag = (identity: Identity): void => showTag(identity, cachedZoneTag(c, identity));
 
-  /** Re-derives every occupant's tag (a group rename/delete changes them all). */
   const applyAllTags = (): void => {
     for (const member of c.db.groupMember.iter()) applyTag(member.identity);
   };

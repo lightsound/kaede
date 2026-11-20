@@ -94,12 +94,9 @@ function participantIdOf(ctx: Ctx): string {
   return subject === '' ? ctx.sender.toHexString() : subject;
 }
 
-/** What the join's charge transaction hands the HTTP half. */
 interface JoinSetup {
   groupId: bigint;
-  /** The group's registered meeting, or undefined when one must be provisioned. */
   meetingId: string | undefined;
-  /** The sender's display name — what the call tile shows the others. */
   name: string;
   participantId: string;
   cfg: CallConfig;
@@ -206,19 +203,16 @@ export const joinGroupCall = spacetimedb.procedure(
   },
 );
 
-/** What a recording-control charge transaction hands the HTTP half. */
 interface RecordingSetup {
   meetingId: string;
-  /** Label snapshots (the call_recording table comment). */
   groupName: string;
   starterName: string;
   cfg: CallConfig;
 }
 
 /**
- * The sender's group's registered call and the group's display name, or a
- * loud refusal. Split from recordingControlSetupIn to keep both uncovered
- * functions under the CRAP budget (the vetCallRegistration precedent).
+ * Split from recordingControlSetupIn to keep both uncovered functions under
+ * the CRAP budget.
  */
 function recordingCallOf(tx: Ctx, procedureName: string, groupId: bigint) {
   const call = tx.db.groupCall.groupId.find(groupId);

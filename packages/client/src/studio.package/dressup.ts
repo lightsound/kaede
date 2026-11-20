@@ -14,12 +14,6 @@
 
 import type { AssetCatalog, AssetFrame, AvatarAsset, ItemAsset } from './catalog';
 
-/**
- * The carry variant naming rule: `<outfit id>-carry` for the two-arm heavy
- * carry (avatar.boy-basic-carry), `<outfit id>-carry-light` for the
- * one-hand light carry (owner direction 2026-08-12 — carry pose must match
- * the item's weight).
- */
 const CARRY_SUFFIX = '-carry';
 const CARRY_LIGHT_SUFFIX = '-carry-light';
 
@@ -30,7 +24,6 @@ const CARRY_LIGHT_SUFFIX = '-carry-light';
  */
 export const DEFAULT_OUTFIT_ID = 'avatar.boy-pants';
 
-/** The body sheets offered as outfits: everything that is not itself a carry variant. */
 export function outfitOptions(catalog: AssetCatalog): readonly AvatarAsset[] {
   const outfits = catalog.avatars.filter(
     (avatar) => !avatar.id.endsWith(CARRY_SUFFIX) && !avatar.id.endsWith(CARRY_LIGHT_SUFFIX),
@@ -60,12 +53,6 @@ export function carryVariantOf(
   );
 }
 
-/**
- * What the stage renders: the chosen outfit, the body sheet actually worn
- * (the outfit itself, or its carry variant while an item is held), the
- * held item, and a note when the item had to be dropped because the
- * outfit has no carry sheet to hold it with.
- */
 export interface StageLook {
   outfit: AvatarAsset;
   body: AvatarAsset;
@@ -104,11 +91,6 @@ export function resolveStageLook(
   return { outfit, body: carry, item, note: undefined };
 }
 
-/**
- * The frame to show while the walk clock says `pose`: a body missing that
- * pose falls back to stand (the gap is already flagged by the missing-pose
- * badge, so the preview degrades quietly).
- */
 export function frameFor(
   avatar: AvatarAsset,
   pose: string,
@@ -137,7 +119,6 @@ export function maxFrameSize(avatar: AvatarAsset): readonly [number, number] {
   return [w > 0 ? w : 128, h > 0 ? h : 192];
 }
 
-/** One composited layer over the body frame, in source pixels from the frame's top-left. */
 export interface OverlayLayer {
   url: string;
   left: number;
@@ -145,7 +126,6 @@ export interface OverlayLayer {
   width: number;
 }
 
-/** Top-left offset (source px) that puts a layer's grip point on the pose's hand anchor. */
 function gripOffset(
   hand: readonly [number, number],
   grip: readonly [number, number] | undefined,

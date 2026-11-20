@@ -32,10 +32,8 @@ import { normalizeDisplayName } from './displayName';
  */
 export type MemberStatus = 'pending' | 'approved' | 'rejected' | 'banned';
 
-/** What a member may do: `admin` decides applications and edits settings. */
 export type MemberRole = 'member' | 'admin';
 
-/** A member's standing in the space, as the public space_member row carries it. */
 export interface Membership {
   readonly status: MemberStatus;
   readonly role: MemberRole;
@@ -77,7 +75,6 @@ export function initialMembership(isFirstMember: boolean): Membership {
     : { status: 'pending', role: 'member' };
 }
 
-/** True when this membership may act as an admin: approved AND holding the role. */
 export function isActingAdmin(membership: Membership | undefined): boolean {
   return membership?.status === 'approved' && membership.role === 'admin';
 }
@@ -95,7 +92,6 @@ export type Admission =
   | 'banned'
   | 'guests-not-allowed';
 
-/** Why a join was refused: every admission except being admitted. */
 export type JoinRefusalReason = Exclude<Admission, 'admitted'>;
 
 export type JoinVerdict = { ok: true } | { ok: false; reason: JoinRefusalReason };
@@ -109,9 +105,7 @@ export type JoinVerdict = { ok: true } | { ok: false; reason: JoinRefusalReason 
  * never lock members out.
  */
 export function evaluateJoin(request: {
-  /** The sender's membership, or undefined for a guest connection. */
   membership: Membership | undefined;
-  /** The space's guest-admission setting (missing row reads as true). */
   guestsAllowed: boolean;
 }): JoinVerdict {
   if (request.membership === undefined) {
@@ -149,7 +143,6 @@ export function guestsAllowedFrom(row: { guestsAllowed: boolean } | null | undef
   return row?.guestsAllowed ?? true;
 }
 
-/** Why an application (apply_for_membership) was refused. */
 export type ApplicationRefusalReason =
   | 'no-account'
   | 'already-applied'
@@ -170,7 +163,6 @@ export function evaluateApplication(request: {
    * server-side fact behind membershipPrompt's client-side `signedIn`.
    */
   hasAccount: boolean;
-  /** The sender's current membership, or undefined before the first application. */
   membership: Membership | undefined;
 }): ApplicationVerdict {
   if (!request.hasAccount) return { ok: false, reason: 'no-account' };
@@ -181,7 +173,6 @@ export function evaluateApplication(request: {
   return { ok: false, reason };
 }
 
-/** Why each non-reapplicable status refuses a fresh application. */
 const REAPPLY_REFUSALS = {
   pending: 'already-applied',
   approved: 'already-member',
@@ -222,7 +213,6 @@ export type AdminActionRefusalReason =
 export type MemberActionVerdict =
   | {
       ok: true;
-      /** Where the transition lands, straight from the table. */
       nextStatus: MemberStatus;
     }
   | { ok: false; reason: AdminActionRefusalReason };
@@ -252,17 +242,12 @@ export function evaluateMemberAction(request: {
   return { ok: true, nextStatus };
 }
 
-/** Admission check for changing a space setting: acting admins only. */
 export function evaluateSettingChange(request: {
   actor: Membership | undefined;
 }): AdminActionVerdict {
   return isActingAdmin(request.actor) ? { ok: true } : { ok: false, reason: 'not-admin' };
 }
 
-/**
- * The application affordance the UI can offer: a first application, or a
- * re-application after a rejection.
- */
 export type MembershipPrompt = 'apply' | 'apply-first' | 'reapply';
 
 /**
@@ -277,10 +262,6 @@ export type MembershipPrompt = 'apply' | 'apply-first' | 'reapply';
  * to file), or for banned members (the admission notice explains instead).
  */
 export function membershipPrompt(request: {
-  /**
-   * Whether this client is signed in as a member — the client-side mirror
-   * of evaluateApplication's `hasAccount` (the account exists iff signed in).
-   */
   signedIn: boolean;
   membership: Membership | undefined;
   /**

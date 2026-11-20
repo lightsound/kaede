@@ -27,7 +27,6 @@ function findSection(sections, key) {
   return undefined;
 }
 
-// ExplicitNames セクションから source_name → canonical_name の対応表を作る。
 function canonicalNames(sections) {
   const explicit = findSection(sections, 'ExplicitNames');
   const names = new Map();

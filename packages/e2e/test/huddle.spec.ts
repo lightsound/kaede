@@ -27,14 +27,6 @@ const huddleMembers = async (page: Page, label: string) =>
 // for a software-rendered CI runner.
 test.setTimeout(300_000);
 
-/**
- * The huddle lifecycle end to end: A founds one where it stands (both
- * tags and the circle appear on BOTH browsers), B walks up and joins
- * through the proximity-gated button, B walks away past
- * HUDDLE_LEAVE_DISTANCE and the SERVER removes it (no leave call), the
- * circle follows A (solo) walking, and A's explicit leave empties the
- * huddle and cleans the group row up everywhere.
- */
 test('立ち話の発足・参加・歩き去り自動離脱・解散が相手ブラウザに同期する', async ({ browser }) => {
   const contextA = await browser.newContext();
   const contextB = await browser.newContext();
@@ -45,37 +37,26 @@ test('立ち話の発足・参加・歩き去り自動離脱・解散が相手�
     await enterWorld(pageB);
     await expect.poll(() => remoteZone(pageB), { timeout: 15_000 }).toBeUndefined();
 
-    // A founds a huddle on the spot (the default name — one click).
     await pageA.getByRole('button', { name: 'ここで立ち話' }).click();
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBe(openLabel);
     await expect.poll(() => remoteZone(pageB), { timeout: 15_000 }).toBe(openLabel);
     await expect.poll(() => huddleMembers(pageB, openLabel), { timeout: 15_000 }).toBe(1);
 
-    // B spawned next to A, so the proximity-gated join button offers this
-    // huddle; joining flips B's tag on both browsers and the circle counts
-    // two member sprites.
     await pageB.getByRole('button', { name: `${openLabel} に参加` }).click({ timeout: 15_000 });
     await expect.poll(() => localZone(pageB), { timeout: 15_000 }).toBe(openLabel);
     await expect.poll(() => huddleMembers(pageA, openLabel), { timeout: 15_000 }).toBe(2);
 
-    // B walks away past the leave distance: the server-side retention rule
-    // (riding B's own accepted batches) removes B with no leave call, on
-    // both browsers; A stays, now solo.
     const start = await localX(pageB);
     await walkWhile(pageB, 'ArrowRight', (x) => x >= start + HUDDLE_LEAVE_DISTANCE + 100);
     await expect.poll(() => localZone(pageB), { timeout: 15_000 }).toBeUndefined();
     await expect.poll(() => huddleMembers(pageA, openLabel), { timeout: 15_000 }).toBe(1);
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBe(openLabel);
 
-    // The solo huddle follows its founder's avatar: A walks and the circle
-    // keeps rendering around A (members 1, tag intact) instead of leaving.
     const startA = await localX(pageA);
     await walkWhile(pageA, 'ArrowRight', (x) => x >= startA + 200);
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBe(openLabel);
     await expect.poll(() => huddleMembers(pageB, openLabel), { timeout: 15_000 }).toBe(1);
 
-    // A leaves explicitly: the huddle hits zero members and its row is
-    // cleaned up — the circle disappears from both browsers.
     await pageA.getByRole('button', { name: '抜ける' }).click();
     await expect.poll(() => localZone(pageA), { timeout: 15_000 }).toBeUndefined();
     await expect.poll(async () => (await huddleList(pageB)).length, { timeout: 15_000 }).toBe(0);
@@ -85,11 +66,6 @@ test('立ち話の発足・参加・歩き去り自動離脱・解散が相手�
   }
 });
 
-/**
- * The クローズド rendering (「コソコソ話している」): a named, closed huddle
- * renders with the 🤫 label — on the circle and on the member's tag — for
- * the other browser too. The chat invisibility itself is 増分④'s RLS.
- */
 test('クローズドの立ち話は 🤫 のコソコソ表示で相手ブラウザにも同期する', async ({ browser }) => {
   const contextA = await browser.newContext();
   const contextB = await browser.newContext();

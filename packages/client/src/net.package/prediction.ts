@@ -10,11 +10,8 @@ import {
   unpackInput,
 } from '@kaede/shared';
 
-/** Transport + sim hooks the prediction loop drives, decoupled from SpacetimeDB/Pixi. */
 export interface PredictionDeps {
-  /** Fire-and-forget: send one input batch starting at startTick (the tick BEFORE the chunk's first input). */
   sendBatch(startTick: number, packed: Uint8Array): void;
-  /** Snap the game sim to an authoritative state at tick (hard-reset fallback). */
   resetLocal(state: PlayerState, tick: number): void;
 }
 
@@ -55,8 +52,6 @@ export function createPrediction(
   map: CollisionMap,
   nowMs = performance.now(),
 ) {
-  // Prediction bookkeeping. history[t] is the packed input applied to produce
-  // predicted[t]; both are pruned once tick t is acknowledged by the server.
   const history = new Map<number, number>();
   const predicted = new Map<number, PlayerState>();
   let currentTick = startTick;
@@ -68,15 +63,10 @@ export function createPrediction(
   // may end quiescent (just landed) while its start was mid-air, and going
   // silent then would leave the server's row frozen in the air.
   let lastSentState = startState;
-  // The latest authoritative state, for rewinding lastSentState when the
-  // resend watchdog rewinds lastSentTick to ackedTick.
   let ackedState = startState;
-  // Seed the ack-advance clock at creation (the authoritative spawn is "fresh").
-  // nowMs is injectable so tests can drive a virtual clock.
   let lastAckAdvanceAt = nowMs;
   let lastFlushMs = 0;
 
-  /** Any real input in the pending window ((lastSentTick, currentTick])? */
   function pendingWindowHasInput(): boolean {
     for (let t = lastSentTick + 1; t <= currentTick; t++) {
       if ((history.get(t) ?? 0) !== 0) return true;
@@ -116,7 +106,6 @@ export function createPrediction(
       return;
     }
 
-    // Send ticks (lastSentTick, currentTick] in chunks of <= INPUT_BATCH_MAX_TICKS.
     let base = lastSentTick;
     while (base < currentTick) {
       const end = Math.min(base + INPUT_BATCH_MAX_TICKS, currentTick);
@@ -141,15 +130,11 @@ export function createPrediction(
   }
 
   return {
-    // Outbound: collect each predicted tick, and flush pending inputs on the
-    // INPUT_FLUSH_INTERVAL_MS cadence (driven by the local tick timing, like
-    // the old throttle).
     onTick(state: PlayerState, tick: number, packedInput: number, nowMs: number): void {
       currentTick = tick;
       history.set(tick, packedInput);
       predicted.set(tick, state);
 
-      // Bound history memory: drop the oldest entries beyond the cap.
       while (history.size > PREDICTION_HISTORY_MAX_TICKS) {
         const oldest = tick - history.size + 1;
         history.delete(oldest);
@@ -175,7 +160,6 @@ export function createPrediction(
       flush(nowMs);
     },
 
-    /** Ack path: an own-row update IS the acknowledgement (ackTick = applied). */
     onAck(authoritative: PlayerState, ackTick: number, nowMs: number): void {
       const ack = ackTick;
       // Not an advance: a heartbeat rewrites the row (updatedAt) without
@@ -190,14 +174,11 @@ export function createPrediction(
 
       const mine = predicted.get(ack);
       if (mine && sameState(mine, authoritative)) {
-        // Prediction matched: just advance the ack horizon.
         ackedTick = ack;
         prunePredictionsUpTo(ack);
         return;
       }
 
-      // Reconcile: the server diverged (or we lost the predicted state). Replay
-      // un-acked inputs from the authoritative state forward to currentTick.
       if (ack < currentTick && !history.has(ack + 1)) {
         // The ack predates everything we still keep: we can't replay the missing
         // inputs. Hard reset to the authoritative state and start over from there.

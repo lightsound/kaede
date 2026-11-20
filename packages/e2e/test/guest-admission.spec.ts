@@ -12,7 +12,6 @@ async function seedGuestsAllowed(allowed: boolean): Promise<void> {
   await sql(`INSERT INTO space_setting (id, guests_allowed) VALUES (0, ${allowed})`);
 }
 
-/** Flips the seeded singleton in one atomic statement; safe mid-test. */
 async function setGuestsAllowed(allowed: boolean): Promise<void> {
   await sql(`UPDATE space_setting SET guests_allowed = ${allowed} WHERE id = 0`);
 }
@@ -33,7 +32,6 @@ test('ゲスト入場を不許可にすると入場できず、再許可で自�
     const page = await context.newPage();
     await page.goto('/');
 
-    // The refusal notice is the UI contract for a held guest.
     await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeVisible({
       timeout: 15_000,
     });
@@ -81,8 +79,6 @@ test('ゲスト入場を不許可にすると入場できず、再許可で自�
 test('入場中のゲストは不許可への切替で即キックされ、再許可で自動的に復帰する', async ({
   browser,
 }) => {
-  // Seed the singleton while nothing is connected, so the flips below can be
-  // single atomic UPDATEs.
   await seedGuestsAllowed(true);
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -95,9 +91,6 @@ test('入場中のゲストは不許可への切替で即キックされ、再�
     // 理由はこのテストの doc コメント参照)。
     await page.keyboard.down('ArrowRight');
     try {
-      // Expelled: the refusal notice covers the world, and the local
-      // simulation is re-gated (tick returns to -1, the not-in-world
-      // signal), so the kicked client cannot keep walking a ghost around.
       await expect(page.getByText('ゲスト入場は現在許可されていません')).toBeVisible({
         timeout: 15_000,
       });
@@ -106,7 +99,6 @@ test('入場中のゲストは不許可への切替で即キックされ、再�
       await page.keyboard.up('ArrowRight');
     }
 
-    // Re-allowing readmits the kicked client on its own, no reload needed.
     await setGuestsAllowed(true);
     await page.waitForFunction(() => (window.__kaedeE2E?.snapshot().tick ?? -1) >= 0, undefined, {
       timeout: 15_000,

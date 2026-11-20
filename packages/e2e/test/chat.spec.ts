@@ -28,8 +28,6 @@ test('チャットが相手のログと吹き出しに届き、返信で会話�
   await enterWorld(pageA);
   await enterWorld(pageB);
 
-  // B must see A before the chat, so the assertions below measure message
-  // propagation and not mere entry.
   await expect
     .poll(async () => (await snapshot(pageB)).remotePlayers.length, { timeout: 15_000 })
     .toBe(1);
@@ -46,8 +44,6 @@ test('チャットが相手のログと吹き出しに届き、返信で会話�
   await expect(pageA.getByRole('log')).toContainText(messageA, { timeout: 10_000 });
   await expect(pageB.getByRole('log')).toContainText(messageA, { timeout: 10_000 });
 
-  // The speech bubble, on both sides of the wire: over A's own avatar, and
-  // over A's remote avatar as B renders it.
   await expect
     .poll(async () => (await snapshot(pageA)).local.bubble, { timeout: 10_000 })
     .toBe(messageA);
@@ -55,15 +51,12 @@ test('チャットが相手のログと吹き出しに届き、返信で会話�
     .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.bubble, { timeout: 10_000 })
     .toBe(messageA);
 
-  // The reply completes the conversation (Phase 2 の完了条件の会話成立).
   await sendChat(pageB, messageB);
   await expect(pageA.getByRole('log')).toContainText(messageB, { timeout: 10_000 });
   await expect
     .poll(async () => (await snapshot(pageA)).remotePlayers[0]?.bubble, { timeout: 10_000 })
     .toBe(messageB);
 
-  // Bubbles are transient: gone once the display window elapses (the log
-  // keeps the text).
   await expect
     .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.bubble, {
       timeout: CHAT_BUBBLE_DURATION_MS + 10_000,

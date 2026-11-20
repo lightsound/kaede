@@ -20,7 +20,6 @@ const PENDING_MEMBER: Membership = { status: 'pending', role: 'member' };
 const REJECTED_MEMBER: Membership = { status: 'rejected', role: 'member' };
 const BANNED_MEMBER: Membership = { status: 'banned', role: 'member' };
 const ADMIN: Membership = { status: 'approved', role: 'admin' };
-/** An admin whose own approval was somehow lost must not keep acting as one. */
 const PENDING_ADMIN: Membership = { status: 'pending', role: 'admin' };
 
 describe('asMembership', () => {
@@ -91,7 +90,6 @@ describe('evaluateJoin / decideAdmission', () => {
     );
   });
 
-  // Turning guests away must never lock members out of their own office.
   it('never applies the guest setting to an approved member', () => {
     expect(evaluateJoin({ membership: APPROVED_MEMBER, guestsAllowed: false })).toEqual({
       ok: true,

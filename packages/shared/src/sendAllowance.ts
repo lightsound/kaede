@@ -8,16 +8,13 @@
  */
 
 export interface SendAllowanceRequest {
-  /** Token-bucket marker persisted on the sender's guard row (micros since Unix epoch). */
   allowanceMicros: bigint;
-  /** Server wall clock (micros since Unix epoch). */
   nowMicros: bigint;
 }
 
 export type SendAllowanceVerdict =
   | {
       ok: true;
-      /** The advanced token-bucket marker to persist on the sender's guard row. */
       allowanceMicros: bigint;
     }
   | { ok: false; reason: 'rate-limited' };

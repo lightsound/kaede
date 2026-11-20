@@ -1,7 +1,5 @@
-/** Direction the player sprite faces. */
 export type Facing = -1 | 1;
 
-/** Player intent for one simulation tick. */
 export interface PlayerInput {
   left: boolean;
   right: boolean;
@@ -21,11 +19,9 @@ export interface PlayerState {
   vy: number;
   facing: Facing;
   onGround: boolean;
-  /** Index into the map's ropes while climbing, or -1 when not climbing. */
   rope: number;
 }
 
-/** Axis-aligned rectangle: top-left corner plus size, in world pixels. */
 export interface Rect {
   x: number;
   y: number;
@@ -45,13 +41,10 @@ export interface Rope {
   bottom: number;
 }
 
-/** Static collision geometry of a map. */
 export interface CollisionMap {
   width: number;
   height: number;
-  /** Impassable AABBs (ground, walls). Block movement from every side. */
   solids: Rect[];
-  /** One-way platforms: support the player only when falling onto their top edge. */
   platforms: Rect[];
   ropes: Rope[];
 }

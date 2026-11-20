@@ -15,10 +15,8 @@ import { createRateGate, exceptionFingerprint } from './throttle';
 const KEY = typeof __KAEDE_POSTHOG_KEY__ === 'string' ? __KAEDE_POSTHOG_KEY__ : '';
 const HOST = typeof __KAEDE_POSTHOG_HOST__ === 'string' ? __KAEDE_POSTHOG_HOST__ : '';
 
-/** init が実行されたか。false の間、送出口はすべて no-op。 */
 let active = false;
 
-/** identify() 済みか。reset() を「識別していたときだけ」に絞るための記憶。 */
 let identified = false;
 
 /**

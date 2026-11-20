@@ -2,13 +2,10 @@
 import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, snapshot } from './helpers';
 
-/** Clicks the availability button labelled `label` (the StatusControl row). */
 async function setAvailability(page: Page, label: string): Promise<void> {
   await page.getByLabel(`ステータス ${label}`).click();
 }
 
-/** Fills the free-text status and submits (Enter, the chat-input way). Exact,
- * because the クリア button's label contains the input's label as a prefix. */
 async function setStatusText(page: Page, text: string): Promise<void> {
   await page.getByLabel('ひとことステータス', { exact: true }).fill(text);
   await page.getByLabel('ひとことステータス', { exact: true }).press('Enter');
@@ -44,14 +41,10 @@ test('ステータスの3値切替と自由文が両画面に反映され、リ�
   await enterWorld(pageA);
   await enterWorld(pageB);
 
-  // B must see A before the switch, so the assertions below measure status
-  // propagation and not mere entry.
   await expect
     .poll(async () => (await snapshot(pageB)).remotePlayers.length, { timeout: 15_000 })
     .toBe(1);
 
-  // 手動切替: the send round-trips through the server row before anything
-  // renders — A's own line and B's view of it come from the same row event.
   await setAvailability(pageA, '取り込み中');
   const busy = '🔴 取り込み中';
   await expect
@@ -61,8 +54,6 @@ test('ステータスの3値切替と自由文が両画面に反映され、リ�
     .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.status, { timeout: 10_000 })
     .toBe(busy);
 
-  // 自由文: joins the availability on the same line (the upsert row makes
-  // this an UPDATE event, the other half of the display wiring).
   const note = `もくもく作業中・話しかけてOK ${Date.now() % 100_000}`;
   await setStatusText(pageA, note);
   const busyWithNote = `${busy}・${note}`;
@@ -87,8 +78,6 @@ test('ステータスの3値切替と自由文が両画面に反映され、リ�
     .poll(async () => (await snapshot(pageB)).remotePlayers[0]?.status, { timeout: 10_000 })
     .toBe(busyWithNote);
 
-  // Clearing both (the クリア button and the オンライン switch) returns the
-  // default — no line — on both sides of the wire.
   await pageA.getByLabel('ひとことステータスをクリア').click();
   await setAvailability(pageA, 'オンライン');
   await expect

@@ -37,7 +37,6 @@ import type { Rect } from './types';
  */
 export const GROUP_KIND_ZONE = 'zone';
 
-/** Longest zone name, in Unicode code points (the display-name cap: a canvas label). */
 export const ZONE_NAME_MAX_LENGTH = 16;
 
 /**
@@ -49,7 +48,6 @@ export const ZONE_NAME_MAX_LENGTH = 16;
 export const ZONE_MIN_SIZE = 96;
 export const ZONE_MAX_SIZE = 1280;
 
-/** The size create_zone places (update_zone resizes later). */
 export const ZONE_DEFAULT_W = 360;
 export const ZONE_DEFAULT_H = 240;
 
@@ -72,13 +70,11 @@ export const ZONE_EXIT_MARGIN = 32;
  */
 export const ZONE_MAX = 32;
 
-/** One zone as the occupancy rule reads it: the group row's id and placed rect. */
 export interface ZoneShape {
   readonly id: bigint;
   readonly rect: Rect;
 }
 
-/** True when `position` (a player AABB center) is inside `rect`, boundary inclusive. */
 export function zoneRectContains(rect: Rect, position: { x: number; y: number }): boolean {
   return (
     position.x >= rect.x &&
@@ -88,7 +84,6 @@ export function zoneRectContains(rect: Rect, position: { x: number; y: number })
   );
 }
 
-/** `rect` grown by `margin` on every side (the hysteresis leave test). */
 function expandRect(rect: Rect, margin: number): Rect {
   return {
     x: rect.x - margin,
@@ -98,16 +93,9 @@ function expandRect(rect: Rect, margin: number): Rect {
   };
 }
 
-/** What ruling on one player's zone occupancy needs (see resolveZoneOccupancy). */
 export interface ZoneOccupancyRequest {
-  /** The player's authoritative AABB center after the movement being ruled on. */
   position: { x: number; y: number };
-  /**
-   * The zone-kind groups on the player's map, sorted by id so overlapping
-   * zones resolve deterministically (lowest id wins).
-   */
   zones: readonly ZoneShape[];
-  /** The zone the player's group_member row currently names, if any. */
   currentZoneId: bigint | undefined;
 }
 
@@ -132,19 +120,15 @@ export function resolveZoneOccupancy(request: ZoneOccupancyRequest): bigint | un
   return zones.find((zone) => zoneRectContains(zone.rect, position))?.id;
 }
 
-/** What placing a zone rect needs (see clampZoneRect). */
 export interface ZonePlacementRequest {
-  /** Where the zone should center — the placing admin's avatar position. */
   centerX: number;
   centerY: number;
   w: number;
   h: number;
-  /** The map's collision bounds (CollisionMap width/height). */
   mapWidth: number;
   mapHeight: number;
 }
 
-/** Clamps `value` into [min, max] (max wins when the range is inverted). */
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -166,20 +150,17 @@ export function clampZoneRect(request: ZonePlacementRequest): Rect {
   };
 }
 
-/** Why a zone spec (name and size) was refused. */
 export type ZoneSpecRejectReason = TextRejectReason | 'invalid-size';
 
 export type ZoneSpecVerdict =
   | {
       ok: true;
-      /** The normalized name to persist and render. */
       name: string;
       w: number;
       h: number;
     }
   | { ok: false; reason: ZoneSpecRejectReason };
 
-/** True when `value` is a size create/update_zone may persist. */
 function isZoneSize(value: number): boolean {
   return Number.isFinite(value) && value >= ZONE_MIN_SIZE && value <= ZONE_MAX_SIZE;
 }

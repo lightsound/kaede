@@ -93,20 +93,12 @@ const dockLanguage = makeRtkLanguage({
   'audio_playback.title': '音声を再生',
   'audio_playback.description': 'ブラウザの自動再生制限のため、クリックで通話音声を有効にします。',
   audio_playback: '音声を有効にする',
-  // The recording indicator (増分④ — the transparency rule: every
-  // participant sees it, whoever started the recording).
   'recording.label': '録画中',
   'recording.indicator': 'この通話は録画されています',
 });
 
-/**
- * What the recording toggle calls — CallDock binds these to the
- * start/stop_group_recording procedures (増分⑥).
- */
 export interface RecordingHandlers {
-  /** Starts the recording and logs its label row; rejects on refusal. */
   start(): Promise<void>;
-  /** Stops the active recording; resolves even when none is active. */
   stop(): Promise<void>;
 }
 
@@ -141,7 +133,6 @@ function useRecordingState(meeting: Meeting): string {
   return state;
 }
 
-/** The provider states collapsed to what the toggle rules on. */
 type RecordingPhase = 'idle' | 'recording' | 'starting' | 'stopping';
 
 /**
@@ -162,7 +153,6 @@ function recordingPhaseOf(state: string): RecordingPhase {
   return PHASE_BY_STATE[state] ?? 'starting';
 }
 
-/** The direction of our own in-flight procedure call, or null when none is. */
 type PendingAction = 'start' | 'stop' | null;
 
 /**
@@ -189,7 +179,6 @@ const TRANSITIONAL_FACES: Record<'starting' | 'stopping', string> = {
   stopping: '⏳ 停止処理中…',
 };
 
-/** The button's face for one phase (disabled while anything is in flight). */
 function toggleFace(
   phase: RecordingPhase,
   pending: PendingAction,
@@ -259,7 +248,6 @@ export function InCallPanel({
   recording,
 }: {
   meeting: Meeting;
-  /** The member-only recording control, or undefined for guests. */
   recording: RecordingHandlers | undefined;
 }) {
   return (

@@ -1,13 +1,9 @@
 import { type StatusView, statusLabel } from '@kaede/shared';
 import type { PlayerLabelPatch } from '../game.package';
 
-/** What the own-view publishers need from the net stack that owns them (startNet). */
 export interface OwnPublishersDeps {
-  /** Applies one patch to the local player's canvas label (GameApp.patchLocalLabel). */
   patchLocalLabel(patch: PlayerLabelPatch): void;
-  /** Reports the authoritative own display name (NetHooks.onOwnName). */
   onOwnName(name: string | undefined): void;
-  /** Reports the own manual status (NetHooks.onOwnStatus). */
   onOwnStatus(view: StatusView): void;
 }
 

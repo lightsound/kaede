@@ -25,7 +25,6 @@ export const spacetimedb = schema({
     {
       id: t.u64().primaryKey().autoInc(),
       identity: t.identity().unique(),
-      // Absent until the member first sets a name; join falls back to a default.
       displayName: t.string().optional(),
       createdAt: t.timestamp(),
       updatedAt: t.timestamp(),
@@ -76,10 +75,9 @@ export const spacetimedb = schema({
     {
       identity: t.identity().primaryKey(),
       displayName: t.string().optional(),
-      // MemberStatus in @kaede/shared: 'pending' | 'approved' | 'rejected' | 'banned'
       status: t.string(),
-      role: t.string(), // MemberRole in @kaede/shared: 'member' | 'admin'
-      requestedAt: t.timestamp(), // when the (latest) application was filed
+      role: t.string(),
+      requestedAt: t.timestamp(),
       updatedAt: t.timestamp(),
     },
   ),
@@ -118,11 +116,11 @@ export const spacetimedb = schema({
       y: t.number(),
       vx: t.number(),
       vy: t.number(),
-      facing: t.i8(), // -1 left, 1 right
+      facing: t.i8(),
       onGround: t.bool(),
-      rope: t.i32(), // rope index while climbing, -1 = none
-      tick: t.u32(), // ticks applied so far; state is "after tick `tick`"
-      online: t.bool(), // false between disconnect and rejoin/sweep; hidden by clients
+      rope: t.i32(),
+      tick: t.u32(),
+      online: t.bool(),
       updatedAt: t.timestamp(),
       // The map this player is on (WorldMap id in @kaede/shared; ROADMAP
       // Phase 3 AoI). Appended with a default so existing rows migrate on
@@ -342,7 +340,7 @@ export const spacetimedb = schema({
     { name: 'gesture', public: true },
     {
       identity: t.identity().primaryKey(),
-      gesture: t.string(), // GestureKind in @kaede/shared: 'sit' | 'sleep' | 'dance' | 'wave'
+      gesture: t.string(),
       sentAt: t.timestamp(),
     },
   ),
@@ -412,8 +410,8 @@ export const spacetimedb = schema({
     { name: 'player_status', public: true },
     {
       identity: t.identity().primaryKey(),
-      availability: t.string(), // Availability in @kaede/shared: 'online' | 'away' | 'busy'
-      text: t.string(), // free-text status line, '' while unset
+      availability: t.string(),
+      text: t.string(),
     },
   ),
   // The @mention DM history (ROADMAP Phase 2) — chat_message's shape with a
@@ -499,7 +497,7 @@ export const spacetimedb = schema({
     { name: 'conversation_group', public: true },
     {
       id: t.u64().primaryKey().autoInc(),
-      kind: t.string(), // GROUP_KIND_ZONE / GROUP_KIND_HUDDLE in @kaede/shared
+      kind: t.string(),
       name: t.string(),
       closed: t.bool(),
       mapId: t.u32().index(),
@@ -572,8 +570,8 @@ export const spacetimedb = schema({
       id: t.u64().primaryKey().autoInc(),
       identity: t.identity(),
       connectionId: t.connectionId(),
-      kind: t.string(), // 'connected' | 'disconnected'
-      detail: t.string(), // connect: 'member' | 'guest'; disconnect: DisconnectReason
+      kind: t.string(),
+      detail: t.string(),
       at: t.timestamp(),
     },
   ),
@@ -759,11 +757,8 @@ export const spacetimedb = schema({
     { name: 'call_config' },
     {
       id: t.u8().primaryKey(),
-      // Cloudflare account API token with Realtime Admin (secret).
       realtimekitToken: t.string(),
-      // The RealtimeKit app every meeting lives under (a public identifier).
       realtimekitAppId: t.string(),
-      // The Cloudflare account the app and bucket belong to (a public identifier).
       cloudflareAccountId: t.string(),
       // R2 S3 credentials (secrets): what the recording start hands the
       // provider (storage_config), what signs the bucket listing, and what
@@ -771,7 +766,6 @@ export const spacetimedb = schema({
       // token (access key = token id, secret = SHA-256 of the token value).
       storageAccessKeyId: t.string(),
       storageSecretAccessKey: t.string(),
-      // The R2 bucket finished recordings land in (a public identifier).
       storageBucket: t.string(),
     },
   ),

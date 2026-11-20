@@ -3,7 +3,6 @@ import { expect, type Page, test } from '@playwright/test';
 import { enterWorld, netStats, snapshot } from './helpers';
 
 const remoteCount = async (page: Page) => (await snapshot(page)).remotePlayers.length;
-/** The single remote player's x, or undefined during a transient empty list. */
 const remoteX = async (page: Page) => (await snapshot(page)).remotePlayers[0]?.x;
 
 /**
@@ -26,8 +25,6 @@ async function settleSends(page: Page): Promise<void> {
 }
 
 test('静止中は送信が完全に止まり、行は残り、移動再開で同期が復帰する', async ({ browser }) => {
-  // 2 コンテキスト = 別々のゲスト Identity。B は観測者: 抑制中でも A の
-  // 行が掃除されず見え続けること、再開後に A の移動が届くことを見る。
   const contextA = await browser.newContext();
   const contextB = await browser.newContext();
   const pageA = await contextA.newPage();
@@ -37,7 +34,6 @@ test('静止中は送信が完全に止まり、行は残り、移動再開で�
   await enterWorld(pageB);
   await expect.poll(() => remoteCount(pageB), { timeout: 15_000 }).toBe(1);
 
-  // 静止到達まで(落下・着地の同期を送り切るまで)は送信が続いてよい。
   await settleSends(pageA);
 
   // 静止中: 入力バッチは 1 本も送られない(これが「静止中 0 calls/秒」の
@@ -71,7 +67,6 @@ test('静止中は送信が完全に止まり、行は残り、移動再開で�
     .poll(async () => (await remoteX(pageB)) ?? Number.NEGATIVE_INFINITY, { timeout: 15_000 })
     .toBeGreaterThan(bView + 100);
 
-  // 停止すると再び完全に黙る(減速・着地ぶんを送り切ってから)。
   await settleSends(pageA);
   const again = await netStats(pageA);
   await pageA.waitForTimeout(3000);

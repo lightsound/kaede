@@ -7,7 +7,6 @@ import { evaluateChatSend } from '@kaede/shared';
  * for instant feedback; the server's verdict is the authority.
  */
 export interface AllowanceMirror {
-  /** The bucket marker, as evaluateChatSend reads and advances it. */
   readonly allowanceMicros: bigint;
   /**
    * The marker as it stood before the most recent charge, so a refusal can
@@ -20,13 +19,11 @@ export interface AllowanceMirror {
   readonly chargedFromMicros: bigint | undefined;
 }
 
-/** Nothing charged yet: the epoch marker, the full burst available. */
 export const FRESH_ALLOWANCE: AllowanceMirror = {
   allowanceMicros: 0n,
   chargedFromMicros: undefined,
 };
 
-/** Charges one send at `nowMicros`; undefined when the bucket refuses it. */
 export function chargeSend(
   mirror: AllowanceMirror,
   nowMicros: bigint,

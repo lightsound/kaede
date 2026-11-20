@@ -8,13 +8,11 @@ import { normalizeSingleLineText, type TextRejectReason } from './text';
  */
 export const DISPLAY_NAME_MAX_LENGTH = 16;
 
-/** Why a proposed display name was refused. */
 export type DisplayNameRejectReason = TextRejectReason;
 
 export type DisplayNameVerdict =
   | {
       ok: true;
-      /** The normalized name to persist and render. */
       name: string;
     }
   | { ok: false; reason: DisplayNameRejectReason };
@@ -69,11 +67,8 @@ export function evaluateRename(request: {
  * a swapped call site invert exactly the precedence this function protects.
  */
 export function resolveJoinName(source: {
-  /** The account's display name, when the member has set one. */
   persistedName: string | undefined;
-  /** The name on the player_name row being resumed, when one survived. */
   resumedRowName: string | undefined;
-  /** Hex form of the joining identity, seeding the default name. */
   identityHex: string;
 }): string {
   return (

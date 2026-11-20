@@ -23,57 +23,30 @@ import { sessionRows } from './rowEvents';
 import { wireStatuses } from './statusFeed';
 import { type HuddleView, wireZones, type ZoneAdminView } from './zoneFeed';
 
-/** What session wiring needs from the net stack that owns it (startNet). */
 export interface SessionWiringDeps {
   gameApp: GameApp;
-  /** The remote players' interpolated views, kept across sessions (remoteView.ts). */
   remoteViews: ReturnType<typeof createRemoteViews>;
-  /** The chat feed, which owns its log across sessions (chatFeed.ts). */
   chatFeed: ReturnType<typeof createChatFeed>;
-  /** The own simulation's state, held across sessions (see OwnSim in playerFeed.ts). */
   sim: OwnSim;
-  /** The single paths for own-name / own-status changes (ownPublishers.ts). */
   publishers: OwnPublishers;
-  /** The own simulation's send paths (inputSender.ts). */
   inputSender: InputSender;
-  /** Counts one row event on the dev-only E2E counters (see installNetStats in sync.ts). */
   bumpStat(key: keyof E2ENetStats): void;
-  /** Every space_member / space_setting change (NetHooks.onSpace). */
   onSpace(view: SpaceView): void;
-  /** Every conversation_group change, as the whole zone list (NetHooks.onZones). */
   onZones(zones: ZoneAdminView[]): void;
-  /** Every change of the huddle control's answer (NetHooks.onHuddle). */
   onHuddle(view: HuddleView): void;
-  /** Every change of the sendable chat scopes (NetHooks.onChatScopes). */
   onChatScopes(view: ChatScopeView): void;
-  /** Every change of the conversation group this client is in (NetHooks.onOwnGroup). */
   onOwnGroup(groupId: bigint | undefined): void;
-  /** Every call_recording change, as the whole label list (NetHooks.onRecordings). */
   onRecordings(labels: RecordingLabelView[]): void;
-  /** Every dm_message row handed to this client (NetHooks.onDmRow). */
   onDmRow(event: DmRowEvent): void;
-  /**
-   * Whether the session of `generation` must already be ignored: the
-   * stack is torn down, or a newer connect has taken over.
-   */
   isStale(generation: number): boolean;
-  /** Drops the stack's live-connection ref (the session half of teardown). */
   clearConnection(): void;
 }
 
-/** One stack's session entry and exit, driven by the lifecycle driver. */
 export interface SessionWiring {
-  /** Wires every feed to a freshly settled connection's rows. */
   wireSession(settled: Connected, generation: number): void;
-  /** Tears the live session's state down (prediction, remote views, own name). */
   dropSession(): void;
 }
 
-/**
- * Builds the session wiring. Building it has no side effects; the
- * lifecycle driver runs wireSession per adopted connection and
- * dropSession whenever the machine cuts one.
- */
 export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
   const { gameApp, remoteViews, chatFeed, sim, publishers, inputSender } = deps;
 
@@ -91,12 +64,7 @@ export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
 
   function wireSession(settled: Connected, generation: number): void {
     const { conn: c, myIdentity, myIdHex } = settled;
-    // True once this session's events must be ignored: the stack is torn
-    // down, or a newer connect has taken over (an idle resume can start one
-    // while this session's socket is still closing).
     const stale = () => deps.isStale(generation);
-    // This session's row events: every feed registers its handlers through
-    // them, so none acts once stale (see rowEvents.ts).
     const rows = sessionRows(myIdHex, stale);
 
     // The whole-session map state: the shared currentMapId (the tick
@@ -108,9 +76,6 @@ export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
     sim.portalPendingAtMs = undefined;
     gameApp.setMap(mapFor(sim.currentMapId));
 
-    // Statuses: state wiring, seed + row events (the opposite of the
-    // reaction seed rule) — see statusFeed.ts. The seed half rides labelOf
-    // and handleOwnRow (playerFeed.ts); the events land here.
     wireStatuses(c, rows, {
       applyOwn: publishers.publishOwnStatus,
       applyRemote: (idHex, view) =>
@@ -120,10 +85,6 @@ export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
         }),
     });
 
-    // Gestures (Phase 5 ①c): the third display convention — state poses
-    // (sit / sleep / dance) seed + events like statuses, the transient
-    // wave events-only like reactions; the split lives in gestureFeed.ts.
-    // The seed half rides labelOf and handleOwnRow (playerFeed.ts).
     wireGestures(c, rows, {
       applyOwn: (gesture) => gameApp.patchLocalLabel({ gesture }),
       applyRemote: (idHex, gesture) => remoteViews.patchLabel(idHex, { gesture }),
@@ -154,12 +115,8 @@ export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
     // layer, and this file is long enough (see chatScopeFeed.ts).
     wireChatScopes(c, rows, myIdentity, { onChatScopes: deps.onChatScopes });
 
-    // The own-group signal for the call dock (ROADMAP Phase 4 増分①): the
-    // same own group_member row the scope feed reads, but as the raw
-    // groupId — the call's identity, not a chat affordance (see callFeed.ts).
     wireOwnGroup(c, rows, myIdentity, { onOwnGroup: deps.onOwnGroup });
 
-    // The recording labels for the 録画一覧 (ROADMAP Phase 4 増分④).
     wireRecordings(c, rows, { onRecordings: deps.onRecordings });
 
     // The RLS privacy probe for the call registry (the groupChatRowsReceived
@@ -170,8 +127,6 @@ export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
     for (const _row of c.db.groupCall.iter()) deps.bumpStat('groupCallRowsReceived');
     rows.on(c.db.groupCall, { insert: () => deps.bumpStat('groupCallRowsReceived') });
 
-    // The player rows (playerFeed.ts): the own row drives the simulation,
-    // remote rows the interpolated views, player_name rows the labels.
     const players = createPlayerFeed(settled, rows, {
       sim,
       gameApp,
@@ -184,19 +139,13 @@ export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
       refreshZones: zoneFeed.refresh,
     });
 
-    // Admission (承認制 / ゲスト入場設定): the rules live in admission.ts;
-    // this session supplies what acting on them needs.
     const admission = wireAdmission(c, rows, myIdentity, {
       onSpace: deps.onSpace,
       enterWorld: players.enterWorld,
     });
 
-    // Seed the remote players already in the world (our own surviving row
-    // waits for the admission re-evaluation below — see seedRemotes).
     players.seedRemotes();
 
-    // Chat: the feed seeds its log from the cache and keeps it (and the
-    // speech bubbles) fed by row events — see chatFeed.ts.
     chatFeed.wire(c, rows, {
       showLocalBubble: (text) => gameApp.showLocalBubble(text),
       showRemoteBubble: (idHex, text) => gameApp.showRemoteBubble(idHex, text),
@@ -209,16 +158,11 @@ export function createSessionWiring(deps: SessionWiringDeps): SessionWiring {
       },
     });
 
-    // Reactions: display-only wiring, row events only (no seed) — see
-    // reactionFeed.ts, which also owns the palette narrowing of the raw
-    // row string.
     wireReactions(c, rows, {
       showLocalReaction: (emoji) => gameApp.showLocalReaction(emoji),
       showRemoteReaction: (idHex, emoji) => gameApp.showRemoteReaction(idHex, emoji),
     });
 
-    // The player / player_name row events (see wireRowEvents); a deleted
-    // own row re-runs admission.
     players.wireRowEvents(admission);
 
     // The first decision: enter (the pre-admission behavior), or hold and

@@ -16,14 +16,12 @@ import {
   UI_TEXT_COLOR,
 } from '../theme';
 
-/** One section's title inside the panel (the panel supplies the font). */
 export const panelHeadingStyle: CSSProperties = {
   fontWeight: 'bold',
   color: UI_GOLD,
   margin: '8px 0 4px',
 };
 
-/** One form or list row: controls in a line, wrapping onto the next when tight. */
 export const panelRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -32,7 +30,6 @@ export const panelRowStyle: CSSProperties = {
   flexWrap: 'wrap',
 };
 
-/** A text input filling the row's free space. */
 export const panelInputStyle: CSSProperties = {
   flex: '1 1 80px',
   minWidth: 0,
@@ -44,7 +41,6 @@ export const panelInputStyle: CSSProperties = {
   font: 'inherit',
 };
 
-/** An action button; never shrinks, so its label stays readable. */
 export const panelButtonStyle: CSSProperties = {
   padding: '2px 8px',
   borderRadius: 6,
@@ -56,7 +52,6 @@ export const panelButtonStyle: CSSProperties = {
   flexShrink: 0,
 };
 
-/** An inline refusal, on its own line under the row it belongs to. */
 export const panelErrorStyle: CSSProperties = {
   color: UI_ERROR_COLOR,
   flexBasis: '100%',

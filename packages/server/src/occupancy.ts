@@ -20,17 +20,12 @@ import {
 } from '@kaede/shared';
 import type { Ctx, SenderIdentity } from './world';
 
-/**
- * The zone-kind groups placed on `mapId` in id order (sortedZoneRows —
- * the deterministic overlap priority), shaped for the occupancy rule.
- */
 function zonesOnMap(ctx: Ctx, mapId: number): ZoneShape[] {
   return sortedZoneRows(ctx.db.conversationGroup.iter())
     .filter((row) => row.mapId === mapId)
     .map((row) => ({ id: row.id, rect: { x: row.x, y: row.y, w: row.w, h: row.h } }));
 }
 
-/** The conversation_group row `groupId` names IF it is a huddle, else null. */
 function huddleRowOf(ctx: Ctx, groupId: bigint) {
   const row = ctx.db.conversationGroup.id.find(groupId);
   return row !== null && row.kind === GROUP_KIND_HUDDLE ? row : null;
@@ -141,7 +136,6 @@ export function syncGroupOccupancy(
   syncZoneOccupancy(ctx, identity, position, mapId, member);
 }
 
-/** A group_member row as this schema returns it. */
 type GroupMemberRow = NonNullable<ReturnType<Ctx['db']['groupMember']['identity']['find']>>;
 
 /**

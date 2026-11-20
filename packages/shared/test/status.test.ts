@@ -53,7 +53,6 @@ describe('normalizeStatusText', () => {
   });
 
   it('normalizes to NFC and collapses whitespace runs', () => {
-    // か + combining dakuten composes to が.
     expect(normalizeStatusText('か\u3099っつり  作業中')).toEqual({
       ok: true,
       text: 'がっつり 作業中',
@@ -112,10 +111,10 @@ describe('statusLabel', () => {
 // (chat.test.ts) — both delegate to evaluateSendAllowance. These pin the
 // status-specific parameters.
 describe('evaluateStatusSend', () => {
-  const NOW = 1_700_000_000_000_000n; // an arbitrary wall-clock instant
+  const NOW = 1_700_000_000_000_000n;
 
   it('allows exactly the status burst back-to-back, then refuses', () => {
-    let marker = 0n; // no guard row yet = the epoch marker
+    let marker = 0n;
     for (let i = 0; i < STATUS_BURST_SENDS; i += 1) {
       const verdict = evaluateStatusSend({ allowanceMicros: marker, nowMicros: NOW });
       expect(verdict.ok).toBe(true);

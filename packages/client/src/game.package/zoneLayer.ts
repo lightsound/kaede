@@ -2,15 +2,7 @@
 import type { Rect } from '@kaede/shared';
 import { type Container, Graphics, Text, TextStyle } from 'pixi.js';
 
-/**
- * One meeting-room zone as the renderer draws it (ROADMAP Phase 3 増分②):
- * the placed rect, the composed label (zoneLabel in @kaede/shared — the
- * closed marker rides it) and the closed flag, which picks the tint. Built
- * by the net stack's zone feed from the subscribed conversation_group
- * rows; the renderer knows nothing about groups or kinds.
- */
 export interface ZoneRender {
-  /** The group row id, stringified — a stable identity for the snapshot. */
   key: string;
   rect: Rect;
   label: string;
@@ -28,7 +20,6 @@ const ZONE_LABEL_STYLE = new TextStyle({
   fontFamily: 'sans-serif',
 });
 
-/** One zone's visuals: the tinted area, its border, and the label above. */
 function drawZone(layer: Container, zone: ZoneRender): void {
   const { rect } = zone;
   const color = zone.closed ? ZONE_CLOSED_COLOR : ZONE_OPEN_COLOR;

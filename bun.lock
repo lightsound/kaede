@@ -5,6 +5,7 @@
     "": {
       "name": "kaede",
       "devDependencies": {
+        "@babel/parser": "7.29.9",
         "@import-lint/cli": "0.1.10",
         "@vitest/coverage-v8": "^5.1.0",
         "fallow": "^3.42.0",

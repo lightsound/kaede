@@ -14,7 +14,6 @@ import {
 
 const NO_INPUT: PlayerInput = { left: false, right: false, up: false, down: false, jump: false };
 
-/** 地面の上で静止している状態 (DEFAULT_MAP の唯一の solid の上)。 */
 function grounded(): PlayerState {
   return {
     x: SPAWN_X,
@@ -27,7 +26,6 @@ function grounded(): PlayerState {
   };
 }
 
-/** ワンウェイ足場の上で静止している状態 (platforms[0] の上)。 */
 function onPlatform(): PlayerState {
   const p = DEFAULT_MAP.platforms[0];
   return {

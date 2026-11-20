@@ -3,7 +3,6 @@ import { type CSSProperties } from 'react';
 import { type ChatEntryView } from '../net.package';
 import { UI_DM_COLOR, UI_GOLD, UI_GOLD_BORDER_SOFT, UI_TEXT_COLOR } from '../theme';
 
-/** The sender name lead-in; the local player's own lines get the gold accent. */
 function senderStyle(own: boolean): CSSProperties {
   return { color: own ? UI_GOLD : UI_TEXT_COLOR, fontWeight: 'bold' };
 }
@@ -59,7 +58,6 @@ function LineMark({ entry }: { entry: ChatEntryView }) {
   return <span style={scopeMarkStyle}>[{entry.scopeTag}] </span>;
 }
 
-/** The 宛先 a DM line ends its header with; nothing on a public line. */
 function DmRecipient({ entry }: { entry: ChatEntryView }) {
   if (entry.kind !== 'dm') return null;
   return <span style={dmMarkStyle}> → {entry.recipientName}</span>;

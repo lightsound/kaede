@@ -9,7 +9,6 @@ import {
   transition,
 } from '../src/net.package/lifecycle';
 
-/** Applies events in order, returning the final state and each step's effects. */
 function run(events: LifecycleEvent[], from: LifecycleState = initialLifecycle()) {
   let state = from;
   const steps: LifecycleEffect[][] = [];
@@ -65,7 +64,6 @@ describe('失敗と再試行', () => {
       { kind: 'status', status: 'connecting' },
       { kind: 'arm-retry', delayMs: RETRY_INITIAL_MS },
     ]);
-    // 同じ失敗のソケットクローズは drop-session だけで、再武装しない。
     expect(kinds(steps[2])).toEqual(['drop-session']);
     expect(state.retryDelayMs).toBe(RETRY_INITIAL_MS * 2);
   });
@@ -111,7 +109,6 @@ describe('失敗と再試行', () => {
   });
 
   it('古い世代のソケットクローズは何もしない', () => {
-    // 休止が LIVE セッションを切ると世代が進む。閉じ終わりの報告は stale。
     const { last, state } = run([
       { kind: 'start' },
       { kind: 'connect-ok' },
@@ -128,7 +125,7 @@ describe('アイドル休止と再開', () => {
     const armed = run([
       { kind: 'start' },
       { kind: 'connect-ok' },
-      { kind: 'socket-closed', generation: 1 }, // 再試行が武装した状態で
+      { kind: 'socket-closed', generation: 1 },
       { kind: 'idle-timeout' },
     ]);
     // 実際は LIVE か再試行中のどちらかだが、両方の後始末を1ステップで見る:
@@ -147,7 +144,6 @@ describe('アイドル休止と再開', () => {
     const live = run([{ kind: 'start' }, { kind: 'connect-ok' }, { kind: 'idle-timeout' }]);
     expect(live.state.generation).toBe(2);
 
-    // pending(接続確立前)の休止は世代を保つ: 復帰時にその connect を採用できる。
     const pending = run([{ kind: 'start' }, { kind: 'idle-timeout' }]);
     expect(pending.state.generation).toBe(1);
     expect(kinds(pending.last)).toEqual(['status', 'drop-session', 'disconnect']);
@@ -216,7 +212,6 @@ describe('アイドル休止と再開', () => {
 
 describe('ページ復帰(page-resume)と死んだソケットの再構築', () => {
   it('武装済みの再試行は前倒しされ、backoff が初期化される', () => {
-    // 背景タブでタイマーが間引かれて停滞していた再試行を、復帰した今すぐ撃つ。
     let state = initialLifecycle();
     for (const kind of ['start', 'connect-failed', 'retry-due', 'connect-failed'] as const) {
       state = transition(state, { kind }).state;
@@ -225,7 +220,6 @@ describe('ページ復帰(page-resume)と死んだソケットの再構築', () 
     const resumed = transition(state, { kind: 'page-resume' });
     expect(kinds(resumed.effects)).toEqual(['cancel-retry', 'status', 'connect']);
     expect(resumed.state.retryArmed).toBe(false);
-    // 前倒しの connect が失敗しても次の再武装は初期値から。
     expect(resumed.state.retryDelayMs).toBe(RETRY_INITIAL_MS);
   });
 
@@ -265,7 +259,6 @@ describe('ページ復帰(page-resume)と死んだソケットの再構築', () 
     ]);
     expect(state.sessionLive).toBe(false);
     expect(state.retryDelayMs).toBe(RETRY_INITIAL_MS);
-    // 死んだソケットの閉じ終わり報告(世代1)は以後 stale。
     const lateClose = transition(state, { kind: 'socket-closed', generation: 1 });
     expect(lateClose.effects).toEqual([]);
   });
@@ -274,14 +267,13 @@ describe('ページ復帰(page-resume)と死んだソケットの再構築', () 
     const { last } = run([
       { kind: 'start' },
       { kind: 'connect-ok' },
-      { kind: 'idle-timeout' }, // LIVE を切って世代が進む
+      { kind: 'idle-timeout' },
       { kind: 'session-dead', generation: 1 },
     ]);
     expect(last).toEqual([]);
   });
 
   it('セッションが LIVE でない session-dead は無視する', () => {
-    // probe と verdict の間に socket-closed が届いて後始末済みのケース。
     const { last } = run([
       { kind: 'start' },
       { kind: 'connect-ok' },

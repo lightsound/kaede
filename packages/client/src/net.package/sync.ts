@@ -43,11 +43,6 @@ function installNetStats(): E2ENetStats | undefined {
   return stats;
 }
 
-/**
- * The whole net facade: the user-action surface (NetApi — the methods every
- * UI control calls, built in netApi.ts) plus the one lifecycle-owning
- * method that must live with the connection state machine here.
- */
 export interface Net extends NetApi {
   dispose(): void;
 }
@@ -60,11 +55,8 @@ export interface Net extends NetApi {
  */
 export interface NetHooks {
   onStatus(status: ConnectionStatus): void;
-  /** See startNet's own-name contract in the doc comment below. */
   onOwnName(name: string | undefined): void;
-  /** Every space_member / space_setting change, as one SpaceView. */
   onSpace(view: SpaceView): void;
-  /** Every chat_message change (seed and row events), as one whole log. */
   onChat(log: ChatLog): void;
   /**
    * The own manual status whenever the authority's view of it changes —
@@ -93,37 +85,10 @@ export interface NetHooks {
    * it from its seed and from row events registered through SessionRows.
    */
   onDmRow(event: DmRowEvent): void;
-  /**
-   * Every conversation_group change, as the whole zone list (all maps) —
-   * what the admin panel's zone section renders (ROADMAP Phase 3 増分②).
-   */
   onZones(zones: ZoneAdminView[]): void;
-  /**
-   * Every change of the huddle control's answer (own huddle / joinable
-   * huddle / neither — ROADMAP Phase 3 増分③), deduplicated by value in
-   * the feed so the row-event cadence stays out of React.
-   */
   onHuddle(view: HuddleView): void;
-  /**
-   * Every change of the chat scopes this client may send under (全体 /
-   * このマップ / いまの会話グループ — ROADMAP Phase 3 増分④), deduplicated
-   * by value in the feed. The selector renders exactly this list, so a
-   * scope the server would refuse is never offered.
-   */
   onChatScopes(view: ChatScopeView): void;
-  /**
-   * Every change of which conversation group this client is in (seeded on
-   * session entry, deduplicated by value — ROADMAP Phase 4 増分①). The
-   * call dock offers 通話 from it and auto-leaves the call when it stops
-   * naming the call's group.
-   */
   onOwnGroup(groupId: bigint | undefined): void;
-  /**
-   * Every call_recording change, as the whole label list (newest first —
-   * ROADMAP Phase 4 増分④). The 録画一覧 decorates the module's R2
-   * listing (list_recordings) with these; the rows themselves carry no
-   * download capability.
-   */
   onRecordings(labels: RecordingLabelView[]): void;
 }
 
@@ -161,12 +126,8 @@ export interface NetHooks {
  */
 export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks: NetHooks): Net {
   const remoteViews = createRemoteViews();
-  // The chat log and bubbles, wired per session (wireSession); the feed
-  // owns the log across sessions (see chatFeed.ts).
   const chatFeed = createChatFeed(hooks.onChat);
   let conn: DbConnection | undefined;
-  // The whole retry/suspension/generation bookkeeping lives in this pure
-  // state (see lifecycle.ts); everything below reads it through `life`.
   let life = initialLifecycle();
 
   const netStats = installNetStats();
@@ -174,22 +135,12 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
     if (netStats) netStats[key] += 1;
   };
 
-  // The own simulation's state, held across sessions (see OwnSim in
-  // playerFeed.ts): the tick callback and the heartbeat below read it,
-  // wireSession and dropSession set and clear it, and each session's
-  // player feed starts and re-maps the simulation.
   const sim: OwnSim = {
     prediction: undefined,
     currentMapId: DEFAULT_MAP_ID,
     portalPendingAtMs: undefined,
   };
 
-  // The pieces this composition wires together: the own-view publishers
-  // (ownPublishers.ts), the input sender (inputSender.ts), the session
-  // wiring (sessionWiring.ts) and the lifecycle driver
-  // (lifecycleDriver.ts) that runs the state machine's effects — the
-  // wire-session and drop-session effects land on the session wiring, so
-  // the driver is built last and handed both.
   const publishers = createOwnPublishers({
     patchLocalLabel: gameApp.patchLocalLabel,
     onOwnName: hooks.onOwnName,
@@ -234,23 +185,16 @@ export function startNet(gameApp: GameApp, getAuthToken: AuthTokenGetter, hooks:
 
   gameApp.onLocalTick(inputSender.handleLocalTick);
 
-  // Render remote players interpolated INTERP_DELAY_MS in the past.
   gameApp.onFrame((now) => {
     remoteViews.renderFrame(now, gameApp.upsertRemotePlayer);
   });
 
   dispatch({ kind: 'start' });
 
-  // What the user and the page do (activity.ts): input resumes an idle
-  // suspension, the idle timeout suspends, and a page resume wakes stalled
-  // retries and finds dead sockets.
   const stopActivity = watchActivity({ isDisposed: () => life.disposed, dispatch });
 
-  // 静止中の生存証明(送りどきの規則は inputSender.ts の heartbeatTick)。
   const heartbeat = createHeartbeat(inputSender.heartbeatTick);
 
-  // The user-action surface (netApi.ts), reading the live connection
-  // through the closure so a reconnect swaps it under every method at once.
   const api = createNetApi({
     conn: () => conn,
     onChatRefused: () => hooks.onChatRefused(),

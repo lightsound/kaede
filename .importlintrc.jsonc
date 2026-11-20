@@ -19,17 +19,9 @@
   // are owned by the SpacetimeDB CLI and must not acquire hand-written tags.
   "exclude": ["**/test/**", "**/module_bindings/**"],
 
-  // Path to tsconfig.json (for resolver `paths`/`baseUrl`), relative to the
-  // project root. Defaults to "<project root>/tsconfig.json" if it exists.
-  // "tsconfig": "./tsconfig.json",
-
   "rules": {
     "package-access": {
-      // "error" | "warn" | "off". An `off` rule is never checked.
       "severity": "error",
-
-      // Below: identical options, names, and defaults to
-      // eslint-plugin-import-access's `import-access/jsdoc` rule.
 
       // Treat a file named "index.{js,ts,jsx,tsx,mjs,cjs,...}" as if its parent
       // directory were the exporting file, for package-boundary purposes. This is
@@ -37,20 +29,10 @@
       // boundary's index.ts promotes that export to the parent's package.
       "indexLoophole": true,
 
-      // Treat "foo/bar.ts" as in-package with "foo.ts" (one directory level,
-      // matching the importer's own filename stem). Turn on for the
-      // companion-file pattern: a "sub.ts" file living next to the "sub/"
-      // directory it belongs to.
-      // "filenameLoophole": true,
       "filenameLoophole": false,
 
-      // Access level assumed for an export with no recognized JSDoc access tag.
-      // "public" | "package" | "private". "package" makes every configured
-      // boundary private by default, with no JSDoc tag required.
       "defaultImportability": "package",
 
-      // How a bare specifier matching the importer's own package name is
-      // classified. "external" (never checked) | "internal" (checked normally).
       "treatSelfReferenceAs": "internal",
 
       // Generated SpacetimeDB bindings are consumed as an opaque public API;

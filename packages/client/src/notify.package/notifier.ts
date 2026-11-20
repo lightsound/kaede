@@ -9,19 +9,12 @@ import {
 } from '@kaede/shared';
 import { parseVisibilityOverride, type VisibilityReading } from './visibilityOverride';
 
-/** What the permission UI renders from (see NotificationControl). */
 export interface NotifyUiState {
   permission: NotificationPermissionState;
-  /** The session-local mute toggle; never persisted (out of scope). */
   muted: boolean;
 }
 
 export interface DmNotifier {
-  /**
-   * Feeds one dm_message row (seed or event — source-tagged) through the
-   * decision rule and, when it says so, raises the OS notification. The
-   * caller (useNetStack wiring NetHooks.onDmRow) never decides anything.
-   */
   onDmRow(event: DmRowEvent): void;
   uiState(): NotifyUiState;
   /**
@@ -55,7 +48,6 @@ function countDecisionForE2E(): void {
   if (stats) stats.dmNotifyDecisions += 1;
 }
 
-/** Constructs the OS notification; clicking it focuses this tab and dismisses. */
 function raiseNotification(content: DmNotificationContent): void {
   try {
     const notification = new Notification(content.title, {
@@ -75,8 +67,6 @@ function raiseNotification(content: DmNotificationContent): void {
 }
 
 function createDmNotifier(): DmNotifier {
-  // The dev-only E2E lever (see visibilityOverride.ts); undefined in
-  // production builds and on any URL without the parameter.
   const override = import.meta.env.DEV
     ? parseVisibilityOverride(window.location.search)
     : undefined;

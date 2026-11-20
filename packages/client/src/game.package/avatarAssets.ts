@@ -1,10 +1,5 @@
 // fallow-ignore-file coverage-gaps -- loads the bundled PNGs into PixiJS textures, which needs a browser to decode the images (the unit-test setup has no browser or DOM); the manifests it reads are validated by studio.package/catalog.ts, which is unit-tested, and checked clean end to end by asset-studio.spec.ts
 
-// The avatar assets every player view shares: the base pose sheet (Phase 5
-// 増分①a) and the gesture kit (増分①c), bundled statically by Vite so the
-// hashed URLs bust caches with the assets. The dev-only dress-up preview's
-// outfit, carry and item assets are dressUpPreview.ts's — loaded on demand,
-// and their loader code is dropped from production builds.
 import { Assets } from 'pixi.js';
 import avatarManifest from './avatar/manifest.json';
 import standUrl from './avatar/stand.png';
@@ -33,7 +28,6 @@ import type {
 import headphonesUrl from './items/headphones/headphones.png';
 import headphonesManifest from './items/headphones/manifest.json';
 
-/** The base outfit's pose sheet (stand + four walk frames) every player view shares. */
 export async function loadBaseSheet(): Promise<AvatarSheetTextures> {
   const [stand, walkA, walkB, walkC, walkD] = await Promise.all(
     [standUrl, walkAUrl, walkBUrl, walkCUrl, walkDUrl].map((url) => Assets.load(url)),

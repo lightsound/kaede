@@ -41,15 +41,11 @@ const rowStyle: CSSProperties = {
   justifyContent: 'space-between',
 };
 
-/** What the panel calls on the net facade (the CallDockNet shape). */
 export interface RecordingsDockNet {
-  /** NetApi.listRecordings — the module's R2 listing (増分⑥). */
   listRecordings(): Promise<RecordingFile[]>;
-  /** NetApi.recordingDownloadUrl — a short-lived presigned URL. */
   recordingDownloadUrl(fileName: string): Promise<string>;
 }
 
-/** What the panel knows about the listing right now. */
 type Listing =
   | { kind: 'closed' }
   | { kind: 'loading' }
@@ -81,14 +77,12 @@ async function download(ctx: PanelContext, fileName: string): Promise<void> {
   anchor.remove();
 }
 
-/** What every listing row and the panel body need from the mounted dock. */
 interface PanelContext {
   net: RecordingsDockNet;
   labels: RecordingLabelView[];
   onDownloadFailure: () => void;
 }
 
-/** One recording's row: its labels (or the date-only fallback) and the DL button. */
 function RecordingRow({ file, ctx }: { file: RecordingFile; ctx: PanelContext }) {
   const label = ctx.labels.find((candidate) => candidate.fileName === file.fileName);
   const title = label === undefined ? '録画' : `${label.groupName} — ${label.starterName}`;
@@ -110,7 +104,6 @@ function RecordingRow({ file, ctx }: { file: RecordingFile; ctx: PanelContext })
   );
 }
 
-/** The open panel's body, one branch per listing state. */
 function ListingBody({
   listing,
   ctx,
@@ -149,10 +142,8 @@ export function RecordingsDock({
   net,
   labels,
 }: {
-  /** Connected AND an approved member (cosmetic gate — see above). */
   visible: boolean;
   net: RecordingsDockNet;
-  /** The call_recording label rows (NetHooks.onRecordings), newest first. */
   labels: RecordingLabelView[];
 }) {
   const [listing, setListing] = useState<Listing>({ kind: 'closed' });

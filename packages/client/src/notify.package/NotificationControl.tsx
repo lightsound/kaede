@@ -22,7 +22,6 @@ const blockedStyle: CSSProperties = {
   opacity: 0.6,
 };
 
-/** The 'default'-permission arm: enabling notifications IS this click (see below). */
 function EnableButton({ notifier, onSettled }: { notifier: DmNotifier; onSettled: () => void }) {
   const request = () => {
     void notifier.requestPermission().then(onSettled);
@@ -39,7 +38,6 @@ function EnableButton({ notifier, onSettled }: { notifier: DmNotifier; onSettled
   );
 }
 
-/** The 'granted' arm: the session-local on/off (the delegated minimal toggle). */
 function MuteToggle({
   muted,
   notifier,

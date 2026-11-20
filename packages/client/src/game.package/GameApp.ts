@@ -50,15 +50,7 @@ const BG_COLOR = 0x10131b;
  */
 export interface PlayerLabel {
   name: string;
-  /**
-   * The composed status line (statusLabel in @kaede/shared) shown under
-   * the avatar, or undefined for the default status (the line hides).
-   */
   status: string | undefined;
-  /**
-   * The composed occupancy tag (groupTagLabel in @kaede/shared: the zone
-   * tag, or a huddle's own label), or undefined while in no group.
-   */
   zone: string | undefined;
   /**
    * The player's STATE gesture directive (増分①c — 'sit' | 'sleep' |
@@ -109,12 +101,6 @@ export interface GameApp {
    * the current map's zones and re-pushes on zone edits and map switches.
    */
   setZones(zones: readonly ZoneRender[]): void;
-  /**
-   * Replaces the rendered huddles (Phase 3 増分③ — the setZones sibling).
-   * The caller passes the current map's huddles with their member
-   * identities; positions resolve per frame from the members' sprites, so
-   * the circle follows the avatars between row events.
-   */
   setHuddles(huddles: readonly HuddleRender[]): void;
   /**
    * Updates some of the local avatar's display attributes — the name, the
@@ -124,11 +110,6 @@ export interface GameApp {
    * overrides the gesture visually (avatarView).
    */
   patchLocalLabel(patch: PlayerLabelPatch): void;
-  /**
-   * Begin stepping the local simulation from `state` at `tick`. Until this is
-   * called the ticker renders the scene but never steps physics or fires
-   * onLocalTick, so the client waits for the authoritative spawn row.
-   */
   start(state: PlayerState, tick: number): void;
   /**
    * Re-gate the simulation (the pre-start state): physics stops stepping and
@@ -137,36 +118,17 @@ export interface GameApp {
    * swept player must not keep walking a ghost around under the overlay.
    */
   stop(): void;
-  /**
-   * Reconciliation hook: snap prev=curr=state and the tick counter to `tick`.
-   * Rendering jumps to the corrected state (intended).
-   */
   resetLocal(state: PlayerState, tick: number): void;
   onLocalTick(cb: (state: PlayerState, tick: number, packedInput: number) => void): void;
   onFrame(cb: (nowMs: number) => void): void;
   upsertRemotePlayer(id: string, label: PlayerLabel, x: number, y: number, facing: Facing): void;
   removeRemotePlayer(id: string): void;
-  /** Drop every remote player sprite (e.g. when the connection is lost). */
   clearRemotePlayers(): void;
-  /**
-   * Shows `text` in a speech bubble above the local avatar for
-   * CHAT_BUBBLE_DURATION_MS; a newer message replaces it and restarts the
-   * clock.
-   */
   showLocalBubble(text: string): void;
-  /** Same, above the remote player `id`; a no-op while that player has no sprite. */
   showRemoteBubble(id: string, text: string): void;
-  /**
-   * Shows `emoji` above the local avatar for REACTION_DURATION_MS; a newer
-   * reaction replaces it and restarts the clock. Stacks above the speech
-   * bubble when one is visible (see layoutReaction).
-   */
   showLocalReaction(emoji: ReactionEmoji): void;
-  /** Same, above the remote player `id`; a no-op while that player has no sprite. */
   showRemoteReaction(id: string, emoji: ReactionEmoji): void;
-  /** Plays the transient wave on the local avatar (増分①c row event). */
   showLocalWave(): void;
-  /** Same, on the remote player `id`; a no-op while that player has no sprite. */
   showRemoteWave(id: string): void;
 }
 
@@ -185,7 +147,6 @@ function applyLabel(view: PlayerView, label: PlayerLabel): void {
   view.avatar.setBusy(label.availability === 'busy');
 }
 
-/** The rendering resolution: the device pixel ratio, or 1 where unreported. */
 function renderResolution(): number {
   return window.devicePixelRatio || 1;
 }
@@ -217,9 +178,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   });
   host.appendChild(app.canvas);
 
-  // The one pose-frame sheet every player view shares (avatarAssets.ts),
-  // loaded before any view exists — createGameApp is already the async
-  // init path.
   const baseSheet = await loadBaseSheet();
   // Dev-only dress-up preview (the ①b(a) spike): swapped sheet / held item
   // for EVERY view in this tab — selection is per-player only from 増分①e.
@@ -231,9 +189,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
 
   const world = new Container();
   app.stage.addChild(world);
-  // The map being simulated AND rendered — swapped whole by setMap. The
-  // default map is only the pre-session placeholder; the net stack sets the
-  // authoritative map when the session wires up.
   let currentMap: WorldMap = mapFor(DEFAULT_MAP_ID);
   let mapLayer = buildMapLayer(currentMap);
   world.addChild(mapLayer);
@@ -246,15 +201,9 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   world.addChild(zoneLayer);
   let currentZones: readonly ZoneRender[] = [];
 
-  // The huddles (増分③): same layering rule as zones — behind the player
-  // views, whose sprites the circles follow per frame (see huddleLayer.ts).
   const huddleLayerRoot = new Container();
   world.addChild(huddleLayerRoot);
 
-  // The local avatar's display attributes (remote views get theirs whole
-  // with every upsertRemotePlayer): the own rows patch them piecemeal
-  // (patchLocalLabel) and every patch applies the whole label. 'You' holds
-  // the name until the own row brings the real one.
   let localLabel: PlayerLabel = {
     name: 'You',
     status: undefined,
@@ -265,7 +214,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   const local = createPlayerView(world, localLabel.name, avatarSheet, heldItem, gestureKit);
   const remotes = new Map<string, PlayerView>();
 
-  /** The member sprites a huddle circle anchors on this frame. */
   function huddleMemberPositions(huddle: HuddleRender): { x: number; y: number }[] {
     const positions = [];
     if (huddle.includesLocal) positions.push({ x: local.root.x, y: local.root.y });
@@ -313,7 +261,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   };
   let curr: PlayerState = prev;
   let acc = 0;
-  // Simulation is gated until start(): tick < 0 means "not yet running".
   let tick = -1;
   // Render-only smoothing for reconciliation corrections: the decaying error
   // between where we last rendered and the new corrected state. The simulation
@@ -321,7 +268,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
   // shifts the sprite, never the physics.
   let localOffset: Vec2 = { x: 0, y: 0 };
 
-  /** One fixed simulation tick: sample every input source, step, notify. */
   function simulateTick(): void {
     prev = curr;
     const sample = touch ? mergeInputs(input.sample(), touch.sample()) : input.sample();
@@ -331,7 +277,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     for (const cb of tickCbs) cb(curr, tick, packInput(sample));
   }
 
-  /** Place the local sprite and the camera for the current interpolation alpha. */
   function renderLocal(deltaMS: number): void {
     const alpha = acc / DT;
     const rx = prev.x + (curr.x - prev.x) * alpha;
@@ -364,12 +309,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     world.position.set(cam.x * scale, cam.y * scale);
   }
 
-  /**
-   * Hides one view's overhead displays whose time is up (see
-   * expireOverhead) and keeps its reaction stacked clear of its bubble —
-   * re-laid out every frame because either can appear, resize or expire
-   * mid-display.
-   */
   function expireViewOverheads(view: PlayerView, nowMs: number): void {
     expireOverhead(view.bubble, nowMs);
     expireOverhead(view.reaction, nowMs);
@@ -399,13 +338,10 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     const now = performance.now();
     fpsWindow.fps = sampleFpsWindow(now, fpsWindow);
     for (const cb of frameCbs) cb(now);
-    // Simulation is gated until start(): never pre-accumulate before it runs.
     acc = tick < 0 ? 0 : acc + Math.min(ticker.deltaMS / 1000, MAX_FRAME);
     while (acc >= DT) simulateTick();
     renderLocal(ticker.deltaMS);
     animateAvatars(ticker.deltaMS);
-    // After renderLocal and the remote upserts (onFrame above): the huddle
-    // circles anchor on where the sprites ARE this frame.
     huddleLayer.renderFrame();
     expireOverheads(now);
   });
@@ -420,7 +356,6 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     () => fpsWindow.fps,
   );
 
-  /** Runs `act` on the remote player's view; a no-op while it has no sprite. */
   function withRemoteView(id: string, act: (view: PlayerView) => void): void {
     const view = remotes.get(id);
     if (view) act(view);
@@ -457,7 +392,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
     start(state, t) {
       prev = curr = state;
       tick = t;
-      acc = 0; // clamp so the first running frame doesn't replay a burst
+      acc = 0;
       localOffset = { x: 0, y: 0 };
       // Installed here rather than at creation: only the instance that the
       // network wires up ever starts, whereas StrictMode creates two instances
@@ -466,7 +401,7 @@ export async function createGameApp(host: HTMLElement): Promise<GameApp> {
       if (e2eHook) window.__kaedeE2E = e2eHook;
     },
     stop() {
-      tick = -1; // the ticker treats tick < 0 as "not running" (see start)
+      tick = -1;
       acc = 0;
     },
     resetLocal(state, t) {
