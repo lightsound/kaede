@@ -24,6 +24,13 @@ const DEFAULT_BASELINE = join(REPO, 'comment-baseline.json');
 const SELF = 'scripts/comment-ratchet.mjs';
 const BASELINE_NAME = 'comment-baseline.json';
 
+// ベースラインのキーと SELF は POSIX 区切りで統一する。path.relative は
+// Windows ではバックスラッシュ区切りを返すため、変換しないとベースラインの
+// キーとも SELF とも一致せず、全ファイルが新規扱いになってしまう。
+function toPosixPath(p) {
+  return p.replaceAll('\\', '/');
+}
+
 const args = process.argv.slice(2);
 const write = args.includes('--write');
 const baselinePath = (() => {
@@ -44,7 +51,7 @@ function walk(dir, out) {
       if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.'))
         walk(join(dir, entry.name), out);
     } else if (entry.isFile() && EXTS.has(entry.name.slice(entry.name.lastIndexOf('.')))) {
-      out.push(relative(REPO, join(dir, entry.name)));
+      out.push(toPosixPath(relative(REPO, join(dir, entry.name))));
     }
   }
 }
@@ -274,7 +281,7 @@ if (write) {
   };
   writeFileSync(baselinePath, JSON.stringify(data, null, 2) + '\n');
   console.log(
-    `comment-ratchet: baseline を再生成した（散文コメント ${actualTotal} ブロック / ${actual.size} ファイル）: ${relative(REPO, baselinePath)}`,
+    `comment-ratchet: baseline を再生成した（散文コメント ${actualTotal} ブロック / ${actual.size} ファイル）: ${toPosixPath(relative(REPO, baselinePath))}`,
   );
   process.exit(0);
 }
