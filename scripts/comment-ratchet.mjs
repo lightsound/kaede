@@ -185,14 +185,19 @@ function groupBlocks(raw, src) {
   };
   for (const c of raw) {
     const isLine = c.type === 'CommentLine';
-    if (isLine && ownLine(c) && cur && cur.kind === 'lineRun' && c.startLine === cur.endLine + 1) {
+    // ブロックは「隣接する単独行コメントの並び」かブロックコメント1個。
+    // 行末（インライン）コメントはそれ自体が1ブロックであり、単独行の
+    // 並びを開始も延長もしない（混ぜると、既存ブロックの直上に行末
+    // コメントを足しても件数が増えず検出できない）。
+    const own = isLine && ownLine(c);
+    if (own && cur && cur.kind === 'lineRun' && c.startLine === cur.endLine + 1) {
       cur.endLine = c.endLine;
       cur.end = c.end;
       continue;
     }
     flush();
     cur = {
-      kind: isLine ? 'lineRun' : 'block',
+      kind: isLine ? (own ? 'lineRun' : 'inline') : 'block',
       startLine: c.startLine,
       endLine: c.endLine,
       start: c.start,
