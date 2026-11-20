@@ -95,13 +95,19 @@ that are Decision Records, not Excuses.
    else. Run the full gates: `bun run lint`, `bun run test`,
    `bun run test:coverage` and the four fallow subcommands.
 5. **Regenerate the baseline in the same PR:**
-   `bun scripts/comment-ratchet.mjs --write`. The baseline may only shrink —
-   per-file counts decrease or entries disappear. **A PR whose baseline grows
-   is wrong**: it means new prose comments were added instead of deleted. The
-   one exception is a documented correction — a ratchet rule fix that
-   reclassifies an existing block, or the restoration of a still-valid
-   rationale an earlier round removed — and the PR must call that growth out
-   explicitly, per file, as a correction rather than new prose.
+   `bun scripts/comment-ratchet.mjs --write`. The ratchet enforces exact
+   equality with the baseline: it fails when a file's count grows **and**
+   when it shrinks or a baseline entry goes stale (file deleted or renamed),
+   so any PR that changes prose-comment counts — a deletion round, an ADR
+   migration, or plain code removal — must regenerate the baseline in the
+   same PR, or the freed room could be spent again later. The baseline may
+   only shrink — per-file counts decrease or entries disappear. **A PR whose
+   baseline grows is wrong**: it means new prose comments were added instead
+   of deleted. The one exception is a documented correction — a ratchet rule
+   fix that reclassifies an existing block, or the restoration of a
+   still-valid rationale an earlier round removed — and the PR must call
+   that growth out explicitly, per file, as a correction rather than new
+   prose.
 
 ## Migrating Decision Records into ADRs
 
@@ -136,5 +142,7 @@ baseline (step 5). A one-line pointer comment is not a substitute for the ADR.
 Don't. If a decision is worth recording, write or extend the ADR. The only
 comments that may be added freely are Functional directives (with the reason
 the repo's rules already require, e.g. fallow's `require-suppression-reason`).
-If the ratchet fails on your change, the fix is to remove the comment — never
-to raise the baseline.
+If the ratchet fails because your change added prose, the fix is to remove
+the comment — never to raise the baseline. If it fails because your change
+removed comments or files, regenerate the baseline with `--write` in the
+same PR so the baseline tightens with the tree.

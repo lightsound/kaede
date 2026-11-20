@@ -1,10 +1,11 @@
 // fallow-ignore-file coverage-gaps -- lint 用 CLI スクリプトで単体テストを持たない。検証は lint:comments として全 lint で実行されること自体で行う
 //
 // コメント・ラチェット: 新しい散文コメントの混入を禁止し、残存分は
-// comment-baseline.json の件数まで許容する。ベースラインは削除ラウンドの
-// たびに --write で再生成して小さくしていく一方通行の歯止めであり、
-// 増やす方向の再生成は「新しいコメントを書いた」ことと同義なので、
-// レビューで必ず差分を確認すること。
+// comment-baseline.json の件数と完全一致するときだけ許容する（増えても
+// 減っても落ちる。減った場合は同じ PR で --write して締め直す）。
+// ベースラインは削除ラウンドのたびに --write で再生成して小さくしていく
+// 一方通行の歯止めであり、増やす方向の再生成は「新しいコメントを書いた」
+// ことと同義なので、レビューで必ず差分を確認すること。
 //
 // 使い方:
 //   bun scripts/comment-ratchet.mjs            検査（lint:comments）
@@ -299,9 +300,14 @@ const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
 const baseFiles = new Map(Object.entries(baseline.files || {}));
 
 const violations = [];
+const stale = [];
 for (const [file, n] of actual) {
   const base = baseFiles.get(file) || 0;
   if (n > base) violations.push({ file, base, actual: n });
+  else if (n < base) stale.push({ file, base, actual: n });
+}
+for (const [file, base] of baseFiles) {
+  if (!actual.has(file)) stale.push({ file, base, actual: 0 });
 }
 if (violations.length) {
   console.error('comment-ratchet: ベースラインを超える散文コメントがあります:');
@@ -315,8 +321,21 @@ if (violations.length) {
   console.error(
     '新しい散文コメントは書かず、決定の記録は ADR（docs/adr-*.md）へ。意図した削除ラウンドの後は --write でベースラインを再生成すること。',
   );
-  process.exit(1);
 }
+if (stale.length) {
+  console.error('comment-ratchet: ベースラインより散文コメントが減っているファイルがあります:');
+  for (const v of stale.sort((a, b) => a.file.localeCompare(b.file))) {
+    console.error(
+      v.actual === 0
+        ? `  ${v.file}: 散文コメント 0 件（ベースライン ${v.base} 件、ファイルが無いか全て消えた）`
+        : `  ${v.file}: 散文コメント ${v.actual} 件（ベースライン ${v.base} 件）`,
+    );
+  }
+  console.error(
+    'コメントやファイルを消した PR では、--write でベースラインを再生成して締め直し、同じ PR に含めること（減った分の余白を後の追加に使わせない）。',
+  );
+}
+if (violations.length || stale.length) process.exit(1);
 console.log(
   `comment-ratchet: OK（散文コメント ${actualTotal} 件 / ベースライン ${baseline.total} 件）`,
 );
