@@ -173,6 +173,11 @@ function rawComments(src, file) {
   }));
 }
 
+function blockKind(c, own) {
+  if (c.type !== 'CommentLine') return 'block';
+  return own ? 'lineRun' : 'inline';
+}
+
 function groupBlocks(raw, src) {
   const lines = src.split('\n');
   const ownLine = (c) => lines[c.startLine - 1].slice(0, c.startCol).trim() === '';
@@ -198,7 +203,7 @@ function groupBlocks(raw, src) {
     }
     flush();
     cur = {
-      kind: isLine ? (own ? 'lineRun' : 'inline') : 'block',
+      kind: blockKind(c, own),
       startLine: c.startLine,
       endLine: c.endLine,
       start: c.start,
