@@ -91,9 +91,14 @@
       // as a glob, so a future root-level source file or script is not
       // exempted silently — it has to be classified or added here
       // deliberately. describe-table-names.mjs is a standalone helper that
-      // backup-maincloud.sh runs with node (fallow checks unreached files
+      // backup-maincloud.sh runs with node; comment-ratchet.mjs is the
+      // comment-ratchet lint's script (fallow checks unreached files
       // against boundaries since 3.31).
-      "allowUnmatched": ["vite.config.ts", "scripts/describe-table-names.mjs"],
+      "allowUnmatched": [
+        "vite.config.ts",
+        "scripts/describe-table-names.mjs",
+        "scripts/comment-ratchet.mjs",
+      ],
     },
   },
 
