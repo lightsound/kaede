@@ -210,6 +210,10 @@ interface RecordingSetup {
   cfg: CallConfig;
 }
 
+/**
+ * Split from recordingControlSetupIn to keep both uncovered functions under
+ * the CRAP budget.
+ */
 function recordingCallOf(tx: Ctx, procedureName: string, groupId: bigint) {
   const call = tx.db.groupCall.groupId.find(groupId);
   if (call === null) throw new SenderError(`${procedureName} refused (no-call-registered)`);

@@ -70,6 +70,9 @@ that are Decision Records, not Excuses.
    block in scope (`packages/*/src`, `packages/*/test`, `infra`, `scripts`,
    root config files; excluding `module_bindings`, generated output, docs)
    with file, line range, and verbatim text.
+   Scope boundary: package-level config files such as
+   `packages/*/tsconfig.json` sit outside both the audit scope and the
+   ratchet's scope — comments there are neither classified nor counted.
 2. **Classify** every block into the five categories. Re-verify each Excuse
    and Stale claim against the current tree before trusting it.
 3. **Act per category:**
@@ -93,7 +96,11 @@ that are Decision Records, not Excuses.
 5. **Regenerate the baseline in the same PR:**
    `bun scripts/comment-ratchet.mjs --write`. The baseline may only shrink —
    per-file counts decrease or entries disappear. **A PR whose baseline grows
-   is wrong**: it means new prose comments were added instead of deleted.
+   is wrong**: it means new prose comments were added instead of deleted. The
+   one exception is a documented correction — a ratchet rule fix that
+   reclassifies an existing block, or the restoration of a still-valid
+   rationale an earlier round removed — and the PR must call that growth out
+   explicitly, per file, as a correction rather than new prose.
 
 ## Migrating Decision Records into ADRs
 

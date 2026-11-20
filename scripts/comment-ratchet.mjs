@@ -204,11 +204,43 @@ function extractBlocks(src, file) {
 }
 
 // ---- Functional 指令の判定 --------------------------------------------------
-const DIRECTIVE =
-  /(fallow-ignore|oxlint-disable|oxlint-enable|eslint-disable|import-lint-disable|oxfmt-ignore|prettier-ignore|@vite-ignore|@ts-ignore|@ts-expect-error|@ts-nocheck|istanbul ignore|c8 ignore|v8 ignore|@__PURE__|@__NO_SIDE_EFFECTS__)/;
+// 指令として数えるのは、コメント行の先頭（マーカーを除いた位置）に指令
+// トークンが現れる場合だけ。本文中で指令名に言及しただけの散文（例:
+// 「fallow-ignore header」への言及）は指令ではない。fallow の指令は
+// ignore-file / ignore-next-line の2綴りだけが実在するので、
+// 裸の fallow-ignore は指令として扱わない。
+const DIRECTIVES = [
+  'fallow-ignore-file',
+  'fallow-ignore-next-line',
+  'oxlint-disable',
+  'oxlint-enable',
+  'eslint-disable',
+  'import-lint-disable',
+  'oxfmt-ignore',
+  'prettier-ignore',
+  '@vite-ignore',
+  '@ts-ignore',
+  '@ts-expect-error',
+  '@ts-nocheck',
+  'istanbul ignore',
+  'c8 ignore',
+  'v8 ignore',
+  '@__PURE__',
+  '@__NO_SIDE_EFFECTS__',
+];
+const DIRECTIVE_AT_LINE_START = new RegExp(`^(?:${DIRECTIVES.join('|')})\\b`);
+
+function contentLine(raw) {
+  let s = raw.trimStart();
+  if (s.startsWith('//')) return s.slice(2).trimStart();
+  if (s.startsWith('/*')) s = s.slice(2);
+  else if (s.startsWith('*')) s = s.slice(1);
+  return s.replace(/^\*+/, '').trimStart();
+}
 
 function isFunctional(block) {
-  if (DIRECTIVE.test(block.text)) return true;
+  if (block.text.split('\n').some((line) => DIRECTIVE_AT_LINE_START.test(contentLine(line))))
+    return true;
   if (block.kind === 'block') {
     const inner = block.text
       .replace(/^\/\*+/, '')

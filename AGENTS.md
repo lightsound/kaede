@@ -119,8 +119,9 @@ enforce the workspace-level `client` / `server` / `shared` dependency graph.
 ### Comments
 
 - Prose comments are ratcheted: `bun run lint:comments` (part of `bun run lint`) fails when a
-  file's prose-comment count exceeds `comment-baseline.json`. The baseline only ever shrinks;
-  regenerating it upward in a PR is wrong.
+  file's prose-comment count exceeds `comment-baseline.json`. The baseline only ever shrinks
+  (the one exception is a documented rule correction or rationale restoration, called out in
+  the PR); any other upward regeneration is wrong.
 - Do not write new prose comments. Record decisions in an ADR (`docs/adr-<kebab-topic>.md`)
   instead. Tool directives (`fallow-ignore-file`, `oxlint-disable`, …) are not prose and are
   unaffected.
