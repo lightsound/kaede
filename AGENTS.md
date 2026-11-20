@@ -116,6 +116,17 @@ enforce the workspace-level `client` / `server` / `shared` dependency graph.
 - Tests are excluded so they may import package-private implementation details directly.
 - Read `.agents/skills/import-lint/SKILL.md` before fixing ImportLint diagnostics.
 
+### Comments
+
+- Prose comments are ratcheted: `bun run lint:comments` (part of `bun run lint`) fails when a
+  file's prose-comment count exceeds `comment-baseline.json`. The baseline only ever shrinks;
+  regenerating it upward in a PR is wrong.
+- Do not write new prose comments. Record decisions in an ADR (`docs/adr-<kebab-topic>.md`)
+  instead. Tool directives (`fallow-ignore-file`, `oxlint-disable`, …) are not prose and are
+  unaffected.
+- Read `.agents/skills/delete-comment/SKILL.md` before running a comment-deletion round or
+  migrating Decision Record comments into ADRs.
+
 <!-- stripe-projects-cli managed:agents-md:start -->
 
 ## Stripe Projects CLI
