@@ -10,7 +10,8 @@ a **Decision Record** — the non-obvious _why_ — and even that belongs in an 
 not inline, once it grows past a line or two. Everything else is deleted on
 sight in periodic cleanup rounds, and the comment ratchet
 (`scripts/comment-ratchet.mjs`, wired into `bun run lint` as `lint:comments`)
-makes the total only ever shrink.
+makes the total only ever shrink, apart from the documented corrections
+described in step 5.
 
 ## The five categories
 
