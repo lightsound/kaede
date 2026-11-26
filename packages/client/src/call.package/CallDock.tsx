@@ -9,7 +9,7 @@ import {
 } from '../theme';
 import { blurringClick } from '../ui.package';
 import type { RecordingHandlers } from './InCallPanel';
-import { dialMeeting, type Meeting } from './realtimekit';
+import { dialMeeting, type Meeting, type NoiseCanceller } from './realtimekit';
 
 // The UI Kit (hls.js, @floating-ui, hark, lodash-es, …) lives only in
 // InCallPanel — lazy so idle players never download it (a review finding).
@@ -76,7 +76,12 @@ const JOINING_FACES: Record<JoinStage, string> = {
 type CallPhase =
   | { kind: 'idle'; notice?: string }
   | { kind: 'joining'; stage: JoinStage }
-  | { kind: 'in-call'; groupId: bigint; meeting: Meeting };
+  | {
+      kind: 'in-call';
+      groupId: bigint;
+      meeting: Meeting;
+      noiseCancellation: NoiseCanceller | undefined;
+    };
 
 /**
  * Whether the dock renders nothing: disconnected, or out of every
@@ -131,7 +136,7 @@ async function joinCall(ctx: JoinContext): Promise<void> {
     // cleanup's and the next join's only teardown handle — nor overwrite
     // the idle phase with its in-call panel.
     let ended = false;
-    const meeting = await dialMeeting({
+    const { meeting, noiseCancellation } = await dialMeeting({
       authToken: ticket.authToken,
       onEnded: () => {
         ended = true;
@@ -144,7 +149,7 @@ async function joinCall(ctx: JoinContext): Promise<void> {
     // The ticket names the group the module actually bound the meeting to
     // (re-resolved server-side); if the user walked elsewhere mid-dial,
     // the auto-leave watch below sees the mismatch and leaves at once.
-    ctx.setPhase(() => ({ kind: 'in-call', groupId: ticket.groupId, meeting }));
+    ctx.setPhase(() => ({ kind: 'in-call', groupId: ticket.groupId, meeting, noiseCancellation }));
   } catch (err) {
     console.error('call join failed', err);
     ctx.setPhase(() => ({ kind: 'idle', notice: '通話に参加できませんでした' }));
@@ -246,6 +251,7 @@ export function CallDock({
         <InCallPanel
           meeting={phase.meeting}
           recording={recordingHandlersFor(member, phase.groupId, net)}
+          noiseCancellation={phase.noiseCancellation}
         />
       </Suspense>
     );

@@ -8,12 +8,45 @@
 // swapping providers (LiveKit ships the same-shaped prebuilt UI in
 // @livekit/components-react) means rewriting this package and nothing else.
 import RealtimeKitClient from '@cloudflare/realtimekit';
+import { RealtimeKitNoiseCancellation } from '@cloudflare/realtimekit-noise-cancellation';
 
 export type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
+
+export type NoiseCanceller = RealtimeKitNoiseCancellation;
 
 export interface DialRequest {
   authToken: string;
   onEnded(): void;
+}
+
+export interface DialResult {
+  meeting: Meeting;
+  /** Undefined when the noise canceller could not be initialized. */
+  noiseCancellation: NoiseCanceller | undefined;
+}
+
+/**
+ * Arms noise cancellation on the joined meeting (autoManage: the
+ * package enables processing when the mic goes live, maintains it
+ * through mute/unmute and reconnections, and disposes itself on leave).
+ * Strictly best-effort — an enhancement must never fail a join: the
+ * package self-disables on runtime errors, and an initialization
+ * failure (an environment without AudioWorklet, the asset CDN
+ * unreachable) just leaves the call without processing. The model and
+ * worklet assets are fetched from the provider's CDN at enable time;
+ * nothing is bundled or self-hosted.
+ */
+async function initNoiseCancellation(meeting: Meeting): Promise<NoiseCanceller | undefined> {
+  try {
+    return await RealtimeKitNoiseCancellation.init({
+      meeting,
+      autoManage: true,
+      onError: (err) => console.error('noise cancellation error', err),
+    });
+  } catch (err) {
+    console.error('noise cancellation init failed', err);
+    return undefined;
+  }
 }
 
 /**
@@ -23,7 +56,7 @@ export interface DialRequest {
  * the participant's explicit act (the same intentionality rule as
  * starting the call itself).
  */
-export async function dialMeeting({ authToken, onEnded }: DialRequest): Promise<Meeting> {
+export async function dialMeeting({ authToken, onEnded }: DialRequest): Promise<DialResult> {
   const meeting = await RealtimeKitClient.init({
     authToken,
     defaults: { audio: false, video: false },
@@ -41,5 +74,6 @@ export async function dialMeeting({ authToken, onEnded }: DialRequest): Promise<
     await meeting.leave().catch(() => {});
     throw err;
   }
-  return meeting;
+  const noiseCancellation = await initNoiseCancellation(meeting);
+  return { meeting, noiseCancellation };
 }

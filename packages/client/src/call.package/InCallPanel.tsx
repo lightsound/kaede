@@ -23,7 +23,8 @@ import {
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
-import type { Meeting } from './realtimekit';
+import { noiseCancellationFace } from './noiseCancellation';
+import type { Meeting, NoiseCanceller } from './realtimekit';
 
 // The prebuilt in-call UI (ROADMAP Phase 4 増分③). These imports are legal
 // INSIDE call.package only — the containment unit for the vendor
@@ -235,6 +236,68 @@ function RecordingToggle({ meeting, handlers }: { meeting: Meeting; handlers: Re
 }
 
 /**
+ * The noise-cancellation toggle — kaede's own button like the recording
+ * toggle, because the UI Kit has no surface for the vendor's separate
+ * noise-cancellation package. Rendered only when the dial armed a
+ * canceller (realtimekit.ts): where initialization failed, the call
+ * simply has no processing and no dead control to explain. The default
+ * is ON (autoManage arms it at dial; processing starts when the mic
+ * goes live) — this toggle is the participant's way out when the
+ * processing sounds wrong to them. The canceller exposes no change
+ * events, so the face re-reads `enabled` on the meeting's audioUpdate
+ * events: every transition rides one (autoManage enables on unmute,
+ * the package self-disables after a runtime error), and our own clicks
+ * re-read on settle.
+ */
+function NoiseCancellationToggle({
+  meeting,
+  canceller,
+}: {
+  meeting: Meeting;
+  canceller: NoiseCanceller;
+}) {
+  const [enabled, setEnabled] = useState<boolean>(canceller.enabled);
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const sync = () => setEnabled(canceller.enabled);
+    // oxlint-disable-next-line react/set-state-in-effect -- 外部システム（RealtimeKit の meeting）の観測値を state に同期する定型パターン
+    sync();
+    meeting.self.on('audioUpdate', sync);
+    return () => {
+      meeting.self.off('audioUpdate', sync);
+    };
+  }, [meeting, canceller]);
+  const face = noiseCancellationFace(enabled, pending);
+  const toggle = async () => {
+    setPending(true);
+    setFailed(false);
+    try {
+      await (enabled ? canceller.disable() : canceller.enable());
+    } catch (err) {
+      console.error('noise cancellation toggle failed', err);
+      setFailed(true);
+    } finally {
+      setPending(false);
+      setEnabled(canceller.enabled);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        style={recordButtonStyle}
+        disabled={face.disabled}
+        onClick={blurringClick(() => void toggle())}
+      >
+        {face.label}
+      </button>
+      {failed && <span style={{ color: UI_ERROR_COLOR }}>ノイズ除去の操作に失敗しました</span>}
+    </>
+  );
+}
+
+/**
  * The ongoing call, assembled from the UI Kit's parts: the participant
  * grid (which also lays out shared screens), the control bar toggles, the
  * remote audio sink, and the dialog manager (device settings and the
@@ -246,9 +309,11 @@ function RecordingToggle({ meeting, handlers }: { meeting: Meeting; handlers: Re
 export function InCallPanel({
   meeting,
   recording,
+  noiseCancellation,
 }: {
   meeting: Meeting;
   recording: RecordingHandlers | undefined;
+  noiseCancellation: NoiseCanceller | undefined;
 }) {
   return (
     <div style={inCallStyle}>
@@ -263,6 +328,9 @@ export function InCallPanel({
           <RtkScreenShareToggle size="sm" />
           <RtkSettingsToggle size="sm" />
           {recording !== undefined && <RecordingToggle meeting={meeting} handlers={recording} />}
+          {noiseCancellation !== undefined && (
+            <NoiseCancellationToggle meeting={meeting} canceller={noiseCancellation} />
+          )}
           <RtkLeaveButton size="sm" />
         </div>
         <RtkParticipantsAudio />
