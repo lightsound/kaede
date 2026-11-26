@@ -245,9 +245,11 @@ function RecordingToggle({ meeting, handlers }: { meeting: Meeting; handlers: Re
  * goes live) — this toggle is the participant's way out when the
  * processing sounds wrong to them. The canceller exposes no change
  * events, so the face re-reads `enabled` on the meeting's audioUpdate
- * events: every transition rides one (autoManage enables on unmute,
- * the package self-disables after a runtime error), and our own clicks
- * re-read on settle.
+ * events and after our own clicks settle. Not every transition rides
+ * an audioUpdate, though: the package self-disables after a runtime
+ * error without emitting one, and autoManage's enable lands
+ * asynchronously off the same event the face syncs from — either way
+ * the face can lag the real state until the next re-read.
  */
 function NoiseCancellationToggle({
   meeting,
