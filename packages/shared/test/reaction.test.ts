@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
+  DANCE_FRAME_MS,
   evaluateReactionSend,
   GESTURE_LABELS,
   GESTURES,
@@ -9,6 +10,7 @@ import {
   REACTION_BURST_SENDS,
   REACTION_EMOJIS,
   REACTION_SEND_COST_MICROS,
+  WAVE_GESTURE_DURATION_MS,
 } from '../src';
 
 describe('isReactionEmoji', () => {
@@ -92,5 +94,15 @@ describe('isTransientGesture', () => {
     // seed too (a sitter is still sitting after a reload); the wave must
     // never replay from a seeded row.
     expect(GESTURES.filter(isTransientGesture)).toEqual(['wave']);
+  });
+});
+
+describe('gesture timing constants', () => {
+  it('pins the wave display duration the client renderer counts down', () => {
+    expect(WAVE_GESTURE_DURATION_MS).toBe(4_000);
+  });
+
+  it('pins the dance frame clock shared by extraction and playback', () => {
+    expect(DANCE_FRAME_MS).toBe(100);
   });
 });
