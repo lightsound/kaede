@@ -117,7 +117,6 @@ function consumeStdout(state, chunk, carry) {
 }
 
 function startBots() {
-  // fallow-ignore-next-line security-sink -- argv is numeric flags built in this file; the binary is this process's node, not attacker input
   const child = spawn(
     process.execPath,
     [

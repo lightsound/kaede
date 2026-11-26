@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
   AVAILABILITIES,
+  AVAILABILITY_ICONS,
+  AVAILABILITY_LABELS,
   DEFAULT_STATUS,
   evaluateStatusSend,
   isAvailability,
@@ -25,6 +27,20 @@ describe('isAvailability', () => {
     expect(isAvailability('online ')).toBe(false);
     expect(isAvailability('オンライン')).toBe(false);
     expect(isAvailability('offline')).toBe(false);
+  });
+});
+
+describe('availability presentation tables', () => {
+  it('gives every availability a non-empty label and icon', () => {
+    for (const availability of AVAILABILITIES) {
+      expect(AVAILABILITY_LABELS[availability]).not.toBe('');
+      expect(AVAILABILITY_ICONS[availability]).not.toBe('');
+    }
+  });
+
+  it('covers exactly the availabilities, no more and no fewer', () => {
+    expect(Object.keys(AVAILABILITY_LABELS).sort()).toEqual([...AVAILABILITIES].sort());
+    expect(Object.keys(AVAILABILITY_ICONS).sort()).toEqual([...AVAILABILITIES].sort());
   });
 });
 
