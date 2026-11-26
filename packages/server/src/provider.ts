@@ -64,6 +64,21 @@ function timeoutOf(ms: number): NonNullable<Parameters<Http['fetch']>[1]>['timeo
  * not mid-stream); short enough that a leaked URL is a stale one. */
 const DOWNLOAD_URL_TTL_SECONDS = 600;
 
+/**
+ * How long a minted participant token stays valid: 24 hours, set
+ * explicitly via the Add Participant `token` window (the provider
+ * default is 100 days — a join ticket should not outlive the workday it
+ * was minted in by two orders of magnitude; the token is the only
+ * credential the client presents to the provider). The client SDK never
+ * refreshes a token (refresh is a backend-only API, and kaede mints a
+ * fresh one per join regardless), so the window has to cover a long
+ * workday's rejoins on its own; and a participant already in the call is
+ * NOT disconnected when the window closes (provider docs), so no live
+ * call can die at the boundary — expiry only gates the next join, which
+ * re-mints through join_group_call anyway.
+ */
+const PARTICIPANT_TOKEN_TTL_SECONDS = 86_400;
+
 function isSuccessEnvelope(payload: unknown): payload is { success: true; data?: unknown } {
   const record = (payload ?? {}) as Record<string, unknown>;
   return record.success === true;
@@ -142,8 +157,9 @@ export function createMeeting(http: Http, cfg: CallConfig): string {
 
 /**
  * Mints one participant token for `meetingId` (Add Participant — a fresh
- * participant per join, discarded on leave; at 2,400h token life the
- * refresh API exists but is never needed, 増分0 spike). `participantId`
+ * participant per join, discarded on leave), valid for
+ * PARTICIPANT_TOKEN_TTL_SECONDS from `nowMs` (the procedure's own
+ * timestamp, the listRecordings time-source rule). `participantId`
  * is the member's Clerk subject or the guest's Identity hex, recorded
  * provider-side as custom_participant_id for future correlation
  * (recording access, cost attribution).
@@ -154,6 +170,7 @@ export function mintParticipantToken(
   meetingId: string,
   name: string,
   participantId: string,
+  nowMs: number,
 ): string {
   const data = providerRequest(
     http,
@@ -164,6 +181,10 @@ export function mintParticipantToken(
       name,
       preset_name: PARTICIPANT_PRESET,
       custom_participant_id: participantId,
+      token: {
+        not_before: new Date(nowMs).toISOString(),
+        expires_on: new Date(nowMs + PARTICIPANT_TOKEN_TTL_SECONDS * 1000).toISOString(),
+      },
     },
   );
   return stringField(data, 'token');

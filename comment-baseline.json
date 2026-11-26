@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 1035,
+  "total": 1037,
   "files": {
     ".fallowrc.jsonc": 17,
     ".importlintrc.jsonc": 6,
@@ -135,13 +135,14 @@
     "packages/server/src/movement.ts": 14,
     "packages/server/src/occupancy.ts": 9,
     "packages/server/src/posting.ts": 18,
-    "packages/server/src/provider.ts": 15,
+    "packages/server/src/provider.ts": 16,
     "packages/server/src/sendAllowance.ts": 2,
     "packages/server/src/tables.ts": 37,
     "packages/server/src/world.ts": 18,
     "packages/server/src/zones.ts": 7,
     "packages/server/test/harness.ts": 2,
     "packages/server/test/occupancy.test.ts": 3,
+    "packages/server/test/provider.test.ts": 1,
     "packages/server/test/sendAllowance.test.ts": 1,
     "packages/server/test/world.test.ts": 2,
     "packages/shared/src/auth.ts": 4,
