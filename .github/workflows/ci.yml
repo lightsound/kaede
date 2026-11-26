@@ -37,7 +37,8 @@ env:
   # Verified 2026-11-26 for this bump: Maincloud reports 2.16.3, and a
   # local 2.16.3 host accepted a module built with the 2.15 library and
   # then the 2.16.3-built module published over it without --delete-data
-  # (empty migration plan); the scratch database was then deleted.
+  # (empty migration plan); the scratch database lived only inside the
+  # throwaway local host and was discarded with it.
   SPACETIME_VERSION: v2.16.3
 
 jobs:
