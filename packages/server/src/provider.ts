@@ -64,20 +64,8 @@ function timeoutOf(ms: number): NonNullable<Parameters<Http['fetch']>[1]>['timeo
  * not mid-stream); short enough that a leaked URL is a stale one. */
 const DOWNLOAD_URL_TTL_SECONDS = 600;
 
-/**
- * How long a minted participant token stays valid: 24 hours, set
- * explicitly via the Add Participant `token` window (the provider
- * default is 100 days — a join ticket should not outlive the workday it
- * was minted in by two orders of magnitude; the token is the only
- * credential the client presents to the provider). The client SDK never
- * refreshes a token (refresh is a backend-only API, and kaede mints a
- * fresh one per join regardless), so the window has to cover a long
- * workday's rejoins on its own; and a participant already in the call is
- * NOT disconnected when the window closes (provider docs), so no live
- * call can die at the boundary — expiry only gates the next join, which
- * re-mints through join_group_call anyway.
- */
 const PARTICIPANT_TOKEN_TTL_SECONDS = 86_400;
+const TOKEN_NOT_BEFORE_SKEW_SECONDS = 60;
 
 function isSuccessEnvelope(payload: unknown): payload is { success: true; data?: unknown } {
   const record = (payload ?? {}) as Record<string, unknown>;
@@ -182,7 +170,7 @@ export function mintParticipantToken(
       preset_name: PARTICIPANT_PRESET,
       custom_participant_id: participantId,
       token: {
-        not_before: new Date(nowMs).toISOString(),
+        not_before: new Date(nowMs - TOKEN_NOT_BEFORE_SKEW_SECONDS * 1000).toISOString(),
         expires_on: new Date(nowMs + PARTICIPANT_TOKEN_TTL_SECONDS * 1000).toISOString(),
       },
     },

@@ -2,14 +2,6 @@ import { SyncResponse } from 'spacetimedb/server';
 import { describe, expect, it } from 'vite-plus/test';
 import { type CallConfig, type Http, mintParticipantToken } from '../src/provider';
 
-// The provider module's one outbound call that unit tests can pin
-// without a live provider: minting a participant token is a pure
-// request-shape decision (endpoint, preset, and — since the token
-// expiry change — the validity window derived from the caller's
-// timestamp), so a stub Http that records the request and answers the
-// success envelope pins the whole contract. The live round trip stays
-// e2e's job (the calls.ts header rule).
-
 const CFG: CallConfig = {
   id: 0,
   realtimekitToken: 'test-admin-token',
@@ -62,7 +54,7 @@ describe('mintParticipantToken', () => {
     });
   });
 
-  it('bounds the token window to 24 hours from the mint timestamp', () => {
+  it('sets not_before 60 seconds before the mint timestamp and expires_on 24 hours after it', () => {
     const captured: CapturedRequest[] = [];
     mintParticipantToken(
       stubHttp(captured),
@@ -74,7 +66,7 @@ describe('mintParticipantToken', () => {
     );
     expect(captured[0]?.body).toMatchObject({
       token: {
-        not_before: '2027-01-15T08:00:00.000Z',
+        not_before: '2027-01-15T07:59:00.000Z',
         expires_on: '2027-01-16T08:00:00.000Z',
       },
     });
