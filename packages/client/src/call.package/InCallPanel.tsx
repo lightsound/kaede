@@ -26,6 +26,7 @@ import { blurringClick } from '../ui.package';
 import {
   noiseCancellationAction,
   noiseCancellationFace,
+  noiseCancellationMicLive,
   type NoiseCancellationAction,
 } from './noiseCancellation';
 import type { Meeting, NoiseCanceller } from './realtimekit';
@@ -247,7 +248,7 @@ function NoiseCancellationToggle({
   canceller: NoiseCanceller;
 }) {
   const [wanted, setWanted] = useState(true);
-  const [micLive, setMicLive] = useState<boolean>(meeting.self.audioEnabled);
+  const [micLive, setMicLive] = useState<boolean>(noiseCancellationMicLive(meeting.self));
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const applyAction = useCallback(
@@ -268,7 +269,7 @@ function NoiseCancellationToggle({
   );
   useEffect(() => {
     const sync = () => {
-      const live = meeting.self.audioEnabled;
+      const live = noiseCancellationMicLive(meeting.self);
       setMicLive(live);
       void applyAction(noiseCancellationAction(wanted, canceller.enabled, live));
     };
@@ -285,7 +286,7 @@ function NoiseCancellationToggle({
     setWanted(next);
     setFailed(false);
     const ok = await applyAction(
-      noiseCancellationAction(next, canceller.enabled, meeting.self.audioEnabled),
+      noiseCancellationAction(next, canceller.enabled, noiseCancellationMicLive(meeting.self)),
     );
     if (!ok) setFailed(true);
   };

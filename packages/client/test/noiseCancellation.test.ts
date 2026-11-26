@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
   noiseCancellationAction,
   noiseCancellationFace,
+  noiseCancellationMicLive,
 } from '../src/call.package/noiseCancellation';
 
 describe('noiseCancellationFace', () => {
@@ -42,6 +43,48 @@ describe('noiseCancellationFace', () => {
       label: '⏳ 処理中…',
       disabled: true,
     });
+  });
+});
+
+describe('noiseCancellationMicLive', () => {
+  it('is live when audio is enabled and the raw track is live and enabled', () => {
+    expect(
+      noiseCancellationMicLive({
+        audioEnabled: true,
+        rawAudioTrack: { readyState: 'live', enabled: true },
+      }),
+    ).toBe(true);
+  });
+
+  it('is not live while audio is disabled, even with a live track', () => {
+    expect(
+      noiseCancellationMicLive({
+        audioEnabled: false,
+        rawAudioTrack: { readyState: 'live', enabled: true },
+      }),
+    ).toBe(false);
+  });
+
+  it('is not live before the raw track exists', () => {
+    expect(noiseCancellationMicLive({ audioEnabled: true, rawAudioTrack: undefined })).toBe(false);
+  });
+
+  it('is not live once the raw track has ended', () => {
+    expect(
+      noiseCancellationMicLive({
+        audioEnabled: true,
+        rawAudioTrack: { readyState: 'ended', enabled: true },
+      }),
+    ).toBe(false);
+  });
+
+  it('is not live while the raw track is disabled', () => {
+    expect(
+      noiseCancellationMicLive({
+        audioEnabled: true,
+        rawAudioTrack: { readyState: 'live', enabled: false },
+      }),
+    ).toBe(false);
   });
 });
 

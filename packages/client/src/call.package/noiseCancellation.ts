@@ -10,6 +10,16 @@ export function noiseCancellationFace(
   };
 }
 
+export interface NoiseCancellationMic {
+  audioEnabled: boolean;
+  rawAudioTrack: { readyState: string; enabled: boolean } | undefined;
+}
+
+export function noiseCancellationMicLive(mic: NoiseCancellationMic): boolean {
+  const track = mic.rawAudioTrack;
+  return mic.audioEnabled && track !== undefined && track.readyState === 'live' && track.enabled;
+}
+
 export type NoiseCancellationAction = 'enable' | 'disable' | 'none';
 
 export function noiseCancellationAction(
