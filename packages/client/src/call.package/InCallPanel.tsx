@@ -14,7 +14,7 @@ import {
   RtkSettingsToggle,
   RtkUiProvider,
 } from '@cloudflare/realtimekit-react-ui';
-import { type CSSProperties, useEffect, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useState } from 'react';
 import {
   UI_BUTTON_BG,
   UI_ERROR_COLOR,
@@ -23,7 +23,11 @@ import {
   UI_TEXT_COLOR,
 } from '../theme';
 import { blurringClick } from '../ui.package';
-import { noiseCancellationFace } from './noiseCancellation';
+import {
+  noiseCancellationAction,
+  noiseCancellationFace,
+  type NoiseCancellationAction,
+} from './noiseCancellation';
 import type { Meeting, NoiseCanceller } from './realtimekit';
 
 // The prebuilt in-call UI (ROADMAP Phase 4 増分③). These imports are legal
@@ -242,31 +246,48 @@ function NoiseCancellationToggle({
   meeting: Meeting;
   canceller: NoiseCanceller;
 }) {
-  const [enabled, setEnabled] = useState<boolean>(canceller.enabled);
+  const [wanted, setWanted] = useState(true);
+  const [micLive, setMicLive] = useState<boolean>(meeting.self.audioEnabled);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const applyAction = useCallback(
+    async (action: NoiseCancellationAction): Promise<boolean> => {
+      if (action === 'none') return true;
+      setPending(true);
+      try {
+        await (action === 'enable' ? canceller.enable() : canceller.disable());
+        return true;
+      } catch (err) {
+        console.error('noise cancellation toggle failed', err);
+        return false;
+      } finally {
+        setPending(false);
+      }
+    },
+    [canceller],
+  );
   useEffect(() => {
-    const sync = () => setEnabled(canceller.enabled);
+    const sync = () => {
+      const live = meeting.self.audioEnabled;
+      setMicLive(live);
+      void applyAction(noiseCancellationAction(wanted, canceller.enabled, live));
+    };
     // oxlint-disable-next-line react/set-state-in-effect -- 外部システム（RealtimeKit の meeting）の観測値を state に同期する定型パターン
     sync();
     meeting.self.on('audioUpdate', sync);
     return () => {
       meeting.self.off('audioUpdate', sync);
     };
-  }, [meeting, canceller]);
-  const face = noiseCancellationFace(enabled, pending);
+  }, [meeting, canceller, wanted, applyAction]);
+  const face = noiseCancellationFace(wanted, micLive, pending);
   const toggle = async () => {
-    setPending(true);
+    const next = !wanted;
+    setWanted(next);
     setFailed(false);
-    try {
-      await (enabled ? canceller.disable() : canceller.enable());
-    } catch (err) {
-      console.error('noise cancellation toggle failed', err);
-      setFailed(true);
-    } finally {
-      setPending(false);
-      setEnabled(canceller.enabled);
-    }
+    const ok = await applyAction(
+      noiseCancellationAction(next, canceller.enabled, meeting.self.audioEnabled),
+    );
+    if (!ok) setFailed(true);
   };
   return (
     <>
