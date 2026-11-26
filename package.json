@@ -27,10 +27,10 @@
     "vite-plus": "1.8.0"
   },
   "overrides": {
-    "@effect/platform-bun": "4.1.4",
-    "@effect/platform-node-shared": "4.1.4",
-    "@effect/sql-d1": "4.1.4",
-    "chokidar": "4.0.1",
+    "@effect/platform-bun": "4.1.6",
+    "@effect/platform-node-shared": "4.1.6",
+    "@effect/sql-d1": "4.1.6",
+    "chokidar": "4.0.3",
     "@alchemy.run/node-utils>chokidar": "^5.0.0"
   },
   "trustedDependencies": [

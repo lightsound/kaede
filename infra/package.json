@@ -13,14 +13,14 @@
     "destroy:prod": "cross-env ALCHEMY_PROFILE=kaede alchemy destroy --stage prod"
   },
   "devDependencies": {
-    "@alchemy.run/cloudflare": "2.0.0-beta.86",
-    "@effect/platform-bun": "4.1.4",
-    "@effect/platform-node": "4.1.4",
+    "@alchemy.run/cloudflare": "2.0.0-beta.87",
+    "@effect/platform-bun": "4.1.6",
+    "@effect/platform-node": "4.1.6",
     "@types/node": "^26.0.0",
-    "alchemy": "2.0.0-beta.86",
-    "cf": "1.0.0-rc.1",
+    "alchemy": "2.0.0-beta.87",
+    "cf": "1.0.0-rc.6",
     "cross-env": "^10.1.0",
-    "effect": "4.1.4",
+    "effect": "4.1.6",
     "typescript": "~7.0.2"
   }
 }
