@@ -64,6 +64,9 @@ function timeoutOf(ms: number): NonNullable<Parameters<Http['fetch']>[1]>['timeo
  * not mid-stream); short enough that a leaked URL is a stale one. */
 const DOWNLOAD_URL_TTL_SECONDS = 600;
 
+const PARTICIPANT_TOKEN_TTL_SECONDS = 86_400;
+const TOKEN_NOT_BEFORE_SKEW_SECONDS = 60;
+
 function isSuccessEnvelope(payload: unknown): payload is { success: true; data?: unknown } {
   const record = (payload ?? {}) as Record<string, unknown>;
   return record.success === true;
@@ -142,8 +145,9 @@ export function createMeeting(http: Http, cfg: CallConfig): string {
 
 /**
  * Mints one participant token for `meetingId` (Add Participant — a fresh
- * participant per join, discarded on leave; at 2,400h token life the
- * refresh API exists but is never needed, 増分0 spike). `participantId`
+ * participant per join, discarded on leave), valid for
+ * PARTICIPANT_TOKEN_TTL_SECONDS from `nowMs` (the procedure's own
+ * timestamp, the listRecordings time-source rule). `participantId`
  * is the member's Clerk subject or the guest's Identity hex, recorded
  * provider-side as custom_participant_id for future correlation
  * (recording access, cost attribution).
@@ -154,6 +158,7 @@ export function mintParticipantToken(
   meetingId: string,
   name: string,
   participantId: string,
+  nowMs: number,
 ): string {
   const data = providerRequest(
     http,
@@ -164,6 +169,10 @@ export function mintParticipantToken(
       name,
       preset_name: PARTICIPANT_PRESET,
       custom_participant_id: participantId,
+      token: {
+        not_before: new Date(nowMs - TOKEN_NOT_BEFORE_SKEW_SECONDS * 1000).toISOString(),
+        expires_on: new Date(nowMs + PARTICIPANT_TOKEN_TTL_SECONDS * 1000).toISOString(),
+      },
     },
   );
   return stringField(data, 'token');

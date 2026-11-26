@@ -190,6 +190,7 @@ export const joinGroupCall = spacetimedb.procedure(
       bound = ctx.withTx((tx) => bindProvisionedMeeting(tx, provisioned));
     }
     ctx.withTx((tx) => requireStillInGroup(tx, bound.groupId));
+    const nowMs = Number(ctx.timestamp.microsSinceUnixEpoch / 1_000n);
     return {
       groupId: bound.groupId,
       authToken: mintParticipantToken(
@@ -198,6 +199,7 @@ export const joinGroupCall = spacetimedb.procedure(
         bound.meetingId as string,
         setup.name,
         setup.participantId,
+        nowMs,
       ),
     };
   },
