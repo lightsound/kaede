@@ -11,7 +11,7 @@ import type { Ctx } from '../src/world';
 
 /**
  * The seam the server unit tests are written against: the official
- * SpacetimeDB module test harness (spacetimedb 2.15's
+ * SpacetimeDB module test harness (spacetimedb 2.16's
  * `spacetimedb/server/test-utils`). The real `spacetimedb/server` entry
  * cannot be imported outside a module host (it loads the host-only
  * `spacetime:sys` module), so the package's vite.config.ts registers

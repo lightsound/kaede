@@ -17,7 +17,7 @@ permissions:
 
 env:
   # ci.yml と同じピン留め(バージョンの根拠はそちらのコメントを参照)。
-  SPACETIME_VERSION: v2.15.0
+  SPACETIME_VERSION: v2.16.3
 
 jobs:
   backup:
