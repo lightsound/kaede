@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { noiseCancellationFace } from '../src/call.package/noiseCancellation';
 
-// The noise-cancellation toggle's face: the label names the action a
-// click performs (the recording toggle's convention), and an in-flight
-// click disables the button under a transitional face — enable/disable
-// round-trips the provider's audio middleware, so the wait must read
-// as progress, not breakage.
-
 describe('noiseCancellationFace', () => {
   it('offers to turn processing on while it is off', () => {
     expect(noiseCancellationFace(false, false)).toEqual({

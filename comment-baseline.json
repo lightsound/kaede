@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 1041,
+  "total": 1035,
   "files": {
     ".fallowrc.jsonc": 17,
     ".importlintrc.jsonc": 6,
@@ -11,9 +11,8 @@
     "packages/client/src/auth.package/authToken.ts": 5,
     "packages/client/src/auth.package/ClerkGate.tsx": 4,
     "packages/client/src/call.package/CallDock.tsx": 15,
-    "packages/client/src/call.package/InCallPanel.tsx": 12,
-    "packages/client/src/call.package/noiseCancellation.ts": 2,
-    "packages/client/src/call.package/realtimekit.ts": 6,
+    "packages/client/src/call.package/InCallPanel.tsx": 11,
+    "packages/client/src/call.package/realtimekit.ts": 4,
     "packages/client/src/call.package/recordingAccess.ts": 2,
     "packages/client/src/call.package/RecordingsDock.tsx": 3,
     "packages/client/src/chat.package/chatAllowance.ts": 3,
@@ -103,7 +102,6 @@
     "packages/client/test/inputSender.test.ts": 1,
     "packages/client/test/lifecycle.test.ts": 3,
     "packages/client/test/netActions.test.ts": 1,
-    "packages/client/test/noiseCancellation.test.ts": 1,
     "packages/client/test/ownPublishers.test.ts": 1,
     "packages/client/test/playerFeed.test.ts": 2,
     "packages/client/test/prediction.test.ts": 9,

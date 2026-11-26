@@ -21,21 +21,9 @@ export interface DialRequest {
 
 export interface DialResult {
   meeting: Meeting;
-  /** Undefined when the noise canceller could not be initialized. */
   noiseCancellation: NoiseCanceller | undefined;
 }
 
-/**
- * Arms noise cancellation on the joined meeting (autoManage: the
- * package enables processing when the mic goes live, maintains it
- * through mute/unmute and reconnections, and disposes itself on leave).
- * Strictly best-effort — an enhancement must never fail a join: the
- * package self-disables on runtime errors, and an initialization
- * failure (an environment without AudioWorklet, the asset CDN
- * unreachable) just leaves the call without processing. The model and
- * worklet assets are fetched from the provider's CDN at enable time;
- * nothing is bundled or self-hosted.
- */
 async function initNoiseCancellation(meeting: Meeting): Promise<NoiseCanceller | undefined> {
   try {
     return await RealtimeKitNoiseCancellation.init({

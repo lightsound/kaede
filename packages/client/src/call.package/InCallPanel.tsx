@@ -235,22 +235,6 @@ function RecordingToggle({ meeting, handlers }: { meeting: Meeting; handlers: Re
   );
 }
 
-/**
- * The noise-cancellation toggle — kaede's own button like the recording
- * toggle, because the UI Kit has no surface for the vendor's separate
- * noise-cancellation package. Rendered only when the dial armed a
- * canceller (realtimekit.ts): where initialization failed, the call
- * simply has no processing and no dead control to explain. The default
- * is ON (autoManage arms it at dial; processing starts when the mic
- * goes live) — this toggle is the participant's way out when the
- * processing sounds wrong to them. The canceller exposes no change
- * events, so the face re-reads `enabled` on the meeting's audioUpdate
- * events and after our own clicks settle. Not every transition rides
- * an audioUpdate, though: the package self-disables after a runtime
- * error without emitting one, and autoManage's enable lands
- * asynchronously off the same event the face syncs from — either way
- * the face can lag the real state until the next re-read.
- */
 function NoiseCancellationToggle({
   meeting,
   canceller,
