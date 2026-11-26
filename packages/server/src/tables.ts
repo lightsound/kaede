@@ -21,7 +21,7 @@ export const spacetimedb = schema({
   // Not public: clients render names from the player row, and the
   // identity-to-account mapping is nobody else's business.
   account: table(
-    { name: 'account' },
+    { name: 'account', cachePolicy: 'required_in_memory' },
     {
       id: t.u64().primaryKey().autoInc(),
       identity: t.identity().unique(),
@@ -71,7 +71,7 @@ export const spacetimedb = schema({
   // Re-linking an account to a new provider identity (see `account`) must
   // rewrite `identity` here too.
   spaceMember: table(
-    { name: 'space_member', public: true },
+    { name: 'space_member', public: true, cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       displayName: t.string().optional(),
@@ -88,7 +88,7 @@ export const spacetimedb = schema({
   // guests can see the admission setting flip in real time and enter the
   // moment an admin re-allows them.
   spaceSetting: table(
-    { name: 'space_setting', public: true },
+    { name: 'space_setting', public: true, cachePolicy: 'required_in_memory' },
     {
       id: t.u8().primaryKey(),
       guestsAllowed: t.bool(),
@@ -109,7 +109,7 @@ export const spacetimedb = schema({
   // removePlayer in world.ts), so a player row always has its name and
   // guard siblings.
   player: table(
-    { name: 'player', public: true },
+    { name: 'player', public: true, cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       x: t.number(),
@@ -162,7 +162,7 @@ export const spacetimedb = schema({
   // upsert, the heartbeat refresh, every accepted batch) — a false
   // negative that self-heals in seconds beats a lingering false positive.
   playerName: table(
-    { name: 'player_name', public: true },
+    { name: 'player_name', public: true, cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       name: t.string(),
@@ -174,7 +174,7 @@ export const spacetimedb = schema({
   // tables are never broadcast, so the marker's per-batch updates cost
   // writes but zero egress.
   playerGuard: table(
-    { name: 'player_guard' },
+    { name: 'player_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -223,7 +223,7 @@ export const spacetimedb = schema({
   // its members only (the chat_message filters at the end of this file);
   // every other row still reaches any connection.
   chatMessage: table(
-    { name: 'chat_message', public: true },
+    { name: 'chat_message', public: true, cachePolicy: 'required_in_memory' },
     {
       id: t.u64().primaryKey().autoInc(),
       sender: t.identity(),
@@ -264,7 +264,7 @@ export const spacetimedb = schema({
   // lazily on the first send, deleted with the player rows (removePlayer),
   // so transient guest identities cannot pile up marker rows forever.
   chatGuard: table(
-    { name: 'chat_guard' },
+    { name: 'chat_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -297,7 +297,7 @@ export const spacetimedb = schema({
   // it is the single space's data — no tenant/org column (the scaling
   // invariant).
   reaction: table(
-    { name: 'reaction', public: true },
+    { name: 'reaction', public: true, cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       emoji: t.string(),
@@ -337,7 +337,7 @@ export const spacetimedb = schema({
   // column (the scaling invariant). The ⑦③ "sit ON an object" extension
   // arrives additively as a target column, not a new table.
   gesture: table(
-    { name: 'gesture', public: true },
+    { name: 'gesture', public: true, cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       gesture: t.string(),
@@ -350,7 +350,7 @@ export const spacetimedb = schema({
   // as the other lazy guards: created on first use, deleted with the
   // player rows (removePlayer).
   gestureGuard: table(
-    { name: 'gesture_guard' },
+    { name: 'gesture_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -365,7 +365,7 @@ export const spacetimedb = schema({
   // (same lifecycle as chat_guard: lazy on first send, deleted with the
   // player rows) and keeps the two rates independently tunable.
   reactionGuard: table(
-    { name: 'reaction_guard' },
+    { name: 'reaction_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -407,7 +407,7 @@ export const spacetimedb = schema({
   // a future reducer; avatar poses (Phase 5) render from it — both additive.
   // Like every realtime table, no tenant/org column (the scaling invariant).
   playerStatus: table(
-    { name: 'player_status', public: true },
+    { name: 'player_status', public: true, cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       availability: t.string(),
@@ -444,7 +444,7 @@ export const spacetimedb = schema({
   //   state and notification bookkeeping, if ever wanted, land additively
   //   in tables referencing `id`.
   dmMessage: table(
-    { name: 'dm_message', public: true },
+    { name: 'dm_message', public: true, cachePolicy: 'required_in_memory' },
     {
       id: t.u64().primaryKey().autoInc(),
       sender: t.identity().index(),
@@ -494,7 +494,7 @@ export const spacetimedb = schema({
   // or timestamps) does not need to fake. Like every realtime table: the
   // single space's data, no tenant/org column (the scaling invariant).
   conversationGroup: table(
-    { name: 'conversation_group', public: true },
+    { name: 'conversation_group', public: true, cachePolicy: 'required_in_memory' },
     {
       id: t.u64().primaryKey().autoInc(),
       kind: t.string(),
@@ -531,7 +531,7 @@ export const spacetimedb = schema({
   // occupancy is ephemeral presence state, and an orphaned public row
   // would ride every entering client's egress forever.
   groupMember: table(
-    { name: 'group_member', public: true },
+    { name: 'group_member', public: true, cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       groupId: t.u64().index(),
@@ -565,7 +565,7 @@ export const spacetimedb = schema({
   // Kept to CONNECTION_EVENT_MAX rows by the writers (the chat_message
   // trimHistory pattern), so the log cannot grow without bound.
   connectionEvent: table(
-    { name: 'connection_event' },
+    { name: 'connection_event', cachePolicy: 'required_in_memory' },
     {
       id: t.u64().primaryKey().autoInc(),
       identity: t.identity(),
@@ -584,7 +584,7 @@ export const spacetimedb = schema({
   // (an announce whose disconnect never fired) are swept by the disconnect
   // handler so they can neither mislabel a later drop nor pile up.
   disconnectIntent: table(
-    { name: 'disconnect_intent' },
+    { name: 'disconnect_intent', cachePolicy: 'required_in_memory' },
     {
       connectionId: t.connectionId().primaryKey(),
       announcedAt: t.timestamp(),
@@ -600,7 +600,7 @@ export const spacetimedb = schema({
   // the mirror knowing. Same lifecycle as the other lazy guards: created
   // on first send, deleted with the player rows (removePlayer).
   statusGuard: table(
-    { name: 'status_guard' },
+    { name: 'status_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -617,7 +617,7 @@ export const spacetimedb = schema({
   // Same lifecycle as the other lazy guards: created on first use, deleted
   // with the player rows (removePlayer).
   portalGuard: table(
-    { name: 'portal_guard' },
+    { name: 'portal_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -634,7 +634,7 @@ export const spacetimedb = schema({
   // lifecycle as the other lazy guards: created on first use, deleted
   // with the player rows (removePlayer).
   huddleGuard: table(
-    { name: 'huddle_guard' },
+    { name: 'huddle_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -670,7 +670,7 @@ export const spacetimedb = schema({
   // table: the single space's data, no tenant/org column (the scaling
   // invariant).
   groupCall: table(
-    { name: 'group_call', public: true },
+    { name: 'group_call', public: true, cachePolicy: 'required_in_memory' },
     {
       groupId: t.u64().primaryKey(),
       meetingId: t.string(),
@@ -685,7 +685,7 @@ export const spacetimedb = schema({
   // module energy). Same lifecycle as the other lazy guards: created on
   // first use, deleted with the player rows (removePlayer).
   callGuard: table(
-    { name: 'call_guard' },
+    { name: 'call_guard', cachePolicy: 'required_in_memory' },
     {
       identity: t.identity().primaryKey(),
       allowanceMicros: t.i64(),
@@ -723,7 +723,7 @@ export const spacetimedb = schema({
   // space_member share no column, so the filter SQL subset has no ON
   // equality to join them on.
   callRecording: table(
-    { name: 'call_recording', public: true },
+    { name: 'call_recording', public: true, cachePolicy: 'required_in_memory' },
     {
       id: t.u64().primaryKey().autoInc(),
       fileName: t.string(),
@@ -754,7 +754,7 @@ export const spacetimedb = schema({
   // in the same PR. Recovery is re-seeding, not restore
   // (docs/backup-restore.md).
   callConfig: table(
-    { name: 'call_config' },
+    { name: 'call_config', cachePolicy: 'required_in_memory' },
     {
       id: t.u8().primaryKey(),
       realtimekitToken: t.string(),
