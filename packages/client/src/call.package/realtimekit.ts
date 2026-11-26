@@ -8,12 +8,33 @@
 // swapping providers (LiveKit ships the same-shaped prebuilt UI in
 // @livekit/components-react) means rewriting this package and nothing else.
 import RealtimeKitClient from '@cloudflare/realtimekit';
+import { RealtimeKitNoiseCancellation } from '@cloudflare/realtimekit-noise-cancellation';
 
 export type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
+
+export type NoiseCanceller = RealtimeKitNoiseCancellation;
 
 export interface DialRequest {
   authToken: string;
   onEnded(): void;
+}
+
+export interface DialResult {
+  meeting: Meeting;
+  noiseCancellation: NoiseCanceller | undefined;
+}
+
+async function initNoiseCancellation(meeting: Meeting): Promise<NoiseCanceller | undefined> {
+  try {
+    return await RealtimeKitNoiseCancellation.init({
+      meeting,
+      autoManage: true,
+      onError: (err) => console.error('noise cancellation error', err),
+    });
+  } catch (err) {
+    console.error('noise cancellation init failed', err);
+    return undefined;
+  }
 }
 
 /**
@@ -23,7 +44,7 @@ export interface DialRequest {
  * the participant's explicit act (the same intentionality rule as
  * starting the call itself).
  */
-export async function dialMeeting({ authToken, onEnded }: DialRequest): Promise<Meeting> {
+export async function dialMeeting({ authToken, onEnded }: DialRequest): Promise<DialResult> {
   const meeting = await RealtimeKitClient.init({
     authToken,
     defaults: { audio: false, video: false },
@@ -41,5 +62,6 @@ export async function dialMeeting({ authToken, onEnded }: DialRequest): Promise<
     await meeting.leave().catch(() => {});
     throw err;
   }
-  return meeting;
+  const noiseCancellation = await initNoiseCancellation(meeting);
+  return { meeting, noiseCancellation };
 }

@@ -13,6 +13,7 @@
     "@clerk/localizations": "^4.24.6",
     "@clerk/react": "^6.18.6",
     "@cloudflare/realtimekit": "2.1.0",
+    "@cloudflare/realtimekit-noise-cancellation": "0.1.1",
     "@cloudflare/realtimekit-react-ui": "2.1.0",
     "@kaede/shared": "workspace:*",
     "pixi.js": "^8.23.0",
