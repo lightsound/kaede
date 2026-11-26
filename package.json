@@ -23,6 +23,7 @@
     "@import-lint/cli": "0.1.10",
     "@vitest/coverage-v8": "^5.1.0",
     "fallow": "^3.42.0",
+    "fallow-type-aware": "3.49.0",
     "vite-plus": "1.8.0"
   },
   "overrides": {
